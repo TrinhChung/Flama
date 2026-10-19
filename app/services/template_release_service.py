@@ -279,7 +279,8 @@ def _subscription(session, *, user_id, template_id, lock=False):
     return subscription, local
 
 
-def ensure_subscription(session, *, user_id, source_template_id, release_id=None):
+def ensure_subscription(session, *, user_id, source_template_id, release_id=None, access_granted=False):
+    """``access_granted`` is only for payment fulfillment, before its entitlement is active."""
     # Serialize first receipt across multiple deck installs for the same user.
     if repository.lock_user(session, int(user_id)) is None:
         raise TemplateReleaseError("TEMPLATE_NOT_FOUND", "User not found.", status=404)
@@ -287,7 +288,7 @@ def ensure_subscription(session, *, user_id, source_template_id, release_id=None
     if existing:
         return existing  # another install must never downgrade or overwrite this copy
     source = repository.template(session, source_template_id)
-    if source is None or repository.template_owner(session, source) == user_id or not repository.source_access(session, user_id=user_id, source_template_id=source_template_id):
+    if source is None or repository.template_owner(session, source) == user_id or not (access_granted or repository.source_access(session, user_id=user_id, source_template_id=source_template_id)):
         raise TemplateReleaseError("TEMPLATE_ACCESS_DENIED", "An installed deck or NoteType is required to receive this template.", status=403)
     _authored(source, allow_archived=True)
     publication = repository.publication(session, source_template_id)
@@ -570,6 +571,24 @@ def stage_note_type_publications(session, *, note_type_id, actor_user_id, initia
                 head, _ = _publish_version(session, row, version, actor_user_id=actor_user_id, request=request, allow_archived=True)
         releases[row["id"]] = head
     return releases
+
+
+def stage_marketplace_release(session, row, *, actor_user_id):
+    """Listing publishes the current content so marketplace buyers get what is shown."""
+    _authored(row)
+    publication = repository.publication(session, row["id"])
+    head = repository.release(session, publication["current_release_id"], row["id"]) if publication and publication["current_release_id"] else None
+    version = _snapshot(session, row, actor_user_id=actor_user_id)
+    existing = repository.one(session, TemplateRelease, TemplateRelease.template_id == row["id"], TemplateRelease.version_id == version["id"])
+    if existing:
+        return existing
+    publication = repository.ensure_publication(session, row["id"])
+    request = release_core.PublishRequest(
+        release_core.next_auto_version(head["version_label"] if head else None),
+        f"market:{version['id']}", publication["current_release_id"], version["id"],
+        "Phát hành khi đăng lên chợ giao diện thẻ.",
+    )
+    return _publish_version(session, row, version, actor_user_id=actor_user_id, request=request)[0]
 
 
 def stage_note_type_template_subscriptions(session, *, note_type_install_id, user_id):

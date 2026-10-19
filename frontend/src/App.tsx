@@ -143,6 +143,12 @@ const SharedNoteTypeDetailPage = lazy(() =>
     default: module.SharedNoteTypeDetailPage,
   })),
 )
+const TemplateMarketplacePage = lazy(() =>
+  import('./features/template-marketplace').then((module) => ({ default: module.TemplateMarketplacePage })),
+)
+const TemplateMarketDetailPage = lazy(() =>
+  import('./features/template-marketplace').then((module) => ({ default: module.TemplateMarketDetailPage })),
+)
 const PaymentResultPage = lazy(() =>
   import('./features/marketplace/pages/MarketplacePages').then((module) => ({
     default: module.PaymentResultPage,
@@ -636,6 +642,14 @@ const router = createBrowserRouter([
           {
             path: 'flashcards/shared-note-types/:id',
             element: deferred(<SharedNoteTypeDetailPage />),
+          },
+          {
+            path: 'marketplace/templates',
+            element: deferred(<TemplateMarketplacePage />),
+          },
+          {
+            path: 'marketplace/templates/:id',
+            element: deferred(<TemplateMarketDetailPage />),
           },
           { path: 'orders', element: deferred(<OrdersPage />) },
           { path: 'profile', element: deferred(<ProfilePage />) },

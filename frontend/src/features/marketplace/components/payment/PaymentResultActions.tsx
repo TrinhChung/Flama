@@ -17,6 +17,7 @@ interface PaymentResultActionsProps {
   isPending: boolean
   isDeck: boolean
   isNoteType: boolean
+  isTemplate?: boolean
   isDonation: boolean
   firstItem?: OrderItem
   checkoutUrl?: string | null
@@ -30,6 +31,7 @@ export function PaymentResultActions({
   isPending,
   isDeck,
   isNoteType,
+  isTemplate = false,
   isDonation,
   firstItem,
   checkoutUrl,
@@ -55,6 +57,13 @@ export function PaymentResultActions({
               <Link to={`/marketplace/note-types/${firstItem.product_ref_id}`}>
                 <BookOpen className="size-4 mr-1.5" />
                 {t('payment_result.btn_goto_notetype', 'Đến loại thẻ vừa mua')}
+              </Link>
+            </Button>
+          ) : isTemplate && firstItem?.product_ref_id ? (
+            <Button asChild size="lg" className="flex-1 font-bold rounded-xl shadow-md">
+              <Link to={`/marketplace/templates/${firstItem.product_ref_id}`}>
+                <BookOpen className="size-4 mr-1.5" />
+                {t('payment_result.btn_goto_template', 'Đến giao diện thẻ vừa mua')}
               </Link>
             </Button>
           ) : isDonation ? (
@@ -106,6 +115,13 @@ export function PaymentResultActions({
           {firstItem?.product_type === 'deck_marketplace_item' ? (
             <Button asChild size="lg" className="flex-1 font-bold rounded-xl">
               <Link to={`/marketplace/decks/${firstItem.product_ref_id}`}>
+                <ArrowRight className="size-4 mr-1.5" />
+                {t('payment_result.btn_retry_new', 'Thử tạo đơn mới')}
+              </Link>
+            </Button>
+          ) : isTemplate && firstItem?.product_ref_id ? (
+            <Button asChild size="lg" className="flex-1 font-bold rounded-xl">
+              <Link to={`/marketplace/templates/${firstItem.product_ref_id}`}>
                 <ArrowRight className="size-4 mr-1.5" />
                 {t('payment_result.btn_retry_new', 'Thử tạo đơn mới')}
               </Link>

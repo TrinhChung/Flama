@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   MessageSquareHeart,
   NotebookTabs,
+  Palette,
   PackageCheck,
   Printer,
   Search,
@@ -68,6 +69,7 @@ export function AppSidebar({
     // Nhóm Chợ / Chia sẻ cộng đồng
     { title: t('sidebar.item.shared_decks'), url: bootstrap.links.shared_decks, icon: Store },
     { title: t('sidebar.item.shared_note_types'), url: bootstrap.links.shared_note_types, icon: Shapes },
+    { title: t('sidebar.item.shared_templates'), url: '/marketplace/templates', icon: Palette },
     { title: t('sidebar.item.publish_deck'), url: '/marketplace/decks/publish', icon: Upload },
     { title: t('sidebar.item.publish_note_type'), url: '/marketplace/note-types/publish', icon: Shapes },
   ]

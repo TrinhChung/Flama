@@ -70,7 +70,10 @@
       "description": "The learner types the answer and Flama compares it with each line of the bound field. Correct flips to the back; incorrect asks to try again.",
       "show_length": "Show how many characters to type",
       "hints": "Allow revealing hint characters"
-    }
+    },
+    "publish_market": "Publish to marketplace",
+    "publish_market_blocked": "Marketplace copy — cannot be published",
+    "publish_market_save_first": "Save changes before publishing"
   },
   "library": {
     "title": "Card Templates",

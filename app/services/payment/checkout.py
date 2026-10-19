@@ -212,6 +212,11 @@ def _resolve_existing_access_for_product(*, product_type: str, product_ref_id: s
             "installed_note_type_id": install.installed_note_type_id,
         }
 
+    if product_type == "template":
+        from app.services import template_marketplace_service
+
+        return template_marketplace_service.existing_access(user_id=user_id, template_id=product_ref_id)
+
     if product_type == "deck_marketplace_item":
         install = payment_repository.get_deck_install(
             user_id=user_id,
@@ -243,6 +248,16 @@ def _load_checkout_context(*, product_type: str, product_ref_id: str, user_id: i
             raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy deck cần thanh toán.", status=404)
         context = _validate_deck_item_for_checkout(deck_item, user_id=user_id)
         context["product"] = deck_item
+        return context
+
+    if product_type == "template":
+        from app.services import template_marketplace_service
+
+        try:
+            context = template_marketplace_service.checkout_context(template_id=product_ref_id, user_id=user_id)
+        except template_marketplace_service.TemplateCheckoutError as exc:
+            raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
+        context["product"] = None
         return context
 
     raise PaymentServiceError(

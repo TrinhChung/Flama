@@ -48,7 +48,7 @@ export function TemplateLibraryPage() {
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" className="rounded-xl gap-2" asChild>
-            <Link to="/marketplace/note-types">
+            <Link to="/marketplace/templates">
               <Store className="size-4" />
               {t('library.btn_explore_market')}
             </Link>

@@ -26,6 +26,7 @@ from .marketplace import (
     marketplace_installations_bp,
     marketplace_note_types_bp,
     marketplace_taxonomy_bp,
+    marketplace_templates_bp,
 )
 from .download import download_bp
 from .images import images_bp
@@ -128,6 +129,7 @@ api_v1_bp.register_blueprint(marketplace_deck_keys_bp)
 api_v1_bp.register_blueprint(marketplace_deck_releases_bp)
 api_v1_bp.register_blueprint(marketplace_note_types_bp)
 api_v1_bp.register_blueprint(marketplace_taxonomy_bp)
+api_v1_bp.register_blueprint(marketplace_templates_bp)
 api_v1_bp.register_blueprint(creator_deck_keys_bp)
 api_v1_bp.register_blueprint(profile_bp, url_prefix="/profile")
 api_v1_bp.register_blueprint(wallet_bp, url_prefix="/wallet")

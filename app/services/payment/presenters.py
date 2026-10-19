@@ -42,6 +42,7 @@ WEBHOOK_STATUS_LABELS = {
 PRODUCT_TYPE_LABELS = {
     "note_type": "Template",
     "deck_marketplace_item": "Deck",
+    "template": "Giao diện thẻ",
     "support_donation": "Ủng hộ",
 }
 
@@ -252,6 +253,12 @@ def _resolve_item_seller_label(item: PaymentOrderItem) -> str:
         note_type = NoteType.query.get(item.product_ref_id)
         if note_type is not None and note_type.owner is not None:
             return note_type.owner.username or note_type.owner.email or ""
+    if item.product_type == "template":
+        from app.services import template_marketplace_service
+
+        label = template_marketplace_service.seller_label(item.product_ref_id)
+        if label:
+            return label
     if item.product_type == "deck_marketplace_item":
         deck_item = DeckMarketplaceItem.query.get(item.product_ref_id)
         if deck_item is not None and deck_item.owner is not None:

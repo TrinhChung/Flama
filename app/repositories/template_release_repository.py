@@ -115,7 +115,8 @@ def source_access(session, *, user_id, source_template_id):
     ).limit(1)
     if session.execute(free_published).first():
         return True
-    return False
+    from app.repositories import template_marketplace_repository
+    return template_marketplace_repository.marketplace_access(session, user_id=user_id, template_id=source_template_id)
 
 
 def subscriptions_for_source(session, source_template_id, *, automatic_only=False):

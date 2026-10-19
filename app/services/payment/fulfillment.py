@@ -107,6 +107,14 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
             "seller_name": support_donation_service.DONATION_SELLER_NAME,
         }
 
+    if order_item.product_type == "template":
+        from app.services import template_marketplace_service
+
+        try:
+            return template_marketplace_service.fulfill_purchase(user_id=order.user_id, template_id=order_item.product_ref_id)
+        except template_marketplace_service.TemplateCheckoutError as exc:
+            raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
+
     raise PaymentServiceError("VALIDATION_ERROR", "Don hang chua loai san pham khong duoc ho tro.", status=400)
 
 
@@ -122,6 +130,8 @@ def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: Payme
             entitlement_type = "shared_note_type_install"
             if order_item.product_type == "deck_marketplace_item":
                 entitlement_type = "shared_deck_install"
+            elif order_item.product_type == "template":
+                entitlement_type = "shared_template_install"
             elif order_item.product_type == support_donation_service.DONATION_PRODUCT_TYPE:
                 entitlement_type = "support_donation_record"
             entitlement = PaymentEntitlement(

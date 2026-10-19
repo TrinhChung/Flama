@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BookOpen,
   HelpCircle,
-  Layers,
   Plus,
   RotateCcw,
   X,
@@ -14,6 +12,7 @@ import { DeckCard } from '../components/DeckCard'
 import { SharedNoteTypeCard } from '../components/card/SharedNoteTypeCard'
 import { MarketplaceFilterBar } from '../components/MarketplaceFilterBar'
 import { MarketplaceCuratedSection } from '../components/MarketplaceCuratedSection'
+import { MarketplaceModeSwitcher } from '../components/MarketplaceModeSwitcher'
 
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
@@ -480,30 +479,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               {t('header.tour_btn', { defaultValue: 'Hướng Dẫn' })}
             </Button>
 
-            <div data-tour="market-mode-switcher" className="inline-flex rounded-xl border border-border/80 bg-muted/40 p-0.5 sm:p-1 shadow-2xs shrink-0">
-              <Button
-                variant={mode === 'decks' ? 'default' : 'ghost'}
-                size="sm"
-                asChild
-                className="h-7 sm:h-8 px-2.5 sm:px-3 text-xs font-semibold rounded-lg transition-all"
-              >
-                <Link to="/marketplace/decks">
-                  <BookOpen className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
-                  {t('header.tab_decks', { defaultValue: 'Bộ Thẻ' })}
-                </Link>
-              </Button>
-              <Button
-                variant={mode === 'note-types' ? 'default' : 'ghost'}
-                size="sm"
-                asChild
-                className="h-7 sm:h-8 px-2.5 sm:px-3 text-xs font-semibold rounded-lg transition-all"
-              >
-                <Link to="/marketplace/note-types">
-                  <Layers className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
-                  {t('header.tab_notetypes', { defaultValue: 'Cấu trúc thẻ' })}
-                </Link>
-              </Button>
-            </div>
+            <MarketplaceModeSwitcher mode={mode} />
 
             <Button
               variant="outline"

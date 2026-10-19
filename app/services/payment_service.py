@@ -79,6 +79,7 @@ def _product_type_label(product_type: str) -> str:
     return {
         "note_type": "template",
         "deck_marketplace_item": "deck",
+        "template": "giao diện thẻ",
         support_donation_service.DONATION_PRODUCT_TYPE: "\u1ee7ng h\u1ed9",
     }.get(_clean_text(product_type), "sản phẩm")
 
@@ -1101,6 +1102,11 @@ def _resolve_existing_access_for_product(*, product_type: str, product_ref_id: s
             "installed_note_type_id": install.installed_note_type_id,
         }
 
+    if product_type == "template":
+        from app.services import template_marketplace_service
+
+        return template_marketplace_service.existing_access(user_id=user_id, template_id=product_ref_id)
+
     if product_type == "deck_marketplace_item":
         install = payment_repository.get_deck_install(
             user_id=user_id,
@@ -1132,6 +1138,16 @@ def _load_checkout_context(*, product_type: str, product_ref_id: str, user_id: i
             raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy deck cần thanh toán.", status=404)
         context = _validate_deck_item_for_checkout(deck_item, user_id=user_id)
         context["product"] = deck_item
+        return context
+
+    if product_type == "template":
+        from app.services import template_marketplace_service
+
+        try:
+            context = template_marketplace_service.checkout_context(template_id=product_ref_id, user_id=user_id)
+        except template_marketplace_service.TemplateCheckoutError as exc:
+            raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
+        context["product"] = None
         return context
 
     raise PaymentServiceError(
@@ -1750,6 +1766,14 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
             "seller_name": support_donation_service.DONATION_SELLER_NAME,
         }
 
+    if order_item.product_type == "template":
+        from app.services import template_marketplace_service
+
+        try:
+            return template_marketplace_service.fulfill_purchase(user_id=order.user_id, template_id=order_item.product_ref_id)
+        except template_marketplace_service.TemplateCheckoutError as exc:
+            raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
+
     raise PaymentServiceError("VALIDATION_ERROR", "Don hang chua loai san pham khong duoc ho tro.", status=400)
 
 
@@ -1765,6 +1789,8 @@ def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: Payme
             entitlement_type = "shared_note_type_install"
             if order_item.product_type == "deck_marketplace_item":
                 entitlement_type = "shared_deck_install"
+            elif order_item.product_type == "template":
+                entitlement_type = "shared_template_install"
             elif order_item.product_type == support_donation_service.DONATION_PRODUCT_TYPE:
                 entitlement_type = "support_donation_record"
             entitlement = PaymentEntitlement(

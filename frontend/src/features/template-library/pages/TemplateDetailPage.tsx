@@ -1,12 +1,13 @@
 import '@/shared/config/i18n'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Archive, ArrowLeft, History, Info, MoreHorizontal, Save, Share2, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { Archive, ArrowLeft, History, Info, MoreHorizontal, Save, Share2, SlidersHorizontal, Store, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cardTemplateQueryKeys, fetchTemplateVersion, fetchTemplateVersions, inputSchemaPreviewFields, restoreTemplateVersion, SampleValuesSheet, TemplateCodeEditor, type TemplateEditorTab } from '@/entities/card-template'
 import { CardPreviewPanel } from '@/entities/flashcard'
 import { TemplateVersionHistorySheet } from '@/features/template-versions'
 import { TemplateDistributionPanel } from '@/features/template-distribution'
+import { PublishTemplateDialog } from '@/features/template-marketplace'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -48,6 +49,7 @@ function TemplateDetailEditor({ id }: { id: string }) {
   const [reloadOpen, setReloadOpen] = useState(false)
   const [applyOpen, setApplyOpen] = useState(false)
   const [distributionOpen, setDistributionOpen] = useState(false)
+  const [marketOpen, setMarketOpen] = useState(false)
   const guard = useUnsavedChangesGuard(editor.dirty || inputsDirty || informationDirty, t('setup.unsaved_description'), { onSave: inputsDirty || informationDirty ? undefined : editor.saveAsync })
   const historySource = useMemo(() => ({
     listKey: cardTemplateQueryKeys.templateVersions(id), detailKey: (versionId: string) => cardTemplateQueryKeys.templateVersion(id, versionId),
@@ -72,6 +74,7 @@ function TemplateDetailEditor({ id }: { id: string }) {
       <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="icon" disabled={locked} aria-label={t('setup.more_actions')}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-64">
         <DropdownMenuItem onSelect={() => setInformationOpen(true)}><Info />{t('setup.information')}</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setDistributionOpen(true)}><Share2 />{t('setup.distribution')}</DropdownMenuItem>
+        <DropdownMenuItem disabled={template.origin === 'market_copy' || editor.dirty} onSelect={() => setMarketOpen(true)}><Store />{t(template.origin === 'market_copy' ? 'setup.publish_market_blocked' : editor.dirty ? 'setup.publish_market_save_first' : 'setup.publish_market')}</DropdownMenuItem>
         <DropdownMenuItem disabled={Boolean(template.archived_at)} onSelect={() => setApplyOpen(true)}>{t('detail.apply_to_note_type')}</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setHistoryOpen(true)}><History />{t('detail.history')}</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setUsageOpen(true)}>{t('detail.used_in_title')}</DropdownMenuItem>
@@ -94,6 +97,7 @@ function TemplateDetailEditor({ id }: { id: string }) {
     {informationOpen && <TemplateInformationDialog draft={draft} onApply={editor.updateDraft} onClose={() => setInformationOpen(false)} onDirtyChange={setInformationDirty} />}
     <Sheet open={usageOpen} onOpenChange={setUsageOpen}><SheetContent className="w-full sm:max-w-lg"><SheetHeader><SheetTitle>{t('detail.used_in_title')}</SheetTitle><SheetDescription>{t('detail.used_in_stats', { noteTypeCount: template.note_type_count, applicationCount: template.application_count })}</SheetDescription></SheetHeader><div className="p-4 pt-0 overflow-y-auto space-y-3">{template.applications.map((application) => <div key={application.id} className="rounded-xl border p-3 text-sm"><Link className="font-semibold text-primary hover:underline" to={`/flashcards/note-types/${encodeURIComponent(application.note_type_id)}/templates/${encodeURIComponent(application.application_id || application.id)}`} onClick={(event) => { event.preventDefault(); go(event.currentTarget.getAttribute('href')!) }}>{application.display_name || template.name}</Link><p className="text-xs text-muted-foreground mt-1">{application.note_type_name}</p></div>)}{!template.applications.length && <p className="text-sm text-muted-foreground">{t('detail.used_in_empty')}</p>}</div></SheetContent></Sheet>
     <ApplyTemplateWizard open={applyOpen} onOpenChange={setApplyOpen} template={template} />
+    {template.origin !== 'market_copy' && <PublishTemplateDialog open={marketOpen} onOpenChange={setMarketOpen} templateId={template.id} onTemplateChanged={() => void editor.refreshAndReplaceDraft()} />}
     <TemplateDistributionPanel open={distributionOpen} onOpenChange={setDistributionOpen} templateId={template.id} origin={template.origin} currentVersionId={template.current_version_id} onSourceChanged={editor.refreshAndReplaceDraft} />
     {historyOpen && <TemplateVersionHistorySheet open onOpenChange={setHistoryOpen} source={historySource} current={draft} onRestored={editor.refreshAndReplaceDraft} onRestorePendingChange={setRestoring} />}
     <ConfirmDialog open={archiveOpen} onOpenChange={setArchiveOpen} title={t('detail.archive_confirm_title')} description={t('detail.archive_confirm_desc')} confirmText={t('detail.archive_confirm_btn')} cancelText={t('setup.cancel')} isLoading={editor.archiveMutation.isPending} onConfirm={async () => { try { await editor.archive(true); setArchiveOpen(false) } catch { /* Mutation displays the error. */ } }} />

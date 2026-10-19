@@ -199,6 +199,7 @@ export function PaymentResultPage() {
   const firstItem = order.items?.[0]
   const isDeck = firstItem?.product_type === 'deck_marketplace_item'
   const isNoteType = firstItem?.product_type === 'note_type'
+  const isTemplate = firstItem?.product_type === 'template'
   const isDonation = order.is_support_donation || firstItem?.product_type === 'support_donation'
 
   return (
@@ -243,6 +244,7 @@ export function PaymentResultPage() {
             isPending={isPending}
             isDeck={isDeck}
             isNoteType={isNoteType}
+            isTemplate={isTemplate}
             isDonation={isDonation}
             firstItem={firstItem}
             checkoutUrl={order.active_attempt?.checkout_url}

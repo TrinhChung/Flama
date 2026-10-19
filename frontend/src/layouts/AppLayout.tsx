@@ -59,6 +59,7 @@ const pageTitleKeyMap: Record<string, string> = {
   '/marketplace/decks/publish': 'page_titles.marketplace_decks_publish',
   '/marketplace/note-types': 'page_titles.marketplace_note_types',
   '/marketplace/note-types/publish': 'page_titles.marketplace_note_types_publish',
+  '/marketplace/templates': 'page_titles.marketplace_templates',
   '/orders': 'page_titles.orders',
   '/profile': 'page_titles.profile',
   '/settings/goals': 'page_titles.settings_goals',
