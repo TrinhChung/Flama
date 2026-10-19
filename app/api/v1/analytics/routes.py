@@ -58,10 +58,8 @@ def dashboard():
             payload = build_dashboard_payload(current_user, compact=compact in {"1", "true"})
         return jsonify(payload)
     except AnalyticsSummaryNotReady as exc:
-        db.session.rollback()
         return _summary_pending_response(exc)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
         return error_response(
             str(exc.code),
             str(exc),
@@ -106,10 +104,8 @@ def statistics_overview():
                 timezone_name=resolved_tz,
             )
     except AnalyticsSummaryNotReady as exc:
-        db.session.rollback()
         return _summary_pending_response(exc)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
         return error_response(
             str(exc.code),
             str(exc),
@@ -167,10 +163,8 @@ def statistics_today_future():
                 backlog=backlog,
             )
     except AnalyticsSummaryNotReady as exc:
-        db.session.rollback()
         return _summary_pending_response(exc)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
         return error_response(
             str(exc.code),
             str(exc),
@@ -207,6 +201,5 @@ def statistics_study_time():
                 start_date_str=start_date, end_date_str=end_date,
             )
     except AnalyticsSummaryNotReady as exc:
-        db.session.rollback()
         return _summary_pending_response(exc)
     return jsonify(payload)

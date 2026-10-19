@@ -43,8 +43,9 @@ class TemplateDistributionMigrationTests(unittest.TestCase):
             if name == "deck_releases" and current:
                 parent.append_column(sa.Column("template_pins_initialized", sa.Boolean, nullable=False, server_default="0"))
         if current:
-            for model in MODELS:
-                model.__table__.to_metadata(metadata)
+            # Freeze revision 55 schema rather than revision 69 marketplace columns.
+            for table in tables:
+                table.to_metadata(metadata)
         metadata.create_all(self.connection)
         self.connection.execute(metadata.tables["users"].insert(), [{"id": 1}, {"id": 2}])
         self.connection.execute(metadata.tables["decks"].insert(), [{"id": 1}, {"id": 2}])
@@ -198,9 +199,18 @@ class TemplateDistributionMigrationTests(unittest.TestCase):
         metadata = frozen[0].metadata
         for model, table in zip(MODELS, frozen):
             with self.subTest(table=table.name):
-                # Copy model into the frozen parent metadata so references
-                # resolve without importing unrelated application mappers.
-                model_table = model.__table__.to_metadata(sa.MetaData())
+                if model.__table__.name == "template_publications":
+                    added_in_69 = {"marketplace_status", "pricing_mode", "price_amount_minor", "marketplace_published_at"}
+                    filtered_cols = [c._copy() for c in model.__table__.c if c.name not in added_in_69]
+                    filtered_constraints = [constraint._copy() for constraint in model.__table__.constraints if not any(col.name in added_in_69 for col in getattr(constraint, "columns", []))]
+                    model_table = sa.Table(
+                        model.__table__.name,
+                        sa.MetaData(),
+                        *filtered_cols,
+                        *filtered_constraints,
+                    )
+                else:
+                    model_table = model.__table__.to_metadata(sa.MetaData())
                 for parent in ("users", "decks", "templates", "template_versions", "deck_releases"):
                     metadata.tables[parent].to_metadata(model_table.metadata)
                 for linked in ("template_releases",):
