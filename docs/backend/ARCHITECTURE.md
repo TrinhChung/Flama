@@ -234,7 +234,7 @@ Services own business logic orchestration and transaction boundaries:
 - **`flashcard_renderer.py`**: Mustache compilation, field replacement, furigana rendering, and CSP sandbox generation.
 - **`flashcards_share_service.py`**: Monolithic share orchestrator (alongside modular `app/services/share/` package comprising `install.py`, `publish.py`, `overlay.py`, `cutover.py`, `helpers.py`, `constants.py`, `note_types.py`).
 - **`study_session_service.py`**: Study session lifecycle, queue building, and answer rating validation.
-- **`payment_service.py`**: payOS order creation, checkout links, and webhook processing.
+- **`payment/`**: Canonical payment implementation: checkout/pricing (`checkout.py`), order lifecycle (`orders.py`), entitlement grants (`fulfillment.py`), PayOS webhooks (`webhook.py`), and response presentation (`status_display.py`, `presenters.py`). `base.py` owns shared constants and `PaymentServiceError`; `payment_service.py` only re-exports this package for compatibility.
 
 ### 5.2 Repository Layer (`app/repositories/` — 46 modules)
 Repositories encapsulate database query execution:

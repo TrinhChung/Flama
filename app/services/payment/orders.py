@@ -2,57 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-import json
-import logging
-import re
+from datetime import datetime
 from secrets import randbelow
 import time
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
-from flask import current_app
-from sqlalchemy import and_, asc, desc, func, or_
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import joinedload
-
 from app.repositories import payment_repository
-from app.services import flashcards_share_service, support_donation_service
-from app.services.payment import config as payment_config
-from app.services.payment.provider import payos_provider
 from models import db
-from models.audit_log import AuditLog
-from models.deck_install import DeckInstall
-from models.deck_marketplace_item import DeckMarketplaceItem
-from models.note_type import NoteType
-from models.note_type_install import NoteTypeInstall
 from models.payment_attempt import PaymentAttempt
-from models.payment_entitlement import PaymentEntitlement
 from models.payment_order import PaymentOrder
 from models.payment_order_item import PaymentOrderItem
-from models.payment_webhook_event import PaymentWebhookEvent
-from models.user import User
-
-logger = logging.getLogger(__name__)
-UTC = timezone.utc
-
-PAYMENT_PROVIDER_CODE = "payos"
-PAYMENT_METHOD_CODE = "payos_checkout"
-PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
-
 
 from app.services.payment.base import (
     ACTIVE_ATTEMPT_STATUSES,
+    TERMINAL_ORDER_STATUSES,
     PaymentServiceError,
-    _clean_text,
     _iso,
     _order_is_support_donation,
-    _product_title_from_order,
-    _product_type_label,
-    _require_payments_enabled,
-    _require_supported_provider,
     _utcnow,
 )
 from app.services.payment.status_display import (
@@ -105,7 +73,7 @@ def _maybe_expire_order(order: PaymentOrder, *, now: datetime | None = None) -> 
     attempt.status = "expired"
     attempt.failed_at = attempt.failed_at or current_time
     attempt.failure_code = attempt.failure_code or "expired"
-    attempt.failure_message = attempt.failure_message or "Lượt thanh toán đã hết hạn trước khi giao dịch được xác nhận thành công."
+    attempt.failure_message = attempt.failure_message or "Lượt thanh toán đã hết hạn trước khi PayOS xác nhận thành công."
 
     other_non_terminal_attempts = any(
         row.id != attempt.id and row.status in ACTIVE_ATTEMPT_STATUSES.union({"manual_review"})
@@ -211,8 +179,9 @@ def serialize_order(order: PaymentOrder) -> dict[str, Any]:
     }
 
 
-
 def sync_and_get_order(*, order_id: str) -> dict[str, Any]:
+    from app.services.payment.checkout import _sync_attempt_with_payos
+
     order = payment_repository.get_order_by_id(order_id)
     if order is None:
         raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng thanh toán.", status=404)
@@ -229,6 +198,8 @@ def sync_and_get_order(*, order_id: str) -> dict[str, Any]:
 
 
 def get_order_detail_for_user(*, order_id: str, user_id: int) -> dict[str, Any]:
+    from app.services.payment.checkout import _sync_attempt_with_payos
+
     order = payment_repository.get_order_for_user(order_id, user_id)
     if order is None:
         raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng thanh toán.", status=404)
@@ -332,6 +303,15 @@ def admin_update_order_status(*, order_id: str, new_status: str, note: str = "")
             latest_attempt.failure_code = "admin_canceled"
             latest_attempt.failure_message = note or "Quản trị viên đã chủ động hủy đơn hàng."
             
+    elif new_status == "failed":
+        order.status = "failed"
+        order.closed_at = now
+        if latest_attempt is not None and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES.union({"manual_review"}):
+            latest_attempt.status = "failed"
+            latest_attempt.failed_at = now
+            latest_attempt.failure_code = "admin_failed"
+            latest_attempt.failure_message = note or "Quản trị viên đánh dấu thanh toán thất bại."
+
     elif new_status == "refunded":
         order.status = "refunded"
         order.closed_at = now
@@ -353,6 +333,5 @@ def admin_update_order_status(*, order_id: str, new_status: str, note: str = "")
             
     db.session.commit()
     return serialize_order(order)
-
 
 

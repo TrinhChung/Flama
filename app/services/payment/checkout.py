@@ -2,50 +2,28 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-import json
-import logging
-import re
-from secrets import randbelow
-import time
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from uuid import uuid4
-
-from flask import current_app
-from sqlalchemy import and_, asc, desc, func, or_
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import joinedload
+from datetime import datetime, timedelta
+from typing import Any
 
 from app.repositories import payment_repository
-from app.services import flashcards_share_service, support_donation_service
+from app.services import support_donation_service
 from app.services.share.constants import DEFAULT_VISIBLE_PUBLISH_STATUSES
 from app.services.payment import config as payment_config
 from app.services.payment.provider import payos_provider
 from models import db
-from models.audit_log import AuditLog
-from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.note_type import NoteType
-from models.note_type_install import NoteTypeInstall
 from models.payment_attempt import PaymentAttempt
-from models.payment_entitlement import PaymentEntitlement
 from models.payment_order import PaymentOrder
 from models.payment_order_item import PaymentOrderItem
-from models.payment_webhook_event import PaymentWebhookEvent
 from models.user import User
 
-logger = logging.getLogger(__name__)
-UTC = timezone.utc
-
-PAYMENT_PROVIDER_CODE = "payos"
-PAYMENT_METHOD_CODE = "payos_checkout"
-PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
-
-
 from app.services.payment.base import (
+    PAYMENT_PROVIDER_CODE,
+    PAYMENT_METHOD_CODE,
+    PAYOS_PROVIDER_REUSABLE_STATUSES,
     ACTIVE_ATTEMPT_STATUSES,
+    DEFAULT_ORDER_EXPIRY_SECONDS,
     PaymentServiceError,
     _clean_text,
     _iso,
@@ -61,10 +39,6 @@ from app.services.payment.orders import (
     _latest_attempt,
     _maybe_expire_order,
     serialize_order,
-)
-from app.services.payment.status_display import (
-    _build_order_status_display,
-    _grant_status_display,
 )
 
 def _validate_note_type_for_checkout(source_note_type: NoteType, *, user_id: int) -> dict[str, Any]:
@@ -141,8 +115,8 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
             "Bạn không thể mua chính deck do mình phát hành.",
             status=409,
         )
-    # Fulfillment cannot install an overlay for NOTE learners yet. Reject
-    # before creating a payable order or contacting the provider.
+    # Apply the same learner guard used by fulfillment before creating a
+    # payable order or contacting the provider.
     from app.services.share.helpers import (
         ShareControllerError,
         _fence_overlay_install_route,
@@ -283,7 +257,7 @@ def _build_checkout_attempt(
     if not return_url or not cancel_url:
         raise PaymentServiceError(
             "PAYMENT_RETURN_URL_REQUIRED",
-            "Không thể tạo đơn thanh toán vì thiếu liên kết quay lại sau khi thanh toán.",
+            "Không thể tạo đơn thanh toán vì thiếu liên kết quay lại sau khi rời PayOS.",
             status=400,
         )
     now = _utcnow()
@@ -345,6 +319,9 @@ def _build_checkout_attempt(
 
 
 def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, now: datetime) -> str:
+    # Fulfillment serializes orders; keep this edge lazy to avoid an import cycle.
+    from app.services.payment.fulfillment import _ensure_entitlements_for_confirmed_order
+
     if attempt.provider_code != PAYMENT_PROVIDER_CODE or not attempt.checkout_url:
         attempt.status = "failed"
         attempt.failed_at = now
@@ -369,7 +346,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
             attempt.status = "failed"
             attempt.failed_at = now
             attempt.failure_code = "provider_link_unavailable"
-            attempt.failure_message = "Liên kết thanh toán cũ không còn khả dụng nên hệ thống sẽ tạo đơn mới."
+            attempt.failure_message = "Liên kết thanh toán cũ không còn khả dụng trên PayOS nên hệ thống sẽ tạo đơn mới."
             order.status = "failed"
             order.closed_at = now
             return "recreate"
@@ -396,7 +373,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         attempt.status = "expired"
         attempt.failed_at = attempt.failed_at or now
         attempt.failure_code = "expired"
-        attempt.failure_message = "Lượt thanh toán cũ đã hết hạn."
+        attempt.failure_message = "Lượt thanh toán cũ đã hết hạn trên PayOS."
         order.status = "expired"
         order.closed_at = now
         return "recreate"
@@ -407,7 +384,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         attempt.failure_code = "canceled"
         attempt.failure_message = (
             _clean_text(provider_state.get("cancellation_reason"))
-            or "Phiên thanh toán cũ đã bị hủy hoặc đóng."
+            or "Phiên thanh toán cũ đã bị hủy hoặc đóng trên PayOS."
         )
         order.status = "canceled"
         order.closed_at = now
@@ -417,14 +394,14 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         attempt.status = "failed"
         attempt.failed_at = attempt.failed_at or now
         attempt.failure_code = "provider_failed"
-        attempt.failure_message = "Cổng thanh toán báo phiên giao dịch cũ không còn xử lý được."
+        attempt.failure_message = "PayOS báo phiên thanh toán cũ không còn xử lý được."
         order.status = "failed"
         order.closed_at = now
         return "recreate"
 
     if provider_status == "UNDERPAID":
         attempt.status = "manual_review"
-        attempt.manual_review_reason = "Giao dịch ghi nhận chưa đủ số tiền nên cần kiểm tra thủ công."
+        attempt.manual_review_reason = "PayOS ghi nhận giao dịch chưa đủ số tiền nên cần kiểm tra thủ công."
         order.status = "under_review"
         order.closed_at = None
         return "block"
@@ -435,7 +412,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         if provider_amount_minor and provider_amount_minor != int(attempt.amount_minor or 0):
             attempt.status = "manual_review"
             attempt.manual_review_reason = (
-                "Giao dịch thành công nhưng số tiền ghi nhận không khớp với đơn hàng."
+                "PayOS xác nhận thanh toán thành công nhưng số tiền trên PayOS không khớp với đơn hàng."
             )
             order.status = "under_review"
             order.closed_at = None
@@ -443,7 +420,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         if provider_amount_paid_minor and provider_amount_paid_minor != int(attempt.amount_minor or 0):
             attempt.status = "manual_review"
             attempt.manual_review_reason = (
-                "Giao dịch thành công nhưng số tiền thực nhận không khớp với đơn hàng."
+                "PayOS xác nhận thanh toán thành công nhưng số tiền thực nhận không khớp với đơn hàng."
             )
             order.status = "under_review"
             order.closed_at = None
@@ -463,7 +440,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
 
     attempt.status = "manual_review"
     attempt.manual_review_reason = (
-        f"Cổng thanh toán trả về trạng thái '{provider_status or 'UNKNOWN'}' nên hệ thống không tự động tái sử dụng lượt thanh toán này."
+        f"PayOS trả về trạng thái '{provider_status or 'UNKNOWN'}' nên hệ thống không tự động tái sử dụng lượt thanh toán này."
     )
     order.status = "under_review"
     order.closed_at = None
@@ -636,6 +613,5 @@ def prepare_support_donation_checkout(
             "provider_metadata": provider_metadata,
         },
     }
-
 
 

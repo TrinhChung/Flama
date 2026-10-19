@@ -1320,9 +1320,9 @@ def register_cli_commands(app: Flask) -> None:
     @app.cli.command("payments-expire-stale")
     def payments_expire_stale() -> None:
         """Expire stale unpaid payment attempts/orders."""
-        from app.services import payment_service
+        from app.services import payment
 
-        result = payment_service.expire_stale_orders()
+        result = payment.expire_stale_orders()
         click.echo(
             "Done. "
             f"expired_attempts={int(result.get('expired_attempts') or 0)}, "

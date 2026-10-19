@@ -362,6 +362,42 @@ class PaymentManagementViewTests(unittest.TestCase):
         order = payload.get("order") or {}
         self.assertEqual(order.get("status"), "canceled")
 
+    def test_admin_update_order_status_to_failed_persists_attempt_failure(self):
+        self._login(self.admin_email)
+        response = self.client.patch(
+            f"/api/admin/payments/orders/{self.buyer_pending_order_id}/status",
+            json={"status": "failed", "note": "Payment rejected after review"},
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["order"]["status"], "failed")
+        with self.app.app_context():
+            order = db.session.get(PaymentOrder, self.buyer_pending_order_id)
+            self.assertEqual(order.status, "failed")
+            self.assertIsNotNone(order.closed_at)
+            self.assertIsNone(order.paid_at)
+            attempt = order.attempts[0]
+            self.assertEqual(attempt.status, "failed")
+            self.assertIsNotNone(attempt.failed_at)
+            self.assertEqual(attempt.failure_code, "admin_failed")
+            self.assertEqual(attempt.failure_message, "Payment rejected after review")
+            self.assertEqual(
+                PaymentEntitlement.query.filter_by(payment_order_id=order.id).count(), 0
+            )
+
+    def test_admin_update_order_status_errors_keep_the_api_contract(self):
+        self._login(self.admin_email)
+        invalid = self.client.patch(
+            f"/api/admin/payments/orders/{self.buyer_pending_order_id}/status",
+            json={"status": "unsupported"},
+        )
+        self.assertEqual(invalid.status_code, 400, invalid.get_json())
+        self.assertEqual(invalid.get_json()["error"], "VALIDATION_ERROR")
+        missing = self.client.patch(
+            "/api/admin/payments/orders/missing-order/status", json={"status": "paid"}
+        )
+        self.assertEqual(missing.status_code, 404, missing.get_json())
+        self.assertEqual(missing.get_json()["error"], "FIELD_NOT_FOUND")
+
     def test_admin_sync_order_success(self):
         self._login(self.admin_email)
         response = self.client.post(

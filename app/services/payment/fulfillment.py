@@ -2,53 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-import json
-import logging
-import re
-from secrets import randbelow
-import time
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from uuid import uuid4
-
-from flask import current_app
-from sqlalchemy import and_, asc, desc, func, or_
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import joinedload
+from datetime import datetime
+from typing import Any
 
 from app.repositories import payment_repository
 from app.services import flashcards_share_service, support_donation_service, wallet_service
-from app.services.payment import config as payment_config
-from app.services.payment.provider import payos_provider
+from app.services.share.constants import DEFAULT_VISIBLE_PUBLISH_STATUSES
 from models import db
-from models.audit_log import AuditLog
-from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.note_type import NoteType
-from models.note_type_install import NoteTypeInstall
 from models.payment_attempt import PaymentAttempt
 from models.payment_entitlement import PaymentEntitlement
 from models.payment_order import PaymentOrder
 from models.payment_order_item import PaymentOrderItem
 from models.payment_webhook_event import PaymentWebhookEvent
-from models.user import User
-
-logger = logging.getLogger(__name__)
-UTC = timezone.utc
-
-PAYMENT_PROVIDER_CODE = "payos"
-PAYMENT_METHOD_CODE = "payos_checkout"
-PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
-
 
 from app.services.payment.base import (
     PaymentServiceError,
     _iso,
-    _utcnow,
 )
-from app.services.payment.orders import serialize_order
 
 def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, attempt: PaymentAttempt, now: datetime) -> dict[str, Any]:
     if order_item.product_type == "note_type":
@@ -210,6 +182,5 @@ def _mark_failed_attempt(
     event.processing_status = "processed"
     event.error_message = reason
     event.processed_at = now
-
 
 

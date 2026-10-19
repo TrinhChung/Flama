@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.repositories.payment import order_queries
+from app.services.payment import orders as payment_orders
 from app.services.payment.presenters import build_order_detail_payload, build_order_row
 from app.validators.payment_query import OrderFilterInput
 
@@ -20,10 +21,8 @@ def list_user_orders(*, user_id: int, filters: OrderFilterInput, page: int, per_
 
 
 def get_admin_order_detail(order_id: str) -> dict[str, Any] | None:
-    from app.services import payment_service
-
     try:
-        payment_service.sync_and_get_order(order_id=order_id)
+        payment_orders.sync_and_get_order(order_id=order_id)
     except Exception:
         pass
     order = order_queries.get_order_detail_for_admin(order_id)
@@ -33,10 +32,8 @@ def get_admin_order_detail(order_id: str) -> dict[str, Any] | None:
 
 
 def get_user_order_detail(*, order_id: str, user_id: int) -> dict[str, Any] | None:
-    from app.services import payment_service
-
     try:
-        payment_service.get_order_detail_for_user(order_id=order_id, user_id=user_id)
+        payment_orders.get_order_detail_for_user(order_id=order_id, user_id=user_id)
     except Exception:
         pass
     order = order_queries.get_order_detail_for_user(order_id=order_id, user_id=user_id)

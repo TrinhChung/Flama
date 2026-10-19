@@ -2,60 +2,31 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-import json
-import logging
-import re
-from secrets import randbelow
-import time
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from uuid import uuid4
+from typing import Any
 
-from flask import current_app
-from sqlalchemy import and_, asc, desc, func, or_
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.exc import IntegrityError
 
 from app.repositories import payment_repository
-from app.services import flashcards_share_service, support_donation_service
-from app.services.payment import config as payment_config
 from app.services.payment.provider import payos_provider
 from models import db
-from models.audit_log import AuditLog
-from models.deck_install import DeckInstall
-from models.deck_marketplace_item import DeckMarketplaceItem
-from models.note_type import NoteType
-from models.note_type_install import NoteTypeInstall
 from models.payment_attempt import PaymentAttempt
-from models.payment_entitlement import PaymentEntitlement
-from models.payment_order import PaymentOrder
-from models.payment_order_item import PaymentOrderItem
 from models.payment_webhook_event import PaymentWebhookEvent
-from models.user import User
-
-logger = logging.getLogger(__name__)
-UTC = timezone.utc
-
-PAYMENT_PROVIDER_CODE = "payos"
-PAYMENT_METHOD_CODE = "payos_checkout"
-PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
-
 
 from app.services.payment.base import (
+    PAYMENT_PROVIDER_CODE,
     PaymentServiceError,
-    _iso,
+    _require_payments_enabled,
+    _require_supported_provider,
     _utcnow,
 )
+from app.services.payment.config import payments_enabled, webhook_auto_grant_enabled
 from app.services.payment.fulfillment import (
     _ensure_entitlements_for_confirmed_order,
-    _fulfill_order_item,
     _mark_failed_attempt,
     _mark_manual_review,
 )
 from app.services.payment.orders import (
-    _latest_attempt,
+    _maybe_expire_order,
     serialize_order,
 )
 
@@ -148,7 +119,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Giao dịch không vượt qua bước xác minh chữ ký nên cần kiểm tra thủ công.",
+            reason="Webhook từ PayOS không vượt qua bước xác minh chữ ký nên cần kiểm tra thủ công.",
             now=now,
         )
         db.session.commit()
@@ -167,7 +138,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             attempt=attempt,
             event=event,
             reason=(
-                "Cổng thanh toán trả về trạng thái không thành công"
+                "PayOS trả về trạng thái không thành công"
                 f" ('{normalized_payload.get('status') or 'unknown'}') cho đơn hàng này."
             ),
             now=now,
@@ -180,7 +151,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Số tiền chuyển khoản không khớp với số tiền của đơn hàng nên cần kiểm tra thủ công.",
+            reason="Số tiền PayOS gửi về không khớp với số tiền của đơn hàng nên cần kiểm tra thủ công.",
             now=now,
         )
         db.session.commit()
@@ -193,7 +164,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Nội dung chuyển khoản không khớp với mã tham chiếu của đơn hàng.",
+            reason="Nội dung chuyển khoản PayOS gửi về không khớp với mã tham chiếu của đơn hàng.",
             now=now,
         )
         db.session.commit()

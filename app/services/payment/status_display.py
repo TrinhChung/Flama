@@ -2,352 +2,348 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-import json
-import logging
-import re
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any
 
-from flask import current_app
-from sqlalchemy import and_, asc, desc, func, or_
-
-from app.services import support_donation_service
 from app.services.payment.base import (
-    PaymentServiceError,
     _clean_text,
     _iso,
     _order_is_support_donation,
     _product_title_from_order,
-    _product_type_label,
-    _utcnow,
 )
 from models.payment_attempt import PaymentAttempt
 from models.payment_order import PaymentOrder
 
-logger = logging.getLogger(__name__)
-
 
 def _attempt_status_display(attempt: PaymentAttempt) -> dict[str, str]:
     status = _clean_text(attempt.status).lower()
-    if status in {"confirmed", "success"}:
+    if status == "confirmed":
         return {
-            "status": status,
             "code": status,
-            "tone": "success",
-            "badge_variant": "success",
-            "label": "Thanh toán thành công",
-            "title": "Thanh toán thành công",
-            "headline": "Thanh toán thành công",
-            "description": "Giao dịch đã được ghi nhận thành công từ cổng thanh toán.",
-        }
-    if status in {"pending", "processing", "created"}:
-        return {
-            "status": status,
-            "code": status,
-            "tone": "warning",
-            "badge_variant": "warning",
-            "label": "Đang chờ thanh toán",
-            "title": "Đang chờ thanh toán",
-            "headline": "Đang chờ thanh toán",
-            "description": "Cổng thanh toán đang chờ bạn hoàn tất chuyển khoản/quét QR.",
-        }
-    if status in {"cancelled", "canceled"}:
-        return {
-            "status": status,
-            "code": status,
-            "tone": "secondary",
-            "badge_variant": "secondary",
-            "label": "Giao dịch đã hủy",
-            "title": "Giao dịch đã hủy",
-            "headline": "Giao dịch đã hủy",
-            "description": "Phiên thanh toán này đã bị hủy hoặc hết hạn.",
-        }
-    if status in {"failed", "error"}:
-        return {
-            "status": status,
-            "code": status,
-            "tone": "danger",
-            "badge_variant": "destructive",
-            "label": "Thanh toán thất bại",
-            "title": "Thanh toán thất bại",
-            "headline": "Thanh toán thất bại",
-            "description": "Giao dịch không thành công hoặc bị từ chối.",
+            "label": "Đã xác nhận",
+            "description": "PayOS đã xác nhận thanh toán thành công cho lượt thanh toán này.",
         }
     if status == "manual_review":
         return {
-            "status": status,
             "code": status,
-            "tone": "warning",
-            "badge_variant": "destructive",
             "label": "Cần kiểm tra",
-            "title": "Cần kiểm tra",
-            "headline": "Cần kiểm tra",
-            "description": "Giao dịch cần được quản trị viên kiểm tra thủ công.",
+            "description": _clean_text(attempt.manual_review_reason)
+            or "Thanh toán đã được ghi nhận nhưng chưa thể đối soát tự động.",
         }
-    if status == "refunded":
+    if status == "expired":
         return {
-            "status": status,
             "code": status,
-            "tone": "secondary",
-            "badge_variant": "secondary",
-            "label": "Đã hoàn tiền",
-            "title": "Đã hoàn tiền",
-            "headline": "Đã hoàn tiền",
-            "description": "Giao dịch đã được hoàn tiền.",
+            "label": "Đã hết hạn",
+            "description": _clean_text(attempt.failure_message) or "Lượt thanh toán này đã quá hạn.",
+        }
+    if status == "canceled":
+        return {
+            "code": status,
+            "label": "Đã hủy",
+            "description": _clean_text(attempt.failure_message) or "Lượt thanh toán đã bị hủy.",
+        }
+    if status == "failed":
+        return {
+            "code": status,
+            "label": "Thất bại",
+            "description": _clean_text(attempt.failure_message) or "Lượt thanh toán này không thành công.",
         }
     return {
-        "status": status or "unknown",
-        "code": status or "unknown",
-        "tone": "secondary",
-        "badge_variant": "secondary",
-        "label": "Trạng thái giao dịch",
-        "title": "Trạng thái giao dịch",
-        "headline": "Trạng thái giao dịch",
-        "description": "Đang cập nhật trạng thái từ cổng thanh toán.",
+        "code": status or "pending",
+        "label": "Đang chờ thanh toán",
+        "description": "Đơn hàng đã được tạo và đang chờ thanh toán hoặc chờ PayOS xác nhận.",
     }
 
 
 def _grant_status_display(grant_status: str, *, order: PaymentOrder | None = None) -> dict[str, str]:
-    normalized_status = _clean_text(grant_status).lower()
-    is_donation = bool(order and _order_is_support_donation(order))
-    product_title = _product_title_from_order(order) if order else "sản phẩm"
-    product_kind = _product_type_label(order.items[0].product_type) if order and order.items else "sản phẩm"
-
-    if normalized_status == "completed":
-        if is_donation:
-            return {
-                "code": "completed",
-                "grant_status": "completed",
-                "label": "Ủng hộ thành công",
-                "title": "Ủng hộ thành công",
-                "headline": "Ủng hộ thành công",
-                "badge_variant": "success",
-                "description": "Khoản ủng hộ cho dự án Flama đã được ghi nhận. Cảm ơn bạn rất nhiều!",
-            }
+    token = _clean_text(grant_status).lower()
+    is_support_donation = order is not None and _order_is_support_donation(order)
+    if token == "completed":
         return {
-            "code": "completed",
-            "grant_status": "completed",
-            "label": "Đã cấp quyền truy cập",
-            "title": "Đã cấp quyền truy cập",
-            "headline": "Đã cấp quyền truy cập",
-            "badge_variant": "success",
-            "description": f"Bạn đã sở hữu {product_kind} '{product_title}'. Bạn có thể bắt đầu cài đặt và sử dụng ngay bây giờ.",
+            "code": token,
+            "label": "\u0110\u00e3 ghi nh\u1eadn" if is_support_donation else "\u0110\u00e3 c\u1ea5p quy\u1ec1n",
+            "description": (
+                "Kho\u1ea3n \u1ee7ng h\u1ed9 c\u1ee7a b\u1ea1n \u0111\u00e3 \u0111\u01b0\u1ee3c ghi nh\u1eadn th\u00e0nh c\u00f4ng."
+                if is_support_donation
+                else "B\u1ea1n \u0111\u00e3 nh\u1eadn \u0111\u01b0\u1ee3c quy\u1ec1n truy c\u1eadp cho s\u1ea3n ph\u1ea9m trong \u0111\u01a1n h\u00e0ng n\u00e0y."
+            ),
         }
-    if normalized_status == "pending":
-        if is_donation:
-            return {
-                "code": "pending",
-                "grant_status": "pending",
-                "label": "Chờ ghi nhận ủng hộ",
-                "title": "Chờ ghi nhận ủng hộ",
-                "headline": "Chờ ghi nhận ủng hộ",
-                "badge_variant": "warning",
-                "description": "Khoản ủng hộ của bạn đang chờ hệ thống xác nhận thanh toán.",
-            }
+    if token == "failed":
         return {
-            "code": "pending",
-            "grant_status": "pending",
-            "label": "Đang chờ thanh toán",
-            "title": "Đang chờ thanh toán",
-            "headline": "Đang chờ thanh toán",
-            "badge_variant": "warning",
-            "description": f"Hệ thống sẽ tự động cấp quyền truy cập {product_kind} '{product_title}' ngay khi thanh toán hoàn tất.",
-        }
-    if normalized_status == "manual_review":
-        return {
-            "code": "manual_review",
-            "grant_status": "manual_review",
-            "label": "Cần kiểm tra thủ công",
-            "title": "Cần kiểm tra thủ công",
-            "headline": "Cần kiểm tra thủ công",
-            "badge_variant": "destructive",
-            "description": "Thanh toán đã được ghi nhận nhưng hệ thống gặp sự cố khi kích hoạt tự động. Quản trị viên đang hỗ trợ xử lý.",
-        }
-    if normalized_status in {"cancelled", "canceled"}:
-        return {
-            "code": "cancelled",
-            "grant_status": "cancelled",
-            "label": "Đơn hàng đã hủy",
-            "title": "Đơn hàng đã hủy",
-            "headline": "Đơn hàng đã hủy",
-            "badge_variant": "secondary",
-            "description": "Đơn hàng đã được hủy hoặc hết thời hạn thanh toán.",
-        }
-    if normalized_status in {"failed", "error"}:
-        return {
-            "code": "failed",
-            "grant_status": "failed",
-            "label": "Không thể hoàn tất",
-            "title": "Không thể hoàn tất",
-            "headline": "Không thể hoàn tất",
-            "badge_variant": "destructive",
-            "description": "Đơn hàng không thể hoàn tất. Bạn có thể tạo đơn hàng mới để thử lại.",
+            "code": token,
+            "label": "Ghi nh\u1eadn l\u1ed7i" if is_support_donation else "C\u1ea5p quy\u1ec1n l\u1ed7i",
+            "description": (
+                "Thanh to\u00e1n c\u00f3 th\u1ec3 \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00e1c nh\u1eadn nh\u01b0ng kho\u1ea3n \u1ee7ng h\u1ed9 ch\u01b0a \u0111\u01b0\u1ee3c ghi nh\u1eadn ho\u00e0n t\u1ea5t."
+                if is_support_donation
+                else "Thanh to\u00e1n c\u00f3 th\u1ec3 \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00e1c nh\u1eadn nh\u01b0ng h\u1ec7 th\u1ed1ng ch\u01b0a c\u1ea5p quy\u1ec1n ho\u00e0n t\u1ea5t."
+            ),
         }
     return {
-        "code": normalized_status or "unknown",
-        "grant_status": normalized_status or "unknown",
-        "label": "Đang xử lý đơn hàng",
-        "title": "Đang xử lý đơn hàng",
-        "headline": "Đang xử lý đơn hàng",
-        "badge_variant": "secondary",
-        "description": "Hệ thống đang cập nhật trạng thái đơn hàng của bạn.",
+        "code": token or "pending",
+        "label": "Ch\u1edd ghi nh\u1eadn" if is_support_donation else "Ch\u1edd c\u1ea5p quy\u1ec1n",
+        "description": (
+            "Kho\u1ea3n \u1ee7ng h\u1ed9 \u0111ang ch\u1edd x\u00e1c nh\u1eadn cu\u1ed1i c\u00f9ng t\u1eeb PayOS."
+            if is_support_donation
+            else "H\u1ec7 th\u1ed1ng ch\u01b0a ho\u00e0n t\u1ea5t b\u01b0\u1edbc c\u1ea5p quy\u1ec1n cho s\u1ea3n ph\u1ea9m sau thanh to\u00e1n."
+        ),
     }
 
 
 def _build_order_status_display(order: PaymentOrder, attempt: PaymentAttempt | None) -> dict[str, str]:
-    order_status = _clean_text(order.status).lower()
-    attempt_status = _clean_text(attempt.status).lower() if attempt else None
+    status = _clean_text(order.status).lower()
     grant_status = _clean_text(order.grant_status).lower()
-    is_donation = _order_is_support_donation(order)
-    product_title = _product_title_from_order(order)
-    product_kind = _product_type_label(order.items[0].product_type) if order.items else "sản phẩm"
-
-    if order_status in {"completed", "paid"} or grant_status == "completed":
-        if is_donation:
+    if _order_is_support_donation(order):
+        if status == "paid" and grant_status == "completed":
             return {
-                "code": "paid",
+                "code": status,
                 "tone": "success",
-                "badge_variant": "success",
-                "label": "Ủng hộ thành công",
-                "title": "Ủng hộ thành công",
-                "headline": "Cảm ơn bạn đã ủng hộ Flama.",
-                "description": "Khoản ủng hộ của bạn đã được ghi nhận vào hệ thống. Chân thành cảm ơn sự đồng hành của bạn!",
+                "label": "Thanh to\u00e1n th\u00e0nh c\u00f4ng",
+                "headline": "C\u1ea3m \u01a1n b\u1ea1n \u0111\u00e3 \u1ee7ng h\u1ed9 Flama.",
+                "description": "Kho\u1ea3n \u0111\u00f3ng g\u00f3p c\u1ee7a b\u1ea1n \u0111\u00e3 \u0111\u01b0\u1ee3c ghi nh\u1eadn th\u00e0nh c\u00f4ng. S\u1ef1 \u0111\u1ed3ng h\u00e0nh c\u1ee7a b\u1ea1n l\u00e0 ngu\u1ed3n \u0111\u1ed9ng l\u1ef1c r\u1ea5t l\u1edbn \u0111\u1ec3 ch\u00fang t\u00f4i ti\u1ebfp t\u1ee5c ph\u00e1t tri\u1ec3n c\u1ed9ng \u0111\u1ed3ng.",
             }
-        return {
-            "code": "paid",
-            "tone": "success",
-            "badge_variant": "success",
-            "label": "Thanh toán thành công",
-            "title": "Thanh toán thành công",
-            "headline": "Thanh toán thành công",
-            "description": f"Đơn hàng đã hoàn tất. Quyền truy cập {product_kind} '{product_title}' đã sẵn sàng trong tài khoản của bạn.",
-        }
-
-    if grant_status == "manual_review" or order_status == "under_review":
-        return {
-            "code": "under_review",
-            "tone": "warning",
-            "badge_variant": "destructive",
-            "label": "Cần kiểm tra thủ công",
-            "title": "Cần kiểm tra thủ công",
-            "headline": "Giao dịch cần được kiểm tra thêm.",
-            "description": "Hệ thống đã nhận thanh toán nhưng cần kiểm tra thêm để hoàn tất việc cấp quyền. Bạn vui lòng đợi trong giây lát.",
-        }
-
-    if order_status in {"expired", "cancelled", "canceled"}:
-        if attempt_status in {"confirmed", "success"}:
+        if status == "paid":
             return {
-                "code": "under_review",
+                "code": status,
                 "tone": "warning",
-                "badge_variant": "warning",
-                "label": "Đang xác minh giao dịch",
-                "title": "Đang xác minh giao dịch",
-                "headline": "Đang xác minh giao dịch",
-                "description": "Đơn hàng đã quá hạn trong lúc thanh toán đang được xử lý. Hệ thống đang tiến hành đối soát.",
+                "label": "\u0110\u00e3 thanh to\u00e1n",
+                "headline": "Ch\u00fang t\u00f4i \u0111\u00e3 nh\u1eadn \u0111\u01b0\u1ee3c thanh to\u00e1n c\u1ee7a b\u1ea1n.",
+                "description": "H\u1ec7 th\u1ed1ng \u0111ang ho\u00e0n t\u1ea5t b\u01b0\u1edbc ghi nh\u1eadn kho\u1ea3n \u1ee7ng h\u1ed9 n\u00e0y. B\u1ea1n kh\u00f4ng c\u1ea7n thanh to\u00e1n l\u1ea1i.",
             }
-        is_canceled = order_status in {"cancelled", "canceled"}
+        if status == "under_review":
+            reason = _clean_text(attempt.manual_review_reason if attempt is not None else "")
+            return {
+                "code": status,
+                "tone": "warning",
+                "label": "C\u1ea7n ki\u1ec3m tra th\u1ee7 c\u00f4ng",
+                "headline": "Giao d\u1ecbch c\u1ea7n \u0111\u01b0\u1ee3c ki\u1ec3m tra th\u00eam.",
+                "description": reason or "Ch\u00fang t\u00f4i \u0111\u00e3 nh\u1eadn \u0111\u01b0\u1ee3c t\u00edn hi\u1ec7u thanh to\u00e1n nh\u01b0ng c\u1ea7n ki\u1ec3m tra th\u00eam tr\u01b0\u1edbc khi x\u00e1c nh\u1eadn kho\u1ea3n \u1ee7ng h\u1ed9 n\u00e0y.",
+            }
+        if status == "expired":
+            return {
+                "code": status,
+                "tone": "secondary",
+                "label": "Phi\u00ean \u0111\u00e3 h\u1ebft h\u1ea1n",
+                "headline": "Phi\u00ean thanh to\u00e1n \u0111\u00e3 h\u1ebft h\u1ea1n.",
+                "description": "B\u1ea1n c\u00f3 th\u1ec3 t\u1ea1o m\u1ed9t phi\u00ean m\u1edbi b\u1ea5t c\u1ee9 l\u00fac n\u00e0o n\u1ebfu v\u1eabn mu\u1ed1n ti\u1ebfp t\u1ee5c \u1ee7ng h\u1ed9.",
+            }
+        if status == "canceled":
+            return {
+                "code": status,
+                "tone": "secondary",
+                "label": "\u0110\u00e3 h\u1ee7y",
+                "headline": "Phi\u00ean \u1ee7ng h\u1ed9 \u0111\u00e3 \u0111\u01b0\u1ee3c d\u1eebng.",
+                "description": "Khi thu\u1eadn ti\u1ec7n, b\u1ea1n c\u00f3 th\u1ec3 b\u1eaft \u0111\u1ea7u l\u1ea1i b\u1eb1ng m\u1ed9t phi\u00ean m\u1edbi.",
+            }
+        if status == "failed":
+            reason = _clean_text((attempt.failure_message if attempt is not None else "") or "")
+            return {
+                "code": status,
+                "tone": "danger",
+                "label": "Thanh to\u00e1n th\u1ea5t b\u1ea1i",
+                "headline": "R\u1ea5t ti\u1ebfc, giao d\u1ecbch ch\u01b0a ho\u00e0n t\u1ea5t.",
+                "description": reason or "Kho\u1ea3n \u1ee7ng h\u1ed9 n\u00e0y ch\u01b0a \u0111\u01b0\u1ee3c ghi nh\u1eadn. B\u1ea1n c\u00f3 th\u1ec3 th\u1eed l\u1ea1i b\u1eb1ng m\u1ed9t phi\u00ean m\u1edbi khi s\u1eb5n s\u00e0ng.",
+            }
+        if status == "refunded":
+            return {
+                "code": status,
+                "tone": "secondary",
+                "label": "\u0110\u00e3 ho\u00e0n ti\u1ec1n",
+                "headline": "Kho\u1ea3n \u1ee7ng h\u1ed9 \u0111\u00e3 \u0111\u01b0\u1ee3c ho\u00e0n ti\u1ec1n.",
+                "description": "N\u1ebfu \u0111\u00e2y kh\u00f4ng ph\u1ea3i giao d\u1ecbch b\u1ea1n mong mu\u1ed1n, h\u00e3y li\u00ean h\u1ec7 v\u1edbi ch\u00fang t\u00f4i \u0111\u1ec3 \u0111\u01b0\u1ee3c h\u1ed7 tr\u1ee3.",
+            }
         return {
-            "code": "canceled" if is_canceled else "expired",
-            "tone": "secondary",
-            "badge_variant": "secondary",
-            "label": "Đã hủy" if is_canceled else "Phiên đã hết hạn",
-            "title": "Đã hủy" if is_canceled else "Đơn hàng đã hết hạn",
-            "headline": "Phiên thanh toán đã kết thúc.",
-            "description": "Đơn hàng đã hết hạn hoặc bị hủy. Bạn có thể mở thanh toán mới bất cứ lúc nào.",
+            "code": status or "pending_payment",
+            "tone": "info",
+            "label": "\u0110ang ch\u1edd thanh to\u00e1n",
+            "headline": "Phi\u00ean \u1ee7ng h\u1ed9 \u0111\u00e3 s\u1eb5n s\u00e0ng.",
+            "description": "Sau khi ho\u00e0n t\u1ea5t thanh to\u00e1n, h\u1ec7 th\u1ed1ng s\u1ebd c\u1eadp nh\u1eadt k\u1ebft qu\u1ea3 m\u1edbi nh\u1ea5t cho b\u1ea1n t\u1ea1i \u0111\u00e2y.",
         }
-
-    if attempt_status in {"confirmed", "success"}:
+    if status == "paid" and grant_status == "completed":
         return {
-            "code": "paid",
+            "code": status,
             "tone": "success",
-            "badge_variant": "success",
             "label": "Thanh toán thành công",
-            "title": "Thanh toán thành công",
-            "headline": "Thanh toán thành công",
-            "description": "Đang kích hoạt quyền truy cập vào tài khoản của bạn...",
+            "headline": "Đơn hàng đã được thanh toán và cấp quyền thành công.",
+            "description": "Bạn có thể sử dụng ngay sản phẩm vừa mua mà không cần thao tác thêm.",
         }
-
-    if attempt_status in {"failed", "error"}:
+    if status == "paid":
         return {
-            "code": "failed",
-            "tone": "danger",
-            "badge_variant": "destructive",
-            "label": "Thanh toán thất bại",
-            "title": "Thanh toán thất bại",
-            "headline": "Rất tiếc, giao dịch chưa hoàn tất.",
-            "description": "Giao dịch gần nhất không thành công. Bạn có thể thử lại qua cổng thanh toán.",
+            "code": status,
+            "tone": "warning",
+            "label": "Đã thanh toán",
+            "headline": "Thanh toán đã được xác nhận nhưng cấp quyền chưa hoàn tất.",
+            "description": "Hệ thống đang xử lý bước cấp quyền cho sản phẩm. Không cần thanh toán lại.",
         }
-
+    if status == "under_review":
+        reason = _clean_text(attempt.manual_review_reason if attempt is not None else "")
+        return {
+            "code": status,
+            "tone": "warning",
+            "label": "Cần kiểm tra thủ công",
+            "headline": "Đơn hàng cần được kiểm tra thêm trước khi cấp quyền.",
+            "description": reason or "Thanh toán đã được ghi nhận nhưng chưa thể đối soát tự động.",
+        }
+    if status == "expired":
+        return {
+            "code": status,
+            "tone": "secondary",
+            "label": "Đơn đã hết hạn",
+            "headline": "Đơn hàng này không còn hiệu lực để thanh toán tự động.",
+            "description": "Nếu bạn vẫn muốn mua, hãy tạo đơn mới. Không nên chuyển tiền vào đơn đã hết hạn.",
+        }
+    if status == "canceled":
+        return {
+            "code": status,
+            "tone": "secondary",
+            "label": "Đơn đã hủy",
+            "headline": "Đơn hàng đã được hủy.",
+            "description": "Đơn này sẽ không tiếp tục xử lý thanh toán hoặc cấp quyền.",
+        }
+    if status == "failed":
+        reason = _clean_text((attempt.failure_message if attempt is not None else "") or "")
+        return {
+            "code": status,
+            "tone": "danger",
+            "label": "Thanh toán thất bại",
+            "headline": "Đơn hàng không thể xác nhận thanh toán thành công.",
+            "description": reason or "PayOS không trả về trạng thái thanh toán thành công cho đơn này.",
+        }
+    if status == "refunded":
+        return {
+            "code": status,
+            "tone": "secondary",
+            "label": "Đã hoàn tiền",
+            "headline": "Đơn hàng đã được hoàn tiền.",
+            "description": "Quyền truy cập liên quan đến đơn này có thể đã bị thu hồi hoặc sẽ được xử lý riêng.",
+        }
     return {
-        "code": "pending_payment",
-        "tone": "warning",
-        "badge_variant": "warning",
+        "code": status or "pending_payment",
+        "tone": "info",
         "label": "Đang chờ thanh toán",
-        "title": "Đang chờ thanh toán",
-        "headline": "Vui lòng hoàn tất thanh toán",
-        "description": "Vui lòng quét mã QR hoặc chuyển khoản chính xác nội dung hiển thị bên dưới.",
+        "headline": "Đơn hàng đã được tạo và đang chờ PayOS xác nhận.",
+        "description": "Sau khi thanh toán đúng thông tin, hệ thống sẽ tự động cấp quyền khi PayOS gửi xác nhận.",
     }
 
 
 def _build_order_next_action(order: PaymentOrder, attempt: PaymentAttempt | None) -> str:
-    order_status = _clean_text(order.status).lower()
-    attempt_status = _clean_text(attempt.status).lower() if attempt else None
+    status = _clean_text(order.status).lower()
     grant_status = _clean_text(order.grant_status).lower()
-    is_donation = _order_is_support_donation(order)
-
-    if order_status in {"completed", "paid"} or grant_status == "completed":
-        return "view_donations" if is_donation else "open_deck"
-
-    if grant_status == "manual_review":
-        return "contact_support"
-
-    if order_status in {"expired", "cancelled", "canceled"}:
-        return "retry_checkout"
-
-    if attempt and attempt.checkout_url and attempt_status in {"pending", "processing"}:
-        return "pay_with_payos"
-
-    return "retry_checkout"
+    if _order_is_support_donation(order):
+        if status == "pending_payment":
+            if attempt is not None and attempt.checkout_url:
+                if attempt.expires_at is not None:
+                    return "M\u1edf l\u1ea1i trang thanh to\u00e1n v\u00e0 ho\u00e0n t\u1ea5t tr\u01b0\u1edbc khi phi\u00ean h\u1ebft h\u1ea1n."
+                return "M\u1edf l\u1ea1i trang thanh to\u00e1n \u0111\u1ec3 ho\u00e0n t\u1ea5t kho\u1ea3n \u1ee7ng h\u1ed9 n\u00e0y."
+            return "T\u1ea1o l\u1ea1i m\u1ed9t phi\u00ean m\u1edbi n\u1ebfu b\u1ea1n ch\u01b0a th\u1ea5y li\u00ean k\u1ebft thanh to\u00e1n."
+        if status == "under_review":
+            return "Kh\u00f4ng thanh to\u00e1n l\u1ea1i ngay. N\u1ebfu ti\u1ec1n \u0111\u00e3 b\u1ecb tr\u1eeb, h\u00e3y gi\u1eef l\u1ea1i bi\u00ean nh\u1eadn v\u00e0 li\u00ean h\u1ec7 v\u1edbi ch\u00fang t\u00f4i \u0111\u1ec3 ki\u1ec3m tra."
+        if status == "paid" and grant_status != "completed":
+            return "B\u1ea1n kh\u00f4ng c\u1ea7n thanh to\u00e1n l\u1ea1i. H\u1ec7 th\u1ed1ng \u0111ang ho\u00e0n t\u1ea5t ghi nh\u1eadn kho\u1ea3n \u1ee7ng h\u1ed9 n\u00e0y."
+        if status == "expired":
+            return "T\u1ea1o m\u1ed9t phi\u00ean \u1ee7ng h\u1ed9 m\u1edbi khi b\u1ea1n s\u1eb5n s\u00e0ng ti\u1ebfp t\u1ee5c."
+        if status in {"failed", "canceled"}:
+            return "B\u1ea1n c\u00f3 th\u1ec3 b\u1eaft \u0111\u1ea7u l\u1ea1i b\u1eb1ng m\u1ed9t phi\u00ean m\u1edbi ngay tr\u00ean trang n\u00e0y."
+        if status == "paid":
+            return "C\u1ea3m \u01a1n b\u1ea1n \u0111\u00e3 \u0111\u1ed3ng h\u00e0nh c\u00f9ng Flama."
+        return "Ho\u00e0n t\u1ea5t thanh to\u00e1n r\u1ed3i quay l\u1ea1i \u0111\u00e2y \u0111\u1ec3 xem k\u1ebft qu\u1ea3 m\u1edbi nh\u1ea5t."
+    if status == "pending_payment":
+        if attempt is not None and attempt.checkout_url:
+            if attempt.expires_at is not None:
+                return "Mở lại liên kết PayOS hoặc thanh toán đúng thông tin trước thời điểm hết hạn của đơn."
+            return "Mở lại liên kết PayOS và thanh toán đúng số tiền cùng nội dung chuyển khoản đã hiển thị."
+        return "Tạo lại đơn hoặc liên hệ hỗ trợ nếu bạn không thấy liên kết thanh toán hợp lệ."
+    if status == "under_review":
+        return "Không thanh toán lại ngay. Nếu tiền đã bị trừ, hãy liên hệ hỗ trợ và gửi kèm mã đơn hàng để đối soát."
+    if status == "paid" and grant_status != "completed":
+        return "Không cần thanh toán lại. Hãy chờ hệ thống hoàn tất bước cấp quyền hoặc liên hệ hỗ trợ nếu chậm bất thường."
+    if status == "expired":
+        return "Tạo một đơn hàng mới nếu bạn vẫn muốn mua sản phẩm này."
+    if status == "failed":
+        return "Kiểm tra lại thông tin thanh toán rồi tạo đơn mới. Nếu đã bị trừ tiền, hãy liên hệ hỗ trợ."
+    if status == "canceled":
+        return "Tạo đơn mới nếu bạn muốn tiếp tục mua sản phẩm."
+    if status == "paid":
+        return "Bạn có thể quay lại trang chi tiết sản phẩm và sử dụng ngay nội dung đã mua."
+    return "Theo dõi trạng thái đơn hàng trên trang này cho đến khi PayOS gửi xác nhận cuối cùng."
 
 
 def _build_order_instructions(order: PaymentOrder, attempt: PaymentAttempt | None) -> list[str]:
-    is_donation = _order_is_support_donation(order)
-    order_status = _clean_text(order.status).lower()
-    grant_status = _clean_text(order.grant_status).lower()
-
-    if order_status in {"completed", "paid"} or grant_status == "completed":
-        if is_donation:
-            return [
-                "Giao dịch đã được đối soát thành công.",
-                "Bạn có thể xem lại lịch sử ủng hộ bất cứ lúc nào trong trang cá nhân.",
-            ]
+    status = _clean_text(order.status).lower()
+    is_support_donation = _order_is_support_donation(order)
+    instructions: list[str] = []
+    if status == "pending_payment":
+        instructions.append(
+            "Thanh toán đúng số tiền của phiên hiện tại."
+            if is_support_donation
+            else "Thanh toán đúng số tiền của đơn hàng."
+        )
+        instructions.append("Giữ nguyên nội dung chuyển khoản để hệ thống đối soát tự động.")
+        if attempt is not None and attempt.expires_at is not None:
+            instructions.append(
+                "Hoàn tất thanh toán trước thời điểm hết hạn để tránh phiên tự đóng."
+                if is_support_donation
+                else "Hoàn tất thanh toán trước thời điểm hết hạn để tránh đơn tự đóng."
+            )
+        if attempt is not None and attempt.checkout_url:
+            instructions.append(
+                "Nếu đã rời trang thanh toán, bạn có thể mở lại liên kết PayOS bất cứ lúc nào."
+                if is_support_donation
+                else "Nếu đã rời trang thanh toán, bạn có thể mở lại liên kết PayOS tại màn hình kết quả đơn hàng."
+            )
+        return instructions
+    if status == "under_review":
         return [
-            "Đơn hàng đã được kích hoạt thành công.",
-            "Bạn có thể vào thư viện để bắt đầu học bộ thẻ hoặc áp dụng mẫu thẻ này.",
+            "Không thanh toán lại ngay để tránh bị trừ tiền nhiều lần.",
+            "Giữ lại ảnh chụp giao dịch hoặc mã tham chiếu nếu ngân hàng đã báo trừ tiền.",
+            "Liên hệ hỗ trợ và cung cấp mã đơn hoặc mã phiên để được kiểm tra thủ công nhanh hơn.",
         ]
-
-    return [
-        "Mở ứng dụng ngân hàng hoặc ví điện tử hỗ trợ VietQR.",
-        "Quét mã QR hiển thị trên màn hình hoặc mở trang thanh toán ngân hàng.",
-        "Không thay đổi nội dung chuyển khoản để hệ thống tự động nhận diện giao dịch.",
-        "Hệ thống sẽ cập nhật trạng thái ngay lập tức khi nhận được tiền.",
-    ]
+    if status == "expired":
+        return [
+            "Phiên cũ đã hết hạn nên không nên tiếp tục chuyển tiền vào thông tin cũ."
+            if is_support_donation
+            else "Đơn đã hết hạn nên không nên tiếp tục chuyển tiền vào thông tin cũ.",
+            "Tạo phiên mới nếu bạn vẫn muốn tiếp tục."
+            if is_support_donation
+            else "Tạo đơn mới nếu bạn vẫn muốn mua sản phẩm.",
+        ]
+    if status == "failed":
+        return [
+            "Kiểm tra lại trạng thái giao dịch trên PayOS hoặc ứng dụng ngân hàng trước khi thử lại.",
+            "Nếu tiền đã bị trừ nhưng trạng thái vẫn thất bại, hãy liên hệ hỗ trợ kèm mã phiên hoặc mã đơn."
+            if is_support_donation
+            else "Nếu tiền đã bị trừ nhưng đơn vẫn báo thất bại, hãy liên hệ hỗ trợ kèm mã đơn hàng.",
+        ]
+    if status == "paid" and _clean_text(order.grant_status).lower() != "completed":
+        return [
+            "Không cần thanh toán lại.",
+            "Hệ thống đang hoàn tất bước ghi nhận sau thanh toán."
+            if is_support_donation
+            else "Hệ thống đang hoàn tất bước cấp quyền sau thanh toán.",
+        ]
+    if status == "paid" and is_support_donation:
+        return [
+            "Cảm ơn bạn đã ủng hộ dự án.",
+            "Nếu bạn đang đăng nhập và không bật ẩn danh, khoản donate sẽ xuất hiện trong lịch sử đơn hàng.",
+        ]
+    if status == "paid":
+        return [
+            "Quyền truy cập đã được cấp tự động.",
+            "Nếu chưa thấy sản phẩm khả dụng ngay, hãy tải lại trang chi tiết sản phẩm.",
+        ]
+    return []
 
 
 def _build_order_detail_lines(order: PaymentOrder, attempt: PaymentAttempt | None) -> list[dict[str, Any]]:
-    is_donation = _order_is_support_donation(order)
+    is_support_donation = _order_is_support_donation(order)
     lines: list[dict[str, Any]] = [
         {
             "key": "merchant_order_code",
-            "label": "Mã phiên" if is_donation else "Mã đơn hàng",
+            "label": "M\u00e3 phi\u00ean" if is_support_donation else "Mã đơn hàng",
             "type": "text",
-            "value": order.merchant_order_code or order.id,
-            "copyable": True,
+            "value": order.merchant_order_code,
         },
         {
             "key": "product_title",
-            "label": "Khoản ủng hộ" if is_donation else "Sản phẩm",
+            "label": "Kho\u1ea3n \u1ee7ng h\u1ed9" if is_support_donation else "Sản phẩm",
             "type": "text",
             "value": _product_title_from_order(order),
         },
@@ -359,30 +355,70 @@ def _build_order_detail_lines(order: PaymentOrder, attempt: PaymentAttempt | Non
             "currency_code": order.currency_code or "VND",
         },
         {
-            "key": "created_at",
-            "label": "Thời gian tạo",
-            "type": "datetime",
-            "value": _iso(order.created_at),
+            "key": "order_status",
+            "label": "Trạng thái",
+            "type": "status",
+            "value": _build_order_status_display(order, attempt)["label"],
+        },
+        {
+            "key": "grant_status",
+            "label": "Tr\u1ea1ng th\u00e1i ghi nh\u1eadn" if is_support_donation else "Trạng thái cấp quyền",
+            "type": "status",
+            "value": _grant_status_display(order.grant_status, order=order)["label"],
         },
     ]
-
-    expires_at = getattr(attempt, "expires_at", None)
-    if expires_at:
-        lines.append({
-            "key": "expires_at",
-            "label": "Hạn thanh toán",
-            "type": "datetime",
-            "value": _iso(expires_at),
-        })
-
-    provider_payment_id = getattr(attempt, "provider_payment_id", None)
-    if provider_payment_id:
-        lines.append({
-            "key": "provider_payment_id",
-            "label": "Mã giao dịch PayOS",
-            "type": "text",
-            "value": provider_payment_id,
-            "copyable": True,
-        })
-
+    if attempt is not None:
+        lines.append(
+            {
+                "key": "attempt_status",
+                "label": "Trạng thái thanh toán",
+                "type": "status",
+                "value": _attempt_status_display(attempt)["label"],
+            }
+        )
+        if attempt.expected_payment_reference:
+            lines.append(
+                {
+                    "key": "payment_reference",
+                    "label": "Nội dung chuyển khoản",
+                    "type": "text",
+                    "value": attempt.expected_payment_reference,
+                }
+            )
+        if attempt.checkout_url:
+            lines.append(
+                {
+                    "key": "checkout_url",
+                    "label": "Liên kết thanh toán",
+                    "type": "url",
+                    "value": attempt.checkout_url,
+                }
+            )
+        if attempt.expires_at is not None:
+            lines.append(
+                {
+                    "key": "expires_at",
+                    "label": "Hạn thanh toán",
+                    "type": "datetime",
+                    "value": _iso(attempt.expires_at),
+                }
+            )
+        if attempt.confirmed_at is not None:
+            lines.append(
+                {
+                    "key": "confirmed_at",
+                    "label": "Thời điểm xác nhận",
+                    "type": "datetime",
+                    "value": _iso(attempt.confirmed_at),
+                }
+            )
+    if order.paid_at is not None:
+        lines.append(
+            {
+                "key": "paid_at",
+                "label": "Thời điểm thanh toán",
+                "type": "datetime",
+                "value": _iso(order.paid_at),
+            }
+        )
     return lines

@@ -567,16 +567,16 @@ def install_shared_deck_item(deck_item_id: str):
                     field="source_note_type_id",
                 )
 
-            from app.services import payment_service
+            from app.services import payment
 
-            if not payment_service.paid_install_interception_enabled():
+            if not payment.paid_install_interception_enabled():
                 return _api_error(
                     "PAYMENT_UNAVAILABLE",
                     "Thanh toán cho nội dung trả phí chưa được bật trong môi trường này. Vui lòng thử lại sau.",
                     status=503,
                 )
             try:
-                checkout = payment_service.prepare_checkout_for_product(
+                checkout = payment.prepare_checkout_for_product(
                     user_id=current_user.id,
                     product_type="deck_marketplace_item",
                     product_ref_id=deck_item.id,
@@ -587,7 +587,7 @@ def install_shared_deck_item(deck_item_id: str):
                         "payments.marketplace_payment_result_page",
                     ),
                 )
-            except payment_service.PaymentServiceError as exc:
+            except payment.PaymentServiceError as exc:
                 return _api_error(
                     exc.error,
                     exc.message,

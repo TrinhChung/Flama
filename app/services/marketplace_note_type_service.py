@@ -20,7 +20,7 @@ from app.services import (
     flashcards_share_service,
     marketplace_hub_service,
     marketplace_query_service,
-    payment_service,
+    payment,
     template_release_service,
 )
 from app.repositories import flashcards_share_repository, template_release_repository
@@ -487,21 +487,21 @@ def install_shared_note_type(
         )
 
     if source_note_type.pricing_mode == "paid":
-        if not payment_service.paid_install_interception_enabled():
+        if not payment.paid_install_interception_enabled():
             raise MarketplaceNoteTypeError(
                 "PAYMENT_UNAVAILABLE",
                 "Thanh toán cho nội dung trả phí chưa được bật trong môi trường này. Vui lòng thử lại sau.",
                 status=503,
             )
         try:
-            checkout = payment_service.prepare_checkout_for_product(
+            checkout = payment.prepare_checkout_for_product(
                 user_id=user_id,
                 product_type="note_type",
                 product_ref_id=source_note_type.id,
                 return_url=return_url,
                 cancel_url=cancel_url,
             )
-        except payment_service.PaymentServiceError as exc:
+        except payment.PaymentServiceError as exc:
             raise MarketplaceNoteTypeError(
                 exc.error,
                 exc.message,

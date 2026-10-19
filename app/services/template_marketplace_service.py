@@ -30,7 +30,7 @@ SAMPLE_TEXT_TYPES = {"text", "richtext", "markdown", "array"}
 
 
 class TemplateCheckoutError(Exception):
-    """Payment-facing failure; each payment module maps it to its own error type."""
+    """Marketplace failure mapped to the canonical payment service error."""
 
     def __init__(self, code: str, message: str, *, status: int = 400):
         super().__init__(message)
@@ -257,7 +257,7 @@ def update_listing(*, user_id: int, template_id: str, payload) -> dict[str, Any]
 
 
 def install(*, user_id: int, template_id: str, return_url: str | None = None, cancel_url: str | None = None):
-    from app.services import payment_service
+    from app.services import payment
 
     row = market.item(db.session, template_id)
     if row is None or _received_block(row):
@@ -271,18 +271,18 @@ def install(*, user_id: int, template_id: str, return_url: str | None = None, ca
     if not _is_listed(row) and not entitled:
         raise TemplateReleaseError("TEMPLATE_NOT_LISTED", "Giao diện thẻ này hiện không còn trên chợ.", status=409)
     if row.get("pricing_mode") == "paid" and not entitled:
-        if not payment_service.paid_install_interception_enabled():
+        if not payment.paid_install_interception_enabled():
             raise TemplateReleaseError(
                 "PAYMENT_UNAVAILABLE",
                 "Thanh toán cho nội dung trả phí chưa được bật trong môi trường này. Vui lòng thử lại sau.",
                 status=503,
             )
         try:
-            checkout = payment_service.prepare_checkout_for_product(
+            checkout = payment.prepare_checkout_for_product(
                 user_id=user_id, product_type=PRODUCT_TYPE, product_ref_id=row["id"],
                 return_url=return_url, cancel_url=cancel_url,
             )
-        except payment_service.PaymentServiceError as exc:
+        except payment.PaymentServiceError as exc:
             raise TemplateReleaseError(exc.error, exc.message, status=exc.status, field=exc.field) from exc
         return checkout, 202 if checkout.get("payment_required") else 200
     try:

@@ -25,7 +25,6 @@ from app.services import (
     flashcards_share_service,
     marketplace_query_service,
     marketplace_taxonomy_service,
-    payment_service,
 )
 from app.services.payment import presenters as payment_presenters
 from models import db
