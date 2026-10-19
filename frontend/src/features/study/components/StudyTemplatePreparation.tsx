@@ -281,40 +281,43 @@ export function StudyTemplatePreparation({
   }).length
 
   return (
-    <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-y-auto p-3 sm:p-6 text-foreground">
+    <div className="relative flex flex-col items-center justify-start h-full h-[100dvh] max-h-[100dvh] w-full overflow-y-auto p-2.5 sm:p-4 md:p-6 text-foreground">
       <AmbientBackground />
-      <main className="relative z-10 w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md p-4 sm:p-8 shadow-2xl shadow-primary/5 dark:shadow-none">
-        {/* Nút quay về Dashboard ở đầu màn hình */}
-        <div className="flex items-center justify-between pb-3 mb-4 sm:pb-3.5 sm:mb-5 border-b border-border/25">
-          <Button
-            asChild
-            variant="ghost"
-            size="sm"
-            className="-ml-1.5 sm:-ml-2 rounded-full text-xs sm:text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-          >
-            <Link to="/dashboard">
-              <ArrowLeft className="mr-1.5 size-4 shrink-0" /> Quay về Dashboard
-            </Link>
-          </Button>
-          <span className="text-[10px] sm:text-xs text-muted-foreground/80 font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-muted/40">
-            Phiên học Flashcard
-          </span>
-        </div>
-
-        <div className="space-y-1">
-          <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-foreground">Chuẩn bị phiên học</h1>
-          {deckName ? <p className="text-xs sm:text-sm text-muted-foreground truncate">{deckName}</p> : null}
-        </div>
-
-        {preparation.error || error ? (
-          <div className="mt-4">
-            <PageError error={preparation.error || error} />
+      <main className="relative z-10 w-full max-w-2xl my-auto rounded-2xl sm:rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md shadow-2xl shadow-primary/5 dark:shadow-none flex flex-col max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2rem)] md:max-h-[calc(100dvh-3rem)] overflow-hidden">
+        {/* Nút quay về Dashboard và tiêu đề ở đầu màn hình (pinned top) */}
+        <div className="shrink-0 p-3.5 sm:p-5 md:p-6 pb-2.5 sm:pb-3 border-b border-border/25">
+          <div className="flex items-center justify-between pb-2 mb-2 sm:pb-2.5 sm:mb-2.5 border-b border-border/15">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="-ml-1.5 sm:-ml-2 h-7 sm:h-8 rounded-full text-xs sm:text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+            >
+              <Link to="/dashboard">
+                <ArrowLeft className="mr-1.5 size-3.5 sm:size-4 shrink-0" /> Quay về Dashboard
+              </Link>
+            </Button>
+            <span className="text-[10px] sm:text-xs text-muted-foreground/80 font-medium px-2 py-0.5 rounded-full bg-muted/40">
+              Phiên học Flashcard
+            </span>
           </div>
-        ) : null}
 
-        <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-5">
+          <div className="space-y-0.5">
+            <h1 className="text-base sm:text-xl md:text-2xl font-bold tracking-tight text-foreground">Chuẩn bị phiên học</h1>
+            {deckName ? <p className="text-xs sm:text-sm text-muted-foreground truncate">{deckName}</p> : null}
+          </div>
+        </div>
+
+        {/* Thân cuộn nội dung (scrollable body) */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 md:p-6 space-y-3.5 sm:space-y-4">
+          {preparation.error || error ? (
+            <div>
+              <PageError error={preparation.error || error} />
+            </div>
+          ) : null}
+
           {/* Chọn Template cho phiên học */}
-          <div className="space-y-1.5">
+          <div className="space-y-1 sm:space-y-1.5">
             <div className="flex items-center justify-between">
               <label htmlFor="study-template-choice" className="block text-xs sm:text-sm font-semibold text-foreground">
                 Template cho phiên này
@@ -330,7 +333,7 @@ export function StudyTemplatePreparation({
                 id="study-template-choice"
                 value={preparation.compositionId ?? ''}
                 disabled={pending}
-                className="h-9.5 sm:h-10 w-full appearance-none rounded-xl border border-input/80 bg-background px-3 pr-9 text-xs sm:text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 cursor-pointer"
+                className="h-9 sm:h-9.5 md:h-10 w-full appearance-none rounded-xl border border-input/80 bg-background px-3 pr-9 text-xs sm:text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 cursor-pointer"
                 onChange={(event) => preparation.selectComposition(event.target.value)}
               >
                 <option value="" disabled className="text-xs sm:text-sm">
@@ -349,7 +352,7 @@ export function StudyTemplatePreparation({
 
           {/* Phần tùy chọn truyền trường và mapping */}
           {preparation.entry && (
-            <div className="space-y-3 sm:space-y-3.5 rounded-2xl border border-border/30 bg-muted/30 dark:bg-muted/15 p-3.5 sm:p-5">
+            <div className="space-y-2.5 sm:space-y-3 rounded-xl sm:rounded-2xl border border-border/30 bg-muted/30 dark:bg-muted/15 p-3 sm:p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
                 <div className="min-w-0">
                   <h2 className="text-xs sm:text-sm font-semibold text-foreground">
@@ -376,7 +379,7 @@ export function StudyTemplatePreparation({
               )}
 
               {/* 2 nút thao tác chính theo yêu cầu */}
-              <div className="grid gap-2 sm:gap-2.5 sm:grid-cols-2 pt-1">
+              <div className="grid gap-2 sm:gap-2.5 grid-cols-1 sm:grid-cols-2 pt-0.5">
                 {/* Nút 1: Chọn các trường sẽ truyền vào */}
                 <Button
                   type="button"
@@ -439,7 +442,7 @@ export function StudyTemplatePreparation({
           )}
 
           {/* Tùy chọn ghi nhớ */}
-          <div className="space-y-2.5 sm:space-y-3 border-t border-border/25 pt-3.5 sm:pt-5">
+          <div className="space-y-2 border-t border-border/25 pt-3 sm:pt-3.5">
             <label className="flex items-center gap-2.5 text-xs sm:text-sm cursor-pointer select-none group">
               <input
                 type="checkbox"
@@ -465,18 +468,28 @@ export function StudyTemplatePreparation({
               </span>
             </label>
           </div>
+        </div>
 
-          {/* Nút hành động ở cuối */}
-          <div className="flex items-center justify-end pt-4 sm:pt-6 border-t border-border/25">
-            <Button
-              size="lg"
-              disabled={pending || !preparation.compositionId}
-              onClick={onStart}
-              className="w-full sm:w-auto min-w-36 h-10 sm:h-11 px-6 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs sm:text-sm font-semibold shadow-md shadow-primary/15 transition-all cursor-pointer"
-            >
-              {preparation.error || error ? 'Thử lại' : 'Bắt đầu học'}
-            </Button>
+        {/* Thanh hành động luôn hiển thị ở cuối thẻ (pinned bottom footer) */}
+        <div className="shrink-0 p-3 sm:p-4 px-3.5 sm:px-6 border-t border-border/25 bg-card/95 backdrop-blur-md flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1 hidden sm:block">
+            <div className="text-[11px] sm:text-xs text-muted-foreground truncate">
+              {selectedChoice?.template_name ? (
+                <span>
+                  Template: <span className="font-semibold text-foreground">{selectedChoice.template_name}</span>
+                </span>
+              ) : null}
+            </div>
           </div>
+
+          <Button
+            size="lg"
+            disabled={pending || !preparation.compositionId}
+            onClick={onStart}
+            className="w-full sm:w-auto min-w-36 h-9.5 sm:h-10 md:h-11 px-5 sm:px-6 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs sm:text-sm font-semibold shadow-md shadow-primary/15 transition-all cursor-pointer ml-auto"
+          >
+            {preparation.error || error ? 'Thử lại' : 'Bắt đầu học'}
+          </Button>
         </div>
       </main>
 

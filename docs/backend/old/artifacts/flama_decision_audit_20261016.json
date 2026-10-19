@@ -1,0 +1,147 @@
+{
+  "date": "2026-10-16",
+  "scope": "isolated SQLite in-memory; existing test fixture; synthetic data; no production access",
+  "base_commit": "033dd94af05e597e8de3a59bafe1355ae7e8d739",
+  "checks": {
+    "refund": {
+      "http_status": 200,
+      "order_status": "refunded",
+      "grant_status": "completed",
+      "entitlement_statuses": [
+        "active"
+      ],
+      "audit_rows_added": 0
+    },
+    "failed_status_update": {
+      "http_status": 200,
+      "requested_status": "failed",
+      "persisted_status": "paid"
+    },
+    "core_api_quota": {
+      "configured_daily_requests": 2,
+      "paths": [
+        "GET /api/note-types",
+        "GET /api/note-types",
+        "POST /api/note-types"
+      ],
+      "responses": [
+        {
+          "http_status": 200,
+          "error": null
+        },
+        {
+          "http_status": 200,
+          "error": null
+        },
+        {
+          "http_status": 429,
+          "error": "RATE_LIMIT_EXCEEDED"
+        }
+      ]
+    },
+    "scheduler_default": {
+      "scheduler_mode": "legacy",
+      "fsrs_next_states_present": false,
+      "algorithms": [
+        {
+          "key": "legacy-anki",
+          "version": "1.0.0",
+          "state_schema_version": "anki-card-state.v1",
+          "lifecycle_state": "active",
+          "server_executable": true,
+          "new_session_allowed": true,
+          "existing_lease_allowed": true,
+          "accepted_job_allowed": true,
+          "history_read_allowed": true,
+          "switch_initializer_registered": false,
+          "switch_target_allowed": false,
+          "artifacts": {
+            "state_decoder": true,
+            "config_decoder": true,
+            "event_history_decoder": true,
+            "interaction_contract_decoder": true
+          }
+        }
+      ]
+    },
+    "initial_core_api_quota_invalid_route": {
+      "configured_daily_requests": 2,
+      "responses": [
+        {
+          "http_status": 200,
+          "error": null
+        },
+        {
+          "http_status": 405,
+          "error": "METHOD_NOT_ALLOWED"
+        },
+        {
+          "http_status": 201,
+          "error": null
+        }
+      ]
+    },
+    "fsrs_runtime_resolver": {
+      "configured_mode": "fsrs",
+      "fsrs_next_states_present": false,
+      "uses_fsrs_branch": false
+    },
+    "quota_blueprint_boundary": {
+      "quota": 1,
+      "api_reads": [
+        200,
+        429
+      ],
+      "study_request_after_exhaustion": {
+        "http_status": 400,
+        "error": "VALIDATION_ERROR",
+        "rate_limit_header": null
+      },
+      "endpoints": {
+        "/api/note-types": "api_v1.api_v1_flashcards.api_v1_note_types.list_note_types",
+        "/api/study/sessions": "flashcards.study_session_open"
+      },
+      "meaning": "The v1 blueprint guard covers CRUD routes, not the separately registered flashcards Study session endpoint. The invalid Study payload is only a guard-boundary probe, not a successful Study commit."
+    }
+  },
+  "verification_commit": "1eca44cbd83234ce5bb708770b0a24b946ddf773",
+  "tests": [
+    {
+      "selector": "--module payment --backend-only",
+      "tests": 46,
+      "files": 7,
+      "status": "PASS",
+      "test_seconds": 32.914
+    },
+    {
+      "selector": "--file tests/test_daily_rate_limit.py tests/test_study_algorithm_registry.py tests/test_study_algorithm_golden_vectors.py tests/test_study_content_delete.py tests/test_study_note_overlay.py tests/test_study_batch_queue.py --backend-only",
+      "tests": 75,
+      "files": 6,
+      "status": "PASS",
+      "test_seconds": 32.549
+    }
+  ],
+  "source_file_sha256": {
+    "app/api/v1/__init__.py": "3829593960471a51ef6025807082d5ce09cb3d8f6e8dbccf7ed1f1b7e254a2d1",
+    "app/settings.py": "be8706dfa3ad8fd8ffe57c87983e1719b0d11b0df63847b0938bb4c4a34fae41",
+    "app/startup.py": "e8d263fa26d190ea3732949aadc401ce6ad4d750a43e651279720558e1b1345b",
+    "app/routes/flashcards/study.py": "30b485b0b01647ba7346738583db40ce325c77974216a46f200654aaac972380",
+    "app/services/daily_rate_limit_service.py": "6325213c38fa76fab1531d76456f18e903f8bbf0fe36d27dba14f4e3d0567f21",
+    "app/services/study_algorithm_registry.py": "337554f0ac33faab8926b419774b19bd839fd3058645ebb9bc1e3fbe5b4da160",
+    "app/services/scheduler_config_service.py": "dd9c2336b4c5fb07e501d92bd9f494c1050f035914fe38893f753fc0bb2ee805",
+    "app/services/deck_auto_publish_service.py": "0741ac8cef1f9a1657c438353f79fe74f3cd1d580e6b8c35a47f6837c6a2e41a",
+    "app/services/deck_install_rebase_service.py": "c021bbbbe8a5465d9ebf5d87a08fcb18802b5fe149e1f16ec7938a9ab0a1330e",
+    "app/services/deck_working_tree_service.py": "6adc88325b840d95f256d0a3eb7b8f41bbfe54d624243943257be8bd9ab37804",
+    "app/services/forecast_snapshot_service.py": "7eedffca0a869efbd29f3ca609fe1306001128cfba3d7e24706b67bb46b8728d",
+    "app/services/payment/orders.py": "32843f5a675411436f206486cd6f52c6bf6e74572026765325efdc99a65d9d74",
+    "app/services/wallet_service.py": "4694040db41a2c75246786529dc14e07fb88be7b273da13278881b65ae2e9d6d",
+    "app/services/flashcard_content_service.py": "8d3fb82af6a1016d5b5ae075ec1ec058d7197211cc2e08fecc65556c655b27ed",
+    "app/services/connect/mining_media.py": "0e3ce0f13f52bc37c1906e42fe20759c8c90b9d46eb15d1a8a24ee24caef8fbe",
+    "app/services/flashcard_media_api_service.py": "62e48f8df91710d65e16387520f5794054426d09f6d560c8b48f47ca44b8ed6c",
+    "models/note.py": "2822a6de178b5db2a3d763a65631e93a6c53657bc369a02a353f3ff57ccfecfe",
+    "models/card.py": "e43b495b68772f6f4cb556836b475580f719467c671ec1e983cf27691d27efec",
+    "models/study_progress_subject.py": "11ebe6d9f59e9da93bc931b4e5ac5d5d0ce3f1cf711bb6955a3b4d95b6b730e7",
+    ".github/workflows/ci.yml": "251fd9ef3ccdf46131d6b01e277c27cd398cad6930b5d0196ceb859dc79153a6",
+    ".github/workflows/deploy.yml": "7463842d2b2e1254dd02fedbb640342eb70fa25e679718037668a350901e717b"
+  }
+}

@@ -212,10 +212,11 @@ def _binding_projection_payload(context):
 
 
 def _media_payload(context: EffectiveStudyCard) -> list[dict[str, Any]]:
+    from app.services.media_field_codec import media_field_label_for_schema
     return [
         {
             "id": str(asset.id),
-            "field_name": str(asset.field_name or ""),
+            "field_name": media_field_label_for_schema(asset, context.field_defs),
             "filename": str(asset.filename or ""),
             "mime_type": str(asset.mime_type or "application/octet-stream"),
             "sha256": str(asset.sha256 or ""),
@@ -223,7 +224,7 @@ def _media_payload(context: EffectiveStudyCard) -> list[dict[str, Any]]:
         }
         for asset in sorted(
             context.note.media_assets or [],
-            key=lambda item: (str(item.field_name or ""), str(item.id)),
+            key=lambda item: (media_field_label_for_schema(item, context.field_defs), str(item.id)),
         )
     ]
 

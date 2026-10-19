@@ -1,0 +1,15 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 17.078,
+  "errors": 0,
+  "failures": 0,
+  "fixture_cases": [
+    "test_savepoint_rollback_after_finalizer_does_not_reopen_source_writes"
+  ],
+  "generated_schema": "flama_history_outbox_probe_19196_75546d0ca82a",
+  "mysql_specific_cases": [],
+  "mysql_version": "8.0.40",
+  "probe_database_dropped": true,
+  "status": "PASS",
+  "tests_run": 1
+}

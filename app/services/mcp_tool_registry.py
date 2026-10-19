@@ -477,6 +477,8 @@ def _call_update_note(*, user_id: int, arguments: dict[str, Any]) -> dict[str, A
             fields=arguments.get("fields"),
             tags=arguments.get("tags"),
             deck_id=arguments.get("deck_id"),
+            expected_content_revision=arguments.get("expected_content_revision"),
+            expected_field_schema_revision=arguments.get("expected_field_schema_revision"),
         )
     )
 
@@ -492,6 +494,8 @@ UPDATE_NOTE_TOOL = McpToolDefinition(
             "fields": {"type": "object", "description": "Key-value mapping of field names to new values (partial update)"},
             "tags": {"type": "array", "items": {"type": "string"}, "description": "New list of tags (replaces tags)"},
             "deck_id": {"type": "integer", "description": "New deck ID to move note into"},
+            "expected_content_revision": {"type": "integer", "minimum": 0, "description": "Content revision returned by get_note"},
+            "expected_field_schema_revision": {"type": "integer", "minimum": 0, "description": "Field schema revision returned by get_note"},
         },
         "required": ["note_id"],
         "additionalProperties": False,

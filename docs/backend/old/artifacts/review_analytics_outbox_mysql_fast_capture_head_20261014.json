@@ -1,0 +1,17 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 27.688,
+  "errors": 0,
+  "failures": 0,
+  "fixture_cases": [
+    "test_canonical_insert_uses_frozen_values_without_reloading_raw_event"
+  ],
+  "generated_schema": "flama_history_outbox_probe_28784_606de1f73e6b",
+  "mysql_specific_cases": [
+    "test_atomic_head_statement_returns_revision_for_new_existing_and_rolled_back_head"
+  ],
+  "mysql_version": "8.0.40",
+  "probe_database_dropped": true,
+  "status": "PASS",
+  "tests_run": 2
+}

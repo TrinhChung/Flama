@@ -778,6 +778,8 @@ def update_note_type(
 
     # 2. Update Fields
     if fields is not None:
+        from app.services.template_library_service import initialize_legacy_bindings
+        initialize_legacy_bindings(nt)
         current_fields = {f.name: f for f in nt.field_defs}
         current_field_ids = {f.id: f for f in nt.field_defs}
 
@@ -789,22 +791,14 @@ def update_note_type(
                 if old_name and new_name and old_name in current_fields and old_name != new_name:
                     field_obj = current_fields[old_name]
                     field_obj.name = new_name
-                    # Migrate data in notes
-                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
-                        if note.field_values and old_name in note.field_values:
-                            fvals = dict(note.field_values)
-                            fvals[new_name] = fvals.pop(old_name)
-                            note.field_values = fvals
+                    current_fields.pop(old_name)
+                    current_fields[new_name] = field_obj
 
             for rem_name in fields.get("removed", []):
                 if rem_name in current_fields:
                     field_obj = current_fields[rem_name]
-                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
-                        if note.field_values and rem_name in note.field_values:
-                            fvals = dict(note.field_values)
-                            fvals.pop(rem_name, None)
-                            note.field_values = fvals
                     db.session.delete(field_obj)
+                    current_fields.pop(rem_name)
 
             for add_f in fields.get("added", []):
                 add_name = add_f.get("name")
@@ -835,7 +829,7 @@ def update_note_type(
         elif isinstance(fields, list):
             # Process list format
             seen_names = set()
-            new_field_names = {f.get("name") for f in fields if f.get("name")}
+            retained_fields = set()
             for idx, f in enumerate(fields):
                 f_name = f.get("name")
                 f_id = f.get("id")
@@ -845,31 +839,22 @@ def update_note_type(
                     f_obj = current_field_ids[f_id]
                     if f_obj.name != f_name:
                         # Rename
-                        prev_name = f_obj.name
                         f_obj.name = f_name
-                        for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
-                            if note.field_values and prev_name in note.field_values:
-                                fvals = dict(note.field_values)
-                                fvals[f_name] = fvals.pop(prev_name)
-                                note.field_values = fvals
                     f_obj.field_type = f.get("field_type", f_obj.field_type)
                     f_obj.required = bool(f.get("required", f_obj.required))
                     f_obj.position = int(f.get("position", idx))
                     f_obj.identity_role = f.get("identity_role", f_obj.identity_role)
                     seen_names.add(f_name)
+                    retained_fields.add(f_obj)
                 elif old_name and old_name in current_fields:
                     f_obj = current_fields[old_name]
                     f_obj.name = f_name
-                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
-                        if note.field_values and old_name in note.field_values:
-                            fvals = dict(note.field_values)
-                            fvals[f_name] = fvals.pop(old_name)
-                            note.field_values = fvals
                     f_obj.field_type = f.get("field_type", f_obj.field_type)
                     f_obj.required = bool(f.get("required", f_obj.required))
                     f_obj.position = int(f.get("position", idx))
                     f_obj.identity_role = f.get("identity_role", f_obj.identity_role)
                     seen_names.add(f_name)
+                    retained_fields.add(f_obj)
                 elif f_name in current_fields:
                     f_obj = current_fields[f_name]
                     f_obj.field_type = f.get("field_type", f_obj.field_type)
@@ -877,6 +862,7 @@ def update_note_type(
                     f_obj.position = int(f.get("position", idx))
                     f_obj.identity_role = f.get("identity_role", f_obj.identity_role)
                     seen_names.add(f_name)
+                    retained_fields.add(f_obj)
                 else:
                     # New field
                     f_obj = FieldDef(
@@ -891,13 +877,8 @@ def update_note_type(
                     seen_names.add(f_name)
 
             # Delete fields removed from list
-            for curr_name, curr_f in current_fields.items():
-                if curr_name not in new_field_names:
-                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
-                        if note.field_values and curr_name in note.field_values:
-                            fvals = dict(note.field_values)
-                            fvals.pop(curr_name, None)
-                            note.field_values = fvals
+            for curr_f in current_fields.values():
+                if curr_f not in retained_fields:
                     db.session.delete(curr_f)
 
         db.session.flush()

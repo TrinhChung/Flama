@@ -109,6 +109,10 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     # Counter finalizers run after the history guard and after domain flushes.
     from app.services import review_analytics_projection_service as _review_projection  # noqa: F401
     from app.services import deck_count_projection_service as _deck_projection  # noqa: F401
+    from models.forecast_snapshot import StudyForecastSnapshot, StudyForecastDueBucket  # noqa: F401
+    from models.field_value_identity_definition import FieldValueIdentityDefinition, FieldValueIdentityArchive, FieldValueIdentityCutover  # noqa: F401
+    from models.review_analytics_outbox import ReviewAnalyticsOutbox  # noqa: F401
+    from app.services import field_value_identity_hooks as _field_identity  # noqa: F401
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
     from models.user_role import UserRole  # noqa: F401  # register model
     from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401
@@ -167,7 +171,6 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
         DeckMarketplaceItem,
         DeckReview,
         FieldDef,
-        FieldRenameJob,
         MediaAsset,
         MediaFieldMigrationItem,
         MediaFieldMigrationRun,
@@ -225,6 +228,22 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
             pass
 
     # Register error handlers
+    from app.services.field_value_identity_service import FieldIdentityError, FieldIdentityConflict
+    from sqlalchemy.orm.exc import StaleDataError
+
+    @app.errorhandler(FieldIdentityError)
+    def field_identity_error(error):
+        _rollback_failed_session()
+        conflict = isinstance(error, FieldIdentityConflict)
+        return jsonify({"error": "FIELD_IDENTITY_CONFLICT" if conflict else "INVALID_FIELD_IDENTITY",
+                        "message": str(error)}), 409 if conflict else 400
+
+    @app.errorhandler(StaleDataError)
+    def stale_note_content(_error):
+        _rollback_failed_session()
+        return jsonify({"error": "CONTENT_REVISION_CONFLICT",
+                        "message": "Nội dung đã thay đổi. Tải lại dữ liệu trước khi lưu."}), 409
+
     @app.errorhandler(404)
     def page_not_found(error):
         """Handle 404 errors."""

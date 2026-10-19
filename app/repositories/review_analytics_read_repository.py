@@ -108,6 +108,9 @@ def read_or_raw(
         return raw()
     if not current_app.config.get("REVIEW_ANALYTICS_WRITE_ENABLED", False):
         _observe(metric, user_id, mode, "fallback_writes_disabled")
+        if mode == "summary" and _allowed_user(user_id):
+            from app.services.analytics_summary_readiness import require_ready_summary
+            require_ready_summary(user_id=user_id, metric=metric)
         return raw()
     if not _allowed_user(user_id):
         _observe(metric, user_id, mode, "fallback_allowlist")
@@ -116,6 +119,9 @@ def read_or_raw(
         return raw()
     if timezone_name is None or day_boundary_hour_local is None:
         _observe(metric, user_id, mode, "fallback_missing_policy")
+        if mode == "summary":
+            from app.services.analytics_summary_readiness import require_ready_summary
+            require_ready_summary(user_id=user_id, metric=metric)
         return raw()
     from app.services.review_analytics_policy import ReviewAnalyticsPolicy
 
@@ -123,10 +129,16 @@ def read_or_raw(
     generation = _ready_generation(user_id, policy)
     if generation is None:
         _observe(metric, user_id, mode, "fallback_generation")
+        if mode == "summary":
+            from app.services.analytics_summary_readiness import require_ready_summary
+            require_ready_summary(user_id=user_id, metric=metric)
         return raw()
     projected = summary(int(generation), policy)
     if projected is None:
         _observe(metric, user_id, mode, "fallback_partial_day")
+        if mode == "summary":
+            from app.services.analytics_summary_readiness import require_ready_summary
+            require_ready_summary(user_id=user_id, metric=metric)
         return raw()
     if mode == "shadow":
         original = raw()

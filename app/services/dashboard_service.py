@@ -77,6 +77,7 @@ def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> T
         timezone_name=timezone_name, day_boundary_hour_local=boundary_hour,
         is_note_mode=True, admin_mode=admin_mode,
         count_by_note=count_by_note, now_utc=now,
+        authority_route=authority_route,
     )
     metadata_ids = [int(deck.id) for deck in decks if not deck.note_type_id]
     card_counts_by_deck, deck_note_types = aggregate_deck_study_counts(
@@ -91,7 +92,7 @@ def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> T
         count_by_note=count_by_note,
     )
     card_counts_by_deck.update(cached_counts)
-    if cached_counts:
+    if cached_counts and metadata_ids:
         deck_note_types = deck_note_type_metadata(
             db.session, learner_user_id=int(current_user.id), deck_ids=metadata_ids,
             admin_mode=admin_mode,

@@ -292,24 +292,18 @@ def _build_local_change_payloads(
     source_notes_by_id = _load_notes_by_ids(
         {str(row.source_note_id) for row in note_override_rows if row.source_note_id}
     )
-    inverse_rename_map = {
-        str(renamed_name): str(source_name)
-        for source_name, renamed_name in renamed_field_names.items()
-        if str(source_name) and str(renamed_name)
-    }
+    from app.services.clone_field_identity_service import clone_field_identity_labels
+    identity_labels = clone_field_identity_labels(install, schema_view)
+    added_prefix = f"added:{install.id}:"
     for row in note_override_rows:
         source_note = source_notes_by_id.get(str(row.source_note_id))
         if source_note is None:
             continue
-        stable_field_id = str(row.source_field_def_id or "").strip() or None
-        if stable_field_id is None:
-            lookup_name = inverse_rename_map.get(str(row.field_name), str(row.field_name))
-            stable_field_id = base_field_ids_by_name.get(lookup_name)
-        local_added_field_def_id = (
-            added_field_ids_by_name.get(str(row.field_name))
-            if stable_field_id is None
-            else None
-        )
+        identity_key = str(row.field_identity_key or "")
+        if identity_key not in identity_labels and not identity_key.startswith("extra:"):
+            continue
+        local_added_field_def_id = identity_key[len(added_prefix):] if identity_key.startswith(added_prefix) else None
+        stable_field_id = identity_key if identity_key and not identity_key.startswith(("added:", "extra:")) else None
         if uses_release_base and stable_field_id is None and local_added_field_def_id is None:
             raise ChangeRequestError(
                 "A note override no longer maps to a field in the applied release.",
@@ -323,10 +317,8 @@ def _build_local_change_payloads(
             ).get("name")
             or row.field_name
         )
-        effective_field_name = renamed_field_names.get(
-            release_field_name,
-            release_field_name,
-        )
+        effective_field_name = identity_labels.get(identity_key) or renamed_field_names.get(
+            release_field_name, release_field_name)
         if effective_field_name in removed_field_names:
             continue
         if uses_release_base and str(source_note.id) not in base_note_values:

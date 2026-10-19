@@ -12,7 +12,7 @@
         {{{word}}}
 
 {{#word_audio}}
-  <audio id="custom-audio" controls style="display: none" src="{{{word_audio_url}}}"></audio>
+  <audio id="custom-audio" style="display: none" src="{{{word_audio_url}}}"></audio>
   <button onclick="document.getElementById('custom-audio').play()">🔊</button>
 {{/word_audio}}
     </div>
@@ -90,7 +90,6 @@
             {{#example_audio}}
             <audio
                 id="example-audio"
-                controls
                 style="display: none"
                 src="{{{example_audio_url}}}">
             </audio>

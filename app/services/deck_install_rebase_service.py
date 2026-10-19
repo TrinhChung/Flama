@@ -550,16 +550,12 @@ def _load_local_overlays(install: DeckInstall):
         for row in FieldDef.query.filter(FieldDef.id.in_(sorted(field_ids) or [""])).all()
     }
     note_by_id = {
-        (str(row.source_note_id), str(row.source_field_def_id)): row
+        (str(row.source_note_id), str(row.field_identity_key)): row
         for row in note_rows
-        if row.source_field_def_id
-    }
-    note_by_name = {
-        (str(row.source_note_id), str(row.field_name)): row
-        for row in note_rows
+        if row.field_identity_key
     }
     schema_by_id = {str(row.source_field_def_id): row for row in schema_rows}
-    return note_rows, schema_rows, order_row, field_names, note_by_id, note_by_name, schema_by_id
+    return note_rows, schema_rows, order_row, field_names, note_by_id, schema_by_id
 
 
 def _local_overlay_for_change(
@@ -567,16 +563,15 @@ def _local_overlay_for_change(
     *,
     field_names: dict[str, str],
     note_by_id: dict[tuple[str, str], DeckCloneNoteFieldOverride],
-    note_by_name: dict[tuple[str, str], DeckCloneNoteFieldOverride],
     schema_by_id: dict[str, DeckCloneFieldDefOverride],
     order_row: DeckCloneFieldOrderOverride | None,
 ) -> _LocalOverlay | None:
     if change.entity_kind == "note_field":
-        row = None
-        if change.field_def_id:
-            row = note_by_id.get((str(change.entity_id), str(change.field_def_id)))
+        identity = str(change.field_def_id or "")
+        if not identity and str(change.property_key or "").startswith("field:"):
+            identity = str(change.property_key)[6:]
+        row = note_by_id.get((str(change.entity_id), identity)) if identity else None
         field_name = _field_name_for_change(change, field_names)
-        row = row or note_by_name.get((str(change.entity_id), field_name))
         if row is None:
             return None
         value = MISSING_MARKER if row.operation == "remove" else row.value
@@ -717,14 +712,13 @@ def prepare_update(
     db.session.flush()
 
     collapsed, local_state = _overlapping_changes(install, target)
-    _, _, order_row, field_names, note_by_id, note_by_name, schema_by_id = local_state
+    _, _, order_row, field_names, note_by_id, schema_by_id = local_state
     conflict_count = 0
     for change, base_value, upstream_value in collapsed:
         local = _local_overlay_for_change(
             change,
             field_names=field_names,
             note_by_id=note_by_id,
-            note_by_name=note_by_name,
             schema_by_id=schema_by_id,
             order_row=order_row,
         )
@@ -1045,7 +1039,7 @@ def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
         )
     target = _require_target_release(install, rebase.to_release_id)
     collapsed, local_state = _overlapping_changes(install, target)
-    _, _, order_row, field_names, note_by_id, note_by_name, schema_by_id = local_state
+    _, _, order_row, field_names, note_by_id, schema_by_id = local_state
     collapsed_keys = {
         str(
             change.change_key
@@ -1066,7 +1060,6 @@ def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
             change,
             field_names=field_names,
             note_by_id=note_by_id,
-            note_by_name=note_by_name,
             schema_by_id=schema_by_id,
             order_row=order_row,
         )

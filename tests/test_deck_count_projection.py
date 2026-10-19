@@ -10,8 +10,9 @@ from app import create_app
 from app.repositories.study_progress_subject_repository import ensure_and_lock_subject
 from app.services.deck_aggregation_service import aggregate_deck_study_counts
 from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts
+from app.services.field_value_identity_service import FieldIdentityError
 from models import db
-from models.card import Card
+from models.card import Card, PresentationAlias, cutover_notes
 from tests.study_note_fixtures import attach_template, enroll_note_user
 from tests.note_progress_fixtures import stage_note_state
 from models.deck import Deck
@@ -111,7 +112,7 @@ class DeckCountProjectionTests(unittest.TestCase):
         db.session.commit()
         self.assertEqual(self._revisions(), ({self.deck_ids[0]: 1, self.deck_ids[1]: 1}, {}))
 
-    def test_occurrence_attach_and_retire_invalidate_only_decks_of_the_note_type(self):
+    def test_occurrence_attach_and_retire_use_metadata_epoch_without_note_scan(self):
         other_type = NoteType(name="Unrelated", user_id=self.user_id)
         db.session.add(other_type)
         db.session.flush()
@@ -125,12 +126,64 @@ class DeckCountProjectionTests(unittest.TestCase):
         self.app.config["DECK_COUNT_WRITE_ENABLED"] = True
         application = db.session.get(StudyApplication, self.other_application_id)
         application.status_code = "ACTIVE"
-        db.session.commit()
+        statements = []
+        def capture(_connection, _cursor, sql, _params, _context, _many):
+            statements.append(sql.lower())
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            db.session.commit()
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
         self.assertEqual(Card.query.filter_by(note_id=self.note_ids[0]).count(), 2)
-        self.assertEqual(self._revisions(), ({deck_id: 1 for deck_id in self.deck_ids}, {}))
+        self.assertEqual(self._revisions(), ({0: 1}, {}))
+        self.assertFalse(any("select distinct notes.deck_id" in sql for sql in statements))
+        self.assertFalse(any("from study_progress_subjects" in sql or "review_events" in sql for sql in statements))
         application.status_code = "RETIRED"
         db.session.commit()
-        self.assertEqual(self._revisions(), ({deck_id: 2 for deck_id in self.deck_ids}, {}))
+        self.assertEqual(self._revisions(), ({0: 2}, {}))
+
+    def test_null_deck_note_lifecycle_invalidates_collection_epoch(self):
+        note = self._add_note(None)
+        db.session.commit()
+        self.assertEqual(self._revisions(), ({0: 1}, {}))
+        note.deck_id = self.deck_ids[0]
+        db.session.commit()
+        self.assertEqual(self._revisions(), ({0: 2, self.deck_ids[0]: 1}, {}))
+        note.deck_id = None
+        db.session.commit()
+        db.session.delete(note)
+        db.session.commit()
+        self.assertEqual(self._revisions()[0][0], 4)
+
+    def test_interval_only_and_integrity_changes_invalidate_subject_scope(self):
+        self.app.config["DECK_COUNT_WRITE_ENABLED"] = False
+        subject = stage_note_state(db.session, user_id=self.user_id, note_id=self.note_ids[0],
+                                   queue="review", due_day=1, interval_days=4)
+        db.session.add(subject)
+        db.session.commit()
+        self.app.config["DECK_COUNT_WRITE_ENABLED"] = True
+        stage_note_state(db.session, user_id=self.user_id, note_id=self.note_ids[0],
+                         queue="review", due_day=1, interval_days=8)
+        db.session.commit()
+        self.assertEqual(self._revisions(), ({}, {(self.user_id, self.deck_ids[0]): 1}))
+        subject.authority_revision += 1
+        db.session.commit()
+        self.assertEqual(self._revisions()[1][(self.user_id, self.deck_ids[0])], 2)
+
+    def test_alias_and_cutover_core_membership_changes_invalidate_epoch(self):
+        db.session.execute(PresentationAlias.__table__.insert().values(id="fixture-alias", note_id=self.note_ids[0],
+            template_id=self.template_id,
+            application_id=str(Card.query.filter_by(note_id=self.note_ids[0]).one().application_id),
+            created_at=datetime.utcnow(), updated_at=datetime.utcnow()))
+        db.session.commit()
+        self.assertEqual(self._revisions(), ({0: 1}, {}))
+        db.session.execute(cutover_notes.insert().values(note_id=self.note_ids[0]))
+        db.session.commit()
+        self.assertEqual(self._revisions(), ({0: 2}, {}))
+        db.session.execute(cutover_notes.delete().where(cutover_notes.c.note_id == self.note_ids[0]))
+        db.session.execute(PresentationAlias.__table__.delete().where(PresentationAlias.__table__.c.id == "fixture-alias"))
+        db.session.commit()
+        self.assertEqual(self._revisions(), ({0: 3}, {}))
 
     def test_note_type_change_invalidates_the_note_deck(self):
         other_type = NoteType(name="Target type", user_id=self.user_id)
@@ -240,10 +293,22 @@ class DeckCountProjectionTests(unittest.TestCase):
     def test_structured_and_text_bulk_mutations_bump_global_once(self):
         db.session.execute(update(StudyProgressSubject).where(StudyProgressSubject.learner_user_id == self.user_id)
                            .values(is_suspended=True))
-        db.session.execute(text("UPDATE notes SET tags = :tags WHERE id = :note_id"),
-                           {"tags": "[]", "note_id": self.note_ids[0]})
+        db.session.execute(text("UPDATE study_progress_subjects SET is_suspended = :suspended "
+                                "WHERE learner_user_id = :user_id"),
+                           {"suspended": False, "user_id": self.user_id})
         db.session.commit()
         self.assertEqual(self._revisions(), ({0: 1}, {}))
+
+    def test_rejected_raw_note_write_rolls_back_pending_count_invalidation(self):
+        db.session.execute(update(StudyProgressSubject).where(StudyProgressSubject.learner_user_id == self.user_id)
+                           .values(is_suspended=True))
+        with self.assertRaisesRegex(FieldIdentityError, "Raw field-identity writes"):
+            db.session.execute(text("UPDATE notes SET tags = :tags WHERE id = :note_id"),
+                               {"tags": '["bypass"]', "note_id": self.note_ids[0]})
+        db.session.rollback()
+        self.assertEqual(db.session.get(Note, self.note_ids[0]).tags, [])
+        db.session.commit()
+        self.assertEqual(self._revisions(), ({}, {}))
 
     def test_revision_failure_rolls_back_domain_write_and_captured_scope(self):
         self._add_note(self.deck_ids[0])

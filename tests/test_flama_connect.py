@@ -1351,7 +1351,7 @@ class FlamaConnectTests(unittest.TestCase):
             self.assertEqual(result, [False, True] + [False] * 24 + [True] * 24)
             note_reads = [sql for sql in metrics["selects"] if "FROM notes" in sql]
             self.assertEqual(len(note_reads), 1, metrics["selects"])
-            self.assertIn("JSON_EXTRACT", note_reads[0])
+            self.assertIn("JSON_EXTRACT", note_reads[0].upper())
             self.assertNotIn("notes.tags", note_reads[0])
             self.assertEqual(metrics["loaded_notes"], [])
             self.assertLessEqual(len(metrics["selects"]), 10, metrics["selects"])
@@ -1391,16 +1391,15 @@ class FlamaConnectTests(unittest.TestCase):
                 for index in range(100)
             ])
             db.session.commit()
-            matched_id = Note.query.filter(
-                Note.field_values["Word"].as_string() == "word-50",
-            ).one().id
+            from app.repositories.field_value_query_repository import note_values_search_condition
+            matched_id = Note.query.filter(note_values_search_condition(keyword_like="word-50")).one().id
             db.session.remove()
             payload = self._note(word="word-50")
             payload["fields"]["Meaning"] = "updated"
             with _connect_read_metrics() as metrics:
                 ref_id = add_note(self.user_id, payload)
             self.assertIsInstance(ref_id, int)
-            identity_reads = [sql for sql in metrics["selects"] if "FROM notes" in sql and "JSON_EXTRACT" in sql]
+            identity_reads = [sql for sql in metrics["selects"] if "FROM notes" in sql and "JSON_EXTRACT" in sql.upper()]
             self.assertEqual(len(identity_reads), 1)
             self.assertEqual(set(metrics["loaded_notes"]), {matched_id})
             self.assertEqual(db.session.get(Note, matched_id).field_values["Meaning"], "updated")

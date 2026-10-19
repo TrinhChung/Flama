@@ -6,7 +6,6 @@ from app import create_app
 from models import db
 from models.audit_log import AuditLog
 from models.field_def import FieldDef
-from models.field_rename_job import FieldRenameJob
 from models.note import Note
 from models.user import User
 from tests.study_note_fixtures import create_note_user
@@ -200,13 +199,17 @@ class FieldArrayConversionTests(unittest.TestCase):
         duplicated["notes"].append(duplicated["notes"][0])
         self.assertEqual(self.client.post(self._url(), json=duplicated).status_code, 400)
 
-    def test_rename_in_progress_blocks_the_conversion(self):
+    def test_schema_rename_keeps_values_and_does_not_require_a_rewrite_job(self):
         with self.app.app_context():
-            db.session.add(FieldRenameJob(note_type_id=self.note_type["id"], user_id=self.owner_id, field_def_id=self.fields["Meaning"], old_name="Meaning", new_name="Meaning2", status="pending"))
+            before = {note.id: dict(note.field_values_by_id) for note in Note.query.all()}
+            db.session.get(FieldDef, self.fields["Meaning"]).name = "Meaning2"
             db.session.commit()
+            after = {note.id: dict(note.field_values_by_id) for note in Note.query.all()}
+            self.assertEqual(before, after)
         source = self.client.get(self._url()).get_json()
+        self.assertEqual(source["field"]["name"], "Meaning2")
         response = self.client.post(self._url(), json=self._payload(source))
-        self.assertEqual((response.status_code, response.get_json()["error"]), (409, "FIELD_RENAME_IN_PROGRESS"))
+        self.assertEqual(response.status_code, 200, response.get_json())
 
     def test_restore_from_backup_returns_the_original_type_and_values(self):
         before = self.client.get(self._url()).get_json()
@@ -240,6 +243,27 @@ class FieldArrayConversionTests(unittest.TestCase):
         self._login("other@example.com")
         self.assertEqual(self.client.get(self._url()).status_code, 404)
         self.assertEqual(self.client.post(self._url(), json={"target_type": "array", "expected_field_type": "text", "notes": []}).status_code, 404)
+
+    def test_note_api_revisions_fence_stale_edits_and_renamed_raw_labels(self):
+        url = f"/api/notes/{self.note_ids[0]}"
+        original = self.client.get(url).get_json()
+        self.assertIn("content_revision", original)
+        self.assertIn("field_schema_revision", original)
+        current = self.client.patch(url, json={"field_values": {"Meaning": "updated"},
+            "expected_content_revision": original["content_revision"],
+            "expected_field_schema_revision": original["field_schema_revision"]})
+        self.assertEqual(current.status_code, 200, current.get_json())
+        self.assertGreater(current.get_json()["content_revision"], original["content_revision"])
+        stale = self.client.patch(url, json={"field_values": {"Meaning": "stale"},
+            "expected_content_revision": original["content_revision"]})
+        self.assertEqual(stale.status_code, 409, stale.get_json())
+        with self.app.app_context():
+            db.session.get(FieldDef, self.fields["Meaning"]).name = "Meaning2"
+            db.session.commit()
+        renamed = self.client.patch(url, json={"field_values": {"Meaning": "obsolete label"}})
+        self.assertEqual(renamed.status_code, 409, renamed.get_json())
+        latest = self.client.get(url).get_json()
+        self.assertEqual(latest["field_values"]["Meaning2"], "updated")
 
 
 if __name__ == "__main__":

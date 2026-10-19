@@ -344,6 +344,88 @@ class StudyContentDeleteTests(unittest.TestCase):
             self.assertEqual(StudyProgressSubject.query.filter_by(learner_user_id=self.user_id).one().status_code,
                 "TOMBSTONED_SUBJECT_DELETED")
 
+    def test_browse_selected_note_delete_keeps_templates_and_cancels_all_presentations(self):
+        from app.services import browse_card_service
+        with self.app.app_context():
+            reader_id = self._add_note_source_reader()
+            own_session = self._open_session(self.user_id, self.card_ids[0])
+            reader_session = self._open_session(reader_id, self.card_ids[1])
+            listing = browse_card_service.list_browse_cards(user_id=self.user_id, admin_mode=False,
+                timezone_name="UTC", query_args={"deck_id": str(self.deck_id)})
+            self.assertEqual(listing["total"], 1)
+            ids = [row["note_id"] for row in listing["items"]]
+        response = self.client.post("/api/browse/notes/batch-delete", json={"note_ids": ids + ids})
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["deleted_count"], 1)
+        with self.app.app_context():
+            self.assertIsNone(db.session.get(Note, ids[0]))
+            self.assertEqual(Card.query.count(), 0)
+            self.assertEqual(Template.query.count(), 2)
+            self.assertEqual(StudyApplication.query.count(), 2)
+            self.assertEqual({row.status_code for row in StudyProgressSubject.query.all()},
+                {"TOMBSTONED_SUBJECT_DELETED"})
+            for session_id in (own_session, reader_session):
+                self.assertEqual(db.session.get(StudySession, session_id).status, "cancelled")
+
+    def test_browse_note_delete_works_without_active_presentations(self):
+        with self.app.app_context():
+            note_id = self._own_note_id()
+            for app in StudyApplication.query.all():
+                app.status_code = "RETIRED"
+            db.session.commit()
+        response = self.client.delete(f"/api/browse/notes/{note_id}")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        with self.app.app_context():
+            self.assertIsNone(db.session.get(Note, note_id))
+            self.assertEqual(Template.query.count(), 2)
+            self.assertEqual(StudyApplication.query.count(), 2)
+
+    def test_browse_note_batch_rejects_foreign_note_without_deleting_owned_note(self):
+        with self.app.app_context():
+            self._add_learners()
+            own_id = self._own_note_id()
+            foreign_id = Note.query.filter(Note.user_id != self.user_id).one().id
+        response = self.client.post("/api/browse/notes/batch-delete",
+            json={"note_ids": [own_id, foreign_id]})
+        self.assertEqual(response.status_code, 403, response.get_json())
+        with self.app.app_context():
+            self.assertIsNotNone(db.session.get(Note, own_id))
+            self.assertIsNotNone(db.session.get(Note, foreign_id))
+
+    def test_browse_note_batch_validates_ids_and_missing_notes_atomically(self):
+        for payload in ([], {}, {"note_ids": "bad"}, {"note_ids": [None]}, {"note_ids": [{}]},
+                        {"note_ids": [""]}, {"note_ids": ["x" * 37]}):
+            with self.subTest(payload=payload):
+                response = self.client.post("/api/browse/notes/batch-delete", json=payload)
+                self.assertEqual(response.status_code, 400)
+        with self.app.app_context():
+            own_id = self._own_note_id()
+        response = self.client.post("/api/browse/notes/batch-delete",
+            json={"note_ids": [own_id, str(uuid4())]})
+        self.assertEqual(response.status_code, 404)
+        with self.app.app_context():
+            self.assertIsNotNone(db.session.get(Note, own_id))
+
+    def test_browse_note_delete_preserves_released_source_even_for_owner(self):
+        from models.deck_release_entity_membership import DeckReleaseEntityMembership
+        with self.app.app_context():
+            note = db.session.get(Note, self._own_note_id())
+            note_id = note.id
+            item = DeckMarketplaceItem(owner_user_id=self.user_id, source_deck_id=self.deck_id,
+                source_note_type_id=note.note_type_id, title="Published source", publish_status="published",
+                pricing_mode="free")
+            db.session.add(item)
+            db.session.flush()
+            db.session.add(DeckReleaseEntityMembership(deck_item_id=item.id, entity_kind="note",
+                entity_id=note_id, source_deck_id=self.deck_id, introduced_sequence=1))
+            db.session.commit()
+        response = self.client.delete(f"/api/browse/notes/{note_id}")
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["code"], "SHARED_ENTITY_RETIRE_REQUIRED")
+        with self.app.app_context():
+            self.assertIsNotNone(db.session.get(Note, note_id))
+            self.assertEqual(Template.query.count(), 2)
+
     def test_template_delete_keeps_state_for_owner_and_second_note_learner(self):
         with self.app.app_context():
             self._add_note_source_reader()

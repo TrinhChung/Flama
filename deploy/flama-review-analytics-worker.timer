@@ -1,0 +1,12 @@
+[Unit]
+Description=Process Flama review analytics feed each second
+
+[Timer]
+OnBootSec=5s
+OnUnitInactiveSec=1s
+AccuracySec=100ms
+Persistent=false
+Unit=flama-review-analytics-worker.service
+
+[Install]
+WantedBy=timers.target

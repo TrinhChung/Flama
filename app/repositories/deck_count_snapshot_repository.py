@@ -2,18 +2,34 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
+from models.deck_release import DeckRelease
 from models.deck_count_snapshot import (
     DeckCountContentRevision, DeckCountLearnerRevision, DeckStudyCountSnapshot,
 )
 from models.user import User
 from models.user_role import UserRole
+
+
+# Cache the common one-deck review invalidation instead of compiling a new
+# dialect upsert on every command. Atomic increments keep concurrent commits
+# and rollback semantics identical to the batched maintenance path.
+_BUMP_CONTENT_MYSQL = text(
+    "INSERT INTO deck_count_content_revisions (physical_deck_id,revision,updated_at) "
+    "VALUES (:physical_deck_id,1,:updated_at) "
+    "ON DUPLICATE KEY UPDATE revision=revision+1,updated_at=:updated_at"
+)
+_BUMP_LEARNER_MYSQL = text(
+    "INSERT INTO deck_count_learner_revisions (user_id,effective_deck_id,revision,updated_at) "
+    "VALUES (:user_id,:effective_deck_id,1,:updated_at) "
+    "ON DUPLICATE KEY UPDATE revision=revision+1,updated_at=:updated_at"
+)
 
 
 def _utcnow():
@@ -45,6 +61,46 @@ def overlay_local_deck_ids(session, deck_ids):
         DeckInstall.local_deck_id.in_(ids),
     )).scalars()
     return {int(value) for value in list(mapped) + list(installed) if value is not None}
+
+
+def read_installed_scope_dependencies(session, *, deck_ids):
+    """Small map/install/release vectors, with no Note or progress scan.
+
+    Return every mapping, including malformed/foreign mappings: eligibility is
+    the caller's decision. Missing release metadata is represented as NULL so
+    legacy fallback never accidentally acquires an initialized-release stamp.
+    """
+    ids = sorted({int(value) for value in deck_ids})
+    if not ids:
+        return {}
+    statement = select(
+        DeckCloneDeckMap.local_deck_id.label("local_deck_id"),
+        DeckCloneDeckMap.source_deck_id.label("map_source_deck_id"),
+        DeckInstall.id.label("install_id"),
+        DeckInstall.user_id.label("install_user_id"),
+        DeckInstall.local_deck_id.label("install_local_deck_id"),
+        DeckInstall.source_deck_id.label("install_source_deck_id"),
+        DeckInstall.source_owner_user_id.label("source_owner_user_id"),
+        DeckInstall.source_note_type_id.label("source_note_type_id"),
+        DeckInstall.deck_item_id.label("deck_item_id"),
+        DeckInstall.clone_mode.label("clone_mode"),
+        DeckInstall.applied_release_id.label("applied_release_id"),
+        DeckInstall.version_mode.label("version_mode"),
+        DeckInstall.overlay_revision.label("overlay_revision"),
+        DeckInstall.base_snapshot_at.label("base_snapshot_at"),
+        DeckInstall.installed_at.label("installed_at"),
+        DeckRelease.id.label("release_id"),
+        DeckRelease.deck_item_id.label("release_deck_item_id"),
+        DeckRelease.sequence_no.label("release_sequence_no"),
+        DeckRelease.status.label("release_status"),
+        DeckRelease.template_pins_initialized.label("template_pins_initialized"),
+        DeckRelease.manifest_hash.label("release_manifest_hash"),
+    ).select_from(DeckCloneDeckMap).join(
+        DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id,
+    ).outerjoin(DeckRelease, DeckRelease.id == DeckInstall.applied_release_id).where(
+        DeckCloneDeckMap.local_deck_id.in_(ids),
+    )
+    return {int(row["local_deck_id"]): dict(row) for row in session.execute(statement).mappings()}
 
 
 def read_admin_mode(session, user_id):
@@ -85,7 +141,14 @@ def read_snapshots(session, *, user_id, deck_ids, contract_code, unit_code):
 
 
 def _bump(session, table, rows, keys):
+    if not rows:
+        return
     dialect = session.get_bind().dialect.name
+    if dialect == "mysql" and len(rows) == 1:
+        statement = (_BUMP_CONTENT_MYSQL if table is DeckCountContentRevision.__table__
+                     else _BUMP_LEARNER_MYSQL)
+        session.execute(statement, rows[0])
+        return
     for offset in range(0, len(rows), 200):
         batch = rows[offset:offset + 200]
         if dialect == "mysql":

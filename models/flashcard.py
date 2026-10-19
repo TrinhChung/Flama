@@ -26,7 +26,6 @@ from models.deck_release_note_checkpoint import DeckReleaseNoteCheckpoint
 from models.deck_review import DeckReview
 from models.deck_working_dirty_entity import DeckWorkingDirtyEntity
 from models.field_def import FieldDef
-from models.field_rename_job import FieldRenameJob
 from models.media_asset import MediaAsset
 from models.marketplace_saved_item import MarketplaceSavedItem
 from models.media_field_migration import MediaFieldMigrationItem, MediaFieldMigrationRun
@@ -69,7 +68,6 @@ __all__ = [
     "DeckReview",
     "DeckWorkingDirtyEntity",
     "FieldDef",
-    "FieldRenameJob",
     "MediaAsset",
     "MarketplaceSavedItem",
     "MediaFieldMigrationItem",

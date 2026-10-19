@@ -1,0 +1,17 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 0.437,
+  "generated_schema": "flama_field_identity_probe_13888_4362d7644f02",
+  "legacy_note_media_rows_preserved": true,
+  "media_fk_uniqueness_preserved": true,
+  "metadata_lock_timeout_restored": true,
+  "migration": "20261013_000063",
+  "mysql_version": "8.0.40",
+  "nested_arrays_and_null_preserved": true,
+  "populated_downgrade_refused": true,
+  "probe_database_dropped": true,
+  "raw_named_json_preserved": true,
+  "status": "PASS",
+  "unused_expand_downgrade_and_reupgrade": true,
+  "upgrade_repeatable": true
+}

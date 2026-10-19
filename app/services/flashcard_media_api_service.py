@@ -110,11 +110,13 @@ def upload_media(
             field=exc.field,
         ) from exc
 
-    existing = MediaAsset.query.filter_by(
+    from app.repositories.media_field_identity_repository import find_note_field_media
+    existing = find_note_field_media(
         note_id=note.id,
         field_name=validated.field_name,
         sha256=validated.sha256,
-    ).first()
+        note=note,
+    )
     if existing:
         if not markdown_inline:
             values = dict(note.field_values or {})
@@ -477,7 +479,9 @@ def delete_media(
     note = asset.note
     values = dict(note.field_values or {})
     cleared_field = False
-    current_items = split_media_field_value(values.get(asset.field_name))
+    from app.repositories.media_field_identity_repository import media_identity_for_label
+    same_identity = media_identity_for_label(note, asset.field_name) == asset.field_identity_key
+    current_items = split_media_field_value(values.get(asset.field_name)) if same_identity else []
     removable = {
         str(asset.id),
         f"/media/proxy/{asset.id}",
@@ -485,7 +489,7 @@ def delete_media(
         f"[sound:{str(asset.filename or '').strip()}]",
     }
     next_value = join_media_field_urls([item for item in current_items if item not in removable])
-    if next_value != str(values.get(asset.field_name) or ""):
+    if same_identity and next_value != str(values.get(asset.field_name) or ""):
         values[asset.field_name] = next_value
         note.field_values = values
         cleared_field = True

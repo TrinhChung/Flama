@@ -22,7 +22,7 @@ from models import db
 logger = logging.getLogger(__name__)
 connect_bp = Blueprint("flama_connect", __name__)
 
-from app.connect.request_pipeline import handle_request, protocol_response as _protocol_response
+from app.connect.request_pipeline import get_cors_allow_origin, handle_request, protocol_response as _protocol_response
 from app.services.connect.registry import ACTION_PARAMS, ACTION_SCOPES, LEGACY_WEB_ACTIONS as _LEGACY_WEB_ACTIONS
 from app.services.connect.rate_limit import SlidingWindowLimiter, _limiter, rate_allowed as _rate_allowed
 
@@ -64,7 +64,6 @@ def _register_models() -> None:
         DeckMarketplaceItem,
         DeckReview,
         FieldDef,
-        FieldRenameJob,
         MediaAsset,
         MarketplaceSavedItem,
         Note,
@@ -84,7 +83,9 @@ def _register_models() -> None:
     from models.template_subscription import TemplateSubscription  # noqa: F401
     from models.study_template_preset import StudyTemplatePreset  # noqa: F401
     from models.deck_release_template_pin import DeckReleaseTemplatePin  # noqa: F401
+    from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent  # noqa: F401
     from app.services import template_version_service  # noqa: F401
+    from app.services import field_value_identity_hooks as _field_identity  # noqa: F401
 
 
 @connect_bp.get("/healthz")
@@ -222,15 +223,17 @@ def _apply_security_headers(response):
     response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("Cache-Control", "no-store")
+    if response.status_code == 403:
+        return response
     origin = request.headers.get("Origin")
     standard = request.path == "/v1/anki-connect"
-    allowed = set(current_app.config.get("CONNECT_ANKI_ALLOWED_ORIGINS" if standard else "CONNECT_CORS_ALLOWED_ORIGINS", ()))
-    if standard:
-        allowed -= {"*", "null"}
-    if origin and (origin in allowed or (not standard and "*" in allowed)):
-        response.headers["Access-Control-Allow-Origin"] = origin
+    allow_origin = get_cors_allow_origin(origin, standard=standard)
+    if allow_origin is not None:
+        response.headers["Access-Control-Allow-Origin"] = allow_origin
         response.headers["Vary"] = "Origin"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Content-Encoding, Authorization, X-Flama-Connect-Key, X-Package-SHA256, MCP-Protocol-Version"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, Content-Encoding, Authorization, X-Flama-Connect-Key, X-Package-SHA256, MCP-Protocol-Version"
+        )
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Max-Age"] = "600"
     return response
@@ -247,7 +250,7 @@ def create_connect_app(config: dict[str, Any] | None = None) -> Flask:
             "CONNECT_ANKI_ADAPTER_ENABLED": coerce_bool_env("CONNECT_ANKI_ADAPTER_ENABLED", default=False),
             "CONNECT_ANKI_MEDIA_ENABLED": coerce_bool_env("CONNECT_ANKI_MEDIA_ENABLED", default=False),
             "CONNECT_VERSIONED_PROTOCOL_ENABLED": coerce_bool_env("CONNECT_VERSIONED_PROTOCOL_ENABLED", default=False),
-            "CONNECT_ANKI_ALLOWED_ORIGINS": comma_separated_env("CONNECT_ANKI_ALLOWED_ORIGINS"),
+            "CONNECT_ANKI_ALLOWED_ORIGINS": comma_separated_env("CONNECT_ANKI_ALLOWED_ORIGINS") or ("https://killergerbah.github.io",),
             "CONNECT_ANKI_MAX_CONTENT_LENGTH": coerce_int_env("CONNECT_ANKI_MAX_CONTENT_LENGTH", default=6 * 1024 * 1024),
             "CONNECT_ANKI_MEDIA_MAX_BYTES": coerce_int_env("CONNECT_ANKI_MEDIA_MAX_BYTES", default=2 * 1024 * 1024),
             "CONNECT_ANKI_NOTE_MEDIA_MAX_BYTES": coerce_int_env("CONNECT_ANKI_NOTE_MEDIA_MAX_BYTES", default=4 * 1024 * 1024),

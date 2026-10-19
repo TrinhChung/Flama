@@ -47,7 +47,8 @@ class LegacyProgressRetirementAuditTests(unittest.TestCase):
         db.session.execute(sa.insert(NoteType).values(id='type-1', user_id=1, name='Audit'))
         template = attach_template(db.session, note_type_id='type-1', owner_user_id=1, name='Front', created_at=OLD)
         application = StudyApplication.query.filter_by(template_id=template.id).one()
-        db.session.execute(sa.insert(Note).values(id=NOTE_ID, note_type_id='type-1', user_id=1, created_at=OLD))
+        db.session.add(Note(id=NOTE_ID, note_type_id='type-1', user_id=1, field_values={}, created_at=OLD))
+        db.session.flush()
         db.session.execute(sa.insert(Card).values(id=CARD_ID, note_id=NOTE_ID,
                                                   template_id=template.id, application_id=application.id, created_at=OLD))
         self.progress = CardProgress(id=1, user_id=1, card_id=CARD_ID, queue='review',

@@ -121,13 +121,45 @@ function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
 }
 
 describe('StudyQuickEditDialog', () => {
+  it('sends the revision captured before the user draft when detail refreshes in the background', async () => {
+    const detail = {
+      card: { card_id: 'card-123', status: 'learning' },
+      note: { id: '101', deck_id: 5, deck_name: 'N5 Deck', tags: ['jlpt-n5'],
+        field_values: mockContent.field_values, content_revision: 3, field_schema_revision: 4 },
+      fields: mockTemplate.field_defs,
+      decks: [{ id: 5, name: 'N5 Deck' }],
+    }
+    mocks.get.mockResolvedValue(detail)
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => root?.render(renderWithClient(
+      <StudyQuickEditDialog open={true} onOpenChange={vi.fn()} cardId="card-123"
+        template={mockTemplate} content={mockContent} onCardUpdated={vi.fn()} />,
+    )))
+    const word = document.querySelector('input[placeholder*="Word"]') as HTMLInputElement
+    await act(async () => setNativeValue(word, 'draft'))
+    await act(async () => queryClient.setQueryData(['browse', 'card-detail', 'card-123'], {
+      ...detail, note: { ...detail.note, content_revision: 9, field_schema_revision: 10 },
+    }))
+    const save = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('Lưu thay đổi'))!
+    await act(async () => save.click())
+    expect(mocks.mutate).toHaveBeenCalledWith('/browse/cards/card-123', 'PATCH', expect.objectContaining({
+      expected_content_revision: 3, expected_field_schema_revision: 4,
+    }))
+  })
+
   it('blocks invalid array code and saves nested arrays as native lists', async () => {
-    mocks.get.mockImplementation(() => new Promise(() => {}))
     const template = { ...mockTemplate, field_defs: [
       { name: 'Word', field_type: 'text', position: 0 },
       { name: 'Answer', field_type: 'array', position: 1 },
     ] }
     const content = { ...mockContent, field_values: { Word: '勉強', Answer: [['old'], 'answer'] } }
+    mocks.get.mockResolvedValue({
+      card: { card_id: 'card-123', status: 'learning' },
+      note: { id: '101', deck_id: 5, tags: ['jlpt-n5'], field_values: content.field_values },
+      fields: template.field_defs, decks: [{ id: 5, name: 'N5 Deck' }],
+    })
     const onCardUpdated = vi.fn()
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -152,7 +184,8 @@ describe('StudyQuickEditDialog', () => {
   })
 
   it('uses frozen note fields and excludes aliases while authoritative detail is loading', async () => {
-    mocks.get.mockImplementation(() => new Promise(() => {}))
+    let resolveDetail!: (detail: unknown) => void
+    mocks.get.mockImplementation(() => new Promise((resolve) => { resolveDetail = resolve }))
     const projection = {
       schema_version: 'template-input-bindings.v1' as const,
       input_bindings: { term: 'field-word' },
@@ -179,12 +212,31 @@ describe('StudyQuickEditDialog', () => {
     const word = document.querySelector('input[placeholder*="Word"]') as HTMLInputElement
     expect(word.value).toBe('dog')
     await act(async () => { setNativeValue(word, 'cat') })
+    const tag = document.querySelector<HTMLInputElement>('input[placeholder="Thêm tag mới…"]')!
+    await act(async () => setNativeValue(tag, 'draft-tag'))
+    await act(async () => tag.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
     const save = Array.from(document.querySelectorAll('button')).find((button) => (
       button.textContent?.includes('Lưu thay đổi')
-    ))
-    await act(async () => { save?.click() })
+    ))!
+    expect(save.disabled).toBe(true)
+    await act(async () => word.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', ctrlKey: true, bubbles: true,
+    })))
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    await act(async () => resolveDetail({
+      card: { card_id: 'card-123', status: 'learning' },
+      note: { id: '101', deck_id: 5, deck_name: 'N5 Deck', tags: ['jlpt-n5'],
+        field_values: { Word: 'dog', Meaning: 'animal' }, content_revision: 3, field_schema_revision: 4 },
+      fields: projection.field_defs,
+      decks: [{ id: 5, name: 'N5 Deck' }],
+    }))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(word.value).toBe('cat')
+    expect(save.disabled).toBe(false)
+    await act(async () => { save.click() })
     expect(mocks.mutate).toHaveBeenCalledWith('/browse/cards/card-123', 'PATCH', expect.objectContaining({
       field_values: { Word: 'cat', Meaning: 'animal' },
+      tags: ['jlpt-n5', 'draft-tag'], expected_content_revision: 3, expected_field_schema_revision: 4,
     }))
   })
 
@@ -494,6 +546,12 @@ describe('StudyQuickEditDialog', () => {
   it('forwards media_assets from PATCH response to onCardUpdated options', async () => {
     const onOpenChange = vi.fn()
     const onCardUpdated = vi.fn()
+
+    mocks.get.mockResolvedValue({
+      card: { card_id: 'card-cat-1', status: 'learning' },
+      note: { id: '789', deck_id: 1, tags: ['n5'], field_values: mockContent.field_values },
+      fields: mockTemplate.field_defs, decks: [{ id: 1, name: 'N5 Deck' }],
+    })
 
     mocks.mutate.mockResolvedValueOnce({
       success: true,

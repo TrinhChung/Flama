@@ -9,6 +9,8 @@ from flask_login import current_user, login_required
 from app.services import browse_card_service, browse_voicevox_service
 from app.services.stats_overview import get_effective_timezone_name
 from app.utils.permissions import is_admin_user
+from app.validators import RequestValidationError
+from app.validators.browse_note import validate_note_delete_payload
 
 
 browse_bp = Blueprint("api_v1_browse", __name__)
@@ -189,6 +191,35 @@ def browse_notes():
     except browse_card_service.BrowseApiError as exc:
         return _browse_error(exc)
     return jsonify(browse_card_service.build_legacy_notes_payload(cards_payload))
+
+
+@browse_bp.delete("/notes/<note_id>")
+@login_required
+def browse_note_delete(note_id: str):
+    user_id, admin_mode, _timezone_name = _context()
+    try:
+        payload = browse_card_service.delete_browse_notes_batch(
+            user_id=user_id, admin_mode=admin_mode, note_ids=[note_id],
+        )
+    except browse_card_service.BrowseApiError as exc:
+        return _browse_error(exc)
+    return jsonify(payload)
+
+
+@browse_bp.post("/notes/batch-delete")
+@login_required
+def browse_notes_batch_delete():
+    user_id, admin_mode, _timezone_name = _context()
+    try:
+        note_ids = validate_note_delete_payload(request.get_json(silent=True))
+        payload = browse_card_service.delete_browse_notes_batch(
+            user_id=user_id, admin_mode=admin_mode, note_ids=note_ids,
+        )
+    except RequestValidationError as exc:
+        return jsonify({"error": str(exc), "code": exc.code, "field": exc.field}), exc.status
+    except browse_card_service.BrowseApiError as exc:
+        return _browse_error(exc)
+    return jsonify(payload)
 
 
 @browse_bp.patch("/notes/<note_id>")

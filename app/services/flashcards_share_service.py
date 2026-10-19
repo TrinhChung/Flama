@@ -2902,6 +2902,7 @@ def build_clone_schema_view(
         resolved_defs.append(
             SimpleNamespace(
                 id=source_def.id,
+                field_identity_key=str(source_def.id),
                 name=resolved_name,
                 field_type=resolved_field_type,
                 position=resolved_position,
@@ -2930,6 +2931,7 @@ def build_clone_schema_view(
             SimpleNamespace(
                 id=row.id,
                 name=resolved_name,
+                field_identity_key=f"added:{install.id}:{row.id}",
                 field_type=resolved_field_type,
                 position=resolved_position,
                 required=resolved_required,
@@ -3026,16 +3028,12 @@ def apply_clone_note_field_overrides(
 
     if note_override_rows is None:
         note_override_rows = flashcards_share_repository.get_clone_note_field_overrides(install.id, source_note.id)
-    active_field_names_by_id = {
-        str(field_def.id): str(field_def.name)
-        for field_def in schema_view.field_defs
-        if field_def.id and str(field_def.name or "").strip()
-    }
+    from app.services.clone_field_identity_service import clone_override_field_label, clone_field_identity_labels
+    identity_labels = clone_field_identity_labels(install, schema_view)
     for row in note_override_rows:
-        field_name = active_field_names_by_id.get(
-            str(row.source_field_def_id or ""),
-            row.field_name,
-        )
+        field_name = clone_override_field_label(row, install, schema_view, identity_labels=identity_labels)
+        if field_name is None:
+            continue
         if row.operation == "remove":
             values.pop(field_name, None)
         else:
@@ -3065,6 +3063,8 @@ def upsert_clone_overlay(
     deck_install: DeckInstall,
     payload: dict[str, Any],
 ) -> tuple[dict[str, int], str | None]:
+    from app.services.clone_field_identity_service import lock_clone_overlay_write
+    deck_install = lock_clone_overlay_write(deck_install, expected_revision=payload.get("expected_overlay_revision"))
     if deck_install.clone_mode != "logical_overlay":
         return {}, "This install does not support overlay edits."
 
@@ -3077,6 +3077,13 @@ def upsert_clone_overlay(
     }
 
     source_note_type_id = (deck_install.source_note_type_id or "").strip()
+    removal_identity_labels = {}
+    note_deltas = payload.get("note_field_overrides")
+    if isinstance(note_deltas, list) and any(isinstance(item, dict)
+            and str(item.get("operation") or "set").strip().lower() == "remove" for item in note_deltas):
+        from app.services.clone_field_identity_service import clone_field_identity_labels
+        initial_schema = build_clone_schema_view(install=deck_install, source_note_type_id=source_note_type_id)
+        removal_identity_labels = clone_field_identity_labels(deck_install, initial_schema)
     source_field_ids: set[str] = set()
     source_fields_by_id: dict[str, FieldDef] = {}
     source_fields_by_name: dict[str, FieldDef] = {}
@@ -3265,13 +3272,17 @@ def upsert_clone_overlay(
         if not isinstance(note_field_overrides_payload, list):
             return {}, "note_field_overrides must be a list."
         snapshot_at = _install_snapshot_at(deck_install)
+        from app.services.clone_field_identity_service import clone_field_identity_labels
+        resolved_schema = build_clone_schema_view(install=deck_install, source_note_type_id=source_note_type_id)
+        identity_labels = clone_field_identity_labels(deck_install, resolved_schema)
         for item in note_field_overrides_payload:
             if not isinstance(item, dict):
                 return {}, "Each note_field_overrides item must be an object."
             source_note_id = str(item.get("source_note_id") or "").strip()
             field_name = str(item.get("field_name") or "").strip()
-            if not source_note_id or not field_name:
-                return {}, "note_field_overrides requires source_note_id and field_name."
+            field_identity_key = str(item.get("field_identity_key") or "").strip() or None
+            if not source_note_id or not (field_name or field_identity_key):
+                return {}, "note_field_overrides requires source_note_id and a field identity or current label."
             source_note = db.session.get(Note, source_note_id)
             if not source_note:
                 return {}, "note_field_overrides references missing source note."
@@ -3300,37 +3311,11 @@ def upsert_clone_overlay(
             operation = str(item.get("operation") or "set").strip().lower()
             if operation not in {"set", "remove"}:
                 return {}, "note_field_overrides.operation must be set/remove."
-            source_field = source_fields_by_name.get(field_name)
-            override = None
-            if source_field is not None:
-                override = DeckCloneNoteFieldOverride.query.filter_by(
-                    deck_install_id=deck_install.id,
-                    source_note_id=source_note_id,
-                    source_field_def_id=source_field.id,
-                ).first()
-            if override is None:
-                override = DeckCloneNoteFieldOverride.query.filter_by(
-                    deck_install_id=deck_install.id,
-                    source_note_id=source_note_id,
-                    field_name=field_name,
-                ).first()
-            if override is None:
-                override = DeckCloneNoteFieldOverride(
-                    deck_install_id=deck_install.id,
-                    source_note_id=source_note_id,
-                    field_name=field_name,
-                    source_field_def_id=(
-                        source_field.id
-                        if source_field is not None
-                        else None
-                    ),
-                    base_release_id=deck_install.applied_release_id,
-                )
-                db.session.add(override)
-            elif source_field is not None:
-                override.source_field_def_id = source_field.id
-                override.field_name = field_name
-            override.operation = operation
+            from app.services.clone_field_identity_service import stage_clone_note_field_override
+            override = stage_clone_note_field_override(install=deck_install, source_note=source_note,
+                field_name=field_name, field_identity_key=field_identity_key,
+                operation=operation, value=item.get("value"), identity_labels=identity_labels,
+                removal_identity_labels=removal_identity_labels)
             if operation == "remove":
                 override.value = None
                 counters["removed_note_fields"] += 1

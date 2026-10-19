@@ -5,6 +5,9 @@
 > Đối chiếu working tree trên HEAD `886ad3bf9491dcce6fcea59889a7ab1a040e2762`.
 > Báo cáo này chỉ thêm tài liệu, không đổi application, migrations, DB hay cấu hình triển khai.
 
+> Cập nhật triển khai 2026-10-14: xem [implementation tracker](DATABASE_PROGRESS_SCALABILITY_IMPLEMENTATION_2026-10-14.md) và [rollout runbook](../runbooks/DATABASE_PROGRESS_SCALABILITY_ROLLOUT.md). Các kết luận dưới đây giữ snapshot điều tra gốc; trạng thái implementation/qualification được ghi riêng theo đợt.
+> Chốt 2026-10-15: Field ID live cutover và writer B8 đã đóng ở mức code/qualification local; head68, không còn named live store hoặc sync/async review writer song song. Bằng chứng và giới hạn rollout được ghi trong tracker.
+
 ## Kết luận để ra quyết định
 
 **Hướng hiện tại đúng, nhưng mới tách được nơi lưu progress; chưa tách hoàn toàn chi phí đọc thống kê và chi phí thay đổi schema khỏi dữ liệu lớn.** Không cần thiết kế lại toàn bộ DB hoặc chuyển sang một DB engine khác trước khi giải quyết các điểm này.

@@ -64,6 +64,17 @@ jobs:
           DB_MAX_OVERFLOW: ${{ vars.DB_MAX_OVERFLOW || '1' }}
           DB_POOL_TIMEOUT_SECONDS: ${{ vars.DB_POOL_TIMEOUT_SECONDS || '5' }}
           DB_POOL_RECYCLE_SECONDS: ${{ vars.DB_POOL_RECYCLE_SECONDS || '1800' }}
+          REVIEW_ANALYTICS_WRITE_ENABLED: ${{ vars.REVIEW_ANALYTICS_WRITE_ENABLED }}
+          REVIEW_ANALYTICS_READ_MODE: ${{ vars.REVIEW_ANALYTICS_READ_MODE }}
+          REVIEW_ANALYTICS_READ_USER_IDS: ${{ vars.REVIEW_ANALYTICS_READ_USER_IDS }}
+          REVIEW_ANALYTICS_SHADOW_SAMPLE_RATE: ${{ vars.REVIEW_ANALYTICS_SHADOW_SAMPLE_RATE }}
+          REVIEW_ANALYTICS_TIMEZONE_RULES_VERSION: ${{ vars.REVIEW_ANALYTICS_TIMEZONE_RULES_VERSION }}
+          DECK_COUNT_WRITE_ENABLED: ${{ vars.DECK_COUNT_WRITE_ENABLED }}
+          DECK_COUNT_READ_MODE: ${{ vars.DECK_COUNT_READ_MODE }}
+          DECK_COUNT_PREWARM_USER_IDS: ${{ vars.DECK_COUNT_PREWARM_USER_IDS }}
+          FORECAST_SUMMARY_READ_MODE: ${{ vars.FORECAST_SUMMARY_READ_MODE }}
+          FORECAST_SUMMARY_READ_USER_IDS: ${{ vars.FORECAST_SUMMARY_READ_USER_IDS }}
+          ANALYTICS_REQUIRE_READY_USER_IDS: ${{ vars.ANALYTICS_REQUIRE_READY_USER_IDS }}
           FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH: ${{ vars.FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH || '0' }}
           FLASHCARD_MEDIA_MAX_BYTES: ${{ vars.FLASHCARD_MEDIA_MAX_BYTES || '10485760' }}
           FLASHCARD_MEDIA_SCAN_ENABLED: ${{ vars.FLASHCARD_MEDIA_SCAN_ENABLED || '0' }}
@@ -261,6 +272,14 @@ jobs:
           previous_release=""
           activation_started=0
           deployment_succeeded=0
+          previous_analytics_timer_enabled=0
+          previous_review_timer_enabled=0
+          if systemctl is-enabled --quiet flama-analytics-counts.timer; then
+            previous_analytics_timer_enabled=1
+          fi
+          if systemctl is-enabled --quiet flama-review-analytics-worker.timer; then
+            previous_review_timer_enabled=1
+          fi
 
           rollback_activation() {
             if [ "$activation_started" -ne 1 ] || [ "$deployment_succeeded" -eq 1 ]; then
@@ -275,6 +294,8 @@ jobs:
               echo "Automatic rollback blocked: HTTP/Connect writers did not stop." >&2
               return
             fi
+            systemctl stop flama-analytics-counts.timer flama-analytics-counts.service || true
+            systemctl stop flama-review-analytics-worker.timer flama-review-analytics-worker.service || true
             if ! systemd-run --quiet --wait --collect --pipe \
               --unit="flama-study-rollback-check-$RELEASE_ID" \
               --property=User=flama \
@@ -288,6 +309,29 @@ jobs:
             if ! systemctl stop flama-study-worker.service; then
               echo "Automatic rollback blocked: the Study consumer did not stop." >&2
               return
+            fi
+            if [ -f "$release_dir/deploy/flama-review-analytics-worker.service" ]; then
+              if ! systemd-run --quiet --wait --collect --pipe \
+                --unit="flama-history-rollback-check-$RELEASE_ID" \
+                --property=User=flama --property=Group=flama \
+                --property="WorkingDirectory=$release_dir" \
+                --property="EnvironmentFile=$environment_file" \
+                "$PROJECT_DIR/venv/bin/flask" --app wsgi.py review-analytics-rollback-check --writers-quiesced; then
+                echo "Automatic rollback blocked: drain committed history revisions with this release before restoring old code." >&2
+                return
+              fi
+            fi
+            if [ -f "$release_dir/deploy/check_field_code_rollback.py" ]; then
+              if ! systemd-run --quiet --wait --collect --pipe \
+                --unit="flama-field-code-rollback-$RELEASE_ID" \
+                --property=User=flama --property=Group=flama \
+                --property="WorkingDirectory=$release_dir" \
+                --property="EnvironmentFile=$environment_file" \
+                "$PROJECT_DIR/venv/bin/python" "$release_dir/deploy/check_field_code_rollback.py" \
+                  --writers-quiesced --previous-release "$previous_release"; then
+                echo "Automatic rollback blocked: contracted Field ID storage requires compatible code or an isolated backup restore." >&2
+                return
+              fi
             fi
             if [ -f "$environment_backup_file" ]; then
               cp -p "$environment_backup_file" "$environment_file"
@@ -313,8 +357,26 @@ jobs:
                   /etc/systemd/system/flama-study-worker.service
                 previous_worker_available=1
               fi
+              if [ -f "$previous_release/deploy/flama-analytics-counts.service" ] && [ -f "$previous_release/deploy/flama-analytics-counts.timer" ]; then
+                install -m 0644 "$previous_release/deploy/flama-analytics-counts.service" /etc/systemd/system/flama-analytics-counts.service
+                install -m 0644 "$previous_release/deploy/flama-analytics-counts.timer" /etc/systemd/system/flama-analytics-counts.timer
+              fi
+              if [ -f "$previous_release/deploy/flama-review-analytics-worker.service" ] && [ -f "$previous_release/deploy/flama-review-analytics-worker.timer" ]; then
+                install -m 0644 "$previous_release/deploy/flama-review-analytics-worker.service" /etc/systemd/system/flama-review-analytics-worker.service
+                install -m 0644 "$previous_release/deploy/flama-review-analytics-worker.timer" /etc/systemd/system/flama-review-analytics-worker.timer
+              fi
               ln -sfn "$previous_release" "$PROJECT_DIR/current"
               systemctl daemon-reload || true
+              if [ "${previous_analytics_timer_enabled:-0}" -eq 1 ] && [ -f "$previous_release/deploy/flama-analytics-counts.timer" ]; then
+                systemctl enable --now flama-analytics-counts.timer || true
+              else
+                systemctl disable flama-analytics-counts.timer || true
+              fi
+              if [ "${previous_review_timer_enabled:-0}" -eq 1 ] && [ -f "$previous_release/deploy/flama-review-analytics-worker.timer" ]; then
+                systemctl enable --now flama-review-analytics-worker.timer || true
+              else
+                systemctl disable flama-review-analytics-worker.timer || true
+              fi
               if [ "$previous_worker_available" -eq 1 ]; then
                 systemctl restart flama-study-worker.service || true
               else
@@ -346,6 +408,8 @@ jobs:
             systemctl stop flama.service || true
             systemctl stop flama-connect.service || true
             systemctl disable flama-study-worker.service || true
+            systemctl disable flama-analytics-counts.timer || true
+            systemctl disable flama-review-analytics-worker.timer || true
             echo "No previous release was available; stopped flama.service." >&2
           }
 
@@ -385,6 +449,24 @@ jobs:
           fi
 
           "$PROJECT_DIR/venv/bin/pip" install --disable-pip-version-check -r "$release_dir/requirements.txt"
+          previous_release="$(readlink -f "$PROJECT_DIR/current" 2>/dev/null || true)"
+          case "$previous_release" in
+            "$PROJECT_DIR"/releases/*) test -d "$previous_release" || previous_release="" ;;
+            *) previous_release="" ;;
+          esac
+          cp -p "$environment_file" "$environment_backup_file"
+          # Field contraction is an explicit maintenance boundary. No old
+          # process may continue writing name-key values while rows are mapped.
+          activation_started=1
+          for unit in flama.service flama-connect.service flama-study-worker.service \
+            flama-analytics-counts.timer flama-analytics-counts.service \
+            flama-review-analytics-worker.timer flama-review-analytics-worker.service; do
+            # A first deployment has no application units yet. A loaded unit
+            # must stop successfully; never acknowledge quiescence on failure.
+            if systemctl cat "$unit" >/dev/null 2>&1; then
+              systemctl stop "$unit"
+            fi
+          done
           systemd-run --quiet --wait --collect --pipe \
             --unit="flama-db-migrate-$RELEASE_ID" \
             --property=User=flama \
@@ -392,7 +474,7 @@ jobs:
             --property="WorkingDirectory=$release_dir" \
             --property="EnvironmentFile=$desired_environment_file" \
             --property='Environment=STARTUP_RUN_MAINTENANCE=0 STARTUP_RUN_DB_CREATE_ALL=0 STARTUP_RUN_CLONE_CUTOVER=0' \
-            "$PROJECT_DIR/venv/bin/flask" --app wsgi.py db upgrade
+            "$PROJECT_DIR/venv/bin/python" "$release_dir/deploy/migrate_database.py" --writers-quiesced
           systemd-run --quiet --wait --collect --pipe \
             --unit="flama-bootstrap-admin-$RELEASE_ID" \
             --property=User=flama \
@@ -403,25 +485,18 @@ jobs:
           install -m 0644 "$release_dir/deploy/flama.service" /etc/systemd/system/flama.service
           install -m 0644 "$release_dir/deploy/flama-connect.service" /etc/systemd/system/flama-connect.service
           install -m 0644 "$release_dir/deploy/flama-study-worker.service" /etc/systemd/system/flama-study-worker.service
+          install -m 0644 "$release_dir/deploy/flama-analytics-counts.service" /etc/systemd/system/flama-analytics-counts.service
+          install -m 0644 "$release_dir/deploy/flama-analytics-counts.timer" /etc/systemd/system/flama-analytics-counts.timer
+          install -m 0644 "$release_dir/deploy/flama-review-analytics-worker.service" /etc/systemd/system/flama-review-analytics-worker.service
+          install -m 0644 "$release_dir/deploy/flama-review-analytics-worker.timer" /etc/systemd/system/flama-review-analytics-worker.timer
 
-          previous_release="$(readlink -f "$PROJECT_DIR/current" 2>/dev/null || true)"
-          case "$previous_release" in
-            "$PROJECT_DIR"/releases/*)
-              if [ ! -d "$previous_release" ]; then
-                previous_release=""
-              fi
-              ;;
-            *)
-              previous_release=""
-              ;;
-          esac
-
-          cp -p "$environment_file" "$environment_backup_file"
           cp -p "$environment_file" /etc/flama/flama.env.bak
           # Stop the previous consumer under its original environment before
           # changing the symlink/namespace; DB admissions survive the handoff.
           systemctl daemon-reload
           systemctl stop flama-study-worker.service
+          systemctl stop flama-analytics-counts.timer flama-analytics-counts.service || true
+          systemctl stop flama-review-analytics-worker.timer flama-review-analytics-worker.service || true
           activation_started=1
           mv -f "$desired_environment_file" "$environment_file"
           ln -sfn "$release_dir" "$PROJECT_DIR/current"
@@ -433,6 +508,10 @@ jobs:
           systemctl restart flama-study-worker.service
           systemctl restart flama.service
           systemctl restart flama-connect.service
+          # The oneshot ExecCondition skips disabled/unconfigured writers;
+          # readers stay independently gated until parity/latency qualification.
+          systemctl enable --now flama-analytics-counts.timer
+          systemctl enable --now flama-review-analytics-worker.timer
 
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error --max-time 5 \

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { memo, useState, useRef, useEffect, useCallback, useMemo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import { ChevronLeft, ChevronRight } from '@/shared/components/Icons'
@@ -137,6 +137,82 @@ const futureLevelClasses = [
   'stats-day--future-level-7 bg-[#74838D] dark:bg-[#929EAE]',
 ]
 
+type HeatmapCell = {
+  day: HeatmapDay
+  isToday: boolean
+  isPeak: boolean
+  title: string
+  bgClass: string
+}
+
+type HeatmapGridProps = {
+  weeks: Array<Array<HeatmapCell | null>>
+  selectedDate: string | null
+  todayRef: RefObject<HTMLButtonElement | null>
+  onSelectDay: (date: string, title: string) => void
+  onHoverDay: (title: string) => void
+  onLeaveDay: () => void
+}
+
+// Memoized so hover-driven tooltip updates in the parent do not re-render
+// every calendar cell; it re-renders only when data, locale or selection change.
+const HeatmapGrid = memo(function HeatmapGrid({
+  weeks,
+  selectedDate,
+  todayRef,
+  onSelectDay,
+  onHoverDay,
+  onLeaveDay,
+}: HeatmapGridProps) {
+  return (
+    <div
+      className="stats-heatmap grid gap-[3px] min-w-[720px] p-1"
+      style={{
+        gridTemplateColumns: `repeat(${Math.max(weeks.length, 53)}, minmax(0, 1fr))`,
+      }}
+      role="grid"
+      aria-label="Study heatmap"
+    >
+      {weeks.map((week, weekIndex) => (
+        <div key={weekIndex} className="stats-week grid grid-rows-7 gap-[3px]">
+          {week.map((cell, dayIndex) => {
+            if (!cell) {
+              return (
+                <span
+                  key={`empty-${weekIndex}-${dayIndex}`}
+                  className="stats-day aspect-square w-full rounded-[2px] bg-[#E9DDD4] dark:bg-[#272320] opacity-35"
+                  aria-hidden="true"
+                />
+              )
+            }
+            const { day, isToday, isPeak, title, bgClass } = cell
+            const isSelected = selectedDate === day.date
+
+            return (
+              <button
+                key={day.date}
+                ref={isToday ? todayRef : undefined}
+                type="button"
+                className={cn(
+                  'stats-day relative aspect-square w-full rounded-[2px] border-0 p-0 transition-transform duration-150 hover:scale-125 focus-visible:outline-2 focus-visible:outline-orange-400 cursor-pointer',
+                  bgClass,
+                  isPeak && 'ring-1 ring-[#EE4D00] shadow-[0_0_8px_rgba(238,77,0,0.65)] z-20 scale-105 font-bold',
+                  isToday && 'ring-2 ring-orange-600 ring-offset-1 ring-offset-card z-30 scale-110 shadow-sm font-bold',
+                  isSelected && !isToday && 'ring-2 ring-primary ring-offset-1 ring-offset-card z-30 scale-125 shadow-md',
+                )}
+                title={title}
+                onClick={() => onSelectDay(day.date, title)}
+                onMouseEnter={() => onHoverDay(title)}
+                onMouseLeave={onLeaveDay}
+              />
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
+})
+
 export function StudyHeatmap({
   overview,
   loading = false,
@@ -201,22 +277,51 @@ export function StudyHeatmap({
   // Group heatmap into 53 weeks x 7 days
   const heatmap = overview?.heatmap
   const pastStats = useMemo(() => calculateMaxAndPeak(heatmap || [], false), [heatmap])
-  const safeHeatmap = heatmap || []
 
-  const firstDay = safeHeatmap[0]
-  const leadingCount = firstDay
-    ? (new Date(`${firstDay.date}T00:00:00Z`).getUTCDay() + 6) % 7
-    : 0
+  // Titles call toLocaleString twice per day; compute them once per data or
+  // locale change rather than on every hover-driven tooltip update.
+  const weeks = useMemo(() => {
+    const safeHeatmap = heatmap || []
+    const firstDay = safeHeatmap[0]
+    const leadingCount = firstDay
+      ? (new Date(`${firstDay.date}T00:00:00Z`).getUTCDay() + 6) % 7
+      : 0
 
-  const allCells: Array<HeatmapDay | null> = [
-    ...Array.from({ length: leadingCount }, () => null),
-    ...safeHeatmap,
-  ]
+    const allCells: Array<HeatmapCell | null> = [
+      ...Array.from({ length: leadingCount }, () => null),
+      ...safeHeatmap.map((day): HeatmapCell => {
+        const isFuture = Boolean(day.is_future)
+        const isToday = day.date === todayStr
+        const isPeak = !isFuture && day.cards > 0 && day.cards === pastStats.peakCards && pastStats.peakCards >= 10
+        // Unified intensity baseline: compare future cards against past historical study scale
+        const level = getDayLevelPower(day.cards, pastStats.effectiveMax)
+        return {
+          day,
+          isToday,
+          isPeak,
+          title: getDayTitle(day, isToday, isPeak, t, numberLocale),
+          bgClass: isFuture ? futureLevelClasses[level] : pastLevelClasses[level],
+        }
+      }),
+    ]
 
-  const weeks: Array<Array<HeatmapDay | null>> = []
-  for (let i = 0; i < allCells.length; i += 7) {
-    weeks.push(allCells.slice(i, i + 7))
-  }
+    const grouped: Array<Array<HeatmapCell | null>> = []
+    for (let i = 0; i < allCells.length; i += 7) {
+      grouped.push(allCells.slice(i, i + 7))
+    }
+    return grouped
+  }, [heatmap, pastStats, todayStr, t, numberLocale])
+
+  const handleSelectDay = useCallback((date: string, title: string) => {
+    setSelectedDate(date)
+    setTooltipText(title)
+  }, [])
+  const handleHoverDay = useCallback((title: string) => setTooltipText(title), [])
+  const handleLeaveDay = useCallback(() => {
+    if (!selectedDate) {
+      setTooltipText(defaultHint)
+    }
+  }, [selectedDate, defaultHint])
 
   return (
     <section className={cn("stats-board w-full rounded-xl sm:rounded-2xl border-0 sm:border border-border bg-card p-2.5 sm:p-6 shadow-none sm:shadow-sm", className)}>
@@ -277,64 +382,14 @@ export function StudyHeatmap({
 
           {/* Heatmap Grid */}
           <div ref={scrollContainerRef} className="stats-heatmap-scroll overflow-x-auto pb-2 scroll-smooth">
-            <div
-              className="stats-heatmap grid gap-[3px] min-w-[720px] p-1"
-              style={{
-                gridTemplateColumns: `repeat(${Math.max(weeks.length, 53)}, minmax(0, 1fr))`,
-              }}
-              role="grid"
-              aria-label="Study heatmap"
-            >
-              {weeks.map((week, weekIndex) => (
-                <div key={weekIndex} className="stats-week grid grid-rows-7 gap-[3px]">
-                  {week.map((day, dayIndex) => {
-                    if (!day) {
-                      return (
-                        <span
-                          key={`empty-${weekIndex}-${dayIndex}`}
-                          className="stats-day aspect-square w-full rounded-[2px] bg-[#E9DDD4] dark:bg-[#272320] opacity-35"
-                          aria-hidden="true"
-                        />
-                      )
-                    }
-                    const isFuture = Boolean(day.is_future)
-                    const isToday = day.date === todayStr
-                    const isSelected = selectedDate === day.date
-                    const isPeak = !isFuture && day.cards > 0 && day.cards === pastStats.peakCards && pastStats.peakCards >= 10
-                    // Unified intensity baseline: compare future cards against past historical study scale
-                    const level = getDayLevelPower(day.cards, pastStats.effectiveMax)
-                    const title = getDayTitle(day, isToday, isPeak, t, numberLocale)
-                    const bgClass = isFuture ? futureLevelClasses[level] : pastLevelClasses[level]
-
-                    return (
-                      <button
-                        key={day.date}
-                        ref={isToday ? todayRef : undefined}
-                        type="button"
-                        className={cn(
-                          'stats-day relative aspect-square w-full rounded-[2px] border-0 p-0 transition-transform duration-150 hover:scale-125 focus-visible:outline-2 focus-visible:outline-orange-400 cursor-pointer',
-                          bgClass,
-                          isPeak && 'ring-1 ring-[#EE4D00] shadow-[0_0_8px_rgba(238,77,0,0.65)] z-20 scale-105 font-bold',
-                          isToday && 'ring-2 ring-orange-600 ring-offset-1 ring-offset-card z-30 scale-110 shadow-sm font-bold',
-                          isSelected && !isToday && 'ring-2 ring-primary ring-offset-1 ring-offset-card z-30 scale-125 shadow-md',
-                        )}
-                        title={title}
-                        onClick={() => {
-                          setSelectedDate(day.date)
-                          setTooltipText(title)
-                        }}
-                        onMouseEnter={() => setTooltipText(title)}
-                        onMouseLeave={() => {
-                          if (!selectedDate) {
-                            setTooltipText(defaultHint)
-                          }
-                        }}
-                      />
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
+            <HeatmapGrid
+              weeks={weeks}
+              selectedDate={selectedDate}
+              todayRef={todayRef}
+              onSelectDay={handleSelectDay}
+              onHoverDay={handleHoverDay}
+              onLeaveDay={handleLeaveDay}
+            />
           </div>
 
           {/* Dynamic Hover / Tap Tooltip & Legend */}

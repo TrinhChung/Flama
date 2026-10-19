@@ -1,0 +1,48 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 327.172,
+  "errors": 0,
+  "failed_cases": [
+    "tests.test_review_analytics_outbox.ReviewAnalyticsOutboxTests.test_worker_applies_all_scopes_and_idempotent_retry_once"
+  ],
+  "failure_summaries": [
+    "Non-assertion fixture error; inspect locally."
+  ],
+  "failures": 1,
+  "fixture_cases": [
+    "test_async_source_commit_has_durable_feed_without_bucket_or_generation_locks",
+    "test_async_to_sync_backlog_switch_marks_generation_dirty",
+    "test_bounded_worker_user_discovery_and_invalid_arguments",
+    "test_bulk_mutation_requires_fence_and_queues_dirty_marker",
+    "test_commit_revision_applies_low_event_id_after_larger_baseline_id",
+    "test_correction_and_delete_enqueue_dirty_markers",
+    "test_dirty_marker_tamper_is_covered_by_envelope_hash",
+    "test_inserted_facts_outbox_and_source_revision_rollback_together",
+    "test_lost_worker_commit_ack_retry_does_not_double_apply",
+    "test_migration_shape_and_populated_downgrade_guard",
+    "test_missing_final_pending_row_does_not_leave_ready_generation",
+    "test_missing_revision_fails_closed_dirty",
+    "test_new_backfill_covers_pending_baseline_without_double_apply",
+    "test_payload_hash_corruption_fails_closed_dirty",
+    "test_released_savepoint_descendant_rollback_discards_feed_events",
+    "test_sync_after_drained_async_stays_ready",
+    "test_worker_applies_all_scopes_and_idempotent_retry_once",
+    "test_worker_failure_rolls_back_delta_checkpoint_and_applied_marker"
+  ],
+  "generated_schema": "flama_history_outbox_probe_6640_9685a59f1045",
+  "known_failure_resolution": {
+    "cause": "The whitespace-rating assertion expected SQLite/Python trimming on fixed-offset MySQL; production worker correctly used the captured raw SQL passed expression. Test expectation corrected per dialect; implementation unchanged.",
+    "recheck_artifact": "review_analytics_outbox_mysql_recheck_20261014.json",
+    "rechecked_status": "PASS",
+    "rechecked_tests": 4
+  },
+  "mysql_specific_cases": [
+    "test_mysql_binary_unsigned_precision_and_payload_round_trip",
+    "test_concurrent_same_learner_writers_allocate_commit_revisions_without_loss",
+    "test_concurrent_workers_serialize_head_and_do_not_double_apply"
+  ],
+  "mysql_version": "8.0.40",
+  "probe_database_dropped": true,
+  "status": "FAIL",
+  "tests_run": 21
+}

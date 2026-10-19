@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AmbientBackground } from '@/components/ambient-background'
@@ -18,6 +19,7 @@ import { StudyHeatmap } from '@/shared/components/StudyHeatmap'
 import { DeckTree } from '../components/DeckTree'
 import { CreateDeckModal, DeckActionModal } from '../components/DeckModals'
 import { findDeck, useDashboardPage } from '../hooks/useDashboardPage'
+import type { DeckNode } from '../types'
 
 export function DashboardPage() {
   const { t } = useTranslation('dashboard')
@@ -37,6 +39,28 @@ export function DashboardPage() {
     handleMoveDeck,
   } = useDashboardPage()
 
+  const handleSelectDeck = useCallback((deck: DeckNode) => {
+    setSelectedDeckId(deck.id)
+  }, [setSelectedDeckId])
+
+  const handleActivateDeck = useCallback((deck: DeckNode) => {
+    navigate(deck.study_url)
+  }, [navigate])
+
+  const handleCloseCreate = useCallback(() => {
+    setCreateOpened(false)
+  }, [setCreateOpened])
+
+  const handleCloseAction = useCallback(() => {
+    setSelection(null)
+  }, [setSelection])
+
+  const dashboardData = dashboardQuery.data
+  const selectedDeck = useMemo(() => {
+    if (!dashboardData) return null
+    return findDeck(dashboardData.decks, selectedDeckId)
+  }, [dashboardData, selectedDeckId])
+
   if (bootstrapQuery.isPending || dashboardQuery.isPending) {
     return <PageLoading label={t('page.loading')} />
   }
@@ -49,7 +73,6 @@ export function DashboardPage() {
 
   const bootstrap = bootstrapQuery.data
   const dashboard = dashboardQuery.data
-  const selectedDeck = findDeck(dashboard.decks, selectedDeckId)
 
   const statsUrl = selectedDeck ? `/statistics?deck_id=${selectedDeck.id}` : '/statistics'
   const browseUrl = selectedDeck ? `/browse?deck_id=${selectedDeck.id}` : bootstrap.links.browse
@@ -165,8 +188,8 @@ export function DashboardPage() {
               nodes={dashboard.decks}
               adminMode={dashboard.admin_mode}
               selectedDeckId={selectedDeckId}
-              onSelect={(deck) => setSelectedDeckId(deck.id)}
-              onActivate={(deck) => navigate(deck.study_url)}
+              onSelect={handleSelectDeck}
+              onActivate={handleActivateDeck}
               onAction={setSelection}
               onMoveDeck={handleMoveDeck}
             />
@@ -208,13 +231,13 @@ export function DashboardPage() {
       {/* Modals */}
       <CreateDeckModal
         opened={createOpened}
-        onClose={() => setCreateOpened(false)}
+        onClose={handleCloseCreate}
         dashboard={dashboard}
         selectedDeck={selectedDeck}
       />
       <DeckActionModal
         selection={selection}
-        onClose={() => setSelection(null)}
+        onClose={handleCloseAction}
         dashboard={dashboard}
       />
     </Page>

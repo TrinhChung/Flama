@@ -17,6 +17,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { toast } from 'sonner'
 import type { NoteTypeMeta, WorksheetFieldMapping } from '../types'
 import { loadWorksheetPreset, saveWorksheetPreset } from '../utils/worksheetStorage'
+import { fieldValueEditorText } from '@/lib/arrayField'
 
 export interface WorksheetFieldMappingStepProps {
   noteType: NoteTypeMeta
@@ -101,8 +102,8 @@ export const WorksheetFieldMappingStep: React.FC<WorksheetFieldMappingStepProps>
     }
 
     const available = noteType.fields || []
-    const isMediaOrId = (f: string) => {
-      const lower = f.toLowerCase()
+    const isMediaOrId = (f: unknown) => {
+      const lower = String(f || '').toLowerCase()
       return ['audio', 'sound', 'voice', 'mp3', 'id', 'guid', 'time', 'date'].some((k) =>
         lower.includes(k),
       )
@@ -121,7 +122,7 @@ export const WorksheetFieldMappingStep: React.FC<WorksheetFieldMappingStepProps>
       // Fallback matching
       for (const cand of slot.fallbackCandidateKeys) {
         const foundExact = available.find(
-          (f) => f.toLowerCase() === cand.toLowerCase() && !isMediaOrId(f),
+          (f) => String(f).toLowerCase() === cand.toLowerCase() && !isMediaOrId(f),
         )
         if (foundExact) {
           initial[slot.key] = foundExact
@@ -131,7 +132,7 @@ export const WorksheetFieldMappingStep: React.FC<WorksheetFieldMappingStepProps>
 
       for (const cand of slot.fallbackCandidateKeys) {
         const foundSub = available.find(
-          (f) => f.toLowerCase().includes(cand.toLowerCase()) && !isMediaOrId(f),
+          (f) => String(f).toLowerCase().includes(cand.toLowerCase()) && !isMediaOrId(f),
         )
         if (foundSub) {
           initial[slot.key] = foundSub
@@ -267,9 +268,14 @@ export const WorksheetFieldMappingStep: React.FC<WorksheetFieldMappingStepProps>
         <div className="space-y-3">
           {commonMappingSlots.map((slot) => {
             const currentValue = (fieldMapping[slot.key] as string) || ''
-            const sampleText = currentValue ? sampleValues[currentValue] : ''
+            const rawSample = currentValue ? sampleValues[currentValue] : ''
+            const sampleText = typeof rawSample === 'string' ? rawSample : fieldValueEditorText(rawSample)
             const isLikelyMedia =
-              Boolean(sampleText && (sampleText.includes('[sound:') || sampleText.endsWith('.mp3'))) ||
+              Boolean(
+                sampleText &&
+                (sampleText.includes('[sound:') ||
+                  /\.(mp3|wav|ogg|opus|m4a|aac|flac)(\?.*)?$/i.test(sampleText.trim()))
+              ) ||
               Boolean(currentValue && currentValue.toLowerCase().includes('audio'))
 
             return (

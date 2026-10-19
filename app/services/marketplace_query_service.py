@@ -99,6 +99,7 @@ def serialize_note_type(
     taxonomy_display = marketplace_taxonomy_service.build_taxonomy_display(taxonomy_metadata, content_type="note_type")
     payload = {
         "id": note_type.id,
+        "field_schema_revision": int(note_type.field_schema_revision or 0),
         "name": note_type.name,
         "title": note_type.name,
         "description": note_type.description,

@@ -152,12 +152,24 @@ class ConnectProtocolTests(unittest.TestCase):
 
     def test_auth_origin_and_feature_gate_prevent_writes(self):
         self.assertEqual(self.rpc("addNote", {"note": self.note()}, key="bad").status_code, 401)
-        for origin in ("https://unapproved.example", "null"):
-            response = self.rpc("addNote", {"note": self.note()}, headers={"Origin": origin})
-            self.assertEqual(response.status_code, 403)
-            self.assertNotIn("Access-Control-Allow-Origin", response.headers)
+        response = self.rpc("addNote", {"note": self.note()}, headers={"Origin": "https://unapproved.example"})
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("Access-Control-Allow-Origin", response.headers)
+
+        null_res_bad_key = self.rpc("version", key="bad", headers={"Origin": "null"})
+        self.assertEqual(null_res_bad_key.status_code, 401)
+        self.assertNotIn("Access-Control-Allow-Origin", null_res_bad_key.headers)
+
+        null_res_valid_key = self.rpc("version", headers={"Origin": "null"})
+        self.assertEqual(null_res_valid_key.status_code, 200)
+        self.assertNotIn("Access-Control-Allow-Origin", null_res_valid_key.headers)
+
         response = self.rpc("version", headers={"Origin": "https://killergerbah.github.io"})
         self.assertEqual(response.headers["Access-Control-Allow-Origin"], "https://killergerbah.github.io")
+        edge_origin = "chrome-extension://hkledmpjpaehamkiehglnbelcpdflcab"
+        self.app.config["CONNECT_ANKI_ALLOWED_ORIGINS"] = ("https://killergerbah.github.io", edge_origin)
+        edge_response = self.rpc("version", headers={"Origin": edge_origin})
+        self.assertEqual(edge_response.headers["Access-Control-Allow-Origin"], edge_origin)
         self.app.config["CONNECT_ANKI_ADAPTER_ENABLED"] = False
         self.assertEqual(self.rpc("addNote", {"note": self.note()}).status_code, 404)
         with self.app.app_context():
@@ -359,6 +371,124 @@ class ConnectProtocolTests(unittest.TestCase):
             token = tokens.authenticate_token(self.mining_key)[0]
             rotated = tokens.rotate_token(user_id=self.user_id, token_id=token.id)
             self.assertEqual(tokens.parse_scopes(rotated.record), frozenset(tokens.TOKEN_PRESETS["mining-media"]))
+
+    # -------------------------------------------------------------------------
+    # Flama Connect CORS & Origin Security Suite (R1, R2, R3)
+    # -------------------------------------------------------------------------
+
+    def test_cors_browser_extension_schemes_auto_allowed(self):
+        """Chrome/Edge (chrome-extension://) and Firefox (moz-extension://) origins
+
+        are automatically granted CORS permissions without explicit allowlist entry.
+        """
+        chrome_origins = [
+            "chrome-extension://ogmnaimimemjmbakcfefmnngchbpflhe",  # Yomitan Chrome
+            "chrome-extension://hkledmpjpaehamkiehglnbelcpdflcab",  # asbplayer Chrome
+            "chrome-extension://abcdefghijklmnopabcdefghijklmnop",  # Arbitrary extension
+        ]
+        firefox_origins = [
+            "moz-extension://d3b07384-d113-4684-9351-cc80e4b8e23f",
+            "moz-extension://a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        ]
+
+        for origin in chrome_origins + firefox_origins:
+            with self.subTest(origin=origin):
+                # 1. Preflight OPTIONS request
+                options_res = self.client.options(
+                    "/v1/anki-connect",
+                    headers={
+                        "Origin": origin,
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "Content-Type",
+                    },
+                )
+                self.assertEqual(options_res.status_code, 204)
+                self.assertEqual(options_res.headers.get("Access-Control-Allow-Origin"), origin)
+                self.assertIn("Origin", options_res.headers.get("Vary", ""))
+                self.assertIn("POST", options_res.headers.get("Access-Control-Allow-Methods", ""))
+                self.assertIn("Content-Type", options_res.headers.get("Access-Control-Allow-Headers", ""))
+
+                # 2. Authenticated POST request
+                post_res = self.rpc("version", headers={"Origin": origin})
+                self.assertEqual(post_res.status_code, 200)
+                self.assertEqual(post_res.headers.get("Access-Control-Allow-Origin"), origin)
+                self.assertIn("Origin", post_res.headers.get("Vary", ""))
+                self.assertIsNone(post_res.get_json().get("error"))
+
+    def test_cors_whitelisted_web_origin_receives_full_cors_headers(self):
+        """Whitelisted web origin in CONNECT_ANKI_ALLOWED_ORIGINS receives full CORS headers."""
+        whitelisted = "https://killergerbah.github.io"
+
+        # Preflight OPTIONS
+        options_res = self.client.options(
+            "/v1/anki-connect",
+            headers={
+                "Origin": whitelisted,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "Content-Type, X-Flama-Connect-Key",
+            },
+        )
+        self.assertEqual(options_res.status_code, 204)
+        self.assertEqual(options_res.headers.get("Access-Control-Allow-Origin"), whitelisted)
+        self.assertIn("Origin", options_res.headers.get("Vary", ""))
+        self.assertIn("POST", options_res.headers.get("Access-Control-Allow-Methods", ""))
+        self.assertEqual(options_res.headers.get("Access-Control-Max-Age"), "600")
+
+        # POST execution
+        post_res = self.rpc("version", headers={"Origin": whitelisted})
+        self.assertEqual(post_res.status_code, 200)
+        self.assertEqual(post_res.headers.get("Access-Control-Allow-Origin"), whitelisted)
+        self.assertIn("Origin", post_res.headers.get("Vary", ""))
+
+    def test_cors_untrusted_web_origins_rejected_without_cors_headers(self):
+        """Untrusted web origins are rejected with 403 Forbidden and NO Access-Control-Allow-Origin."""
+        untrusted_origins = [
+            "https://evil.com",
+            "http://malicious.org",
+            "https://killergerbah.github.io.attacker.com",
+            "http://killergerbah.github.io",  # HTTP vs HTTPS mismatch
+        ]
+
+        for origin in untrusted_origins:
+            with self.subTest(origin=origin):
+                # 1. Preflight OPTIONS
+                options_res = self.client.options(
+                    "/v1/anki-connect",
+                    headers={
+                        "Origin": origin,
+                        "Access-Control-Request-Method": "POST",
+                    },
+                )
+                self.assertEqual(options_res.status_code, 403)
+                self.assertNotIn("Access-Control-Allow-Origin", options_res.headers)
+
+                # 2. Action POST
+                post_res = self.rpc("version", headers={"Origin": origin})
+                self.assertEqual(post_res.status_code, 403)
+                self.assertNotIn("Access-Control-Allow-Origin", post_res.headers)
+                self.assertEqual(post_res.get_json().get("error"), "origin is not allowed")
+
+    def test_request_without_origin_header_succeeds_for_desktop_clients(self):
+        """Non-browser/desktop tools (cURL, Python scripts) without Origin header succeed
+
+        when supplied with a valid API key, and return no Access-Control-Allow-Origin header.
+        """
+        # Read action (version)
+        res_read = self.rpc("version", headers={})
+        self.assertEqual(res_read.status_code, 200)
+        self.assertIsNone(res_read.get_json().get("error"))
+        self.assertNotIn("Access-Control-Allow-Origin", res_read.headers)
+
+        # Write action (addNote)
+        res_write = self.rpc("addNote", {"note": self.note(sentence="デスクトップからの採掘。")}, headers={})
+        self.assertEqual(res_write.status_code, 200)
+        self.assertIsNone(res_write.get_json().get("error"))
+        self.assertNotIn("Access-Control-Allow-Origin", res_write.headers)
+
+        # Invalid API key without origin still rejects with 401
+        res_bad_key = self.rpc("version", key="invalid-key", headers={})
+        self.assertEqual(res_bad_key.status_code, 401)
+        self.assertNotIn("Access-Control-Allow-Origin", res_bad_key.headers)
 
 
 if __name__ == "__main__":

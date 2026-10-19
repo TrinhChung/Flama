@@ -1,0 +1,13 @@
+{
+  "database": "flama_retirement_fresh_probe_8144_8fbee23db549",
+  "head": "20261013_000064",
+  "mysql_version": "8.0.40",
+  "runtime_tables": 110,
+  "physical_tables": 111,
+  "users": 0,
+  "subjects": 0,
+  "retired_tables_present": [],
+  "source_database_writes": 0,
+  "elapsed_seconds": 16.437,
+  "result": "PASS"
+}

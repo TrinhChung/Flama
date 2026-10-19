@@ -272,11 +272,13 @@ def crawl_and_save_note_media(
         scan_enabled=scan_enabled,
     )
 
-    existing = MediaAsset.query.filter_by(
+    from app.repositories.media_field_identity_repository import find_note_field_media
+    existing = find_note_field_media(
         note_id=note.id,
         field_name=sanitized.field_name,
         sha256=sanitized.sha256,
-    ).first()
+        note=note,
+    )
 
     if existing:
         if not markdown_inline:

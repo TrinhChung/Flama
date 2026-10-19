@@ -94,6 +94,56 @@ class FlashcardMediaMigrationTests(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
+    def test_rollback_uses_stable_field_after_rename_and_keeps_audit_bytes(self):
+        before = dict(db.session.get(Note, self.note_id).field_values)
+        applied = backfill_media_field_values(deck_id=self.deck_id, apply=True, include_overlays=False,
+            include_templates=False)
+        db.session.commit()
+        audit = MediaFieldMigrationItem.query.filter_by(run_id=applied.run_id, entity_type="note", field_name="Picture").one()
+        archived = (audit.field_name, audit.old_value, audit.new_value)
+        field = FieldDef.query.filter_by(note_type_id=self.note_type_id, name="Picture").one()
+        field.name = "Renamed picture"
+        db.session.commit()
+        result = rollback_media_field_migration(run_id=applied.run_id, apply=True)
+        db.session.commit()
+        self.assertGreater(result.restored, 0)
+        note = db.session.get(Note, self.note_id)
+        self.assertEqual(note.field_values["Renamed picture"], before["Picture"])
+        self.assertNotIn("Picture", note.field_values)
+        self.assertEqual(archived, (audit.field_name, audit.old_value, audit.new_value))
+
+    def test_rollback_refuses_deleted_field_and_same_name_replacement(self):
+        from app.services.field_value_identity_service import FieldIdentityConflict
+        applied = backfill_media_field_values(deck_id=self.deck_id, apply=True, include_overlays=False,
+            include_templates=False)
+        db.session.commit()
+        field = FieldDef.query.filter_by(note_type_id=self.note_type_id, name="Picture").one()
+        db.session.delete(field)
+        db.session.flush()
+        replacement = FieldDef(note_type_id=self.note_type_id, name="Picture", field_type="image")
+        db.session.add(replacement)
+        db.session.commit()
+        note = db.session.get(Note, self.note_id)
+        before = dict(note.field_values_by_id)
+        with self.assertRaises(FieldIdentityConflict):
+            rollback_media_field_migration(run_id=applied.run_id, apply=True)
+        db.session.rollback()
+        self.assertEqual(note.field_values_by_id, before)
+
+    def test_rollback_does_not_coerce_a_new_empty_array_into_audited_empty_text(self):
+        applied = backfill_media_field_values(deck_id=self.deck_id, apply=True, include_overlays=False,
+            include_templates=False)
+        db.session.commit()
+        note = db.session.get(Note, self.note_id)
+        values = dict(note.field_values)
+        values["Diagram"] = []
+        note.field_values = values
+        db.session.commit()
+        result = rollback_media_field_migration(run_id=applied.run_id, apply=True)
+        db.session.commit()
+        self.assertGreaterEqual(result.skipped_changed_since, 1)
+        self.assertEqual(note.field_values["Diagram"], [])
+
     def test_dry_run_apply_audit_idempotency_and_safe_rollback(self):
         original_values = dict(db.session.get(Note, self.note_id).field_values)
         dry_run = backfill_media_field_values(

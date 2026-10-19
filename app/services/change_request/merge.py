@@ -48,57 +48,6 @@ from models.field_def import FieldDef
 from models.note import Note
 
 
-def _rename_note_type_field_values(
-    *,
-    note_type_id: str,
-    old_name: str,
-    new_name: str,
-) -> None:
-    if not note_type_id or not old_name or not new_name or old_name == new_name:
-        return
-    last_id: str | None = None
-    while True:
-        query = Note.query.filter_by(note_type_id=note_type_id)
-        if last_id is not None:
-            query = query.filter(Note.id > last_id)
-        rows = query.order_by(Note.id.asc()).limit(500).all()
-        if not rows:
-            break
-        for note in rows:
-            values = dict(note.field_values or {})
-            if old_name in values and new_name not in values:
-                values[new_name] = values.pop(old_name)
-            elif old_name in values:
-                values.pop(old_name)
-            note.field_values = values
-        db.session.flush()
-        last_id = str(rows[-1].id)
-
-
-def _remove_note_type_field_values(
-    *,
-    note_type_id: str,
-    field_name: str,
-) -> None:
-    if not note_type_id or not field_name:
-        return
-    last_id: str | None = None
-    while True:
-        query = Note.query.filter_by(note_type_id=note_type_id)
-        if last_id is not None:
-            query = query.filter(Note.id > last_id)
-        rows = query.order_by(Note.id.asc()).limit(500).all()
-        if not rows:
-            break
-        for note in rows:
-            values = dict(note.field_values or {})
-            if field_name in values:
-                values.pop(field_name, None)
-                note.field_values = values
-        db.session.flush()
-        last_id = str(rows[-1].id)
-
-
 def _normalize_field_positions(note_type_id: str) -> None:
     rows = (
         FieldDef.query.filter_by(note_type_id=note_type_id)
@@ -355,11 +304,6 @@ def approve_and_merge_request(
             current_name = str(field_obj.name or "")
             next_name = str(desired_value or "").strip()
             if next_name and next_name != current_name:
-                _rename_note_type_field_values(
-                    note_type_id=field_obj.note_type_id,
-                    old_name=current_name,
-                    new_name=next_name,
-                )
                 field_obj.name = next_name
         elif property_name == "field_type":
             next_field_type = str(desired_value or "").strip().lower()
@@ -466,10 +410,6 @@ def approve_and_merge_request(
         field_obj = FieldDef.query.get(str(metadata.get("source_field_def_id") or item.source_ref_id or "").strip())
         if field_obj is None:
             continue
-        _remove_note_type_field_values(
-            note_type_id=field_obj.note_type_id,
-            field_name=field_obj.name,
-        )
         db.session.delete(field_obj)
 
     if field_order_item is not None:

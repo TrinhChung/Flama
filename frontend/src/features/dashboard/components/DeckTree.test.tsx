@@ -249,4 +249,224 @@ describe('DeckTree interactions', () => {
     const toggleButton = container.querySelector<HTMLButtonElement>('.tree-toggle')
     expect(toggleButton?.getAttribute('aria-expanded')).toBe('true')
   })
+
+  it('does not trigger deck drag or move when swiping/scrolling on touch before long-press delay', () => {
+    vi.useFakeTimers()
+    const onMoveDeck = vi.fn().mockResolvedValue(undefined)
+    const targetDeck: DeckNode = {
+      ...deck,
+      id: 77,
+      name: 'N2 Vocabulary',
+    }
+    const elementFromPointDescriptor = Object.getOwnPropertyDescriptor(document, 'elementFromPoint')
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck, targetDeck]}
+            adminMode={false}
+            onAction={vi.fn()}
+            onMoveDeck={onMoveDeck}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    const sourceRow = container.querySelector<HTMLElement>('[data-node-id="42"]')
+    const targetRow = container.querySelector<HTMLElement>('[data-node-id="77"]')
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => targetRow,
+    })
+
+    // User touches row 42 and immediately swipes vertically to scroll (before 450ms)
+    act(() => {
+      sourceRow?.dispatchEvent(
+        Object.assign(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 50, clientY: 50 }), {
+          pointerType: 'touch',
+          pointerId: 1,
+        }),
+      )
+      vi.advanceTimersByTime(100)
+      window.dispatchEvent(
+        Object.assign(new MouseEvent('pointermove', { bubbles: true, clientX: 50, clientY: 90 }), {
+          pointerType: 'touch',
+          pointerId: 1,
+        }),
+      )
+      vi.advanceTimersByTime(500)
+      window.dispatchEvent(
+        Object.assign(new MouseEvent('pointerup', { bubbles: true, clientX: 50, clientY: 90 }), {
+          pointerType: 'touch',
+          pointerId: 1,
+        }),
+      )
+    })
+
+    expect(container.querySelector('[data-root-drop="true"]')).toBeNull()
+    expect(onMoveDeck).not.toHaveBeenCalled()
+
+    if (elementFromPointDescriptor) {
+      Object.defineProperty(document, 'elementFromPoint', elementFromPointDescriptor)
+    } else {
+      delete (document as Partial<Document>).elementFromPoint
+    }
+    vi.useRealTimers()
+  })
+
+  it('activates touch drag only after holding for 450ms and commits move on pointerup, but cancels on pointercancel', () => {
+    vi.useFakeTimers()
+    const onMoveDeck = vi.fn().mockResolvedValue(undefined)
+    const targetDeck: DeckNode = {
+      ...deck,
+      id: 77,
+      name: 'N2 Vocabulary',
+    }
+    const elementFromPointDescriptor = Object.getOwnPropertyDescriptor(document, 'elementFromPoint')
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck, targetDeck]}
+            adminMode={false}
+            onAction={vi.fn()}
+            onMoveDeck={onMoveDeck}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    const sourceRow = container.querySelector<HTMLElement>('[data-node-id="42"]')
+    const targetRow = container.querySelector<HTMLElement>('[data-node-id="77"]')
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => targetRow,
+    })
+
+    // 1. Long-press then pointercancel should NOT call onMoveDeck
+    act(() => {
+      sourceRow?.dispatchEvent(
+        Object.assign(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 50, clientY: 50 }), {
+          pointerType: 'touch',
+          pointerId: 1,
+        }),
+      )
+      vi.advanceTimersByTime(460)
+    })
+    expect(container.querySelector('[data-root-drop="true"]')).not.toBeNull()
+
+    act(() => {
+      window.dispatchEvent(
+        Object.assign(new MouseEvent('pointermove', { bubbles: true, clientX: 50, clientY: 120 }), {
+          pointerType: 'touch',
+          pointerId: 1,
+        }),
+      )
+    })
+    act(() => {
+      window.dispatchEvent(new Event('pointercancel'))
+    })
+    expect(onMoveDeck).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-root-drop="true"]')).toBeNull()
+
+    // 2. Long-press then move to targetRow and pointerup SHOULD call onMoveDeck
+    act(() => {
+      sourceRow?.dispatchEvent(
+        Object.assign(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 50, clientY: 50 }), {
+          pointerType: 'touch',
+          pointerId: 2,
+        }),
+      )
+      vi.advanceTimersByTime(460)
+    })
+    act(() => {
+      window.dispatchEvent(
+        Object.assign(new MouseEvent('pointermove', { bubbles: true, clientX: 50, clientY: 120 }), {
+          pointerType: 'touch',
+          pointerId: 2,
+        }),
+      )
+    })
+    act(() => {
+      window.dispatchEvent(
+        Object.assign(new MouseEvent('pointerup', { bubbles: true, clientX: 50, clientY: 120 }), {
+          pointerType: 'touch',
+          pointerId: 2,
+        }),
+      )
+    })
+
+    expect(onMoveDeck).toHaveBeenCalledWith(42, 77)
+
+    if (elementFromPointDescriptor) {
+      Object.defineProperty(document, 'elementFromPoint', elementFromPointDescriptor)
+    } else {
+      delete (document as Partial<Document>).elementFromPoint
+    }
+    vi.useRealTimers()
+  })
+
+  it('activates study on the second touch tap when the deck is already selected', () => {
+    const onSelect = vi.fn()
+    const onActivate = vi.fn()
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            selectedDeckId={null}
+            onSelect={onSelect}
+            onActivate={onActivate}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    const row = container.querySelector<HTMLElement>('[data-node-id="42"]')
+
+    // First tap on unselected deck selects it without activating study
+    act(() => {
+      row?.dispatchEvent(
+        Object.assign(new MouseEvent('pointerdown', { bubbles: true, button: 0 }), {
+          pointerType: 'touch',
+        }),
+      )
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onActivate).not.toHaveBeenCalled()
+
+    // Re-render with deck 42 selected, then tap again on touch -> activates study
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            selectedDeckId={42}
+            onSelect={onSelect}
+            onActivate={onActivate}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    const selectedRow = container.querySelector<HTMLElement>('[data-node-id="42"]')
+    act(() => {
+      selectedRow?.dispatchEvent(
+        Object.assign(new MouseEvent('pointerdown', { bubbles: true, button: 0 }), {
+          pointerType: 'touch',
+        }),
+      )
+      selectedRow?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(onActivate).toHaveBeenCalledWith(deck)
+  })
 })

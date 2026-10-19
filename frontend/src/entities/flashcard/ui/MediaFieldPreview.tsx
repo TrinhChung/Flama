@@ -28,9 +28,10 @@ export interface MediaFieldPreviewProps {
 }
 
 export function resolveDisplayUrl(
-  raw: string,
+  raw: unknown,
   customResolver?: (raw: string) => string | undefined,
 ): string {
+  if (typeof raw !== 'string') return ''
   let value = raw.trim()
   const soundMatch = /^\[sound:(.+)\]$/i.exec(value)
   if (soundMatch) {
@@ -50,7 +51,8 @@ export function resolveDisplayUrl(
   return ''
 }
 
-function parseMediaValues(value: string): string[] {
+function parseMediaValues(value: unknown): string[] {
+  if (typeof value !== 'string') return []
   return value
     .replace(/\r\n?/g, '\n')
     .split('\n')

@@ -1,8 +1,0 @@
-Task GT-18B — shared controlled input-binding editor only; requires accepted GT-18A.
-Read AGENTS.md, skills/flama-frontend-architecture/SKILL.md, GT-18_STUDY_TEMPLATE_PREPARATION.md Phase B and the linked contract. Apply $impeccable through the available skill catalog; do not assume a repo-local impeccable path exists.
-Edit only these three files:
-frontend/src/entities/card-template/ui/TemplateInputBindingEditor.tsx (new)
-frontend/src/entities/card-template/ui/TemplateInputBindingEditor.test.tsx (new)
-frontend/src/entities/card-template/index.ts
-Props: inputSchema, fieldDefs, value, onChange, disabled?. Select matching-type fields by ID; clearing emits null. Required unbound/stale targets are advisory. Use the spec's exact Vietnamese text and existing primitives. No name-based automatic binding, personal preset writes, start/lease logic, feature imports, backend/model/migration/DB writes, dependency changes, commit or push.
-Run .\.venv\Scripts\python.exe scripts/run_tests.py --file frontend/src/entities/card-template/ui/TemplateInputBindingEditor.test.tsx --frontend-only from D:\Project\nihongo, then npm run typecheck in frontend. Report changed files, actual commands/final 20 lines, deviations and remaining work; stop after Phase B.

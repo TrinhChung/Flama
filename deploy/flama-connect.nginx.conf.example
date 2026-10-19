@@ -2,10 +2,13 @@
 # process bound to 127.0.0.1:4790; only this narrowly scoped reverse proxy is
 # exposed publicly. No wildcard CORS headers are added.
 limit_req_zone $binary_remote_addr zone=flama_connect_ip:10m rate=2r/s;
-# Keep this edge error allowlist aligned with CONNECT_ANKI_ALLOWED_ORIGINS.
+# Keep this edge error allowlist aligned with Flama Connect Origin validation rules.
 map $http_origin $connect_error_origin {
     default "";
-    "https://killergerbah.github.io" "https://killergerbah.github.io";
+    "~^chrome-extension://" $http_origin;
+    "~^moz-extension://"    $http_origin;
+    "https://killergerbah.github.io" $http_origin;
+    "https://asbplayer.dev"          $http_origin;
 }
 
 server {

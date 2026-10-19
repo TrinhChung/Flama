@@ -184,6 +184,8 @@ def _parse_note(
     ):
         raise ConnectError("field names are invalid")
     field_defs_by_name = {field.name: field for field in note_type.field_defs}
+    from app.validators.field_value_identity import validate_incoming_field_labels
+    validate_incoming_field_labels(fields, note_type.field_defs)
     if import_session_id is None:
         fields = normalize_anki_field_values(fields, tuple(note_type.field_defs))
     else:

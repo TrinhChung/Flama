@@ -558,11 +558,13 @@ def materialize_import_media(
                 final_path = _safe_path(relative_path)
                 final_path.parent.mkdir(parents=True, exist_ok=True)
 
-                existing = MediaAsset.query.filter_by(
+                from app.repositories.media_field_identity_repository import find_note_field_media
+                existing = find_note_field_media(
                     note_id=note.id,
                     field_name=field_name,
                     sha256=staged.sha256,
-                ).first()
+                    note=note,
+                )
                 if existing is None:
                     final_path.write_bytes(content)
                     final_paths.append(final_path)

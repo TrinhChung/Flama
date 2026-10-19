@@ -2713,6 +2713,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=install_row.id).count(),
                 2,
             )
+            note_deltas = DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=install_row.id).all()
+            self.assertEqual({row.field_identity_key for row in note_deltas},
+                {field_ids["Word"], field_ids["Reading"]})
+            removed_reading = next(row for row in note_deltas if row.field_identity_key == field_ids["Reading"])
+            self.assertEqual(removed_reading.operation, "remove")
             learner_notes_count = Note.query.filter_by(user_id=learner_id).count()
             self.assertEqual(learner_notes_count, 0)
 

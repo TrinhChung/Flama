@@ -179,6 +179,34 @@ class TestWorksheetService(unittest.TestCase):
         self.assertNotEqual(meta["suggested_mappings"]["kanji"], "Audio")
         self.assertNotEqual(meta["suggested_mappings"]["kanji"], "WordAudio")
 
+    def test_get_deck_worksheet_meta_array_field_values_converted_to_text(self):
+        custom_nt = NoteType(user_id=self.user.id, name="Array Note")
+        db.session.add(custom_nt)
+        db.session.flush()
+
+        f_word = FieldDef(note_type_id=custom_nt.id, name="Word", position=0)
+        f_meanings = FieldDef(note_type_id=custom_nt.id, name="Meanings", position=1, field_type="array")
+        db.session.add_all([f_word, f_meanings])
+        db.session.flush()
+
+        custom_deck = Deck(name="Array Deck", owner_user_id=self.user.id)
+        db.session.add(custom_deck)
+        db.session.flush()
+
+        note = Note(
+            deck_id=custom_deck.id,
+            note_type_id=custom_nt.id,
+            user_id=self.user.id,
+            field_values={"Word": "勉強", "Meanings": ["học tập", "nghiên cứu"]},
+        )
+        db.session.add(note)
+        db.session.commit()
+
+        meta = get_deck_worksheet_meta(user_id=self.user.id, deck_id=custom_deck.id)
+        self.assertIn("sample_values", meta["note_types"][0])
+        # sample_values must be converted to plain string using field_value_text, not raw list
+        self.assertEqual(meta["note_types"][0]["sample_values"].get("Meanings"), "học tập\nnghiên cứu")
+
     def test_get_deck_worksheet_meta_unauthorized(self):
         with self.assertRaises(WorksheetServiceError) as ctx:
             get_deck_worksheet_meta(user_id=self.other_user.id, deck_id=self.deck.id)

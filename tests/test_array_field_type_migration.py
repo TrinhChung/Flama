@@ -51,16 +51,18 @@ class ArrayFieldTypeMigrationTests(unittest.TestCase):
         self.version_id = db.session.execute(
             sa.select(TemplateVersion.id).where(TemplateVersion.template_id == template.id)
         ).scalar_one()
-        # The model no longer knows "answers", so old field rows are written as raw SQL.
-        for name, field_type in (("Prompt", "text"), ("Answer", "answers")):
-            db.session.execute(
-                sa.text(
-                    "INSERT INTO field_defs (id, note_type_id, name, field_type, position, required, created_at, updated_at) "
-                    "VALUES (:id, :note_type_id, :name, :field_type, 0, 0, '2026-10-10 00:00:00', '2026-10-10 00:00:00')"
-                ),
-                {"id": f"f-{name}", "note_type_id": note_type.id, "name": name, "field_type": field_type},
-            )
-        db.session.commit()
+        # Seed the historical schema through a migration connection, outside
+        # the live ORM's field-identity write guards.
+        db.session.remove()
+        with db.engine.begin() as connection:
+            for name, field_type in (("Prompt", "text"), ("Answer", "answers")):
+                connection.execute(
+                    sa.text(
+                        "INSERT INTO field_defs (id, note_type_id, name, field_type, position, required, created_at, updated_at) "
+                        "VALUES (:id, :note_type_id, :name, :field_type, 0, 0, '2026-10-10 00:00:00', '2026-10-10 00:00:00')"
+                    ),
+                    {"id": f"f-{name}", "note_type_id": self.note_type_id, "name": name, "field_type": field_type},
+                )
 
     def tearDown(self):
         op._proxy = None

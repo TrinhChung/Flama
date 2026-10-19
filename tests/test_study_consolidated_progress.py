@@ -425,7 +425,9 @@ class StudyConsolidatedOverlayTests(unittest.TestCase):
             self.assertEqual((source.field_values, source.user_id != self.user_id), ({"Word": "共有"}, True))
             studied = self._reader_view()
             self.assertEqual({row[1] for row in studied["list"]}, {"learning"})
-            self.assertEqual(studied["list_total"], 2)
+            # Browse defaults to one representative presentation per Note.
+            # The shared helper separately verifies all_templates=1 shows two.
+            self.assertEqual(studied["list_total"], 1)
             deleted = deck_management_service.reset_deck_progress(
                 deck_obj=db.session.get(Deck, self.local_deck_id), user_id=self.user_id)
             self.assertEqual(deleted, 2)

@@ -58,6 +58,7 @@ export function StudyQuickEditDialog({
     handleRevert,
     handleApplyStrokes,
     isDirty,
+    isDetailReady,
     hasInvalidFields,
     handleFieldValidityChange,
     mediaResolver,
@@ -96,7 +97,7 @@ export function StudyQuickEditDialog({
           onKeyDown={handleKeyDown}
         >
           {/* Header */}
-          <DialogHeader className="px-3.5 py-3 sm:px-5 sm:py-4 border-b border-border/60 bg-muted/20 shrink-0">
+          <DialogHeader className="px-3.5 pt-3.5 pb-3.5 sm:px-5 sm:pt-4 sm:pb-4 border-b border-border/60 bg-muted/20 shrink-0">
             <div className="flex items-center justify-between gap-2 sm:gap-3 pr-9 sm:pr-8">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="size-7 sm:size-8 rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
@@ -111,13 +112,13 @@ export function StudyQuickEditDialog({
                       </Badge>
                     )}
                   </DialogTitle>
-                  <DialogDescription className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate hidden xs:block">
+                  <DialogDescription className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">
                     {t('quick_edit.description')}
                   </DialogDescription>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0 my-auto">
                 <Button
                   type="button"
                   variant="outline"
@@ -168,7 +169,7 @@ export function StudyQuickEditDialog({
                   disabled={isSubmitting}
                 >
                   <RotateCcw className="size-3.5 sm:mr-1.5" />
-                  <span className="hidden xs:inline">{t('quick_edit.revert')}</span>
+                  <span className="hidden sm:inline">{t('quick_edit.revert')}</span>
                 </Button>
               )}
             </div>
@@ -190,7 +191,7 @@ export function StudyQuickEditDialog({
                 size="sm"
                 className="h-10 sm:h-9 px-4 text-xs font-bold rounded-lg shadow-sm bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-600 flex-1 sm:flex-initial justify-center"
                 onClick={handleSubmit}
-                disabled={!isDirty || isSubmitting || hasInvalidFields}
+                disabled={!isDetailReady || !isDirty || isSubmitting || hasInvalidFields}
                 title={t('quick_edit.save_tooltip')}
               >
                 {isSubmitting ? (

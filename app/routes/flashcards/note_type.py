@@ -22,6 +22,7 @@ from app.validators import (
     sanitize_query_text,
 )
 from app.services import field_array_conversion_service, flashcard_content_service
+from app.repositories.field_value_query_repository import note_values_search_condition
 from app.validators.field_array_conversion import ArrayConversionError
 
 
@@ -111,7 +112,7 @@ def notes_list_page():
     if search_q:
         like_pattern = f"%{escape_like_pattern(search_q)}%"
         query = query.filter(
-            Note.field_values.cast(db.Text).ilike(like_pattern, escape="\\")
+            note_values_search_condition(keyword_like=like_pattern.lower())
         )
 
     pagination = query.order_by(Note.updated_at.desc()).paginate(

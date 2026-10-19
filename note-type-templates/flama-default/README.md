@@ -4,6 +4,8 @@ Bản chụp ngày 2026-10-11 của note type **Flama Standard Vocabulary** và 
 
 Mặt trước và CSS giữ nguyên bản DB. Mặt sau phiên bản 1.1 đọc trực tiếp xuống dòng của array cho cách đọc/nghĩa; vùng chữ dùng layout block để `<br>` không bị gom ngang bởi flex. `source.sha256` giữ checksum của bản DB gốc, `files_sha256` mô tả các file hiện tại.
 
+Phiên bản 1.1.1 (2026-10-19) bỏ thuộc tính `controls` trên hai audio ẩn để `.play()` đi qua trình phát chung của Flama, giống template tiếng Anh. Bản sửa đã được lưu trên server ở template version 4; ID trong `source` vẫn ghi lại bản backup gốc. Nút loa và chuỗi phát từ vựng → ví dụ sau 500 ms được giữ nguyên. Trên iPad, tải lại trang và bắt đầu phiên học mới để nhận template đã sửa.
+
 | File | Nội dung |
 | --- | --- |
 | [prototype.json](prototype.json) | Metadata note type, 16 trường, input schema, ánh xạ, dữ liệu ví dụ và SHA-256 của các file template. |

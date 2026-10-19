@@ -140,6 +140,34 @@ describe('Browse field editing and persistence', () => {
     expect(browse.initialFieldValues.Word).toBe('猫')
   })
 
+  it('sends revisions captured with the editable values despite a background refresh', async () => {
+    details.A = { ...details.A, note: { ...details.A.note, content_revision: 3, field_schema_revision: 4 } }
+    await act(async () => queryClient.setQueryData(['browse', 'card-detail', 'A'], details.A))
+    await waitFor(() => browse.cardDetailQuery.data?.note.content_revision === 3)
+    await act(async () => browse.setEditFieldValues((previous) => ({ ...previous, Word: 'draft' })))
+    await act(async () => queryClient.setQueryData(['browse', 'card-detail', 'A'], {
+      ...details.A, note: { ...details.A.note, content_revision: 9, field_schema_revision: 6 },
+    }))
+    await act(async () => button('Lưu').click())
+    await waitFor(() => mocks.mutate.mock.calls.length === 1)
+    expect(mocks.mutate.mock.calls[0][2]).toMatchObject({
+      expected_content_revision: 3, expected_field_schema_revision: 4,
+    })
+  })
+
+  it('uses only the captured install overlay revision for cloned edits', async () => {
+    details.A = { ...details.A, note: { ...details.A.note, deck_install_id: 'install', overlay_revision: 7,
+      content_revision: 90, field_schema_revision: 80 } }
+    await act(async () => queryClient.setQueryData(['browse', 'card-detail', 'A'], details.A))
+    await waitFor(() => browse.cardDetailQuery.data?.note.overlay_revision === 7)
+    await act(async () => browse.setEditFieldValues((previous) => ({ ...previous, Word: 'clone draft' })))
+    await act(async () => button('Lưu').click())
+    await waitFor(() => mocks.mutate.mock.calls.length === 1)
+    expect(mocks.mutate.mock.calls[0][2].expected_overlay_revision).toBe(7)
+    expect(mocks.mutate.mock.calls[0][2]).not.toHaveProperty('expected_content_revision')
+    expect(mocks.mutate.mock.calls[0][2]).not.toHaveProperty('expected_field_schema_revision')
+  })
+
   it('syncs the saved card even if another card is selected before the response arrives', async () => {
     let finish!: (value: { detail: CardDetailResponse }) => void
     mocks.mutate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
@@ -187,5 +215,31 @@ describe('Browse field editing and persistence', () => {
     expect(button('Tạo').disabled).toBe(true)
     await act(async () => container.firstElementChild!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true })))
     expect(mocks.mutate).not.toHaveBeenCalled()
+  })
+
+  it('deletes the selected Note rather than its preview Card', async () => {
+    mocks.mutate.mockResolvedValueOnce({ success: true, deleted_count: 1 })
+    await act(async () => browse.deleteMutation.mutateAsync('A'))
+    expect(mocks.mutate).toHaveBeenCalledWith('/browse/notes/note-A', 'DELETE')
+    expect(browse.activeCardId).toBeNull()
+  })
+
+  it('bulk deletes Note IDs and retains selected identities across pages', async () => {
+    await act(async () => browse.setSelectedCards(['A']))
+    await act(async () => browse.setPage(2))
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/browse/cards') return { items: [details.B.card], page: 2, total: 2, pages: 2 }
+      if (path === '/browse/decks') return { decks: [{ id: 1, name: 'Deck' }] }
+      if (path === '/note-types') return { items: [] }
+      return details[path.split('/').at(-1)!]
+    })
+    await act(async () => queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] }))
+    await waitFor(() => browse.cards.length === 1)
+    await act(async () => browse.setSelectedCards(['A', 'B']))
+    mocks.mutate.mockResolvedValueOnce({ success: true, deleted_count: 2 })
+    await act(async () => browse.bulkDeleteMutation.mutateAsync(['A', 'B']))
+    expect(mocks.mutate).toHaveBeenCalledWith('/browse/notes/batch-delete', 'POST',
+      { note_ids: ['note-A', 'note-B'] })
+    expect(browse.selectedCards).toEqual([])
   })
 })

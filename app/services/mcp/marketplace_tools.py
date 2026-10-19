@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import or_
 
 from app.repositories import flashcards_share_repository
+from app.repositories.field_value_query_repository import note_values_search_condition
 from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
 from app.services.mcp.deck_tools import resolve_deck
 from app.services import (
@@ -18,6 +19,7 @@ from app.services.mcp.base import (
     _resolve_deck_for_user,
 )
 from app.validators.flashcard_input import RequestValidationError
+from app.validators import escape_like_pattern
 from models import db
 from models.deck import Deck
 from models.note_type import NoteType
@@ -153,11 +155,11 @@ def list_shared_deck_notes(
     )
 
     if query:
-        search_term = f"%{query}%"
+        search_term = f"%{escape_like_pattern(query.lower())}%"
         notes_query = notes_query.filter(
             or_(
-                Note.field_values.cast(db.String).ilike(search_term),
-                Note.tags.cast(db.String).ilike(search_term),
+                note_values_search_condition(keyword_like=search_term),
+                Note.tags.cast(db.String).ilike(search_term, escape="\\"),
             )
         )
 

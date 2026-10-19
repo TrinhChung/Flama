@@ -1,0 +1,3339 @@
+{
+  "all_enabled_cases_meet_b8_synthetic_budget": false,
+  "async_worker_evidence": {
+    "async_both": {
+      "intentionally_held_feed_age_ms": {
+        "p50_ms": 11548.83,
+        "p95_ms": 21057.178,
+        "p99_ms": 21755.836
+      },
+      "lag_scope": "Explicit one-shot drain after measured answers; backlog was intentionally held. No timer or production lag SLO qualification.",
+      "pending_rows_before_worker": 28,
+      "post_worker_raw_summary_exact_parity": true,
+      "strict_summary_after_worker_http": 200,
+      "strict_summary_before_worker_http": 409,
+      "worker_report": {
+        "applied_revisions": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28
+        ],
+        "error": null,
+        "invalidated_generations": 0,
+        "ok": true,
+        "payload_bytes": 7281,
+        "pending": false,
+        "user_id": 6
+      },
+      "worker_transaction_ms": 153.231
+    },
+    "async_history_only": {
+      "intentionally_held_feed_age_ms": {
+        "p50_ms": 11309.751,
+        "p95_ms": 20815.262,
+        "p99_ms": 21548.989
+      },
+      "lag_scope": "Explicit one-shot drain after measured answers; backlog was intentionally held. No timer or production lag SLO qualification.",
+      "pending_rows_before_worker": 28,
+      "post_worker_raw_summary_exact_parity": true,
+      "strict_summary_after_worker_http": 200,
+      "strict_summary_before_worker_http": 409,
+      "worker_report": {
+        "applied_revisions": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28
+        ],
+        "error": null,
+        "invalidated_generations": 0,
+        "ok": true,
+        "payload_bytes": 7281,
+        "pending": false,
+        "user_id": 5
+      },
+      "worker_transaction_ms": 159.469
+    }
+  },
+  "b8_budget": {
+    "metric": "native NOTE command including analytics finalization and outer commit",
+    "p95_added_ms_max": 5,
+    "p95_added_percent_max": 10
+  },
+  "configured_database_modified": false,
+  "diagnostic_spans_enabled": false,
+  "elapsed_seconds": 38.438,
+  "generated_schema": "flama_review_projection_probe_15512_6ba01cbeaad6",
+  "innodb_buffer_pool_bytes": 2147483648,
+  "limitations": [
+    "Synthetic sequential owned-deck learner workload; 6 independent equivalent learners, one active at a time.",
+    "Fresh NEW Note per answer, two presentations per Note; fixed clock and legacy default scheduler; no installed clones.",
+    "Warm local MySQL/Flask process; no concurrent learners, cold-cache qualification or production SLO claim.",
+    "Global status deltas include observer queries and any unrelated server traffic; not per-command byte/lock attribution.",
+    "Schema created from ORM metadata; migration-chain validation is a separate qualification.",
+    "Forecast uses the deck revision hook and does not synchronously rebuild buckets on review."
+  ],
+  "metrics": {
+    "async_both": {
+      "api_ms": {
+        "p50_ms": 121.611,
+        "p95_ms": 151.625,
+        "p99_ms": 178.873
+      },
+      "b8_synthetic_budget_met": false,
+      "command_ms": {
+        "p50_ms": 42.895,
+        "p95_ms": 54.295,
+        "p99_ms": 57.307
+      },
+      "command_p95_added_ms": 11.11,
+      "command_p95_added_percent": 25.727,
+      "deck_write_enabled": true,
+      "dml_statement_count": [
+        8
+      ],
+      "global_status_delta_total": {
+        "Bytes_received": 1737649,
+        "Bytes_sent": 2043903,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_data_written": 2608640,
+        "Innodb_os_log_written": 374784,
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0
+      },
+      "history_write_enabled": true,
+      "history_write_mode": "async",
+      "locking_read_count": [
+        5
+      ],
+      "paired_command_delta_ms": {
+        "p50_ms": 5.144,
+        "p95_ms": 11.885,
+        "p99_ms": 17.831
+      },
+      "samples": 24,
+      "samples_detail": [
+        {
+          "api_ms": 111.802,
+          "command_ms": 38.816,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72284,
+            "Bytes_sent": 85131,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 22528,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 0,
+          "session_commit_ms": 4.455,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 120.924,
+          "command_ms": 42.484,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72275,
+            "Bytes_sent": 85131,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 369664,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 1,
+          "session_commit_ms": 4.545,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 111.631,
+          "command_ms": 38.102,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72275,
+            "Bytes_sent": 85131,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 27648,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 2,
+          "session_commit_ms": 3.617,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 118.325,
+          "command_ms": 43.243,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72275,
+            "Bytes_sent": 85131,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 281088,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 3,
+          "session_commit_ms": 4.143,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 116.85,
+          "command_ms": 38.623,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72272,
+            "Bytes_sent": 85131,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17408,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 4,
+          "session_commit_ms": 3.648,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 116.977,
+          "command_ms": 40.061,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72275,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 15360,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 5,
+          "session_commit_ms": 3.823,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 134.58,
+          "command_ms": 47.253,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72278,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 28160,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 6,
+          "session_commit_ms": 4.968,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 119.133,
+          "command_ms": 38.491,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72276,
+            "Bytes_sent": 85131,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20480,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 7,
+          "session_commit_ms": 3.412,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 186.529,
+          "command_ms": 57.877,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72281,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 421888,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 8,
+          "session_commit_ms": 5.619,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 127.262,
+          "command_ms": 44.51,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72277,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17408,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 9,
+          "session_commit_ms": 4.143,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 114.562,
+          "command_ms": 38.974,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72277,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 24064,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 10,
+          "session_commit_ms": 4.684,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 122.267,
+          "command_ms": 43.111,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72280,
+            "Bytes_sent": 85131,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20992,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 11,
+          "session_commit_ms": 4.523,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 141.734,
+          "command_ms": 55.396,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72274,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18432,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 12,
+          "session_commit_ms": 3.573,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 131.229,
+          "command_ms": 47.207,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72280,
+            "Bytes_sent": 85133,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18944,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 13,
+          "session_commit_ms": 4.05,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 153.241,
+          "command_ms": 44.017,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72288,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 281600,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 14,
+          "session_commit_ms": 4.214,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 142.469,
+          "command_ms": 47.592,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72282,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 36864,
+            "Innodb_os_log_written": 23552,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 15,
+          "session_commit_ms": 4.529,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 126.04,
+          "command_ms": 44.052,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72288,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 30208,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 16,
+          "session_commit_ms": 4.361,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 129.412,
+          "command_ms": 45.038,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72283,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 283648,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 17,
+          "session_commit_ms": 4.782,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 113.632,
+          "command_ms": 37.697,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72282,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 33280,
+            "Innodb_os_log_written": 24064,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 18,
+          "session_commit_ms": 3.417,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 120.954,
+          "command_ms": 42.68,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72283,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 22016,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 19,
+          "session_commit_ms": 3.727,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 117.889,
+          "command_ms": 42.372,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72281,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 30720,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 20,
+          "session_commit_ms": 4.127,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 141.087,
+          "command_ms": 48.059,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72288,
+            "Bytes_sent": 85131,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 24576,
+            "Innodb_os_log_written": 16896,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 21,
+          "session_commit_ms": 4.911,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 132.559,
+          "command_ms": 41.447,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 72281,
+            "Bytes_sent": 85132,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 544256,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 22,
+          "session_commit_ms": 4.946,
+          "sql_statements": 66
+        },
+        {
+          "api_ms": 118.679,
+          "command_ms": 37.898,
+          "dml_statements": 8,
+          "global_status_delta": {
+            "Bytes_received": 75214,
+            "Bytes_sent": 85874,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17408,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 23,
+          "session_commit_ms": 4.437,
+          "sql_statements": 67
+        }
+      ],
+      "session_commit_ms": {
+        "p50_ms": 4.287,
+        "p95_ms": 4.964,
+        "p99_ms": 5.469
+      },
+      "sql_statement_count": [
+        66,
+        67
+      ]
+    },
+    "async_history_only": {
+      "api_ms": {
+        "p50_ms": 115.927,
+        "p95_ms": 131.108,
+        "p99_ms": 135.589
+      },
+      "b8_synthetic_budget_met": true,
+      "command_ms": {
+        "p50_ms": 38.543,
+        "p95_ms": 43.506,
+        "p99_ms": 53.242
+      },
+      "command_p95_added_ms": 0.321,
+      "command_p95_added_percent": 0.743,
+      "deck_write_enabled": false,
+      "dml_statement_count": [
+        7
+      ],
+      "global_status_delta_total": {
+        "Bytes_received": 1731455,
+        "Bytes_sent": 2044408,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_data_written": 916480,
+        "Innodb_os_log_written": 386048,
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0
+      },
+      "history_write_enabled": true,
+      "history_write_mode": "async",
+      "locking_read_count": [
+        5
+      ],
+      "paired_command_delta_ms": {
+        "p50_ms": 1.258,
+        "p95_ms": 6.35,
+        "p99_ms": 15.16
+      },
+      "samples": 24,
+      "samples_detail": [
+        {
+          "api_ms": 107.909,
+          "command_ms": 34.102,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72014,
+            "Bytes_sent": 85152,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19968,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 0,
+          "session_commit_ms": 2.045,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 119.984,
+          "command_ms": 41.05,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72022,
+            "Bytes_sent": 85152,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 25088,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 1,
+          "session_commit_ms": 2.821,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 120.728,
+          "command_ms": 36.708,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72015,
+            "Bytes_sent": 85152,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 14848,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 2,
+          "session_commit_ms": 2.733,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 110.497,
+          "command_ms": 38.07,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72018,
+            "Bytes_sent": 85152,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 21504,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 3,
+          "session_commit_ms": 2.119,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 115.193,
+          "command_ms": 37.684,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72020,
+            "Bytes_sent": 85152,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18432,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 4,
+          "session_commit_ms": 2.551,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 111.432,
+          "command_ms": 39.387,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72023,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 47104,
+            "Innodb_os_log_written": 38400,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 5,
+          "session_commit_ms": 2.57,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 116.818,
+          "command_ms": 38.067,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72022,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17920,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 6,
+          "session_commit_ms": 2.31,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 111.444,
+          "command_ms": 37.314,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72020,
+            "Bytes_sent": 85152,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17408,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 7,
+          "session_commit_ms": 2.254,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 136.908,
+          "command_ms": 56.136,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72019,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17408,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 8,
+          "session_commit_ms": 2.075,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 111.87,
+          "command_ms": 36.981,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72025,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 40448,
+            "Innodb_os_log_written": 25088,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 9,
+          "session_commit_ms": 2.022,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 115.544,
+          "command_ms": 40.246,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72021,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19968,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 10,
+          "session_commit_ms": 3.799,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 131.171,
+          "command_ms": 43.554,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72017,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 393728,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 11,
+          "session_commit_ms": 3.604,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 130.065,
+          "command_ms": 38.682,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72019,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 28160,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 12,
+          "session_commit_ms": 2.431,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 109.476,
+          "command_ms": 37.891,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72025,
+            "Bytes_sent": 85154,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20480,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 13,
+          "session_commit_ms": 2.386,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 117.236,
+          "command_ms": 36.418,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72020,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20480,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 14,
+          "session_commit_ms": 2.28,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 109.777,
+          "command_ms": 38.404,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72032,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18944,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 15,
+          "session_commit_ms": 2.325,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 130.753,
+          "command_ms": 43.236,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72022,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18432,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 16,
+          "session_commit_ms": 2.836,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 122.649,
+          "command_ms": 41.444,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72027,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 16896,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 17,
+          "session_commit_ms": 2.611,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 114.938,
+          "command_ms": 40.102,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72019,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 32256,
+            "Innodb_os_log_written": 23552,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 18,
+          "session_commit_ms": 2.171,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 117.606,
+          "command_ms": 39.694,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72026,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20480,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 19,
+          "session_commit_ms": 2.144,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 114.898,
+          "command_ms": 35.583,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72024,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19456,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 20,
+          "session_commit_ms": 2.189,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 119.625,
+          "command_ms": 38.183,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72021,
+            "Bytes_sent": 85152,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17408,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 21,
+          "session_commit_ms": 2.321,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 112.819,
+          "command_ms": 38.698,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 72027,
+            "Bytes_sent": 85153,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 22016,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 22,
+          "session_commit_ms": 2.578,
+          "sql_statements": 65
+        },
+        {
+          "api_ms": 116.31,
+          "command_ms": 39.371,
+          "dml_statements": 7,
+          "global_status_delta": {
+            "Bytes_received": 74957,
+            "Bytes_sent": 85895,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 27648,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 23,
+          "session_commit_ms": 2.391,
+          "sql_statements": 66
+        }
+      ],
+      "session_commit_ms": {
+        "p50_ms": 2.356,
+        "p95_ms": 3.488,
+        "p99_ms": 3.754
+      },
+      "sql_statement_count": [
+        65,
+        66
+      ]
+    },
+    "both": {
+      "api_ms": {
+        "p50_ms": 127.388,
+        "p95_ms": 136.308,
+        "p99_ms": 141.737
+      },
+      "b8_synthetic_budget_met": false,
+      "command_ms": {
+        "p50_ms": 48.078,
+        "p95_ms": 56.309,
+        "p99_ms": 56.755
+      },
+      "command_p95_added_ms": 13.124,
+      "command_p95_added_percent": 30.39,
+      "deck_write_enabled": true,
+      "dml_statement_count": [
+        10
+      ],
+      "global_status_delta_total": {
+        "Bytes_received": 1784314,
+        "Bytes_sent": 2159402,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_data_written": 2008576,
+        "Innodb_os_log_written": 397312,
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0
+      },
+      "history_write_enabled": true,
+      "history_write_mode": "sync",
+      "locking_read_count": [
+        7
+      ],
+      "paired_command_delta_ms": {
+        "p50_ms": 11.015,
+        "p95_ms": 18.013,
+        "p99_ms": 18.774
+      },
+      "samples": 24,
+      "samples_detail": [
+        {
+          "api_ms": 129.705,
+          "command_ms": 46.808,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74220,
+            "Bytes_sent": 89940,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17408,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 0,
+          "session_commit_ms": 4.901,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 127.86,
+          "command_ms": 51.262,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74216,
+            "Bytes_sent": 89941,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18432,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 1,
+          "session_commit_ms": 3.329,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 123.817,
+          "command_ms": 48.185,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74220,
+            "Bytes_sent": 89941,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 21504,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 2,
+          "session_commit_ms": 4.125,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 127.732,
+          "command_ms": 43.871,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74213,
+            "Bytes_sent": 89941,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18944,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 3,
+          "session_commit_ms": 3.964,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 117.729,
+          "command_ms": 46.461,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74212,
+            "Bytes_sent": 89941,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 16896,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 4,
+          "session_commit_ms": 3.17,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 116.039,
+          "command_ms": 45.902,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74217,
+            "Bytes_sent": 89942,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 422912,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 5,
+          "session_commit_ms": 3.712,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 129.724,
+          "command_ms": 50.891,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74225,
+            "Bytes_sent": 89943,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18944,
+            "Innodb_os_log_written": 16896,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 6,
+          "session_commit_ms": 4.541,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 124.706,
+          "command_ms": 46.415,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74218,
+            "Bytes_sent": 89943,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 26624,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 7,
+          "session_commit_ms": 3.253,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 125.779,
+          "command_ms": 49.546,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74214,
+            "Bytes_sent": 89944,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 26624,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 8,
+          "session_commit_ms": 3.936,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 117.551,
+          "command_ms": 44.021,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74221,
+            "Bytes_sent": 89944,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19968,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 9,
+          "session_commit_ms": 3.561,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 128.644,
+          "command_ms": 50.663,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74219,
+            "Bytes_sent": 89943,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 28160,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 10,
+          "session_commit_ms": 3.192,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 122.472,
+          "command_ms": 47.971,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74229,
+            "Bytes_sent": 89945,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 22016,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 11,
+          "session_commit_ms": 3.432,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 143.256,
+          "command_ms": 56.862,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74237,
+            "Bytes_sent": 89947,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 22016,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 12,
+          "session_commit_ms": 4.529,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 118.423,
+          "command_ms": 46.7,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74234,
+            "Bytes_sent": 89947,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 284160,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 13,
+          "session_commit_ms": 3.607,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 123.666,
+          "command_ms": 46.607,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74228,
+            "Bytes_sent": 89946,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 24064,
+            "Innodb_os_log_written": 22528,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 14,
+          "session_commit_ms": 3.213,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 131.491,
+          "command_ms": 56.399,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74229,
+            "Bytes_sent": 89946,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 29696,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 15,
+          "session_commit_ms": 4.9,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 127.044,
+          "command_ms": 51.171,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74229,
+            "Bytes_sent": 89946,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 290304,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 16,
+          "session_commit_ms": 3.662,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 136.652,
+          "command_ms": 54.392,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74228,
+            "Bytes_sent": 89946,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 28672,
+            "Innodb_os_log_written": 16384,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 17,
+          "session_commit_ms": 3.74,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 122.962,
+          "command_ms": 45.46,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74228,
+            "Bytes_sent": 89946,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 31232,
+            "Innodb_os_log_written": 23552,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 18,
+          "session_commit_ms": 3.172,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 129.79,
+          "command_ms": 47.582,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74231,
+            "Bytes_sent": 89946,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17920,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 19,
+          "session_commit_ms": 3.789,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 118.044,
+          "command_ms": 47.071,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74231,
+            "Bytes_sent": 89946,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 22016,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 20,
+          "session_commit_ms": 3.911,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 130.777,
+          "command_ms": 51.02,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74226,
+            "Bytes_sent": 89946,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 545792,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 21,
+          "session_commit_ms": 5.342,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 132.961,
+          "command_ms": 50.879,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 74231,
+            "Bytes_sent": 89945,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 37376,
+            "Innodb_os_log_written": 32768,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 22,
+          "session_commit_ms": 4.368,
+          "sql_statements": 71
+        },
+        {
+          "api_ms": 134.353,
+          "command_ms": 55.796,
+          "dml_statements": 10,
+          "global_status_delta": {
+            "Bytes_received": 77158,
+            "Bytes_sent": 90687,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 16896,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 23,
+          "session_commit_ms": 5.215,
+          "sql_statements": 72
+        }
+      ],
+      "session_commit_ms": {
+        "p50_ms": 3.764,
+        "p95_ms": 5.168,
+        "p99_ms": 5.313
+      },
+      "sql_statement_count": [
+        71,
+        72
+      ]
+    },
+    "deck_only": {
+      "api_ms": {
+        "p50_ms": 116.522,
+        "p95_ms": 141.948,
+        "p99_ms": 186.173
+      },
+      "b8_synthetic_budget_met": true,
+      "command_ms": {
+        "p50_ms": 39.343,
+        "p95_ms": 43.047,
+        "p99_ms": 76.656
+      },
+      "command_p95_added_ms": -0.138,
+      "command_p95_added_percent": -0.32,
+      "deck_write_enabled": true,
+      "dml_statement_count": [
+        6
+      ],
+      "global_status_delta_total": {
+        "Bytes_received": 1720029,
+        "Bytes_sent": 2043231,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_data_written": 2672128,
+        "Innodb_os_log_written": 354816,
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0
+      },
+      "history_write_enabled": false,
+      "history_write_mode": "sync",
+      "locking_read_count": [
+        5
+      ],
+      "paired_command_delta_ms": {
+        "p50_ms": 0.821,
+        "p95_ms": 7.109,
+        "p99_ms": 39.549
+      },
+      "samples": 24,
+      "samples_detail": [
+        {
+          "api_ms": 110.953,
+          "command_ms": 38.108,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71544,
+            "Bytes_sent": 85103,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19456,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 0,
+          "session_commit_ms": 5.414,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 116.045,
+          "command_ms": 39.354,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71543,
+            "Bytes_sent": 85103,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 24064,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 1,
+          "session_commit_ms": 5.879,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 115.172,
+          "command_ms": 36.379,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71539,
+            "Bytes_sent": 85103,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 283136,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 2,
+          "session_commit_ms": 4.461,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 116.894,
+          "command_ms": 39.931,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71551,
+            "Bytes_sent": 85103,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20992,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 3,
+          "session_commit_ms": 5.92,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 112.415,
+          "command_ms": 34.234,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71543,
+            "Bytes_sent": 85103,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 21504,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 4,
+          "session_commit_ms": 4.411,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 130.962,
+          "command_ms": 41.202,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71540,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 22016,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 5,
+          "session_commit_ms": 6.25,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 127.19,
+          "command_ms": 41.624,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71547,
+            "Bytes_sent": 85103,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20480,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 6,
+          "session_commit_ms": 5.594,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 118.989,
+          "command_ms": 41.15,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71540,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 394240,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 7,
+          "session_commit_ms": 4.298,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 110.989,
+          "command_ms": 36.464,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71545,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 14848,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 8,
+          "session_commit_ms": 4.872,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 198.803,
+          "command_ms": 86.672,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71543,
+            "Bytes_sent": 85103,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 26624,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 9,
+          "session_commit_ms": 10.062,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 121.742,
+          "command_ms": 41.391,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71542,
+            "Bytes_sent": 85103,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17920,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 10,
+          "session_commit_ms": 5.799,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 111.94,
+          "command_ms": 38.422,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71538,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 15872,
+            "Innodb_os_log_written": 12800,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 11,
+          "session_commit_ms": 5.194,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 124.245,
+          "command_ms": 41.541,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71553,
+            "Bytes_sent": 85105,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 25088,
+            "Innodb_os_log_written": 22528,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 12,
+          "session_commit_ms": 4.793,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 112.083,
+          "command_ms": 36.996,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71550,
+            "Bytes_sent": 85105,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19456,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 13,
+          "session_commit_ms": 4.675,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 112.468,
+          "command_ms": 38.566,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71549,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 21504,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 14,
+          "session_commit_ms": 4.472,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 121.004,
+          "command_ms": 42.616,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71544,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18432,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 15,
+          "session_commit_ms": 4.82,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 125.697,
+          "command_ms": 43.123,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71549,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 16384,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 16,
+          "session_commit_ms": 6.716,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 120.214,
+          "command_ms": 38.243,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71552,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19456,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 17,
+          "session_commit_ms": 6.003,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 115.934,
+          "command_ms": 40.368,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71547,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 557056,
+            "Innodb_os_log_written": 23040,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 18,
+          "session_commit_ms": 5.034,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 143.887,
+          "command_ms": 37.721,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71544,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20480,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 19,
+          "session_commit_ms": 5.447,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 108.099,
+          "command_ms": 36.295,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71548,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17920,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 20,
+          "session_commit_ms": 4.919,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 116.15,
+          "command_ms": 36.66,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71550,
+            "Bytes_sent": 85104,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20992,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 21,
+          "session_commit_ms": 4.553,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 123.95,
+          "command_ms": 41.257,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 71550,
+            "Bytes_sent": 85103,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 23552,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 22,
+          "session_commit_ms": 6.326,
+          "sql_statements": 64
+        },
+        {
+          "api_ms": 115.334,
+          "command_ms": 39.333,
+          "dml_statements": 6,
+          "global_status_delta": {
+            "Bytes_received": 74478,
+            "Bytes_sent": 85846,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 1030656,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 23,
+          "session_commit_ms": 5.087,
+          "sql_statements": 65
+        }
+      ],
+      "session_commit_ms": {
+        "p50_ms": 5.14,
+        "p95_ms": 6.658,
+        "p99_ms": 9.293
+      },
+      "sql_statement_count": [
+        64,
+        65
+      ]
+    },
+    "disabled": {
+      "api_ms": {
+        "p50_ms": 118.2,
+        "p95_ms": 128.346,
+        "p99_ms": 130.468
+      },
+      "b8_synthetic_budget_met": true,
+      "command_ms": {
+        "p50_ms": 38.723,
+        "p95_ms": 43.185,
+        "p99_ms": 44.585
+      },
+      "command_p95_added_ms": 0.0,
+      "command_p95_added_percent": 0.0,
+      "deck_write_enabled": false,
+      "dml_statement_count": [
+        5
+      ],
+      "global_status_delta_total": {
+        "Bytes_received": 1713802,
+        "Bytes_sent": 2042861,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_data_written": 2150400,
+        "Innodb_os_log_written": 343040,
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0
+      },
+      "history_write_enabled": false,
+      "history_write_mode": "sync",
+      "locking_read_count": [
+        5
+      ],
+      "paired_command_delta_ms": {
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 0.0
+      },
+      "samples": 24,
+      "samples_detail": [
+        {
+          "api_ms": 106.807,
+          "command_ms": 32.95,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71277,
+            "Bytes_sent": 85086,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17920,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 0,
+          "session_commit_ms": 3.219,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 118.623,
+          "command_ms": 38.563,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71277,
+            "Bytes_sent": 85086,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18944,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 1,
+          "session_commit_ms": 3.45,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 115.63,
+          "command_ms": 38.914,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71272,
+            "Bytes_sent": 85086,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19968,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 2,
+          "session_commit_ms": 4.503,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 107.989,
+          "command_ms": 33.602,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71281,
+            "Bytes_sent": 85087,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 13824,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 3,
+          "session_commit_ms": 4.105,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 110.405,
+          "command_ms": 34.648,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71278,
+            "Bytes_sent": 85087,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 27648,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 4,
+          "session_commit_ms": 3.747,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 117.066,
+          "command_ms": 33.955,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71286,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20992,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 5,
+          "session_commit_ms": 3.257,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 131.098,
+          "command_ms": 45.003,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71281,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 363520,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 6,
+          "session_commit_ms": 4.481,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 116.241,
+          "command_ms": 40.24,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71288,
+            "Bytes_sent": 85088,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 16896,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 7,
+          "session_commit_ms": 3.599,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 110.08,
+          "command_ms": 38.37,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71285,
+            "Bytes_sent": 85088,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 23552,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 8,
+          "session_commit_ms": 4.493,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 117.33,
+          "command_ms": 37.474,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71283,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 412672,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 9,
+          "session_commit_ms": 3.538,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 120.93,
+          "command_ms": 38.882,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71289,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18944,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 10,
+          "session_commit_ms": 3.047,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 119.753,
+          "command_ms": 37.117,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71290,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 16384,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 11,
+          "session_commit_ms": 3.872,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 127.933,
+          "command_ms": 43.179,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71290,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 275968,
+            "Innodb_os_log_written": 12800,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 12,
+          "session_commit_ms": 4.856,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 128.274,
+          "command_ms": 42.918,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71288,
+            "Bytes_sent": 85090,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 26624,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 13,
+          "session_commit_ms": 4.67,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 111.334,
+          "command_ms": 34.012,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71292,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 27648,
+            "Innodb_os_log_written": 16384,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 14,
+          "session_commit_ms": 4.328,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 122.391,
+          "command_ms": 42.119,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71285,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17920,
+            "Innodb_os_log_written": 12800,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 15,
+          "session_commit_ms": 4.211,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 124.42,
+          "command_ms": 39.237,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71290,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19968,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 16,
+          "session_commit_ms": 3.1,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 113.615,
+          "command_ms": 35.587,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71291,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 15872,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 17,
+          "session_commit_ms": 3.357,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 118.08,
+          "command_ms": 43.187,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71294,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 29184,
+            "Innodb_os_log_written": 21504,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 18,
+          "session_commit_ms": 10.941,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 119.534,
+          "command_ms": 36.871,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71292,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17920,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 19,
+          "session_commit_ms": 5.182,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 113.559,
+          "command_ms": 40.535,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71292,
+            "Bytes_sent": 85089,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 671232,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 20,
+          "session_commit_ms": 3.649,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 118.32,
+          "command_ms": 40.869,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71291,
+            "Bytes_sent": 85088,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20480,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 21,
+          "session_commit_ms": 4.819,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 128.358,
+          "command_ms": 42.923,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 71291,
+            "Bytes_sent": 85088,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 28160,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 22,
+          "session_commit_ms": 3.473,
+          "sql_statements": 63
+        },
+        {
+          "api_ms": 120.775,
+          "command_ms": 37.125,
+          "dml_statements": 5,
+          "global_status_delta": {
+            "Bytes_received": 74219,
+            "Bytes_sent": 85830,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 28160,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 5,
+          "round": 23,
+          "session_commit_ms": 4.091,
+          "sql_statements": 64
+        }
+      ],
+      "session_commit_ms": {
+        "p50_ms": 3.981,
+        "p95_ms": 5.133,
+        "p99_ms": 9.617
+      },
+      "sql_statement_count": [
+        63,
+        64
+      ]
+    },
+    "history_only": {
+      "api_ms": {
+        "p50_ms": 127.826,
+        "p95_ms": 153.19,
+        "p99_ms": 192.686
+      },
+      "b8_synthetic_budget_met": false,
+      "command_ms": {
+        "p50_ms": 47.122,
+        "p95_ms": 59.902,
+        "p99_ms": 69.261
+      },
+      "command_p95_added_ms": 16.717,
+      "command_p95_added_percent": 38.71,
+      "deck_write_enabled": false,
+      "dml_statement_count": [
+        9
+      ],
+      "global_status_delta_total": {
+        "Bytes_received": 1778042,
+        "Bytes_sent": 2159871,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_data_written": 492032,
+        "Innodb_os_log_written": 360960,
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0
+      },
+      "history_write_enabled": true,
+      "history_write_mode": "sync",
+      "locking_read_count": [
+        7
+      ],
+      "paired_command_delta_ms": {
+        "p50_ms": 9.342,
+        "p95_ms": 18.624,
+        "p99_ms": 30.718
+      },
+      "samples": 24,
+      "samples_detail": [
+        {
+          "api_ms": 126.325,
+          "command_ms": 46.723,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73959,
+            "Bytes_sent": 89961,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 16384,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 0,
+          "session_commit_ms": 2.201,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 130.11,
+          "command_ms": 52.165,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73957,
+            "Bytes_sent": 89961,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 15872,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 1,
+          "session_commit_ms": 2.383,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 118.472,
+          "command_ms": 45.64,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73956,
+            "Bytes_sent": 89961,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 20992,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 2,
+          "session_commit_ms": 2.481,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 115.768,
+          "command_ms": 44.442,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73954,
+            "Bytes_sent": 89961,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18944,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 3,
+          "session_commit_ms": 2.467,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 119.826,
+          "command_ms": 44.018,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73960,
+            "Bytes_sent": 89961,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18944,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 4,
+          "session_commit_ms": 3.112,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 127.187,
+          "command_ms": 49.673,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73959,
+            "Bytes_sent": 89962,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 17408,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 5,
+          "session_commit_ms": 2.654,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 134.097,
+          "command_ms": 50.307,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73961,
+            "Bytes_sent": 89963,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 15872,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 6,
+          "session_commit_ms": 2.921,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 125.134,
+          "command_ms": 47.153,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73958,
+            "Bytes_sent": 89964,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 29184,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 7,
+          "session_commit_ms": 2.715,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 121.412,
+          "command_ms": 43.479,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73956,
+            "Bytes_sent": 89964,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18944,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 8,
+          "session_commit_ms": 2.069,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 203.667,
+          "command_ms": 71.652,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73968,
+            "Bytes_sent": 89963,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18432,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 9,
+          "session_commit_ms": 3.056,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 118.969,
+          "command_ms": 42.954,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73958,
+            "Bytes_sent": 89964,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 16896,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 10,
+          "session_commit_ms": 2.678,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 128.465,
+          "command_ms": 50.984,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73960,
+            "Bytes_sent": 89964,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 21504,
+            "Innodb_os_log_written": 14336,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 11,
+          "session_commit_ms": 2.194,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 137.711,
+          "command_ms": 50.684,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73966,
+            "Bytes_sent": 89965,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 29696,
+            "Innodb_os_log_written": 15872,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 12,
+          "session_commit_ms": 2.536,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 136.609,
+          "command_ms": 52.234,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73966,
+            "Bytes_sent": 89966,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19968,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 13,
+          "session_commit_ms": 2.502,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 115.643,
+          "command_ms": 43.38,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73972,
+            "Bytes_sent": 89965,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 14848,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 14,
+          "session_commit_ms": 2.232,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 155.921,
+          "command_ms": 61.256,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73964,
+            "Bytes_sent": 89965,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 26624,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 15,
+          "session_commit_ms": 2.241,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 136.991,
+          "command_ms": 47.09,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73974,
+            "Bytes_sent": 89965,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 15360,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 16,
+          "session_commit_ms": 2.673,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 129.641,
+          "command_ms": 51.229,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73964,
+            "Bytes_sent": 89965,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 30208,
+            "Innodb_os_log_written": 22528,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 17,
+          "session_commit_ms": 2.462,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 115.99,
+          "command_ms": 45.724,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73967,
+            "Bytes_sent": 89965,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 18432,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 18,
+          "session_commit_ms": 2.468,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 130.137,
+          "command_ms": 50.328,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73962,
+            "Bytes_sent": 89965,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 23552,
+            "Innodb_os_log_written": 14848,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 19,
+          "session_commit_ms": 2.512,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 135.812,
+          "command_ms": 49.161,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73964,
+            "Bytes_sent": 89965,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 25088,
+            "Innodb_os_log_written": 16896,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 20,
+          "session_commit_ms": 2.537,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 114.569,
+          "command_ms": 43.019,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73966,
+            "Bytes_sent": 89965,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19456,
+            "Innodb_os_log_written": 13824,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 21,
+          "session_commit_ms": 2.281,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 121.029,
+          "command_ms": 42.522,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 73969,
+            "Bytes_sent": 89964,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19456,
+            "Innodb_os_log_written": 13312,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 22,
+          "session_commit_ms": 2.164,
+          "sql_statements": 70
+        },
+        {
+          "api_ms": 128.986,
+          "command_ms": 46.968,
+          "dml_statements": 9,
+          "global_status_delta": {
+            "Bytes_received": 76902,
+            "Bytes_sent": 90707,
+            "Innodb_buffer_pool_reads": 0,
+            "Innodb_data_written": 19968,
+            "Innodb_os_log_written": 15360,
+            "Innodb_row_lock_time": 0,
+            "Innodb_row_lock_waits": 0
+          },
+          "locking_reads": 7,
+          "round": 23,
+          "session_commit_ms": 2.949,
+          "sql_statements": 71
+        }
+      ],
+      "session_commit_ms": {
+        "p50_ms": 2.491,
+        "p95_ms": 3.04,
+        "p99_ms": 3.099
+      },
+      "sql_statement_count": [
+        70,
+        71
+      ]
+    }
+  },
+  "mysql_version": "8.0.40",
+  "parity": {
+    "cases": {
+      "async_both": {
+        "audits": 28,
+        "authority_revision_per_subject": 1,
+        "binary_hashes_present": true,
+        "collection_daily_totals": [
+          28,
+          2800,
+          28
+        ],
+        "deck_learner_revision": 28,
+        "events": 28,
+        "facts": 28,
+        "history_fact_payload_bytes": 15438,
+        "linked_event_ids_match": true,
+        "receipt_payload_bytes": 97516,
+        "receipts": 28,
+        "state_codec_verified": true
+      },
+      "async_history_only": {
+        "audits": 28,
+        "authority_revision_per_subject": 1,
+        "binary_hashes_present": true,
+        "collection_daily_totals": [
+          28,
+          2800,
+          28
+        ],
+        "deck_learner_revision": 0,
+        "events": 28,
+        "facts": 28,
+        "history_fact_payload_bytes": 15438,
+        "linked_event_ids_match": true,
+        "receipt_payload_bytes": 97516,
+        "receipts": 28,
+        "state_codec_verified": true
+      },
+      "both": {
+        "audits": 28,
+        "authority_revision_per_subject": 1,
+        "binary_hashes_present": true,
+        "collection_daily_totals": [
+          28,
+          2800,
+          28
+        ],
+        "deck_learner_revision": 28,
+        "events": 28,
+        "facts": 28,
+        "history_fact_payload_bytes": 15438,
+        "linked_event_ids_match": true,
+        "receipt_payload_bytes": 97501,
+        "receipts": 28,
+        "state_codec_verified": true
+      },
+      "deck_only": {
+        "audits": 28,
+        "authority_revision_per_subject": 1,
+        "binary_hashes_present": true,
+        "collection_daily_totals": [
+          0,
+          0,
+          0
+        ],
+        "deck_learner_revision": 28,
+        "events": 28,
+        "facts": 28,
+        "history_fact_payload_bytes": 15438,
+        "linked_event_ids_match": true,
+        "receipt_payload_bytes": 97488,
+        "receipts": 28,
+        "state_codec_verified": true
+      },
+      "disabled": {
+        "audits": 28,
+        "authority_revision_per_subject": 1,
+        "binary_hashes_present": true,
+        "collection_daily_totals": [
+          0,
+          0,
+          0
+        ],
+        "deck_learner_revision": 0,
+        "events": 28,
+        "facts": 28,
+        "history_fact_payload_bytes": 15438,
+        "linked_event_ids_match": true,
+        "receipt_payload_bytes": 97479,
+        "receipts": 28,
+        "state_codec_verified": true
+      },
+      "history_only": {
+        "audits": 28,
+        "authority_revision_per_subject": 1,
+        "binary_hashes_present": true,
+        "collection_daily_totals": [
+          28,
+          2800,
+          28
+        ],
+        "deck_learner_revision": 0,
+        "events": 28,
+        "facts": 28,
+        "history_fact_payload_bytes": 15438,
+        "linked_event_ids_match": true,
+        "receipt_payload_bytes": 97488,
+        "receipts": 28,
+        "state_codec_verified": true
+      }
+    },
+    "exactly_once_and_projection_parity": true,
+    "global_content_revision_rows": 0,
+    "semantic_hashes_equal_across_cases": true
+  },
+  "probe_database_dropped": true,
+  "sample_order": [
+    [
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both"
+    ],
+    [
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only"
+    ],
+    [
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both"
+    ],
+    [
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled"
+    ],
+    [
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only"
+    ],
+    [
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only"
+    ],
+    [
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both"
+    ],
+    [
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only"
+    ],
+    [
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both"
+    ],
+    [
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled"
+    ],
+    [
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only"
+    ],
+    [
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only"
+    ],
+    [
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both"
+    ],
+    [
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only"
+    ],
+    [
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both"
+    ],
+    [
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled"
+    ],
+    [
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only"
+    ],
+    [
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only"
+    ],
+    [
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both"
+    ],
+    [
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only"
+    ],
+    [
+      "disabled",
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both"
+    ],
+    [
+      "history_only",
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled"
+    ],
+    [
+      "deck_only",
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only"
+    ],
+    [
+      "both",
+      "async_history_only",
+      "async_both",
+      "disabled",
+      "history_only",
+      "deck_only"
+    ]
+  ],
+  "samples_per_case": 24,
+  "status": "PASS",
+  "timing_scope": {
+    "api_ms": "Flask test-client POST /api/study/<id>/answer including real next-card prefetch; excludes network/proxy.",
+    "command_ms": "Canonical execute_native_review_command; includes locks, scheduler, facts, receipts, projections, commit.",
+    "session_commit_ms": "Session.commit only; history counters are finalized before this, so this is not the B8 gate."
+  },
+  "transaction_isolation": "REPEATABLE-READ",
+  "warmup_per_case": 4
+}

@@ -1003,7 +1003,7 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
         install = db.session.get(DeckInstall, self.ids["install_id"])
         source_note = db.session.get(Note, self.ids["note_id"])
         dummy_note_ids = [f"bulk-note-{index:04d}" for index in range(1005)]
-        db.session.bulk_save_objects(
+        db.session.add_all(
             [
                 Note(
                     id=note_id,
@@ -1017,7 +1017,7 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
             ]
         )
         db.session.commit()
-        db.session.bulk_save_objects(
+        db.session.add_all(
             [
                 DeckCloneNoteFieldOverride(
                     id=f"bulk-override-{index:04d}",
@@ -1026,6 +1026,7 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
                     source_field_def_id=self.ids["word_field_id"],
                     base_release_id=self.ids["first_release_id"],
                     field_name="Word",
+                    field_identity_key=self.ids["word_field_id"],
                     operation="set",
                     value=f"local-{index}",
                 )
@@ -1037,6 +1038,7 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
                     deck_install_id=install.id,
                     source_note_id=self.ids["note_id"],
                     source_field_def_id=self.ids["word_field_id"],
+                    field_identity_key=self.ids["word_field_id"],
                     base_release_id=self.ids["first_release_id"],
                     field_name="Word",
                     operation="set",

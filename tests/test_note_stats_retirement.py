@@ -73,6 +73,12 @@ class NoteStatsRetirementTests(unittest.TestCase):
 
     @staticmethod
     def _insert(model, **values):
+        if model is Note:
+            # The canonical Note writer resolves boundary labels to IDs.
+            # Other rows are intentionally literal retirement fixtures.
+            db.session.add(Note(**values))
+            db.session.flush()
+            return
         db.session.execute(sa.insert(model).values(**values))
 
     def _application(self, owner, note_type, status="ACTIVE"):
@@ -322,7 +328,7 @@ class NoteStatsRetirementTests(unittest.TestCase):
 
     def test_collection_deduplicates_owned_and_installed_active_presentations(self):
         self._clone()
-        db.session.execute(sa.update(Note).where(Note.id == self.source_note).values(user_id=1))
+        db.session.get(Note, self.source_note).user_id = 1
         db.session.execute(sa.update(StudyApplication).where(StudyApplication.id == self.source_app).values(status_code="ACTIVE"))
         db.session.execute(sa.update(DeckInstall).values(source_owner_user_id=1))
         db.session.commit()

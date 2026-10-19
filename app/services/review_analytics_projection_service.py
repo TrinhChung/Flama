@@ -1,27 +1,23 @@
-"""Capture raw changes and finalize daily counters at the outer transaction boundary.
+"""Capture immutable history revisions at the outer transaction boundary.
 
-The buffer retains SAVEPOINT ancestry. Counter locks are taken only after all
-domain work has finished; root commits are guarded against missing finalizers.
+The buffer retains SAVEPOINT ancestry. Learner head locks are taken only after
+all domain work has finished; root commits require a durable feed finalizer.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 
 from flask import current_app, has_app_context
 from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session
 
-from app.repositories.review_analytics_repository import (
-    add_grouped_deltas, load_inserted_events, lock_generations, lock_head,
-)
+from app.repositories.review_analytics_repository import load_inserted_events
 from models.review_event import ReviewEvent
 
 _KEY = "flama.review_analytics.transaction"
 _PROJECTED_COLUMNS = ("user_id", "reviewed_at", "deck_id", "duration_ms", "rating", "id")
-BUILDING, READY, DIRTY = 0, 1, 2
 
 
 class ReviewAnalyticsFenceError(RuntimeError):
@@ -34,6 +30,37 @@ class _Frame:
     event_ids: set[int] = field(default_factory=set)
     dirty_users: set[int] = field(default_factory=set)
     fenced_users: set[int] = field(default_factory=set)
+    inserted: dict[int, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class _InsertedEvent:
+    id: int
+    user_id: int
+    reviewed_at: datetime
+    deck_id: int | None
+    duration_ms: int | None
+    rating: str
+    passed: int | None
+
+
+def _insert_snapshot(event):
+    """Only bypass SQL when stored scalars and passed semantics are identical.
+
+    Exotic/collated ratings, fractional timestamps and driver-coerced integers
+    still use the existing SQL loader. Native ratings and timestamps are exact
+    canonical scalars; there are no projected ReviewEvent triggers in the schema.
+    """
+    rating = event.rating
+    canonical = rating in {"again", "hard", "good", "easy", "1", "2", "3", "4"}
+    moment = event.reviewed_at
+    equivalent = (canonical and type(event.user_id) is int
+        and isinstance(moment, datetime) and moment.tzinfo is None and moment.microsecond == 0
+        and (event.deck_id is None or type(event.deck_id) is int)
+        and (event.duration_ms is None or type(event.duration_ms) is int))
+    return _InsertedEvent(int(event.id), event.user_id, moment, event.deck_id,
+                          event.duration_ms, rating,
+                          int(rating in {"good", "easy", "3", "4"}) if equivalent else None)
 
 
 @dataclass
@@ -91,6 +118,8 @@ def invalidate_review_analytics(session: Session, user_ids) -> None:
     if not writes_enabled(session):
         return
     buffer = _buffer(session, create=True)
+    if buffer.finalized:
+        raise ReviewAnalyticsFenceError("History writes cannot follow analytics finalization; finalize once after all domain writes.")
     users = {int(value) for value in user_ids}
     _require_fences(session, buffer, users)
     _frame(session, buffer).dirty_users.update(users)
@@ -109,6 +138,8 @@ def _guard_raw_writes(session, flush_context, instances):
     if not new and not changed and not deleted:
         return
     buffer = _buffer(session, create=True)
+    if buffer.finalized:
+        raise ReviewAnalyticsFenceError("History writes cannot follow analytics finalization; finalize once after all domain writes.")
     users = {int(obj.user_id) for obj in new + changed + deleted}
     if any(inspect(obj).attrs.id.history.has_changes() for obj in changed):
         raise ReviewAnalyticsFenceError("ReviewEvent identities are immutable during covered writes.")
@@ -134,21 +165,24 @@ def _guard_raw_writes(session, flush_context, instances):
 def _capture_inserted_events(session, flush_context):
     if not writes_enabled(session):
         return
-    ids = {int(obj.id) for obj in session.new
-           if isinstance(obj, ReviewEvent) and obj.id is not None}
-    if ids:
+    inserted = [obj for obj in session.new if isinstance(obj, ReviewEvent) and obj.id is not None]
+    if inserted:
         buffer = _buffer(session, create=True)
-        _frame(session, buffer).event_ids.update(ids)
+        frame = _frame(session, buffer)
+        for obj in inserted:
+            identity = int(obj.id)
+            frame.event_ids.add(identity)
+            frame.inserted[identity] = _insert_snapshot(obj)
         buffer.finalized = False
 
 
 def flush_review_analytics_deltas(session: Session) -> None:
-    """Call once after all domain writes, immediately before outer commit."""
+    """Persist one feed revision after all domain writes, before outer commit."""
     session = session if isinstance(session, Session) else session()
     if not writes_enabled(session):
         return
     if session.in_nested_transaction():
-        raise ReviewAnalyticsFenceError("Daily counters cannot be finalized inside a SAVEPOINT.")
+        raise ReviewAnalyticsFenceError("History revisions cannot be finalized inside a SAVEPOINT.")
     session.flush()
     buffer = _buffer(session)
     if buffer is None or buffer.finalized:
@@ -158,53 +192,30 @@ def flush_review_analytics_deltas(session: Session) -> None:
     if not event_ids and not dirty_users:
         buffer.finalized = True
         return
-    rows = load_inserted_events(session, event_ids)
+    captured = {identity: row for frame in buffer.frames.values() for identity, row in frame.inserted.items()}
+    # Corrected/deleted facts require a rebuild. Their immutable dirty marker
+    # must never replay a snapshot captured before the correction.
+    relevant = {identity: row for identity, row in captured.items() if row.user_id not in dirty_users}
+    rows = [row for row in relevant.values() if row.passed is not None]
+    reload_ids = (event_ids - captured.keys()) | {identity for identity, row in relevant.items() if row.passed is None}
+    if reload_ids:
+        rows.extend(load_inserted_events(session, reload_ids))
     users = sorted(dirty_users | {int(row.user_id) for row in rows})
     _require_fences(session, buffer, users)
-    from app.services.review_analytics_policy import policy_from_generation, passed_count_for_policy
+    from app.repositories.review_analytics_outbox_repository import advance_async_head
+    from app.services.review_analytics_outbox_service import stage_review_analytics_outbox
 
     buffer.finalizing = True
     try:
-        # Acquire ALL user heads before any generation/bucket rows.
-        heads = {user_id: lock_head(session, user_id) for user_id in users}
-        rows_by_user = defaultdict(list)
+        # Lock every learner head before feed writes. Applying daily counters
+        # belongs exclusively to the worker; source commands never lock them.
+        revisions = {user_id: advance_async_head(session, user_id=user_id) for user_id in users}
+        rows_by_user = {user_id: [] for user_id in users}
         for row in rows:
             rows_by_user[int(row.user_id)].append(row)
         for user_id in users:
-            head = heads[user_id]
-            generations = lock_generations(session, user_id,
-                                            (head.active_generation, head.building_generation))
-            head.source_revision = int(head.source_revision) + 1
-            head.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            for generation in generations:
-                if user_id in dirty_users:
-                    generation.status = DIRTY
-                    generation.verified_source_revision = None
-                    generation.verification_contract_version = None
-                    generation.verified_at = None
-                    continue
-                if generation.status not in (BUILDING, READY):
-                    continue
-                policy = policy_from_generation(generation)
-                deltas = defaultdict(lambda: [0, 0, 0])
-                for row in rows_by_user[user_id]:
-                    if generation.status == BUILDING and int(row.id) <= int(generation.baseline_high_water_id):
-                        raise ReviewAnalyticsFenceError("New ReviewEvent crossed an admitted backfill high-water.")
-                    day = policy.study_day(row.reviewed_at)
-                    vector = (1, max(int(row.duration_ms or 0), 0),
-                              passed_count_for_policy(policy, row.rating, row.passed,
-                                                      session.get_bind().dialect.name))
-                    keys = [(0, 0, day)]
-                    if row.deck_id is not None:
-                        if int(row.deck_id) <= 0:
-                            raise ReviewAnalyticsFenceError("ReviewEvent deck attribution must be positive or NULL.")
-                        keys.append((1, int(row.deck_id), day))
-                    for key in keys:
-                        for index, value in enumerate(vector):
-                            deltas[key][index] += value
-                add_grouped_deltas(session, user_id, int(generation.generation), deltas)
-                generation.applied_source_revision = head.source_revision
-        session.flush()
+            stage_review_analytics_outbox(session, user_id=user_id, source_revision=revisions[user_id],
+                rows=rows_by_user[user_id], dirty=user_id in dirty_users)
         buffer.finalized = True
     finally:
         buffer.finalizing = False
@@ -286,7 +297,11 @@ def _discard_rolled_back_frames(session, previous_transaction):
     for transaction in list(buffer.frames):
         if _is_descendant(transaction, previous_transaction):
             del buffer.frames[transaction]
-    buffer.finalized = False
+    # Finalization is prohibited within SAVEPOINTs. If a later SAVEPOINT is
+    # rolled back, the already-finalized root writes/head locks still survive.
+    # Reopening the buffer would allow recounts or domain writes after heads.
+    if not (buffer.finalized and previous_transaction.nested):
+        buffer.finalized = False
 
 
 @event.listens_for(Session, "after_transaction_end")

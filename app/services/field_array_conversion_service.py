@@ -28,7 +28,6 @@ from app.validators.flashcard_input import (
 from models import db
 from models.audit_log import AuditLog
 from models.field_def import FieldDef
-from models.field_rename_job import FieldRenameJob
 from models.field_types import ARRAY_FIELD_TYPE, field_value_text
 from models.note import Note
 from models.note_type import NoteType
@@ -72,16 +71,6 @@ def _owner_notes(*, user_id: int, note_type_id: str, lock: bool = False) -> list
 
 def _value(note: Note, field_name: str) -> str:
     return field_value_text((note.field_values or {}).get(field_name))
-
-
-def _rename_in_progress(note_type_id: str) -> bool:
-    return (
-        FieldRenameJob.query.filter(
-            FieldRenameJob.note_type_id == note_type_id,
-            FieldRenameJob.status.notin_(("completed", "failed")),
-        ).first()
-        is not None
-    )
 
 
 def get_conversion_source(*, user_id: int, note_type_id: str, field_id: str) -> dict[str, Any]:
@@ -128,8 +117,6 @@ def apply_conversion(*, user_id: int, note_type_id: str, field_id: str, payload:
                 "FIELD_CHANGED", "The field type changed since the preview.", status=409,
                 details={"field_type": field.field_type},
             )
-        if _rename_in_progress(note_type.id):
-            raise ArrayConversionError("FIELD_RENAME_IN_PROGRESS", "Wait for the field rename to finish.", status=409)
 
         notes = _owner_notes(user_id=user_id, note_type_id=note_type.id, lock=True)
         by_id = {str(note.id): note for note in notes}

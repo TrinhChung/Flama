@@ -1,0 +1,30 @@
+{
+  "bounded_resume_and_verified_archive": true,
+  "canonical_nonnullable_v1": true,
+  "configured_database_modified": false,
+  "elapsed_seconds": 6.359,
+  "generated_schemas": [
+    "flama_field_cutover_probe_28900_e079d12f2c58",
+    "flama_field_cutover_restore_28900_e079d12f2c58"
+  ],
+  "isolated_archive_restore": {
+    "raw_named_bytes_verified": true,
+    "restored_notes": 1,
+    "source_database_written": false
+  },
+  "media_identity_uniqueness": true,
+  "mysql_version": "8.0.40",
+  "name_column_and_rewrite_jobs_retired": true,
+  "native_types_presence_and_timestamp_preserved": true,
+  "override_identity_uniqueness_and_namespaces": true,
+  "probe_databases_dropped": true,
+  "read_only_dry_run": true,
+  "revisions": [
+    "20261014_000066",
+    "20261014_000067"
+  ],
+  "runtime_mapping_registration": "isolated SQLite audit app; no startup maintenance",
+  "runtime_name_projection_and_no_value_rename_rewrite": true,
+  "source_and_added_overrides_archived": true,
+  "status": "PASS"
+}

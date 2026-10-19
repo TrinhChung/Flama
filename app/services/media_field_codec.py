@@ -150,8 +150,26 @@ def _lookup_target(
     return MediaReferenceTarget(f"/media/proxy/{asset_id}", family) if asset_id else None
 
 
+def media_field_label_for_schema(asset: Any, field_defs: Any = None) -> str:
+    """Resolve media labels against the captured schema, including old releases.
+
+Field names on live MediaAsset objects follow live schema labels; immutable
+release/session contexts must use their captured stable field IDs instead.
+"""
+    if field_defs is None:
+        return str(getattr(asset, "field_name", "") or "")
+    fields = getattr(field_defs, "source_fields", field_defs)
+    identity = str(getattr(asset, "field_identity_key", "") or "")
+    for field in fields or []:
+        key = str(getattr(field, "field_identity_key", None) or getattr(field, "id", "") or "")
+        if key == identity or (identity.startswith("added:") and key == identity.rsplit(":", 1)[-1]):
+            return str(getattr(field, "name", "") or "")
+    historical = getattr(asset, "_field_name", None)
+    return str(historical if historical is not None else getattr(asset, "field_name", "") or "")
+
+
 def build_media_reference_lookup(assets: Any) -> dict[str, MediaReferenceTarget]:
-    """Index managed assets by canonical and legacy reference spellings."""
+    """Index assets by ID/URL/filename; field renames do not affect references."""
     lookup: dict[str, MediaReferenceTarget] = {}
     for asset in assets or []:
         asset_id = str(getattr(asset, "id", "") or "").strip()

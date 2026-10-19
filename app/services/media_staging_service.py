@@ -270,11 +270,12 @@ def commit_staged_media(
     full_path.parent.mkdir(parents=True, exist_ok=True)
     full_path.write_bytes(content)
 
-    existing = MediaAsset.query.filter_by(
+    from app.repositories.media_field_identity_repository import find_note_field_media
+    existing = find_note_field_media(
         note_id=note_id,
         field_name=field_name,
         sha256=sha256_hash,
-    ).first()
+    )
 
     if existing:
         asset = existing

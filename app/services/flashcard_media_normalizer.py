@@ -320,7 +320,7 @@ def backfill_media_field_values(
     details: list[dict[str, Any]] = []
     semantic_mutations: list[dict[str, Any]] = []
 
-    note_query = Note.query.options(selectinload(Note.media_assets)).filter(Note.field_values.isnot(None))
+    note_query = Note.query.options(selectinload(Note.media_assets)).filter(Note.field_values_by_id.isnot(None))
     if user_id is not None:
         note_query = note_query.filter(Note.user_id == user_id)
     if deck_id is not None:
@@ -528,19 +528,21 @@ def rollback_media_field_migration(*, run_id: str, apply: bool = False) -> Media
             if note is None:
                 missing += 1
                 continue
-            values = dict(note.field_values or {})
-            if str(values.get(item.field_name) or "") != new_value:
+            from app.repositories.media_audit_identity_repository import resolve_media_audit_field
+            identity, current_label = resolve_media_audit_field(note, item)
+            values = dict(note.field_values_by_id or {})
+            if identity not in values or not isinstance(values[identity], str) or values[identity] != new_value:
                 skipped_changed_since += 1
                 continue
             if apply:
-                values[item.field_name] = old_value
-                note.field_values = values
+                values[identity] = old_value
+                note.field_values_by_id = values
                 if item.semantic_change:
                     mutation = semantic_mutations.setdefault(
                         str(note.id),
                         {"note": note, "field_names": set(), "operation": "set"},
                     )
-                    mutation["field_names"].add(item.field_name)
+                    mutation["field_names"].add(current_label)
             restored += 1
             continue
         if item.entity_type == "clone_override":
@@ -548,7 +550,7 @@ def rollback_media_field_migration(*, run_id: str, apply: bool = False) -> Media
             if override is None:
                 missing += 1
                 continue
-            if str(override.value or "") != new_value:
+            if not isinstance(override.value, str) or override.value != new_value:
                 skipped_changed_since += 1
                 continue
             if apply:

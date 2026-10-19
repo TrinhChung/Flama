@@ -1,9 +1,0 @@
-Task GT-18C — preparation hook/panel only; requires accepted GT-18A/B.
-Read AGENTS.md, skills/flama-frontend-architecture/SKILL.md, GT-18_STUDY_TEMPLATE_PREPARATION.md Phase C and the linked contract. Apply $impeccable through the available skill catalog; do not assume a repo-local impeccable path exists.
-Edit only these four new files:
-frontend/src/features/study/hooks/useStudyTemplatePreparation.ts
-frontend/src/features/study/hooks/useStudyTemplatePreparation.test.tsx
-frontend/src/features/study/components/StudyTemplatePreparation.tsx
-frontend/src/features/study/components/StudyTemplatePreparation.test.tsx
-Use entity public adapters and binding editor; return one immutable {compositionId, inputBindings} selection without opening a lease. Saved empty map means empty, absent map uses attachment defaults. Remember off sends no PUT; remember on saves one composition, complete field-ID/null mapping and ask_before_study. Preserve edits on errors/deck-switch races, allow required unbound, and use exact UI text. No changes to existing hook/page/runtime, backend/models/migrations/real DB, dependencies, commit or push.
-Run .\.venv\Scripts\python.exe scripts/run_tests.py --file frontend/src/features/study/hooks/useStudyTemplatePreparation.test.tsx frontend/src/features/study/components/StudyTemplatePreparation.test.tsx --frontend-only, then npm run typecheck in frontend. Report actual files, commands/final 20 lines, deviations and remaining work; stop after Phase C.

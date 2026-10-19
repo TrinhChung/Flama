@@ -461,6 +461,8 @@ def normalize_anki_field_values(
     field_defs: list[FieldDef] | tuple[FieldDef, ...],
 ) -> dict[str, Any]:
     """Normalize imported text and richtext fields with field-type awareness and semantic bounds."""
+    from app.validators.field_value_identity import validate_incoming_field_labels
+    validate_incoming_field_labels(raw_values, field_defs)
     field_defs_map: dict[str, Any] = {}
     for field_def in field_defs:
         name = getattr(field_def, "name", None)
@@ -530,7 +532,7 @@ def backfill_anki_note_entities(
     ).exists()
     query = (
         Note.query.filter(tracked_note_exists)
-        .filter(Note.field_values.isnot(None))
+        .filter(Note.field_values_by_id.isnot(None))
         .order_by(Note.id.asc())
     )
     if user_id is not None:

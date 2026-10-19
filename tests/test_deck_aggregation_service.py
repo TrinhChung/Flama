@@ -95,6 +95,10 @@ class DeckAggregationServiceTests(unittest.TestCase):
         note_type_id: str | None = "general-nt",
         created_at: datetime | None = None,
     ) -> tuple[Note, list[Card]]:
+        # Resolve fixture schema before adding a Note: schema lookup may
+        # autoflush, and canonical values require their scoped NoteType.
+        if note_type_id is not None:
+            self._ensure_applications(note_type_id, card_count)
         note = Note(
             user_id=user_id,
             deck_id=deck_id,
@@ -103,8 +107,6 @@ class DeckAggregationServiceTests(unittest.TestCase):
             field_values={"Front": "Q", "Back": "A"},
         )
         db.session.add(note)
-        if note_type_id is not None:
-            self._ensure_applications(note_type_id, card_count)
         db.session.flush()
         # Cards are derived (ADR P11): every Note of the type presents each occurrence.
         cards = Card.query.filter_by(note_id=note.id).order_by(Card.template_id).all()
@@ -743,7 +745,10 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     "user_id": self.learner_id,
                     "deck_id": self.owned_deck_id,
                     "note_type_id": "general-nt",
-                    "field_values": {},
+                    "field_values_by_id": {},
+                    "field_values_codec": "field-id.v1",
+                    "field_values_extras": {},
+                    "content_revision": 0,
                     "tags": [],
                     "created_at": now_utc,
                     "updated_at": now_utc,
@@ -791,7 +796,10 @@ class DeckAggregationServiceTests(unittest.TestCase):
                         "is_buried": False,
                     })
 
-            db.session.execute(note_table.insert(), notes_data)
+            db.session.flush()
+            # Deliberately bypass ORM only for this 40k-row size fixture;
+            # every row is a complete canonical envelope with no declared values.
+            db.session.connection().execute(note_table.insert(), notes_data)
             if progress_data:
                 states = []
                 for values in progress_data:
@@ -840,7 +848,9 @@ class DeckAggregationServiceTests(unittest.TestCase):
             for timezone_name, boundary, now_utc in contexts:
                 with self.subTest(timezone=timezone_name, boundary=boundary):
                     StudyProgressSubject.query.delete()
-                    Note.query.delete()
+                    for note in Note.query.all():
+                        db.session.delete(note)
+                    db.session.flush()
                     today = _today_day_index(
                         now=now_utc, timezone_name=timezone_name, day_boundary_hour_local=boundary
                     )

@@ -62,7 +62,7 @@ def learner_presentation_scope(*, learner_user_id: int, scope_deck_ids: list[int
     return select(rows.c.deck_id, rows.c.card_id, rows.c.note_id).distinct().subquery("learner_presentations")
 
 
-def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] | None):
+def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] | None, session=None, stream=False):
     """Current availability/interval once per scoped Note, with Card weight.
 
     Multiple installs of the same source presentation contribute once to a
@@ -72,13 +72,17 @@ def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] 
     from app.repositories.note_analytics_read_repository import note_rows
     from app.repositories.note_analytics_scope_repository import collection_note_scope
 
-    scope = collection_note_scope(db.session, learner_user_id=user_id, deck_ids=scope_deck_ids)
+    session = db.session if session is None else session
+    scope = collection_note_scope(session, learner_user_id=user_id, deck_ids=scope_deck_ids)
     rows = note_rows(scope, learner_user_id=user_id, include_state=True).subquery("forecast_notes")
-    return db.session.execute(select(
+    statement = select(
         rows.c.note_id, rows.c.violation, rows.c.queue, rows.c.due_at,
         rows.c.due_day, rows.c.is_suspended, rows.c.state_type,
         rows.c.interval_token, rows.c.card_count,
-    ).execution_options(include_retired_cards=True)).all()
+    ).execution_options(include_retired_cards=True)
+    if stream:
+        return session.execute(statement.execution_options(yield_per=500))
+    return session.execute(statement).all()
 
 
 def can_use_mysql_local_day_sql(*, timezone_name: str) -> bool:

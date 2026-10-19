@@ -1,0 +1,28 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 91.968,
+  "errors": 0,
+  "failed_cases": [
+    "tests.test_field_value_consumers.FieldValueConsumerTests.test_rename_changes_labels_without_note_reads_or_note_updates",
+    "tests.test_field_value_consumers.FieldValueConsumerTests.test_search_matches_nested_unicode_and_literal_wildcards_but_not_keys"
+  ],
+  "failure_summaries": [
+    "AssertionError: 0 != 1",
+    "AssertionError: 0 != 1 : café"
+  ],
+  "failures": 2,
+  "fixture_cases": [
+    "test_connect_identity_query_projects_current_label_and_raw_json_type",
+    "test_deleted_field_stays_retained_but_hidden_from_current_search_and_same_name_replacement",
+    "test_media_deduplicates_after_rename_without_reusing_retired_identity",
+    "test_mysql_search_compilation_reads_values_without_named_live_column",
+    "test_public_preconditions_reject_stale_note_and_schema_versions",
+    "test_rename_changes_labels_without_note_reads_or_note_updates",
+    "test_search_matches_nested_unicode_and_literal_wildcards_but_not_keys"
+  ],
+  "generated_schema": "flama_field_consumer_probe_21884_a411eadea58c",
+  "mysql_version": "8.0.40",
+  "probe_database_dropped": true,
+  "status": "FAIL",
+  "tests_run": 7
+}

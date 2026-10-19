@@ -1350,5 +1350,40 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     // Verify preset notification badge
     expect(document.body.textContent).toContain('Đã nạp thiết lập đã lưu')
   })
+
+  it('renders mapping step without crashing when sample_values contains array or non-string values', async () => {
+    const metaWithArraySample = {
+      ...mockMeta,
+      note_types: [
+        {
+          ...mockMeta.note_types[0],
+          sample_values: {
+            Expression: '食べる',
+            Reading: 'たべる',
+            Meaning: ['Ăn', 'Dùng bữa'] as any,
+            Audio: '[sound:taberu.mp3]',
+            Count: 42 as any,
+          },
+        },
+      ],
+    }
+    vi.spyOn(worksheetApi, 'fetchDeckWorksheetMeta').mockResolvedValue(metaWithArraySample)
+
+    await act(async () => {
+      root?.render(
+        <QueryClientProvider client={queryClient}>
+          <DeckWorksheetModal open={true} onOpenChange={vi.fn()} deckId={1} deckName="JLPT N5 Core" />
+        </QueryClientProvider>,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Mapping step should render safely without throwing "r.endsWith is not a function"
+    expect(document.body.textContent).toContain('Bước 2: Ánh xạ trường dữ liệu từ thẻ học')
+    expect(document.body.textContent).toContain('Ăn')
+  })
 })
 

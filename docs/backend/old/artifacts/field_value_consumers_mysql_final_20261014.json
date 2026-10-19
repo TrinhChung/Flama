@@ -1,0 +1,22 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 124.187,
+  "errors": 0,
+  "failures": 0,
+  "fixture_cases": [
+    "test_captured_media_label_render_and_content_fingerprint_survive_live_source_rename",
+    "test_connect_identity_query_projects_current_label_and_raw_json_type",
+    "test_deleted_field_stays_retained_but_hidden_from_current_search_and_same_name_replacement",
+    "test_media_deduplicates_after_rename_without_reusing_retired_identity",
+    "test_mysql_search_compilation_reads_values_without_named_live_column",
+    "test_public_preconditions_reject_stale_note_and_schema_versions",
+    "test_rename_changes_labels_without_note_reads_or_note_updates",
+    "test_search_matches_nested_unicode_and_literal_wildcards_but_not_keys",
+    "test_search_retains_nested_legacy_numeric_boolean_values_without_matching_object_keys"
+  ],
+  "generated_schema": "flama_field_consumer_probe_8056_25536e0a3633",
+  "mysql_version": "8.0.40",
+  "probe_database_dropped": true,
+  "status": "PASS",
+  "tests_run": 9
+}

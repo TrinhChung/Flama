@@ -389,18 +389,23 @@ def build_today_future_stats(
 
     end_offset = _future_window_end_offset(effective_future_range)
 
-    rows, consolidated_load = _consolidated_due_rows_and_load(
-        user_id=user_id,
-        scope_deck_ids=scope_deck_ids,
+    from app.services.forecast_snapshot_service import resolve_forecast_summary
+    summary = resolve_forecast_summary(
+        db.session, user_id=user_id, deck_ids=scope_deck_ids,
+        timezone_name=timezone_effective, day_boundary_hour=day_boundary_hour,
+        now_utc=now_utc_naive, backlog=effective_backlog, end_offset=end_offset,
     )
-    due_by_offset, min_negative_offset = _aggregate_future_due_python(
-        rows=rows,
-        timezone_name=timezone_effective,
-        today_local=today_local,
-        backlog=effective_backlog,
-        end_offset=end_offset,
-        day_boundary_hour_local=day_boundary_hour,
-    )
+    if summary is not None:
+        due_by_offset, min_negative_offset, consolidated_load = summary
+    else:
+        rows, consolidated_load = _consolidated_due_rows_and_load(
+            user_id=user_id, scope_deck_ids=scope_deck_ids,
+        )
+        due_by_offset, min_negative_offset = _aggregate_future_due_python(
+            rows=rows, timezone_name=timezone_effective, today_local=today_local,
+            backlog=effective_backlog, end_offset=end_offset,
+            day_boundary_hour_local=day_boundary_hour,
+        )
 
     series, window_days, total_reviews = _build_future_series(
         by_offset=due_by_offset,

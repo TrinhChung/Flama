@@ -16,6 +16,7 @@ import {
 } from '../services/ttsSettingsStorage'
 import { cleanTextForTts } from '@/features/audio/services/ttsTextNormalizer'
 import { fieldValueEditorText } from '@/lib/arrayField'
+import { noteWritePreconditions } from '@/lib/noteWritePreconditions'
 
 export type BrowseCardRow = {
   card_id: string
@@ -37,6 +38,8 @@ export type BrowseCardsResponse = {
   pages: number
   has_next: boolean
 }
+
+const EMPTY_BROWSE_CARDS: BrowseCardRow[] = []
 
 export type BrowseDeck = {
   id: number
@@ -86,6 +89,10 @@ export type CardDetailResponse = {
     deck_id: number
     deck_name: string
     field_values: Record<string, unknown>
+    content_revision?: number
+    field_schema_revision?: number
+    overlay_revision?: number
+    deck_install_id?: string
     tags: string[]
   }
   fields: CardDetailField[]
@@ -335,6 +342,7 @@ export function useBrowseState() {
   const [initialDeckId, setInitialDeckId] = useState<number | null>(null)
   const [initialTags, setInitialTags] = useState<string[]>([])
   const hydratedCardIdRef = useRef<string | null>(null)
+  const initialWritePreconditionsRef = useRef<ReturnType<typeof noteWritePreconditions>>({})
   const editorStateRef = useRef({
     cardId: activeCardId, fields: editFieldValues, deckId: editDeckId, tags: editTags,
     initialFields: initialFieldValues, initialDeckId, initialTags,
@@ -396,7 +404,19 @@ export function useBrowseState() {
       }),
   })
 
-  const cards = cardsQuery.data?.items || []
+  const cards = cardsQuery.data?.items || EMPTY_BROWSE_CARDS
+
+  // Retain identity only for selected rows, including selections on other pages.
+  const selectedNoteIdsRef = useRef(new Map<string, string>())
+  useEffect(() => {
+    const selected = new Set(selectedCards)
+    for (const id of selectedNoteIdsRef.current.keys()) {
+      if (!selected.has(id)) selectedNoteIdsRef.current.delete(id)
+    }
+    for (const row of cards) {
+      if (selected.has(row.card_id)) selectedNoteIdsRef.current.set(row.card_id, row.note_id)
+    }
+  }, [cards, selectedCards])
 
   // Keyboard shortcuts
   const cardsRef = useRef(cards)
@@ -456,6 +476,7 @@ export function useBrowseState() {
   useEffect(() => {
     if (!activeCardId || isCreatingCard) {
       hydratedCardIdRef.current = null
+      initialWritePreconditionsRef.current = {}
       return
     }
     if (cardDetailQuery.data && String(cardDetailQuery.data.card.card_id) === activeCardId) {
@@ -466,6 +487,7 @@ export function useBrowseState() {
       if (hydratedCardIdRef.current === activeCardId && !isPristine) return
       hydratedCardIdRef.current = activeCardId
       const fieldValues = cardDetailQuery.data.note.field_values || {}
+      initialWritePreconditionsRef.current = noteWritePreconditions(cardDetailQuery.data.note)
       const deckId = cardDetailQuery.data.note.deck_id || null
       const tags = cardDetailQuery.data.note.tags || []
 
@@ -663,7 +685,9 @@ export function useBrowseState() {
       const cardId = activeCardId
       const noteId = cardDetailQuery.data?.note.id
       const draft = { fields: editFieldValues, deckId: editDeckId, tags: editTags }
-      const data = await appApi.mutate<{ detail: CardDetailResponse }>(`/browse/cards/${cardId}`, 'PATCH', payload)
+      const data = await appApi.mutate<{ detail: CardDetailResponse }>(`/browse/cards/${cardId}`, 'PATCH', {
+        ...payload, ...initialWritePreconditionsRef.current,
+      })
       return { data, cardId, noteId, draft }
     },
     onSuccess: async ({ data, cardId, noteId, draft }) => {
@@ -680,6 +704,7 @@ export function useBrowseState() {
       }
       const committed = data.detail.note
       if (cardId === editorStateRef.current.cardId) {
+        initialWritePreconditionsRef.current = noteWritePreconditions(committed)
         setInitialFieldValues(committed.field_values)
         setInitialDeckId(committed.deck_id ?? null)
         setInitialTags(committed.tags)
@@ -706,11 +731,21 @@ export function useBrowseState() {
 
   // Single Delete Mutation
   const deleteMutation = useMutation({
-    mutationFn: (cardId: string) => appApi.mutate(`/browse/cards/${cardId}`, 'DELETE'),
-    onSuccess: () => {
+    mutationFn: async (cardId: string) => {
+      const detail = cardDetailQuery.data
+      const noteId = cards.find((row) => row.card_id === cardId)?.note_id
+        ?? (detail?.card.card_id === cardId ? detail.note.id : undefined)
+      if (!noteId) throw new Error(t('toasts.delete_error'))
+      await appApi.mutate(`/browse/notes/${noteId}`, 'DELETE')
+      return cardId
+    },
+    onSuccess: (cardId) => {
       toast.success(t('toasts.delete_success'))
-      setActiveCardId(null)
+      setActiveCardId((current) => current === cardId ? null : current)
+      setSelectedCards((current) => current.filter((id) => id !== cardId))
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
+      void queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] })
+      void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
     },
     onError: (error: Error) => {
       toast.error(t('toasts.delete_error'), { description: error.message })
@@ -720,12 +755,18 @@ export function useBrowseState() {
   // Bulk Delete Mutation
   const bulkDeleteMutation = useMutation({
     mutationFn: async (cardIds: string[]) => {
+      const noteIds = [...new Set(cardIds.map((cardId) => {
+        const noteId = cards.find((row) => row.card_id === cardId)?.note_id
+          ?? selectedNoteIdsRef.current.get(cardId)
+        if (!noteId) throw new Error(t('toasts.bulk_delete_error'))
+        return noteId
+      }))]
       const res = await appApi.mutate<{ success: boolean; deleted_count?: number }>(
-        '/browse/cards/batch-delete',
+        '/browse/notes/batch-delete',
         'POST',
-        { card_ids: cardIds },
+        { note_ids: noteIds },
       )
-      return res.deleted_count ?? cardIds.length
+      return { count: res.deleted_count ?? noteIds.length, cardIds }
     },
     onMutate: () => {
       toast?.loading?.(t('toasts.bulk_deleting'), {
@@ -733,12 +774,10 @@ export function useBrowseState() {
         description: t('toasts.bulk_deleting_desc'),
       })
     },
-    onSuccess: (count) => {
+    onSuccess: ({ count, cardIds }) => {
       toast.success(t('toasts.bulk_delete_success', { count }), { id: 'bulk-delete-cards' })
-      if (activeCardId && selectedCards.some((id) => String(id) === String(activeCardId))) {
-        setActiveCardId(null)
-      }
-      setSelectedCards([])
+      setActiveCardId((current) => current && cardIds.includes(current) ? null : current)
+      setSelectedCards((current) => current.filter((id) => !cardIds.includes(id)))
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] })
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })

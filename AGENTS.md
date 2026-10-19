@@ -12,17 +12,18 @@
 - Core domains: auth, dashboard/stats, vocabulary browse/study, flashcard note types/import/share/study/media, deck change requests, marketplace, payOS payments, admin management, CLI seeding.
 
 ## Inspect First
+- Master docs portal & audit report: `docs/README.md`, `docs/DOCUMENTATION_AUDIT_REPORT.md`
+- Core architecture hubs: `docs/frontend/ARCHITECTURE.md`, `docs/backend/ARCHITECTURE.md`, `docs/ops/ARCHITECTURE.md`, `docs/logs/ARCHITECTURE.md`
 - Startup and config: `wsgi.py`, `app/__init__.py`, `app/extensions.py`, `app/api/__init__.py`, `docker-compose.yml`, `README_SETUP.md`
-- Architecture context: `docs/architecture/SYSTEM_ARCHITECTURE.md`
-- Flashcard/share/clone/change-request work: `docs/runbooks/FLASHCARD_V2_RUNBOOK.md`, `docs/plans/completed/CLONE_CUTOVER_REPORT.md`, `docs/plans/completed/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
-- UI structure: `frontend/docs/COMPONENT_ARCHITECTURE.md`, `frontend/src/`
+- Flashcard/share/clone/change-request work: `docs/runbooks/FLASHCARD_V2_RUNBOOK.md`, `docs/backend/old/completed-plans/CLONE_CUTOVER_REPORT.md`, `docs/backend/old/completed-plans/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
+- UI structure: `docs/frontend/ARCHITECTURE.md`, `frontend/src/`
 - Treat docs as guidance, not automatic ground truth. Verify behavior in code before encoding agent instructions.
 
 ## Runtime Flow
 - `wsgi.py` calls `create_app()`.
 - `create_app()` loads env config, resolves media storage, initializes `db`, `migrate`, and `login_manager`, imports models for metadata registration, then registers blueprints and CLI commands.
 - `flashcards_bp` and API routes are registered under canonical `/api`.
-- Startup inside the app context is not passive. It runs `db.create_all()`, `ensure_user_management_schema()`, `_ensure_backward_compatible_schema()`, `ensure_default_user_roles()`, `ensure_default_tts_providers()`, and `flashcards_share.cutover_clone_model_to_overlay_only(...)`, then commits.
+- Startup inside the app context is passive by default in production (executes a connectivity check `SELECT 1` only); schema migrations and mutations are owned strictly by Alembic. When `STARTUP_RUN_MAINTENANCE=True` (dev/test), it executes `db.create_all()`, `ensure_user_management_schema()`, `ensure_backward_compatible_schema()`, `ensure_default_user_roles()`, `ensure_default_tts_providers()`, and `flashcards_share.cutover_clone_model_to_overlay_only(...)`, then commits.
 - Before changing startup, confirm whether the change affects app boot, tests, Docker startup, or local schema repair.
 
 ## Architecture Boundaries
@@ -41,21 +42,21 @@
 - Avoid broad rewrites in these files unless the user explicitly asks for architectural refactoring.
 
 ## Common Task Maps
-- Auth and sessions: `app/api/identity/routes.py`, `models/user.py`, `app/services/identity_api_service.py`
-- Dashboard and stats: `app/api/analytics/routes.py`, `app/services/dashboard_service.py`, `app/services/stats_overview.py`, `app/services/stats_today_future.py`
-- Vocabulary browse/study/decks: `app/api/decks/routes.py`, `app/api/learning/browse.py`, `app/api/learning/study.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
-- Flashcard note types/import/render/study: `app/api/flashcards/`, `app/services/flashcard_renderer.py`, `app/services/flashcard_content_service.py`, `app/services/flashcard_import_api_service.py`, `app/services/study_service.py`
-- Shared decks, clone overlay, marketplace: `app/api/marketplace/`, `app/services/flashcards_share_service.py`, `app/repositories/flashcards_share_repository.py`, `docs/plans/completed/CLONE_CUTOVER_REPORT.md`
-- Deck Change Requests: `app/services/deck_change_request_service.py`, `app/repositories/deck_change_request_repository.py`, `models/deck_change_request.py`, `docs/plans/completed/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
+- Auth and sessions: `app/api/v1/identity/routes.py`, `models/user.py`, `app/services/identity_api_service.py`
+- Dashboard and stats: `app/api/v1/analytics/routes.py`, `app/services/dashboard_service.py`, `app/services/stats_overview.py`, `app/services/stats_today_future.py`
+- Vocabulary browse/study/decks: `app/api/v1/decks/routes.py`, `app/api/v1/learning/browse.py`, `app/routes/flashcards/study.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
+- Flashcard note types/import/render/study: `app/api/v1/flashcards/`, `app/services/flashcard_renderer.py`, `app/services/flashcard_content_service.py`, `app/services/flashcard_import_api_service.py`, `app/services/study_service.py`
+- Shared decks, clone overlay, marketplace: `app/api/v1/marketplace/`, `app/services/flashcards_share_service.py`, `app/repositories/flashcards_share_repository.py`, `docs/backend/old/completed-plans/CLONE_CUTOVER_REPORT.md`
+- Deck Change Requests: `app/services/deck_change_request_service.py`, `app/repositories/deck_change_request_repository.py`, `models/deck_change_request.py`, `docs/backend/old/completed-plans/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
 - Flama Connect (Yomitan/AnkiConnect): `connect_wsgi.py`, `app/services/flama_connect_service.py`, `models/connect_*.py`
 - Flama Audio Local TTS: `flama-audio/`, `frontend/src/features/audio/`, `flama-audio/README.md`
-- Payments (payOS): `app/services/payment_service.py`, `app/services/payment/provider/payos_provider.py`, `docs/architecture/FLAMA_PAYMENT_ARCHITECTURE.md`
-- Admin users and roles: `app/api/admin/`, `app/services/admin_service.py`, `app/services/admin_user_api_service.py`, `app/services/user_roles.py`, `models/user_role.py`
+- Payments (payOS): `app/services/payment_service.py`, `app/services/payment/provider/payos_provider.py`, `docs/backend/old/FLAMA_PAYMENT_ARCHITECTURE.md`
+- Admin users and roles: `app/api/v1/admin/`, `app/services/admin_service.py`, `app/services/admin_user_api_service.py`, `app/services/user_roles.py`, `models/user_role.py`
 - Seeding and CLI: `app/cli.py`, `scripts/reseed_db.*`, `static/seed_data/`
 
 ## Repo-Specific Guardrails
 - Preserve the overlay-only shared deck model. Do not reintroduce legacy full-copy clone behavior or mutate source notes in clone edit flows.
-- Treat `docs/plans/completed/CLONE_CUTOVER_REPORT.md` as required context before changing `DeckInstall`, clone scope resolution, browse edit for cloned cards, or cutover logic.
+- Treat `docs/backend/old/completed-plans/CLONE_CUTOVER_REPORT.md` as required context before changing `DeckInstall`, clone scope resolution, browse edit for cloned cards, or cutover logic.
 - Legacy Level/Topic/Lesson routes in `app/routes/vocabulary.py` intentionally return `410`. Do not revive that structure unless the user explicitly wants it back.
 - Due counts and study ordering depend on timezone and day-boundary helpers in `app/services/anki_scheduler.py` and `app/repositories/study_repository.py`. Do not hand-roll new scheduling logic in routes.
 - Flashcard HTML rendering and media safety flow through `app/services/flashcard_renderer.py` plus CSP and `/media/proxy/<asset_id>` constraints. Preserve sanitization and proxy-based media access.
@@ -71,7 +72,7 @@
 
 ## Testing
 - **Modular Test Execution**: To avoid long test runs across 100+ suites, use `python scripts/run_tests.py` instead of running full test suites:
-  - Run tests for modified/staged files: `python scripts/run_tests.py --changed` (or `npm run test:changed` in `frontend/`)
+  - Run tests for modified/staged files: `python scripts/run_tests.py --changed` (or `npm test` in `frontend/`)
   - Run specific domain modules: `python scripts/run_tests.py --module study,flashcards` (or `--module auth`, `--module payment`, `--module decks`, `--module connect_mcp`, etc.)
   - Filter by layer: `python scripts/run_tests.py --module study --backend-only` or `--frontend-only`
   - List available modules & test matrices: `python scripts/run_tests.py --list-modules`

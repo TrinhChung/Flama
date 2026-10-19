@@ -103,8 +103,8 @@ class DeckReleaseSchemaTests(unittest.TestCase):
             for constraint in DeckInstallRebase.__table__.constraints
             if isinstance(constraint, sa.UniqueConstraint)
         }
-        clone_override_constraint_names = {
-            constraint.name
+        clone_override_constraints = {
+            constraint.name: tuple(column.name for column in constraint.columns)
             for constraint in DeckCloneNoteFieldOverride.__table__.constraints
             if isinstance(constraint, sa.UniqueConstraint)
         }
@@ -118,8 +118,12 @@ class DeckReleaseSchemaTests(unittest.TestCase):
             rebase_constraint_names,
         )
         self.assertIn(
-            "uq_clone_note_override_install_note_field_def",
-            clone_override_constraint_names,
+            "uq_clone_note_override_install_note_identity",
+            clone_override_constraints,
+        )
+        self.assertEqual(
+            clone_override_constraints["uq_clone_note_override_install_note_identity"],
+            ("deck_install_id", "source_note_id", "field_identity_key"),
         )
 
 
