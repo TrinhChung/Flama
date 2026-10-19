@@ -281,11 +281,12 @@ class DeployRollbackShellTests(unittest.TestCase):
             assignments = "\n".join(name + "=" + shlex.quote(path.as_posix()) for name, path in zip(
                 ("archive_path", "managed_env_payload_path", "desired_environment_file", "environment_backup_file"), artifacts))
             script = "\n".join(("set -Eeuo pipefail", assignments,
-                "rollback_activation() { return 1; }", "record_state() { echo STATE=$1; }",
+                "rollback_activation() { false; echo UNSAFE_CONTINUATION; }", "record_state() { echo STATE=$1; }",
                 cleanup, "trap cleanup EXIT", "exit 42"))
             result = subprocess.run([self.bash, "--noprofile", "--norc", "-s"], input=script, text=True, capture_output=True, timeout=10)
             self.assertEqual(result.returncode, 42, result.stderr)
             self.assertIn("STATE=failed", result.stdout)
+            self.assertNotIn("UNSAFE_CONTINUATION", result.stdout)
             self.assertTrue(all(path.exists() for path in artifacts))
 
     def test_ssh_loss_after_start_and_during_observation_reconnects_without_restarting(self):

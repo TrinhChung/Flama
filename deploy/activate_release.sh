@@ -175,7 +175,15 @@ cleanup() {
   trap - EXIT
   if [ "$status" -ne 0 ]; then
     # Preserve payload/env backups and the failure phase for operator recovery.
-    rollback_activation || echo "Rollback did not complete; inspect the deployment journal." >&2
+    # Keep errexit inside rollback: wrapping a function in `if`/`||` would
+    # silently disable it for every command in the function.
+    set +e
+    ( set -e; rollback_activation )
+    rollback_status=$?
+    set -e
+    if [ "$rollback_status" -ne 0 ]; then
+      echo "Rollback did not complete; inspect the deployment journal." >&2
+    fi
     record_state failed
   else
     record_state succeeded
@@ -185,6 +193,15 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
+
+# A killed coordinator can leave its separate migration unit running. Never
+# start another migration over that child, even after the shell lock is freed.
+pending_migrations=$(systemctl list-units --plain --no-legend \
+  --state=active,activating 'flama-db-migrate-*.service')
+if [ -n "$pending_migrations" ]; then
+  echo "A previous database migration is still active; inspect its journal before retrying." >&2
+  exit 1
+fi
 
 test -f "$environment_file"
 test -f "$managed_env_payload_path"
