@@ -28,7 +28,8 @@ services passed loopback health and the Study consumer passed readiness. A faile
 or killed unit requires inspection even if a stale status says `running`. Check
 public API/Connect health separately after deployment. Failure keeps staged env,
 rollback env and payload files for recovery; these contain secrets and must stay
-root-readable only. Successful deployment cleans them up.
+restricted to root and the service account where needed. Successful deployment
+cleans them up.
 
 Before retrying a failed attempt, confirm that its coordinator and migration units
 have both stopped. A migration child is a separate systemd unit. Do not kill a

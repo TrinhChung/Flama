@@ -148,7 +148,7 @@ rollback_activation() {
 
     for attempt in $(seq 1 10); do
       if curl --fail --silent --show-error --max-time 5 \
-        http://127.0.0.1:4789/ >/dev/null \
+        http://127.0.0.1:4789/api/health >/dev/null \
         && { [ "$previous_connect_available" -eq 0 ] \
           || curl --fail --silent --show-error --max-time 5 \
             http://127.0.0.1:4790/healthz >/dev/null; }; then
