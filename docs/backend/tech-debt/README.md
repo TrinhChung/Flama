@@ -1,5 +1,10 @@
 # Flama Backend Technical Debt Catalog
 
+> 2026-10-19 follow-up: use the [cleanup priorities and investigation plan](../LEGACY_CLEANUP_PLAN_2026-10-19.md)
+> for the current scope. Retired shadow writer/backfill flags are removed there;
+> the mapper/codec still support live NOTE authority. Historical model audits
+> predate the Card, progress and Field ID contractions and are not a deletion list.
+
 - **Domain**: Flask Modular Monolith & Persistence Layer
 - **Last Audited**: 2026-10-15
 - **Status**: Active Technical Debt Registry

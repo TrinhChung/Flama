@@ -363,7 +363,7 @@ def run_probe(*, learners: int, notes: int, rounds: int, answers: int, signups: 
         # runs 4 threads per process against the default pool of 4 + 1.
         os.environ["DB_POOL_SIZE"] = str(max(learners, signups, creates) + 2)
         app = _probe_app(_database_uri(settings, name))
-        app.config.update(STUDY_NEW_LEARNER_NOTE_ENABLED=True, STUDY_PROGRESS_SHADOW_WRITE_ENABLED=True)
+        app.config.update(STUDY_NEW_LEARNER_NOTE_ENABLED=True)
         seeded = _seed(app, learners=learners, notes=notes)
 
         accepted_by_user: dict[int, int] = {}

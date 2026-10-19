@@ -288,18 +288,11 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "STUDY_NOTE_COUNT_ENABLED",
             default=False,
         ),
-        # Phase 4 shadow progress remains inert until each later rollout gate
-        # is approved independently.  None of these flags grants read authority.
-        "STUDY_PROGRESS_SHADOW_WRITE_ENABLED": coerce_bool_env(
-            "STUDY_PROGRESS_SHADOW_WRITE_ENABLED",
-            default=False,
-        ),
+        # Audit-only snapshot/isolation guard; it does not enable progress
+        # writes or select learner read authority. Retired Phase 4 writer and
+        # backfill switches have no runtime consumers and are no longer loaded.
         "STUDY_PROGRESS_SHADOW_COMPARE_ENABLED": coerce_bool_env(
             "STUDY_PROGRESS_SHADOW_COMPARE_ENABLED",
-            default=False,
-        ),
-        "STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED": coerce_bool_env(
-            "STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED",
             default=False,
         ),
         "RATE_LIMIT_BACKEND": os.getenv("RATE_LIMIT_BACKEND", "local").strip().lower(),
