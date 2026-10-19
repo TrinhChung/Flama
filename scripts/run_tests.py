@@ -1044,6 +1044,8 @@ FULL_FRONTEND_SOURCE_PATTERNS = (
     "frontend/package-lock.json",
     "frontend/vite.config.ts",
     "frontend/vitest.config.ts",
+    "frontend/wrangler.jsonc",
+    "frontend/.node-version",
 )
 
 # Environment-specific contract tiers. These patterns are intentionally

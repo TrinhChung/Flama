@@ -129,6 +129,9 @@ jobs:
       - name: Build
         run: npm run build:ci
 
+      - name: Validate Cloudflare deployment configuration
+        run: npm run deploy:check
+
   backend:
     needs: changes
     if: needs.changes.outputs.backend == 'true'

@@ -17,6 +17,8 @@
     "test:audio": "vitest run src/features/audio",
     "check": "npm run lint && npm run build",
     "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:check": "wrangler deploy --dry-run",
     "audit:seo": "lighthouse http://localhost:5173 --preset=desktop --only-categories=seo --chrome-flags=\"--user-data-dir=C:/Users/chung/.gemini/chrome-profiles/flama-devtools\" --view",
     "audit:lighthouse": "lighthouse http://localhost:5173 --preset=desktop --only-categories=seo,performance,accessibility,best-practices --chrome-flags=\"--user-data-dir=C:/Users/chung/.gemini/chrome-profiles/flama-devtools\" --view"
   },
@@ -66,6 +68,7 @@
     "shadcn": "^4.15.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "4.150.0"
   }
 }
