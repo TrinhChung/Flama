@@ -138,12 +138,6 @@
       "btn_edit_disabled_title": "Coming soon: create personal override for source cards of installed decks.",
       "btn_close": "Close",
       "btn_study": "Study this deck"
-    },
-    "worksheet_loader": {
-      "title": "Handwriting Worksheet & Print Studio (A4)",
-      "loading": "Loading worksheet studio…",
-      "failed": "Unable to load worksheet studio. Please refresh the page.",
-      "sr_loading": "Loading…"
     }
   },
   "heatmap": {

@@ -70,6 +70,7 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
+from models.note_type_review import NoteTypeReview
 from models.taxonomy import (
     TaxonomyDomain,
     TaxonomyFramework,
@@ -85,9 +86,11 @@ logger = logging.getLogger(__name__)
 
 from app.services.share.helpers import (
     ShareControllerError,
+    _active_note_type_templates,
     _audit,
     _increment_counter,
     _is_mysql_deadlock,
+    _note_type_template_publication_error,
     _set_note_type_install_market_activity,
     _utcnow,
     can_user_rate_note_type,
@@ -96,6 +99,35 @@ from app.services.share.helpers import (
     recompute_note_type_market_stats,
     touch_note_type_install_usage,
 )
+
+
+def default_template_sources(field_rows: list[tuple[int, str]]) -> tuple[str, str]:
+    """Return (front_html, back_html) for a new template.
+
+    field_rows: (position, name) of the NoteType's fields, any order.
+    """
+    cleaned = [
+        (int(pos), str(name).strip())
+        for pos, name in field_rows
+        if name and str(name).strip()
+    ]
+    cleaned.sort(key=lambda item: (item[0], item[1]))
+    if not cleaned:
+        return "{{Word}}", "{{Word}}"
+    names = [name for _, name in cleaned]
+    for name in names[:2]:
+        if name == "." or name[0] in "#^/!>&=" or "{" in name or "}" in name:
+            raise ValueError(
+                f"Field name '{name}' cannot be used in an automatic template. "
+                "Rename the field or provide explicit front_html and back_html."
+            )
+    first = "{{" + names[0] + "}}"
+    if len(names) >= 2:
+        back = first + "<hr>" + "{{" + names[1] + "}}"
+    else:
+        back = first
+    return first, back
+
 
 def create_note_type(
     user_id: int,
@@ -161,13 +193,25 @@ def create_note_type(
         )
 
     template_payload = payload.get("template") or {}
-    front_html = (template_payload.get("front_html") or "{{Word}}").strip()
-    back_html = (template_payload.get("back_html") or "{{Word}}").strip()
+    try:
+        default_front, default_back = default_template_sources(
+            [
+                (int(row.get("position", idx)), str(row.get("name") or "").strip())
+                for idx, row in enumerate(input_fields)
+            ]
+        ) if not template_payload.get("front_html") or not template_payload.get("back_html") else ("", "")
+    except ValueError as exc:
+        db.session.rollback()
+        return None, str(exc), "field_defs"
+    front_html = (template_payload.get("front_html") or default_front).strip()
+    back_html = (template_payload.get("back_html") or default_back).strip()
     shared_css = (template_payload.get("shared_css") or "").strip()
     template = template_library_repository.create_attached_template(db.session, note_type=note_type, name=(template_payload.get("name") or "Card 1").strip() or "Card 1", front_html=front_html, back_html=back_html, shared_css=shared_css, position=0, is_default=True)
     db.session.add(template)
-    
-    metadata_error = flashcards_share.apply_note_type_marketplace_payload(
+    from app.services.template_version_service import mark_template_version
+    mark_template_version(template, origin="create", actor_user_id=user_id)
+
+    metadata_error = apply_note_type_marketplace_payload(
         note_type,
         payload,
         allow_set_official=is_admin,
@@ -176,39 +220,56 @@ def create_note_type(
     if metadata_error:
         db.session.rollback()
         return None, metadata_error, None
-        
+
     _audit(user_id, "note_type.create", {"note_type_id": note_type.id, "name": note_type.name})
     db.session.commit()
     return note_type, None, None
 
 
-
-def create_template(note_type_id: str, user_id: int, payload: dict) -> tuple[Template | None, str | None]:
+def create_template(
+    note_type_id: str,
+    user_id: int,
+    payload: dict,
+    *,
+    commit: bool = True,
+) -> tuple[Template | None, str | None]:
     note_type = db.session.get(NoteType, note_type_id)
     if not note_type:
         return None, "Note type not found."
-        
+
     name = (payload.get("name") or "").strip() or f"Card {len(template_library_repository.applications(db.session, note_type.id)) + 1}"
-    front_html = (payload.get("front_html") or "{{Word}}").strip()
-    back_html = (payload.get("back_html") or "{{Word}}").strip()
+    try:
+        default_front, default_back = default_template_sources(
+            [(int(field.position or 0), str(field.name or "")) for field in note_type.field_defs]
+        ) if not payload.get("front_html") or not payload.get("back_html") else ("", "")
+    except ValueError as exc:
+        return None, str(exc)
+    front_html = (payload.get("front_html") or default_front).strip()
+    back_html = (payload.get("back_html") or default_back).strip()
     shared_css = (payload.get("shared_css") or "").strip()
-    
-    max_pos = db.session.query(db.func.max(StudyApplication.position)).filter_by(note_type_id=note_type.id).scalar()
+
+    max_pos = db.session.query(db.func.max(StudyApplication.position)).filter_by(
+        note_type_id=note_type.id
+    ).scalar()
     template = template_library_repository.create_attached_template(db.session, note_type=note_type, name=name, front_html=front_html, back_html=back_html, shared_css=shared_css, position=(int(max_pos) + 1) if max_pos is not None else 0, is_default=False)
     db.session.add(template)
-    # Its compatibility occurrence presents it on every Note (ADR P11).
+    from app.services.template_version_service import mark_template_version
+    mark_template_version(template, origin="create", actor_user_id=user_id)
+    # The flush gives the Template its compatibility occurrence, which presents
+    # it on every Note of the NoteType; nothing is written per Note (ADR P11).
     db.session.flush()
 
     _audit(user_id, "template.create", {"note_type_id": note_type.id, "template_id": template.id})
-    db.session.commit()
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
     return template, None
-
 
 
 def update_template(template: Template, user_id: int) -> None:
     _audit(user_id, "template.update", {"template_id": template.id})
     db.session.commit()
-
 
 
 def reset_template(template: Template, default_front: str, default_back: str, default_css: str) -> None:
@@ -218,10 +279,9 @@ def reset_template(template: Template, default_front: str, default_back: str, de
     db.session.commit()
 
 
-
 def publish_note_type(note_type: NoteType, user_id: int, payload: dict, is_admin: bool) -> tuple[bool, str | None]:
     payload.setdefault("publish_status", "published")
-    validation_error = flashcards_share.apply_note_type_marketplace_payload(
+    validation_error = apply_note_type_marketplace_payload(
         note_type,
         payload,
         allow_set_official=is_admin,
@@ -230,8 +290,8 @@ def publish_note_type(note_type: NoteType, user_id: int, payload: dict, is_admin
     if validation_error:
         db.session.rollback()
         return False, validation_error
-        
-    flashcards_share.recompute_note_type_market_stats(
+
+    recompute_note_type_market_stats(
         note_type,
         note_type_active_note_threshold=5,
         note_type_active_review_threshold=1,
@@ -240,7 +300,6 @@ def publish_note_type(note_type: NoteType, user_id: int, payload: dict, is_admin
     _audit(user_id, "note_type.publish", {"note_type_id": note_type.id, "publish_status": note_type.publish_status})
     db.session.commit()
     return True, None
-
 
 
 def is_installed_note_type_copy(note_type_id: str | None) -> bool:
@@ -252,7 +311,6 @@ def is_installed_note_type_copy(note_type_id: str | None) -> bool:
         NoteTypeInstall.query.filter_by(installed_note_type_id=normalized_id).first()
         is not None
     )
-
 
 
 def get_note_type_publish_eligibility(
@@ -273,8 +331,7 @@ def get_note_type_publish_eligibility(
             "block_code": "marketplace_install",
             "block_reason": "Note Type được cài từ Marketplace không thể chia sẻ lại.",
         }
-    from app.services.template_release_service import note_type_publication_error
-    template_error = note_type_publication_error(db.session, note_type.id)
+    template_error = _note_type_template_publication_error(note_type.id)
     if template_error:
         return {"is_selectable": False, "block_code": "marketplace_template", "block_reason": template_error}
     return {
@@ -284,11 +341,8 @@ def get_note_type_publish_eligibility(
     }
 
 
-
 def validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
-    from app.repositories.template_release_repository import active_templates
-    from app.services.template_release_service import note_type_publication_error
-    template_error = note_type_publication_error(db.session, note_type.id)
+    template_error = _note_type_template_publication_error(note_type.id)
     if template_error:
         return template_error
     if not (note_type.name or "").strip():
@@ -307,7 +361,7 @@ def validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
         return "Paid note type must have a positive price."
     if not note_type.field_defs:
         return "At least one field is required for publish."
-    if not active_templates(db.session, note_type.id):
+    if not _active_note_type_templates(note_type.id):
         return "At least one card template is required for publish."
     taxonomy_error = marketplace_taxonomy_service.validate_required_taxonomy(
         note_type.taxonomy_metadata if isinstance(note_type.taxonomy_metadata, dict) else {},
@@ -488,7 +542,7 @@ def rate_shared_note_type(note_type: NoteType, user_id: int, rating: int, commen
         review.rating = rating
         review.comment = comment
 
-    flashcards_share.recompute_note_type_market_stats(note_type)
+    recompute_note_type_market_stats(note_type)
     _audit(user_id, "market.note_type.rate", {"note_type_id": note_type.id, "rating": rating})
     db.session.commit()
 

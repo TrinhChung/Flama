@@ -163,16 +163,8 @@
       "title": "Select Target Deck & Note Type",
       "desc": "Specify destination deck and data schema for the imported cards.",
       "deck_label": "Destination Deck",
-      "deck_search_placeholder": "Search target decks...",
       "notetype_label": "Note Type",
-      "auto_suggest_badge": "Auto-suggested from sibling decks",
-      "empty_no_decks": "No matching decks found.",
-      "tree": {
-        "expand_deck_aria": "Expand deck {{name}}",
-        "collapse_deck_aria": "Collapse deck {{name}}",
-        "collapse_all": "Collapse all",
-        "expand_all": "Expand all"
-      }
+      "auto_suggest_badge": "Auto-suggested from sibling decks"
     },
     "step2": {
       "title": "Upload File & Parse Data",

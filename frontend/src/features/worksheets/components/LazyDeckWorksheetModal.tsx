@@ -19,20 +19,20 @@ function WorksheetLoadDialog({ onOpenChange, failed = false }: {
   onOpenChange: DeckWorksheetModalProps['onOpenChange']
   failed?: boolean
 }) {
-  const { t } = useTranslation('dashboard')
+  const { t } = useTranslation('common')
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('modals.worksheet_loader.title')}</DialogTitle>
+          <DialogTitle>{t('worksheet_loader.title')}</DialogTitle>
           <DialogDescription>
-            {failed ? t('modals.worksheet_loader.failed') : t('modals.worksheet_loader.loading')}
+            {failed ? t('worksheet_loader.failed') : t('worksheet_loader.loading')}
           </DialogDescription>
         </DialogHeader>
         {!failed && (
           <div role="status" className="flex justify-center py-6">
             <LoaderCircle className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
-            <span className="sr-only">{t('modals.worksheet_loader.sr_loading')}</span>
+            <span className="sr-only">{t('worksheet_loader.sr_loading')}</span>
           </div>
         )}
       </DialogContent>

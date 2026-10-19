@@ -122,7 +122,7 @@ All modern endpoints are consolidated under the `/api` prefix via `api_v1_bp` (`
 - **Regular Learner**: 300 requests/day
 - **Creator Tier**: 2,000 requests/day
 - **Enterprise Tier**: 10,000 requests/day
-- Excluded paths: `/health`, `/identity/login`, `/identity/session`, billing webhooks, and media proxies.
+- Excluded paths: `/health`, `/identity/login`, `/identity/session`, `/study/`, billing webhooks, and media proxies.
 - Rate limit headers attached to every response: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
 
 #### Canonical Blueprints Matrix
@@ -135,7 +135,7 @@ All modern endpoints are consolidated under the `/api` prefix via `api_v1_bp` (`
 | `analytics_bp` | `app/api/v1/analytics/` | `/analytics` | Dashboard review statistics, retention heatmaps |
 | `admin_bp` | `app/api/v1/admin/` | `/admin` | User RBAC, fee schedules, audit logs, TTS keys |
 | `billing_bp` | `app/api/v1/billing/` | `/billing` | payOS payments, checkout creation, webhook ingestion |
-| `learning_bp` | `app/api/v1/learning/` | `/browse` | Vocabulary search, virtualized card table, batch edits |
+| `learning_bp` | `app/api/v1/learning/` | `/browse` & `/study` | Vocabulary search, virtualized card table, batch edits, study session queue & ratings (`study_bp`) |
 | `marketplace_*` | `app/api/v1/marketplace/`| `/marketplace` | Shared deck marketplace, reviews, taxonomy, deck installs |
 | `creator_*` | `app/api/v1/creator/` | `/creator` | Creator deck licensing keys (`creator_deck_keys_bp`) |
 | `download_bp` | `app/api/v1/download.py` | `/download` | Authenticated file and media asset downloads |
@@ -147,14 +147,16 @@ All modern endpoints are consolidated under the `/api` prefix via `api_v1_bp` (`
 | `tickets_bp` | `app/api/v1/tickets.py` | `/tickets` | User support tickets and threaded replies |
 | `worksheets_bp` | `app/api/v1/worksheets/`| `/worksheets` | PDF Japanese practice worksheet generator |
 
-### 3.2 Dual Blueprint Exposure Reality
-A primary architectural anomaly in the current codebase is that active REST endpoints are split across two distinct blueprint hierarchies:
-1. **`app/api/v1/` (`api_v1_bp`)**: Canonical modular REST API.
-2. **`app/routes/`**: Legacy blueprints mounting live `/api/...` endpoints directly:
-   - **`app/routes/flashcards/study.py`**: Houses the **active flashcard study runtime** (`/api/study/sessions`, `/api/study/next`, `/api/study/cards/<id>/answer`, `/api/study/sessions/<id>/commit`).
+### 3.2 Blueprint Consolidation & Canonical Study Routes
+Core REST endpoints are consolidated under the canonical API hierarchy:
+1. **`app/api/v1/` (`api_v1_bp`)**: Canonical modular REST API (300 endpoints).
+   - Core flashcard study endpoints (`/api/study/sessions`, `/api/study/next`, `/api/study/cards/<id>/answer`, `/api/study/sessions/<id>/commit`) are canonicalized under `app/api/v1/learning/study.py` as `study_bp` within `learning_bp`.
+   - All 45 route-level `db.session.commit()` calls in `app/api/v1/` have been removed in favor of service transaction boundaries.
+2. **`app/routes/`**: Legacy blueprints and SSR stubs (pruned during October 2026 debt remediation):
+   - `app/routes/flashcards/study.py`: Preserved for compatibility with legacy test patch harnesses.
    - `app/routes/flashcards/change_requests.py`: Houses `/api/deck-change-requests/...`.
    - `app/routes/flashcards/share.py`: Houses legacy `/api/shared/decks/...`.
-   - `app/routes/vocabulary.py`: Exposes `/vocabulary/api/browse/...` alongside `/api/browse/...`.
+   - `app/routes/vocabulary.py`: Pruned from 718 LOC to 117 LOC (17 dead 410 stubs and duplicate browse endpoints removed).
 
 ### 3.3 Authentication & Authorization
 - **Session Authentication**: Cookie-based via `Flask-Login` (`HttpOnly=True`, `SameSite='Lax'`). CSRF validated through Flask-WTF (`X-CSRFToken` header).
@@ -232,7 +234,7 @@ Services own business logic orchestration and transaction boundaries:
 - **`deck_management_service.py`**: Deck lifecycle, cycle-resistant tree moves, and progress resetting.
 - **`deck_release_service.py`**: Snapshotting and publishing immutable releases of shared decks.
 - **`flashcard_renderer.py`**: Mustache compilation, field replacement, furigana rendering, and CSP sandbox generation.
-- **`flashcards_share_service.py`**: Monolithic share orchestrator (alongside modular `app/services/share/` package comprising `install.py`, `publish.py`, `overlay.py`, `cutover.py`, `helpers.py`, `constants.py`, `note_types.py`).
+- **`flashcards_share_service.py`**: Lightweight compatibility facade (26 LOC) re-exporting from modular `app/services/share/` package (comprising `install.py`, `publish.py`, `overlay.py`, `cutover.py`, `helpers.py`, `constants.py`, `note_types.py`).
 - **`study_session_service.py`**: Study session lifecycle, queue building, and answer rating validation.
 - **`payment/`**: Canonical payment implementation: checkout/pricing (`checkout.py`), order lifecycle (`orders.py`), entitlement grants (`fulfillment.py`), PayOS webhooks (`webhook.py`), and response presentation (`status_display.py`, `presenters.py`). `base.py` owns shared constants and `PaymentServiceError`; `payment_service.py` only re-exports this package for compatibility.
 

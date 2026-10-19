@@ -5,7 +5,6 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
-from models import db
 from app.api.common import error_response, optional_int_query
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services.rest_api_service import (
@@ -15,7 +14,7 @@ from app.services.rest_api_service import (
 from app.services.stats_overview import (
     build_stats_overview,
     get_effective_timezone_name,
-    update_user_timezone,
+    update_user_timezone_and_commit,
 )
 from app.services.stats_today_future import (
     build_today_future_stats,
@@ -41,8 +40,7 @@ def _resolve_request_timezone() -> str:
     if client_tz:
         effective = get_effective_timezone_name(client_tz)
         if current_user.is_authenticated and client_tz != getattr(current_user, "timezone", None):
-            if update_user_timezone(current_user, client_tz):
-                db.session.commit()
+            update_user_timezone_and_commit(current_user, client_tz)
         return effective
     return get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
 

@@ -1,18 +1,22 @@
 """Shared constants for flashcards share and clone operations."""
 
 from datetime import timezone
-from decimal import Decimal
+from models.field_types import FIELD_TYPES as _FIELD_TYPES
 
 UTC = timezone.utc
-FIELD_TYPES = ("text", "markdown", "image", "diagram", "audio")
-DEFAULT_VISIBLE_PUBLISH_STATUSES = ("published", "unlisted")
-PUBLISH_STATUSES_VISIBLE = DEFAULT_VISIBLE_PUBLISH_STATUSES
-MARKET_ACTIVITY_POLICY_VERSION = "2026-03-24"
+FIELD_TYPES = set(_FIELD_TYPES)
+DEFAULT_VISIBLE_PUBLISH_STATUSES = {"published", "unlisted"}
+PUBLISH_STATUSES_VISIBLE = {"published", "unlisted"}
+MARKET_ACTIVITY_POLICY_VERSION = 1
 
-NOTE_TYPE_ACTIVE_DAYS_THRESHOLD = 30
-NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD = 5
-NOTE_TYPE_ACTIVE_NOTE_THRESHOLD = 1
-DECK_ACTIVE_REVIEW_THRESHOLD = 5
+NOTE_TYPE_ACTIVE_DAYS_THRESHOLD = 3
+NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD = 3
+NOTE_TYPE_ACTIVE_NOTE_THRESHOLD = 3
+DECK_ACTIVE_REVIEW_THRESHOLD = 3
 
+SHARED_DECK_TEST_SAMPLE_LIMIT = 5
 SHARED_DECK_INSTALL_MAX_RETRIES = 3
-SHARED_DECK_INSTALL_DEADLOCK_MESSAGE = "Transaction was deadlocked. Retrying install..."
+SHARED_DECK_INSTALL_DEADLOCK_MESSAGE = (
+    "Hệ thống đang bận khi cài deck này. Vui lòng thử lại sau vài giây."
+)
+

@@ -756,7 +756,9 @@ def is_field_empty(value: Any) -> bool:
         return True
     if isinstance(value, str):
         return value.strip() == ""
-    if isinstance(value, (list, tuple, dict, set)):
+    if isinstance(value, (list, tuple, set)):
+        return not any(not is_field_empty(item) for item in value)
+    if isinstance(value, dict):
         return len(value) == 0
     return False
 

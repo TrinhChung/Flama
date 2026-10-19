@@ -6,7 +6,6 @@ import {
   Heart,
   HelpCircle,
   Languages,
-  LoaderCircle,
   LogIn,
   LogOut,
   Menu,
@@ -22,6 +21,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteMascot } from '@/components/site-mascot'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -378,8 +378,7 @@ export function AppLayout() {
   if (bootstrapQuery.isPending) {
     return (
       <div className="flex min-h-svh items-center justify-center">
-        <LoaderCircle className="size-7 animate-spin text-primary" />
-        <span className="sr-only">{t('status.connecting_server')}</span>
+        <Spinner size="lg" aria-label={t('status.connecting_server')} />
       </div>
     )
   }

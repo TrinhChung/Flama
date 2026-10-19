@@ -16,7 +16,7 @@ import { apiRequest } from '@/shared/api/client'
 import {
   DeckSelectionTreeView,
   type DeckOption,
-} from '@/features/import/components/DeckSelectionTreeView'
+} from '@/entities/deck/ui/DeckSelectionTreeView'
 import { fetchDeckWorksheetMeta } from '../api'
 import type { DeckWorksheetMeta } from '../types'
 
@@ -212,7 +212,7 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
               <DeckSelectionTreeView
                 deckOptions={deckOptions}
                 selectedDeckId={activeDeckId ? String(activeDeckId) : ''}
-                onSelectDeck={(id) => setActiveDeckId(Number(id))}
+                onSelectDeck={(id: string) => setActiveDeckId(Number(id))}
               />
             </div>
           )}

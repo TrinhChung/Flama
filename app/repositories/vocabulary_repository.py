@@ -28,7 +28,7 @@ from app.repositories.study_repository import (
     normalize_progress_queue as _normalize_progress_queue,
 )
 from models import db
-from models.field_types import field_value_text
+from models.field_types import ARRAY_FIELD_TYPE, field_value_text
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note, NoteType
 
@@ -259,7 +259,7 @@ def note_ordered_field_names(note_obj: Note | None, *, text_only: bool = False) 
             key=lambda item: ((item.position or 0), item.name.lower()),
         )
         for field_def in sorted_defs:
-            if text_only and field_def.field_type not in {"text", "richtext", "markdown"}:
+            if text_only and field_def.field_type not in {"text", "richtext", "markdown", ARRAY_FIELD_TYPE}:
                 continue
             field_name = (field_def.name or "").strip()
             if field_name and field_name not in ordered_names:

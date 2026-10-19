@@ -943,8 +943,6 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/update_route_snapshot.py",
             "scripts/verify_m4_link_integrity.py",
             "scripts/deploy_cloudflare_cache_rule.py",
-            "fix_deck_imports.py",
-            "update_imports.py",
             "wsgi_audit.py",
         ],
         "backend_tests": [

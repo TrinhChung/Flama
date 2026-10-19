@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "flask-api",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "flask", "--app", "wsgi.py", "run", "--port=4789"],
+      "port": 4789
+    },
+    {
+      "name": "vite",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--prefix", "frontend", "vite", "frontend", "--port", "5173", "--strictPort"],
+      "port": 5173,
+      "url": "http://localhost:5173"
+    }
+  ]
+}

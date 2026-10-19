@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/sheet'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
+import { useCopyToClipboard } from '@/shared/hooks'
 import {
   getLegalDocument,
   legalDocuments,
@@ -242,44 +243,43 @@ function LegalDocumentViewer({
     setMobileTocOpen(false)
   }
 
-  const handleCopyAnchor = (
+  const { copy } = useCopyToClipboard()
+
+  const handleCopyAnchor = async (
     id: string,
     clauseTitle: string,
     e?: React.MouseEvent,
   ) => {
     e?.stopPropagation()
     const url = `${window.location.origin}${window.location.pathname}#${id}`
-    navigator.clipboard
-      .writeText(url)
-      .then(() => {
-        window.history.replaceState(null, '', `#${id}`)
-        setActiveClauseId(id)
-        toast.success(
-          t('actions.copied_clause_toast', {
-            title: clauseTitle,
-            defaultValue: `Đã sao chép liên kết: ${clauseTitle}`,
-          }),
-        )
-      })
-      .catch(() => {
-        window.history.replaceState(null, '', `#${id}`)
-        setActiveClauseId(id)
-        toast.success(
-          t('actions.selected_clause_toast', {
-            title: clauseTitle,
-            defaultValue: `Đã chọn: ${clauseTitle}`,
-          }),
-        )
-      })
+    const success = await copy(url)
+    window.history.replaceState(null, '', `#${id}`)
+    setActiveClauseId(id)
+    if (success) {
+      toast.success(
+        t('actions.copied_clause_toast', {
+          title: clauseTitle,
+          defaultValue: `Đã sao chép liên kết: ${clauseTitle}`,
+        }),
+      )
+    } else {
+      toast.success(
+        t('actions.selected_clause_toast', {
+          title: clauseTitle,
+          defaultValue: `Đã chọn: ${clauseTitle}`,
+        }),
+      )
+    }
   }
 
-  const handleCopyDocumentLink = () => {
+  const handleCopyDocumentLink = async () => {
     const url = `${window.location.origin}${window.location.pathname}`
-    navigator.clipboard.writeText(url).then(() => {
+    const success = await copy(url)
+    if (success) {
       setCopied(true)
       toast.success(t('actions.copied_toast', 'Đã sao chép liên kết văn bản!'))
       setTimeout(() => setCopied(false), 2000)
-    })
+    }
   }
 
   const handlePrint = () => {

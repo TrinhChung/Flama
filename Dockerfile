@@ -24,5 +24,5 @@ COPY --from=frontend-build /frontend/dist ./frontend/dist
 
 EXPOSE 4789 4790
 
-# Chạy ứng dụng bằng gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:4789", "wsgi:app"]
+# Chạy ứng dụng bằng gunicorn với cấu hình tối ưu
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "wsgi:app"]

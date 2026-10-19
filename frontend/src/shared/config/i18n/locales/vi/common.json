@@ -39,5 +39,19 @@
     "label": "Ngôn ngữ",
     "switch_to_en": "Chuyển sang English",
     "switch_to_vi": "Chuyển sang Tiếng Việt"
+  },
+  "deck_tree": {
+    "search_placeholder": "Tìm kiếm bộ thẻ đích...",
+    "expand_all": "Mở rộng tất cả",
+    "collapse_all": "Thu gọn tất cả",
+    "expand_deck_aria": "Mở rộng deck {{name}}",
+    "collapse_deck_aria": "Thu gọn deck {{name}}",
+    "empty_no_decks": "Không tìm thấy deck phù hợp."
+  },
+  "worksheet_loader": {
+    "title": "Mẫu giấy luyện viết & In ấn (A4)",
+    "loading": "Đang tải công cụ tạo bài tập…",
+    "failed": "Không thể tải công cụ tạo bài tập. Hãy tải lại trang để thử lại.",
+    "sr_loading": "Đang tải…"
   }
 }

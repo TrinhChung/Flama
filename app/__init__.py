@@ -244,6 +244,20 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
         return jsonify({"error": "CONTENT_REVISION_CONFLICT",
                         "message": "Nội dung đã thay đổi. Tải lại dữ liệu trước khi lưu."}), 409
 
+    from app.validators import RequestValidationError
+    from app.api.common.responses import error_response
+
+    @app.errorhandler(RequestValidationError)
+    def handle_request_validation_error(error: RequestValidationError):
+        _rollback_failed_session()
+        return error_response(
+            code=error.code or "VALIDATION_ERROR",
+            message=str(error),
+            status=error.status or 400,
+            field=error.field,
+            details=getattr(error, "details", None),
+        )
+
     @app.errorhandler(404)
     def page_not_found(error):
         """Handle 404 errors."""

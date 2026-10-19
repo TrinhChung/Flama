@@ -219,29 +219,11 @@ def set_user_mcp_permission(user_id: int):
     else:
         return error_response("VALIDATION_ERROR", "can_manage_mcp_tokens or can_use_mcp is required.", status=400)
 
-    old_val = bool(getattr(user, "can_manage_mcp_tokens", False) or getattr(user, "can_use_mcp", False))
-
-    user.can_manage_mcp_tokens = new_val
-    user.can_use_mcp = new_val
-    db.session.add(user)
-
-    # Record in audit log
-    db.session.add(
-        UserPermissionAuditLog(
-            actor_user_id=current_user.id,
-            target_user_id=user.id,
-            action="update_mcp_token_management_permission",
-            from_role_id=user.role_id,
-            to_role_id=user.role_id,
-            from_is_admin=bool(user.is_admin),
-            to_is_admin=bool(user.is_admin),
-            from_is_disabled=bool(user.is_disabled),
-            to_is_disabled=bool(user.is_disabled),
-            message=f"{'Cấp' if new_val else 'Thu hồi'} quyền Quản lý Token MCP (trước: {old_val}, sau: {new_val})",
-        )
+    old_val, new_val = mcp_access_token_service.update_user_mcp_permission_and_commit(
+        user=user,
+        actor_user_id=current_user.id,
+        can_manage_mcp_tokens=new_val,
     )
-
-    db.session.commit()
 
     can_manage_now = bool(user.is_admin or user.can_manage_mcp_tokens)
     return jsonify(
@@ -481,13 +463,5 @@ def purge_system_token(token_id: int):
 @admin_mcp_tokens_bp.post("/cleanup")
 def cleanup_system_tokens():
     """Admin cleans up all expired and revoked tokens system-wide."""
-    now = datetime.utcnow()
-    query = McpAccessToken.query.filter(
-        or_(
-            McpAccessToken.revoked.is_(True),
-            McpAccessToken.expires_at <= now,
-        )
-    )
-    count = query.delete(synchronize_session=False)
-    db.session.commit()
+    count = mcp_access_token_service.cleanup_system_tokens_and_commit()
     return jsonify({"success": True, "purged_count": count}), 200

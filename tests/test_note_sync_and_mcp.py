@@ -481,6 +481,92 @@ class NoteSyncAndMcpTests(unittest.TestCase):
             self.assertEqual(Note.query.count(), 80)
             self.assertEqual(Card.query.count(), 80)
 
+    def test_sync_notes_with_array_field(self):
+        with self.app.app_context():
+            nt = NoteType(user_id=self.user_id, name="Array Sync Model")
+            db.session.add(nt)
+            db.session.flush()
+            db.session.add_all([
+                FieldDef(note_type_id=nt.id, name="Word", field_type="text", position=0, required=True, identity_role="primary"),
+                FieldDef(note_type_id=nt.id, name="Collocations", field_type="array", position=1, required=False),
+            ])
+            attach_template(
+                db.session,
+                note_type_id=nt.id,
+                owner_user_id=self.user_id,
+                name="Card 1",
+                front_html="<div>{{Word}}</div>",
+                back_html="<div>{{#Collocations}}{{.}}{{/Collocations}}</div>",
+            )
+            db.session.commit()
+            array_nt_id = nt.id
+
+            # 1. Sync note with multiline string into array field
+            notes_payload = [
+                {
+                    "external_id": "arr-1",
+                    "fields": {
+                        "Word": "hello",
+                        "Collocations": "say hello\nhello world",
+                    },
+                    "tags": ["greeting"],
+                }
+            ]
+            res1 = mcp_tool_service.sync_notes(
+                user_id=self.user_id,
+                source_key="sheets:array_test",
+                deck_id=self.bai1_deck_id,
+                note_type_id=array_nt_id,
+                notes=notes_payload,
+            )
+            self.assertTrue(res1["success"])
+            self.assertEqual(res1["summary"]["created"], 1)
+
+            created_note = Note.query.filter_by(note_type_id=array_nt_id).first()
+            self.assertIsNotNone(created_note)
+            # Must be stored as a list
+            self.assertEqual(created_note.field_values.get("Collocations"), ["say hello", "hello world"])
+
+            # 2. Sync again with list representation of the exact same content -> must be idempotent (0 update, 0 create)
+            preview_res = note_sync_service.preview_sync_notes(
+                user_id=self.user_id,
+                source_key="sheets:array_test",
+                deck_id=self.bai1_deck_id,
+                note_type_id=array_nt_id,
+                notes=[
+                    {
+                        "external_id": "arr-1",
+                        "fields": {
+                            "Word": "hello",
+                            "Collocations": ["say hello", "hello world"],
+                        },
+                        "tags": ["greeting"],
+                    }
+                ],
+            )
+            self.assertEqual(preview_res["summary"]["create"], 0)
+            self.assertEqual(preview_res["summary"]["update"], 0)
+            self.assertEqual(preview_res["summary"]["unchanged"], 1)
+
+            # 3. Sync with nested array deeper than 3 levels -> must fail validation
+            deep_res = mcp_tool_service.sync_notes(
+                user_id=self.user_id,
+                source_key="sheets:array_test",
+                deck_id=self.bai1_deck_id,
+                note_type_id=array_nt_id,
+                notes=[
+                    {
+                        "external_id": "arr-deep",
+                        "fields": {
+                            "Word": "deep",
+                            "Collocations": [[[["too_deep"]]]],
+                        },
+                    }
+                ],
+            )
+            self.assertFalse(deep_res["success"])
+            self.assertEqual(deep_res["summary"]["failed"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

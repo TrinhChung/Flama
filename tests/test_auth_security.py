@@ -99,8 +99,8 @@ class AuthSecurityTests(unittest.TestCase):
         self.assertEqual(login_response.status_code, 302)
 
         blocked = self.client.post(
-            "/vocabulary/decks/create",
-            data={"name": "Secure Deck", "deck_path": "Secure Deck"},
+            "/api/decks",
+            json={"name": "Secure Deck", "deck_path": "Secure Deck"},
             follow_redirects=False,
         )
         self.assertEqual(blocked.status_code, 400)
@@ -108,15 +108,15 @@ class AuthSecurityTests(unittest.TestCase):
         with self.client.session_transaction() as session_state:
             token = str(session_state.get("_csrf_token") or "")
         allowed = self.client.post(
-            "/vocabulary/decks/create",
-            data={
+            "/api/decks",
+            json={
                 "name": "Secure Deck",
                 "deck_path": "Secure Deck",
                 "_csrf_token": token,
             },
             follow_redirects=False,
         )
-        self.assertEqual(allowed.status_code, 302)
+        self.assertEqual(allowed.status_code, 201)
 
         with self.app.app_context():
             rows = Deck.query.filter_by(owner_user_id=self.user_id, name="Secure Deck").all()
@@ -127,8 +127,8 @@ class AuthSecurityTests(unittest.TestCase):
         self.assertEqual(login_response.status_code, 302)
 
         blocked = self.client.post(
-            "/vocabulary/decks/create",
-            data={"name": "Origin Only Deck", "deck_path": "Origin Only Deck"},
+            "/api/decks",
+            json={"name": "Origin Only Deck", "deck_path": "Origin Only Deck"},
             headers={"Origin": "http://localhost"},
             follow_redirects=False,
         )

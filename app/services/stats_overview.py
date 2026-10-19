@@ -97,6 +97,13 @@ def update_user_timezone(user_obj: Any, raw_timezone: Any) -> bool:
     return True
 
 
+def update_user_timezone_and_commit(user_obj: Any, raw_timezone: Any) -> bool:
+    if update_user_timezone(user_obj, raw_timezone):
+        db.session.commit()
+        return True
+    return False
+
+
 def normalize_review_mode(raw_mode: Any) -> str:
     mode = str(raw_mode or "").strip().lower()
     if mode in {"learning", "relearning", "learn"}:

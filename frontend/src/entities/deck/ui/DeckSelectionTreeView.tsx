@@ -11,15 +11,9 @@ import {
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import type { DeckOption } from '../model/types'
 
-export type DeckOption = {
-  id: number
-  name: string
-  path: string
-  note_type_id?: string | null
-  parent_id?: number | null
-  notes_count?: number
-}
+export type { DeckOption }
 
 interface TreeNode {
   deck: DeckOption
@@ -106,7 +100,7 @@ const TreeNodeItem = React.memo<TreeNodeItemProps>(({
   onToggleExpand,
   onSelectDeck,
 }) => {
-  const { t } = useTranslation('import')
+  const { t } = useTranslation()
   const hasChildren = node.children.length > 0
   const isSelected = String(node.deck.id) === selectedDeckId
   const level = node.deck.path.split('::').length - 1
@@ -131,8 +125,8 @@ const TreeNodeItem = React.memo<TreeNodeItemProps>(({
               className="p-0.5 hover:bg-muted/80 rounded text-muted-foreground hover:text-foreground shrink-0 transition-colors"
               aria-label={
                 isExpanded
-                  ? t('file_import.step1.tree.collapse_deck_aria', { name: node.deck.name })
-                  : t('file_import.step1.tree.expand_deck_aria', { name: node.deck.name })
+                  ? t('deck_tree.collapse_deck_aria', { name: node.deck.name })
+                  : t('deck_tree.expand_deck_aria', { name: node.deck.name })
               }
               onClick={(e) => {
                 e.stopPropagation()
@@ -201,7 +195,7 @@ export const DeckSelectionTreeView: React.FC<DeckSelectionTreeViewProps> = ({
   selectedDeckId,
   onSelectDeck,
 }) => {
-  const { t } = useTranslation('import')
+  const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({})
 
@@ -269,7 +263,7 @@ export const DeckSelectionTreeView: React.FC<DeckSelectionTreeViewProps> = ({
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('file_import.step1.deck_search_placeholder')}
+            placeholder={t('deck_tree.search_placeholder')}
             className="pl-9 h-8.5 text-xs rounded-xl border-border/80 focus-visible:ring-1"
           />
         </div>
@@ -279,14 +273,14 @@ export const DeckSelectionTreeView: React.FC<DeckSelectionTreeViewProps> = ({
             onClick={expandAll}
             className="hover:text-primary hover:bg-muted text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors border cursor-pointer"
           >
-            {t('file_import.step1.tree.expand_all')}
+            {t('deck_tree.expand_all')}
           </button>
           <button
             type="button"
             onClick={collapseAll}
             className="hover:text-primary hover:bg-muted text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors border cursor-pointer"
           >
-            {t('file_import.step1.tree.collapse_all')}
+            {t('deck_tree.collapse_all')}
           </button>
         </div>
       </div>
@@ -295,7 +289,7 @@ export const DeckSelectionTreeView: React.FC<DeckSelectionTreeViewProps> = ({
       <div className="border border-border/80 rounded-2xl p-2.5 bg-muted/20 max-h-72 overflow-y-auto space-y-0.5 shadow-inner">
         {treeRoots.length === 0 ? (
           <div className="text-center text-xs text-muted-foreground py-6">
-            {t('file_import.step1.empty_no_decks')}
+            {t('deck_tree.empty_no_decks')}
           </div>
         ) : (
           treeRoots.map((rootNode) => (

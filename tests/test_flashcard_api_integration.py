@@ -2276,7 +2276,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(cloned_child_map)
             cloned_child_local_id = int(cloned_child_map.local_deck_id)
 
-        tree_resp = learner_client.get("/vocabulary/api/browse/decks/tree")
+        tree_resp = learner_client.get("/api/browse/decks/tree")
         self.assertEqual(tree_resp.status_code, 200)
         tree_payload = tree_resp.get_json() or {}
         tree_nodes = tree_payload.get("tree") or []
@@ -2295,7 +2295,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn(installed_root_id, visible_deck_ids)
 
         cards_resp = learner_client.get(
-            f"/vocabulary/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
+            f"/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
         )
         self.assertEqual(cards_resp.status_code, 200)
         cards_payload = cards_resp.get_json() or {}
@@ -2308,7 +2308,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         card_id = row.get("card_id")
         self.assertIsNotNone(card_id)
-        detail_resp = learner_client.get(f"/vocabulary/api/browse/cards/{card_id}")
+        detail_resp = learner_client.get(f"/api/browse/cards/{card_id}")
         self.assertEqual(detail_resp.status_code, 200)
         detail_payload = detail_resp.get_json() or {}
         self.assertIn("\u72ac", ((detail_payload.get("card") or {}).get("word") or ""))
@@ -2322,7 +2322,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         )
 
         save_resp = learner_client.patch(
-            f"/vocabulary/api/browse/cards/{card_id}",
+            f"/api/browse/cards/{card_id}",
             json={
                 "deck_id": cloned_child_local_id,
                 "tags": row.get("tags") or [],
@@ -2341,7 +2341,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             "\u72ac*",
         )
 
-        reload_detail_resp = learner_client.get(f"/vocabulary/api/browse/cards/{card_id}")
+        reload_detail_resp = learner_client.get(f"/api/browse/cards/{card_id}")
         self.assertEqual(reload_detail_resp.status_code, 200)
         reload_detail_payload = reload_detail_resp.get_json() or {}
         self.assertEqual(
@@ -2350,7 +2350,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         )
 
         reload_cards_resp = learner_client.get(
-            f"/vocabulary/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
+            f"/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
         )
         self.assertEqual(reload_cards_resp.status_code, 200)
         reload_items = (reload_cards_resp.get_json() or {}).get("items") or []
@@ -3911,7 +3911,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIsNone(next_payload.get("card_id"))
         self.assertEqual(next_payload.get("session_state"), "complete")
 
-        browse_resp = self.client.get(f"/vocabulary/api/browse/cards?deck_id={self.deck_id}")
+        browse_resp = self.client.get(f"/api/browse/cards?deck_id={self.deck_id}")
         self.assertEqual(browse_resp.status_code, 200)
         browse_payload = browse_resp.get_json()
         self.assertEqual(browse_payload["total"], 0)
@@ -3963,11 +3963,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(next_resp.status_code, 200)
         self.assertIsNone(next_resp.get_json().get("card_id"))
 
-        due_resp = self.client.get(f"/vocabulary/api/browse/cards?deck_id={self.deck_id}&status=due")
+        due_resp = self.client.get(f"/api/browse/cards?deck_id={self.deck_id}&status=due")
         self.assertEqual(due_resp.status_code, 200)
         self.assertEqual(due_resp.get_json()["total"], 0)
 
-        all_resp = self.client.get(f"/vocabulary/api/browse/cards?deck_id={self.deck_id}")
+        all_resp = self.client.get(f"/api/browse/cards?deck_id={self.deck_id}")
         self.assertEqual(all_resp.status_code, 200)
         all_payload = all_resp.get_json()
         self.assertEqual(all_payload["total"], 1)
@@ -4374,7 +4374,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             card_id = card.id  # type: ignore[union-attr]
 
         patch_resp = self.client.patch(
-            f"/vocabulary/api/browse/cards/{card_id}",
+            f"/api/browse/cards/{card_id}",
             json={
                 "field_values": {
                     "Word": "\u72ac-browse-updated",
@@ -4539,7 +4539,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             card_id = card.id  # type: ignore[union-attr]
 
         patch_resp = self.client.patch(
-            f"/vocabulary/api/browse/cards/{card_id}",
+            f"/api/browse/cards/{card_id}",
             json={"deck_id": target_deck_id},
         )
         self.assertEqual(patch_resp.status_code, 200)

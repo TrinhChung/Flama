@@ -482,10 +482,15 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         note_type = self._create_note_type_with_media()
         self._create_note(note_type["id"], word="犬", meaning="dog")
 
-        response = self.client.get("/vocabulary/api/browse/cards?q=' OR 1=1 --")
+        # Contextual SQL injection probe should be rejected
+        response = self.client.get("/api/browse/cards?q=' OR 1=1 --")
         self.assertEqual(response.status_code, 400)
         payload = response.get_json() or {}
         self.assertEqual(payload.get("field"), "q")
+
+        # Innocent text containing dashes should be accepted without false-positive
+        safe_response = self.client.get("/api/browse/cards?q=help --option")
+        self.assertEqual(safe_response.status_code, 200)
 
     def test_upload_markdown_inline_media_keeps_field_value_unchanged(self):
         note_type = self._create_note_type_with_markdown()
@@ -801,6 +806,56 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
                 },
             )
             self.assertEqual(bad_resp.status_code, 400, (malicious, bad_resp.get_json()))
+
+    def test_required_array_field_rejects_empty_items_and_accepts_partially_filled(self):
+        resp = self.client.post(
+            "/api/note-types",
+            json={
+                "name": "Required Array Note Type",
+                "field_defs": [
+                    {"name": "Word", "field_type": "text", "position": 0, "required": True},
+                    {"name": "Answers", "field_type": "array", "position": 1, "required": True},
+                ],
+                "template": {
+                    "name": "Card 1",
+                    "front_html": "<div>{{Word}}</div>",
+                    "back_html": "<div>{{Word}}</div>{{#Answers}}<div>{{{.}}}</div>{{/Answers}}",
+                    "shared_css": "",
+                },
+            },
+        )
+        self.assertEqual(resp.status_code, 201, resp.get_json())
+        nt_id = resp.get_json()["id"]
+
+        # Reject empty arrays or arrays with only empty items
+        for empty_val in ([], [""], ["  "], [[]], [["", "  "]]):
+            bad_resp = self.client.post(
+                "/api/notes",
+                json={
+                    "note_type_id": nt_id,
+                    "deck_id": self.deck_id,
+                    "field_values": {
+                        "Word": "Tokyo",
+                        "Answers": empty_val,
+                    },
+                },
+            )
+            self.assertEqual(bad_resp.status_code, 400, (empty_val, bad_resp.get_json()))
+            self.assertEqual(bad_resp.get_json().get("field"), "Answers")
+
+        # Accept partially filled array with non-empty item
+        good_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": nt_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "Tokyo",
+                    "Answers": ["", "Đông Kinh"],
+                },
+            },
+        )
+        self.assertEqual(good_resp.status_code, 201, good_resp.get_json())
 
 
 if __name__ == "__main__":

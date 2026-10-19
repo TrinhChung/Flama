@@ -7,9 +7,8 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
 from app.api.common.responses import error_response
-from app.services import deck_release_service
+from app.services import deck_auto_publish_service, deck_release_service
 from app.services.deck_release_service import DeckReleaseError
-from models import db
 
 
 marketplace_deck_releases_bp = Blueprint(
@@ -99,7 +98,7 @@ def publish_deck_release(deck_item_id: str):
         )
 
     try:
-        result = deck_release_service.publish_release(
+        result = deck_release_service.publish_release_and_commit(
             deck_item_id=deck_item_id,
             user_id=current_user.id,
             version_label=(
@@ -119,20 +118,14 @@ def publish_deck_release(deck_item_id: str):
                 or request_payload.get("idempotency_key")
             ),
         )
-        db.session.commit()
     except DeckReleaseError as exc:
-        db.session.rollback()
         return _handle_release_error(exc)
     except IntegrityError:
-        db.session.rollback()
         return error_response(
             "RELEASE_CONFLICT",
             "The release conflicted with another publish. Refresh and retry.",
             status=409,
         )
-    except Exception:
-        db.session.rollback()
-        raise
 
     return (
         jsonify(
@@ -218,18 +211,13 @@ def update_deck_auto_publish_setting(deck_item_id: str):
         )
 
     try:
-        payload = deck_auto_publish_service.update_auto_publish_setting(
+        payload = deck_auto_publish_service.update_auto_publish_setting_and_commit(
             deck_item_id=deck_item_id,
             user_id=current_user.id,
             auto_publish_enabled=bool(request_payload.get("auto_publish_enabled")),
         )
-        db.session.commit()
     except DeckReleaseError as exc:
-        db.session.rollback()
         return _handle_release_error(exc)
-    except Exception:
-        db.session.rollback()
-        raise
 
     return jsonify(payload)
 

@@ -20,6 +20,7 @@ class FieldArrayConversionTests(unittest.TestCase):
             "WTF_CSRF_ENABLED": False,
             "STARTUP_RUN_MAINTENANCE": False,
             "STARTUP_CHECK_DB_CONNECTIVITY": False,
+            "ENABLE_FIELD_ARRAY_CONVERSION_API": True,
         })
 
     def setUp(self):
@@ -265,6 +266,20 @@ class FieldArrayConversionTests(unittest.TestCase):
         latest = self.client.get(url).get_json()
         self.assertEqual(latest["field_values"]["Meaning2"], "updated")
 
+    def test_conversion_disallowed_when_flag_disabled(self):
+        try:
+            self.app.config["ENABLE_FIELD_ARRAY_CONVERSION_API"] = False
+            get_resp = self.client.get(self._url())
+            self.assertEqual(get_resp.status_code, 403, get_resp.get_json())
+            self.assertEqual(get_resp.get_json().get("error"), "CONVERSION_DISALLOWED")
+
+            post_resp = self.client.post(self._url(), json={"notes": []})
+            self.assertEqual(post_resp.status_code, 403, post_resp.get_json())
+            self.assertEqual(post_resp.get_json().get("error"), "CONVERSION_DISALLOWED")
+        finally:
+            self.app.config["ENABLE_FIELD_ARRAY_CONVERSION_API"] = True
+
 
 if __name__ == "__main__":
     unittest.main()
+

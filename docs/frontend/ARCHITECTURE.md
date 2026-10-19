@@ -33,7 +33,7 @@ Server-rendered HTML templates (Jinja2) have been eliminated; Flask serves only 
 
 ### Architectural Guarantees
 1. **Zero Server Rendering**: All UI components, state machines, and view routing execute entirely on the client.
-2. **Pragmatic Feature-Sliced Design (FSD v2.1)**: Code is organized into strict functional layers (`app`, `pages`, `features`, `entities`, `shared`, `components`).
+2. **Pragmatic Feature-Sliced Design (FSD v2.1) & Opportunistic Migration**: Code is organized into functional layers (`app`, `pages`, `features`, `entities`, `shared`, `components`). All agents and developers follow an opportunistic migration rule (Boy Scout Rule): whenever any file in `frontend/src/` is touched or modified, it must be migrated to strict FSD (layer alignment, slice public API `index.ts`, eliminating cross-feature imports, hook decoupling, and eliminating legacy `app/api.ts` calls).
 3. **Triple-Tier State Persistence**: Server state caching (TanStack Query) is decoupled from offline study execution (IndexedDB) and UI preferences (`localStorage`).
 4. **Anti-AI-Slop & Zero Visual Regression**: Strict design system based on linear OKLCH color spaces ("Tone màu Hỏa ấm"), Geist typography, and ambient backdrops.
 5. **Native Array Preservation**: Array fields are maintained as JSON lists; no Anki flat-string degeneration is permitted.

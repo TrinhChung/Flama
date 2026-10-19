@@ -274,9 +274,14 @@ def make_unique_note_type_name(user_id: int, base_name: str) -> str:
         counter += 1
 
 
-def _active_note_type_templates(note_type_id: str):
+def _active_note_type_templates(note_type_id):
     from app.repositories.template_release_repository import active_templates
     return active_templates(db.session, note_type_id)
+
+
+def _note_type_template_publication_error(note_type_id):
+    from app.services.template_release_service import note_type_publication_error
+    return note_type_publication_error(db.session, note_type_id)
 
 
 def resolve_single_note_type_for_deck(
@@ -339,7 +344,7 @@ def bind_deck_item_source_note_type(
     )
     if provenance_error:
         return provenance_error
-    if not template_library_repository.attached_templates(db.session, source_note_type.id):
+    if not _active_note_type_templates(source_note_type.id):
         return "source_note_type_id must reference a note type with at least one template."
     return None
 
@@ -384,7 +389,7 @@ def validate_deck_source_note_type_provenance(
     from app.services.share.note_types import is_installed_note_type_copy
     if is_installed_note_type_copy(source_note_type.id):
         return "Note Type được cài từ Marketplace không thể được đóng gói để chia sẻ lại."
-    return None
+    return _note_type_template_publication_error(source_note_type.id)
 
 
 def validate_marketplace_note_type_for_deck(
@@ -493,15 +498,13 @@ def sync_deck_item_source_note_type_and_commit(
     deck_item: DeckMarketplaceItem,
     require_source_note_type: bool
 ) -> tuple[str | None, bool]:
-    bind_error, changed = flashcards_share.sync_deck_item_source_note_type(
-        deck_item, 
-        require_source_note_type=require_source_note_type
+    bind_error, changed = sync_deck_item_source_note_type(
+        deck_item,
+        require_source_note_type=require_source_note_type,
     )
     if changed:
         db.session.commit()
     return bind_error, changed
-
-
 
 
 def is_card_visible_in_clone_scope(
@@ -511,33 +514,12 @@ def is_card_visible_in_clone_scope(
 ) -> bool:
     if card_obj is None or card_obj.note is None:
         return False
-    if (
-        card_obj.note.user_id == scope.install.user_id
-        and card_obj.note.deck_id is not None
-        and int(card_obj.note.deck_id) in set(scope.local_deck_ids)
-        and DeckCloneAddedNote.query.filter_by(
-            deck_install_id=scope.install.id,
-            note_id=card_obj.note.id,
-        ).first()
-        is not None
-    ):
-        return True
-    if card_obj.note.deck_id is None or int(card_obj.note.deck_id) not in set(scope.source_deck_ids):
-        return False
-    if scope.source_owner_user_id is not None and card_obj.note.user_id != scope.source_owner_user_id:
-        return False
-    if _install_uses_release(scope.install):
-        if not _note_is_member_of_applied_release(
-            install=scope.install,
-            note_id=card_obj.note.id,
-        ):
-            return False
-    elif scope.base_snapshot_at is not None:
-        note_created = card_obj.note.created_at or datetime.min
-        card_created = card_obj.created_at or datetime.min
-        if note_created > scope.base_snapshot_at or card_created > scope.base_snapshot_at:
-            return False
-    return True
+    from app.services.share.overlay import query_clone_scope_cards
+    # Share the exact membership policy with discovery and direct artifact
+    # reads, including immutable presentation pins and retired local apps.
+    return query_clone_scope_cards(scope).filter(
+        Card.note_id == card_obj.note_id, Card.application_id == card_obj.application_id,
+    ).first() is not None
 
 
 def is_note_type_visible_for_shared(
@@ -685,6 +667,7 @@ def touch_deck_install_usage(
     local_deck_id: int,
     activity_at: datetime | None = None,
 ) -> None:
+    from app.services.share.overlay import deck_installs_covering_deck
     installs = deck_installs_covering_deck(user_id=user_id, deck_id=local_deck_id)
     if not installs:
         return
@@ -702,6 +685,7 @@ def touch_deck_install_usage(
 
 
 def deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
+    from app.services.share.overlay import resolve_clone_scope_for_local_deck
     clone_scope = resolve_clone_scope_for_local_deck(
         user_id=user_id,
         local_deck_id=local_deck_id,

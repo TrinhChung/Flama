@@ -20,6 +20,7 @@ from typing import Any
 from app.repositories import deck_release_repository
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.services import release_core
+from models import db
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
 from models.deck_release_change import DeckReleaseChange
@@ -1762,6 +1763,36 @@ def publish_release(
     )
     release, replayed = release_core.publish(_DeckPublishAdapter(item, user_id), request)
     return PublishReleaseResult(release, replayed=replayed)
+
+
+def publish_release_and_commit(
+    *,
+    deck_item_id: str,
+    user_id: int,
+    version_label: Any,
+    changelog: Any,
+    expected_current_release_id: str | None,
+    expected_working_revision: Any,
+    idempotency_key: Any,
+    publish_mode: str = "manual",
+) -> PublishReleaseResult:
+    """Build, stage, and commit an immutable release in a committed transaction."""
+    try:
+        result = publish_release(
+            deck_item_id=deck_item_id,
+            user_id=user_id,
+            version_label=version_label,
+            changelog=changelog,
+            expected_current_release_id=expected_current_release_id,
+            expected_working_revision=expected_working_revision,
+            idempotency_key=idempotency_key,
+            publish_mode=publish_mode,
+        )
+        db.session.commit()
+        return result
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 class _DeckPublishAdapter:

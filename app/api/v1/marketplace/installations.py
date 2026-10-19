@@ -9,19 +9,12 @@ from app.api.common.responses import error_response
 from app.services import marketplace_hub_service
 from app.services import deck_install_rebase_service
 from app.services.deck_install_rebase_service import DeckInstallUpdateError
-from models import db
 
 
 marketplace_installations_bp = Blueprint(
     "api_v1_marketplace_installations",
     __name__,
 )
-
-_PERSISTED_REBASE_ERRORS = {
-    "REBASE_CONFLICTS_UNRESOLVED",
-    "APPLIED_RELEASE_STALE",
-    "OVERLAY_REVISION_STALE",
-}
 
 
 @marketplace_installations_bp.get("/installed-decks")
@@ -93,7 +86,7 @@ def prepare_installed_deck_update(install_id: str, release_id: str):
             status=400,
         )
     try:
-        rebase = deck_install_rebase_service.prepare_update(
+        rebase = deck_install_rebase_service.prepare_update_and_commit(
             install_id=install_id,
             release_id=release_id,
             user_id=current_user.id,
@@ -104,9 +97,7 @@ def prepare_installed_deck_update(install_id: str, release_id: str):
                 or body.get("idempotency_key")
             ),
         )
-        db.session.commit()
     except DeckInstallUpdateError as exc:
-        db.session.rollback()
         return _handle_update_error(exc)
     return jsonify({"rebase": deck_install_rebase_service.serialize_rebase(rebase)})
 
@@ -126,7 +117,7 @@ def apply_installed_deck_update(install_id: str, release_id: str):
             status=400,
         )
     try:
-        rebase = deck_install_rebase_service.prepare_and_apply_update(
+        rebase = deck_install_rebase_service.prepare_and_apply_update_and_commit(
             install_id=install_id,
             release_id=release_id,
             user_id=current_user.id,
@@ -137,14 +128,7 @@ def apply_installed_deck_update(install_id: str, release_id: str):
                 or body.get("idempotency_key")
             ),
         )
-        db.session.commit()
     except DeckInstallUpdateError as exc:
-        # A conflicting preparation is durable so the user can resolve it by
-        # field without rebuilding the entire diff.
-        if exc.error in _PERSISTED_REBASE_ERRORS:
-            db.session.commit()
-        else:
-            db.session.rollback()
         return _handle_update_error(exc)
     return jsonify(
         {
@@ -162,14 +146,12 @@ def apply_installed_deck_update(install_id: str, release_id: str):
 @login_required
 def mark_installed_deck_update_seen(install_id: str, release_id: str):
     try:
-        payload = deck_install_rebase_service.mark_update_seen(
+        payload = deck_install_rebase_service.mark_update_seen_and_commit(
             install_id=install_id,
             release_id=release_id,
             user_id=current_user.id,
         )
-        db.session.commit()
     except DeckInstallUpdateError as exc:
-        db.session.rollback()
         return _handle_update_error(exc)
     return jsonify(payload)
 
@@ -189,7 +171,7 @@ def resolve_installed_deck_update_conflict(rebase_id: str, conflict_id: int):
             status=400,
         )
     try:
-        rebase = deck_install_rebase_service.resolve_conflict(
+        rebase = deck_install_rebase_service.resolve_conflict_and_commit(
             rebase_id=rebase_id,
             conflict_id=conflict_id,
             user_id=current_user.id,
@@ -197,9 +179,7 @@ def resolve_installed_deck_update_conflict(rebase_id: str, conflict_id: int):
             resolved_value=body.get("resolved_value"),
             has_resolved_value="resolved_value" in body,
         )
-        db.session.commit()
     except DeckInstallUpdateError as exc:
-        db.session.rollback()
         return _handle_update_error(exc)
     return jsonify(
         {
@@ -230,16 +210,11 @@ def installed_deck_update_conflicts(rebase_id: str):
 @login_required
 def apply_prepared_installed_deck_update(rebase_id: str):
     try:
-        rebase = deck_install_rebase_service.apply_prepared_update(
+        rebase = deck_install_rebase_service.apply_prepared_update_and_commit(
             rebase_id=rebase_id,
             user_id=current_user.id,
         )
-        db.session.commit()
     except DeckInstallUpdateError as exc:
-        if exc.error in _PERSISTED_REBASE_ERRORS:
-            db.session.commit()
-        else:
-            db.session.rollback()
         return _handle_update_error(exc)
     return jsonify(
         {
@@ -283,18 +258,13 @@ def update_installed_deck_settings(install_id: str):
         )
 
     try:
-        payload = deck_install_rebase_service.update_install_settings(
+        payload = deck_install_rebase_service.update_install_settings_and_commit(
             install_id=install_id,
             user_id=current_user.id,
             auto_update_enabled=bool(body.get("auto_update_enabled")),
         )
-        db.session.commit()
     except DeckInstallUpdateError as exc:
-        db.session.rollback()
         return _handle_update_error(exc)
-    except Exception:
-        db.session.rollback()
-        raise
 
     return jsonify(payload)
 
@@ -303,17 +273,12 @@ def update_installed_deck_settings(install_id: str):
 @login_required
 def detach_installed_deck(install_id: str):
     try:
-        payload = deck_install_rebase_service.detach_installed_deck(
+        payload = deck_install_rebase_service.detach_installed_deck_and_commit(
             install_id=install_id,
             user_id=current_user.id,
         )
-        db.session.commit()
     except DeckInstallUpdateError as exc:
-        db.session.rollback()
         return _handle_update_error(exc)
-    except Exception:
-        db.session.rollback()
-        raise
 
     return jsonify(payload)
 
@@ -340,18 +305,13 @@ def resolve_all_installed_deck_conflicts(rebase_id: str):
         )
 
     try:
-        rebase = deck_install_rebase_service.resolve_all_conflicts(
+        rebase = deck_install_rebase_service.resolve_all_conflicts_and_commit(
             rebase_id=rebase_id,
             user_id=current_user.id,
             resolution_mode=resolution_mode,
         )
-        db.session.commit()
     except DeckInstallUpdateError as exc:
-        db.session.rollback()
         return _handle_update_error(exc)
-    except Exception:
-        db.session.rollback()
-        raise
 
     return jsonify(
         {

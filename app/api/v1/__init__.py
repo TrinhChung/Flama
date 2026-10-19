@@ -60,6 +60,7 @@ def _enforce_daily_rate_limit():
             "/api/identity/auth/google",
             "/api/billing/webhook",
             "/media/proxy",
+            "/api/study/",
         )
     ):
         return None

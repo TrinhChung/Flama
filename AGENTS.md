@@ -35,8 +35,8 @@
 - Do not assume the boundaries are perfectly clean today. Preserve behavior before trying to normalize the layer split.
 
 ## High-Risk Files
-- `app/routes/vocabulary.py`: large route module covering browse, study, deck tree, clone-aware browse editing, and legacy `410` stubs.
-- `app/services/flashcards_share_service.py`: overlay/share/install/cutover hotspot with many behaviors and failure paths.
+- `app/routes/vocabulary.py`: pruned legacy route module (117 LOC) retaining browse deck-tree and deck-settings wrappers.
+- `app/services/share/` (and compatibility facade `app/services/flashcards_share_service.py`): overlay/share/install/cutover hotspot with many behaviors and failure paths.
 - `app/services/deck_change_request_service.py`: change request lifecycle and conflict resolution engine.
 - `app/__init__.py`: startup side effects, schema compatibility patches, and clone cutover.
 - Avoid broad rewrites in these files unless the user explicitly asks for architectural refactoring.
@@ -44,9 +44,9 @@
 ## Common Task Maps
 - Auth and sessions: `app/api/v1/identity/routes.py`, `models/user.py`, `app/services/identity_api_service.py`
 - Dashboard and stats: `app/api/v1/analytics/routes.py`, `app/services/dashboard_service.py`, `app/services/stats_overview.py`, `app/services/stats_today_future.py`
-- Vocabulary browse/study/decks: `app/api/v1/decks/routes.py`, `app/api/v1/learning/browse.py`, `app/routes/flashcards/study.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
+- Vocabulary browse/study/decks: `app/api/v1/decks/routes.py`, `app/api/v1/learning/browse.py`, `app/api/v1/learning/study.py` (canonical, delegating to `app/routes/flashcards/study.py`), `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
 - Flashcard note types/import/render/study: `app/api/v1/flashcards/`, `app/services/flashcard_renderer.py`, `app/services/flashcard_content_service.py`, `app/services/flashcard_import_api_service.py`, `app/services/study_service.py`
-- Shared decks, clone overlay, marketplace: `app/api/v1/marketplace/`, `app/services/flashcards_share_service.py`, `app/repositories/flashcards_share_repository.py`, `docs/backend/old/completed-plans/CLONE_CUTOVER_REPORT.md`
+- Shared decks, clone overlay, marketplace: `app/api/v1/marketplace/`, `app/services/share/` (via facade `app/services/flashcards_share_service.py`), `app/repositories/flashcards_share_repository.py`, `docs/backend/old/completed-plans/CLONE_CUTOVER_REPORT.md`
 - Deck Change Requests: `app/services/deck_change_request_service.py`, `app/repositories/deck_change_request_repository.py`, `models/deck_change_request.py`, `docs/backend/old/completed-plans/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
 - Flama Connect (Yomitan/AnkiConnect): `connect_wsgi.py`, `app/services/flama_connect_service.py`, `models/connect_*.py`
 - Flama Audio Local TTS: `flama-audio/`, `frontend/src/features/audio/`, `flama-audio/README.md`
@@ -68,6 +68,14 @@
   - Flama chỉ import một chiều từ Anki/text, **không** có và không làm chức năng xuất sang Anki; ràng buộc chuỗi phẳng của Anki không áp dụng cho `array`.
   - Renderer (backend lẫn frontend) **không** tự định dạng hay chuyển đổi mảng: list được đưa nguyên vào Mustache, chỉ riêng `{{field}}` trên cả list in ra giống `String(array)` của mustache.js. Template tự xử lý bằng `{{#field}}{{.}}{{/field}}` hoặc `<script>`.
 - **Zero Visual Regression**: Khi refactor kiến trúc frontend (tách hook, bẻ nhỏ component, thay thẻ HTML thô bằng UI Primitives), BẮT BUỘC bảo toàn 100% màu sắc, dải gradient thương hiệu, padding, font size, icon, đổ bóng và layout vị trí gốc trừ khi người dùng yêu cầu redesign.
+- **Opportunistic FSD Migration on Touch (Quy tắc di cư FSD khi chạm file)**:
+  - Do quy mô frontend lớn (`frontend/src/`) không thể tái cấu trúc toàn bộ cùng một lúc: **Mỗi khi sửa, refactor hoặc tạo mới bất kỳ file frontend nào, agent BẮT BUỘC phải đồng thời kiểm tra và migrate file đó sang chuẩn Feature-Sliced Design (FSD)**:
+    1. *Đúng tầng FSD*: Đảm bảo file nằm đúng tầng kiến trúc (`shared`, `entities`, `features`, `pages`, `app`). Di dời hoặc tách nhỏ file nếu đang đặt sai vị trí hoặc sai trách nhiệm.
+    2. *Public API (`index.ts`)*: Khi sửa file trong `src/features/<slice>/`, nếu slice chưa có `index.ts` (hoặc thiếu export), phải tạo/cập nhật `index.ts` làm Public API duy nhất cho slice đó. Mọi import từ bên ngoài vào slice phải qua `@/features/<slice>` thay vì trỏ xuyên sâu vào file nội bộ.
+    3. *Triệt tiêu Cross-Feature Imports*: Nếu file đang sửa import trực tiếp từ một feature slice khác cùng cấp (`@/features/other-feature/...`), phải refactor chuyển phần dùng chung đó xuống tầng dưới (`entities/` hoặc `shared/`), tuyệt đối không để hai feature phụ thuộc lẫn nhau.
+    4. *Tách biệt UI & Logic*: Nếu component chứa state phức tạp, side-effects (`useEffect`), timers hoặc API calls, phải trích xuất ra custom hook riêng đặt trong thư mục `hooks/` của slice đó.
+    5. *Thay thế Legacy API Facade*: Chuyển đổi các lời gọi từ `src/app/api.ts` tập trung cũ sang API client cục bộ của slice (`features/<slice>/api/...`) hoặc `src/shared/api/client.ts`.
+    6. *Bảo toàn Zero Visual Regression & Chạy test*: Luôn bảo toàn 100% giao diện, layout, màu sắc gốc và chạy kiểm thử tương ứng (`npm test` hoặc `vitest`) ngay sau khi chỉnh sửa.
 - **Chrome DevTools & Browser Profiling**: Mỗi khi khởi chạy hoặc kết nối Chrome để debug, test, profiling hiệu năng, hoặc dùng `chrome-devtools` MCP, **BẮT BUỘC phải dùng 1 profile riêng biệt** (isolated `--user-data-dir`, ví dụ: `C:\Users\chung\.gemini\chrome-profiles\flama-devtools`). **Tuyệt đối KHÔNG** can thiệp, mở remote debugging hay can thiệp vào profile cá nhân mặc định của người dùng nhằm tránh xung đột cookies/sessions và bảo vệ dữ liệu cá nhân.
 
 ## Testing

@@ -310,11 +310,12 @@ Each of the four primary domains maintains a dedicated `tech-debt/README.md` cat
 ### 4.2 Backend Technical Debt Overview
 *Full Catalog*: [`docs/backend/tech-debt/README.md`](backend/tech-debt/README.md)
 
-| Debt Item | Affected Location | Metric | Severity | Remediation Summary |
+| Debt Item | Affected Location | Metric | Severity | Status / Remediation Summary |
 |---|---|---|---|---|
-| **`flashcards_share_service.py` Monolith** | `app/services/flashcards_share_service.py` | 3,685 LOC<br>54 callers | **P1 / High** | Re-export symbols from modular `app/services/share/`, migrate callers incrementally, and deprecate monolith. |
-| **`vocabulary.py` Legacy Stubs & Routes** | `app/routes/vocabulary.py` | 718 LOC<br>17 stubs | **P2 / Medium** | Remove 17 HTTP 410 stubs, deprecate duplicate browse routes, migrate deck actions to canonical `/api/v1/decks/`. |
-| **Route Transaction Boundary Leaks** | `app/api/v1/` route handlers | 45 commit calls | **P2 / Medium** | Move `db.session.commit()` calls from route handlers into application services to guarantee atomic transactions. |
+| **`flashcards_share_service.py` Monolith** | `app/services/flashcards_share_service.py` | 26 LOC (was 3,685 LOC)<br>Facade pattern | **P1 / High** | **Phase 1 Complete**: Monolith converted to thin re-export facade over `app/services/share/`. All 113 sharing tests pass. |
+| **`vocabulary.py` Legacy Stubs & Routes** | `app/routes/vocabulary.py` | 117 LOC (was 718 LOC)<br>1 consolidated handler | **P2 / Medium** | **Phase 1 & 2 Complete**: 17 dead stubs removed, duplicate browse routes deprecated, form postbacks removed. |
+| **Route Transaction Boundary Leaks** | `app/api/v1/` route handlers | 0 commit calls (was 45) | **P2 / Medium** | **Complete**: All 45 direct `db.session.commit()` calls moved into service transactions across all 9 route modules. |
+| **Study Route Fragmentation** | `app/api/v1/learning/study.py` | 14 canonical endpoints | **P2 / Medium** | **Complete**: Migrated to `study_bp` on `api_v1_bp`, daily rate limit exempt, 300 total canonical routes. |
 | **Deck Tree N+1 Queries** | `app/repositories/vocabulary_repository.py` | Line 780+ | **P3 / Medium** | Expand batch query optimizations for hierarchical subtree rollup calculations. |
 
 ---

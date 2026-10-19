@@ -299,6 +299,95 @@ class BatchFlashcardImportTests(unittest.TestCase):
         self.assertEqual(est["overall_summary"]["inserted"], 3)
         self.assertEqual(est["overall_summary"]["errors"], 0)
 
+    def test_batch_import_with_array_field(self):
+        with self.app.app_context():
+            nt = NoteType(user_id=self.user_id, name="Array Import Model")
+            db.session.add(nt)
+            db.session.flush()
+            db.session.add_all([
+                FieldDef(note_type_id=nt.id, name="Word", field_type="text", position=0, required=True, identity_role="primary"),
+                FieldDef(note_type_id=nt.id, name="Collocations", field_type="array", position=1, required=False),
+            ])
+            attach_template(
+                db.session,
+                note_type_id=nt.id,
+                owner_user_id=self.user_id,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{#Collocations}}{{.}}{{/Collocations}}",
+            )
+            db.session.commit()
+            array_nt_id = nt.id
+
+        csv_content = 'Word,Collocations\nTokyo,"Tokyo tower\ncentral Tokyo"\n'
+        parse_res = self.client.post(
+            "/api/flashcards/import/batch/parse",
+            data={
+                "parent_deck_id": str(self.parent_deck_id),
+                "note_type_id": array_nt_id,
+                "has_header": "1",
+                "delimiter_mode": "csv",
+                "naming_mode": "auto",
+                "files": [(io.BytesIO(csv_content.encode("utf-8")), "array_test.csv")],
+            },
+            content_type="multipart/form-data",
+        ).get_json()
+
+        token = parse_res["token"]
+        mapping = {
+            "Word": {"source_type": "column", "column_index": 0, "constant_value": ""},
+            "Collocations": {"source_type": "column", "column_index": 1, "constant_value": ""},
+        }
+
+        # 1. Execute Insert
+        exec_res = self.client.post(
+            "/api/flashcards/import/batch/execute",
+            json={
+                "token": token,
+                "parent_deck_id": self.parent_deck_id,
+                "note_type_id": array_nt_id,
+                "mapping": mapping,
+                "file_configs": [{"file_id": "f_0", "target_deck_name": "Array Deck", "action": "create_new"}],
+            },
+        )
+        self.assertEqual(exec_res.status_code, 200, exec_res.get_json())
+        self.assertEqual(exec_res.get_json()["overall_summary"]["inserted"], 1)
+
+        with self.app.app_context():
+            imported_note = Note.query.filter_by(note_type_id=array_nt_id).first()
+            self.assertIsNotNone(imported_note)
+            self.assertEqual(imported_note.field_values.get("Collocations"), ["Tokyo tower", "central Tokyo"])
+            target_deck_id = imported_note.deck_id
+
+        # 2. Re-import same CSV into the existing deck -> must be detected as unchanged
+        re_parse = self.client.post(
+            "/api/flashcards/import/batch/parse",
+            data={
+                "parent_deck_id": str(self.parent_deck_id),
+                "note_type_id": array_nt_id,
+                "has_header": "1",
+                "delimiter_mode": "csv",
+                "naming_mode": "auto",
+                "files": [(io.BytesIO(csv_content.encode("utf-8")), "array_test.csv")],
+            },
+            content_type="multipart/form-data",
+        ).get_json()
+
+        re_exec = self.client.post(
+            "/api/flashcards/import/batch/execute",
+            json={
+                "token": re_parse["token"],
+                "parent_deck_id": self.parent_deck_id,
+                "note_type_id": array_nt_id,
+                "mapping": mapping,
+                "uniqueness_fields": ["Word"],
+                "file_configs": [{"file_id": "f_0", "target_deck_id": target_deck_id, "action": "use_existing"}],
+            },
+        )
+        self.assertEqual(re_exec.status_code, 200, re_exec.get_json())
+        self.assertEqual(re_exec.get_json()["overall_summary"]["unchanged"], 1)
+        self.assertEqual(re_exec.get_json()["overall_summary"]["updated"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

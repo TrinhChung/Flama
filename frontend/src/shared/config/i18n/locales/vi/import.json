@@ -163,16 +163,8 @@
       "title": "Chọn Bộ Thẻ & Loại Thẻ Đích",
       "desc": "Xác định nơi lưu trữ và cấu trúc dữ liệu cho các thẻ mới.",
       "deck_label": "Bộ thẻ đích (Deck)",
-      "deck_search_placeholder": "Tìm kiếm bộ thẻ đích...",
       "notetype_label": "Loại thẻ (Note Type)",
-      "auto_suggest_badge": "Gợi ý tự động từ các bộ thẻ cùng cấp",
-      "empty_no_decks": "Không tìm thấy deck phù hợp.",
-      "tree": {
-        "expand_deck_aria": "Mở rộng deck {{name}}",
-        "collapse_deck_aria": "Thu gọn deck {{name}}",
-        "collapse_all": "Thu gọn tất cả",
-        "expand_all": "Mở rộng tất cả"
-      }
+      "auto_suggest_badge": "Gợi ý tự động từ các bộ thẻ cùng cấp"
     },
     "step2": {
       "title": "Tải file & Parse dữ liệu",

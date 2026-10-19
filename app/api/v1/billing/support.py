@@ -73,9 +73,7 @@ def create_support_checkout():
 def get_support_donation_status():
     from app.repositories import payment_repository
     from app.services import payment, support_donation_service
-    from app.services.payment.base import _utcnow
     from app.services.payment.provider.payos_provider import PayOSProviderError
-    from models import db
 
     order_id = (request.args.get("payment_order_id") or request.args.get("order_id") or "").strip()
     provider_order_code = (
@@ -97,12 +95,7 @@ def get_support_donation_status():
                     "Authentication is required to view saved donation order status.",
                     status=401,
                 )
-        latest_attempt = payment._latest_attempt(order)
-        if latest_attempt is not None and latest_attempt.status in payment.ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
-            resolution = payment._sync_attempt_with_payos(order, latest_attempt, now=_utcnow())
-            if resolution in {"reuse", "completed", "block", "recreate"}:
-                db.session.commit()
-                order = payment_repository.get_order_by_id(order_id) or order
+        order = payment.sync_order_and_commit(order=order)
         return jsonify(payment.serialize_order(order))
 
     if provider_order_code:
@@ -121,11 +114,7 @@ def get_support_donation_status():
                     "Authentication is required to view saved donation order status.",
                     status=401,
                 )
-            if attempt.status in payment.ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
-                resolution = payment._sync_attempt_with_payos(order, attempt, now=_utcnow())
-                if resolution in {"reuse", "completed", "block", "recreate"}:
-                    db.session.commit()
-                    order = payment_repository.get_order_by_id(order.id) or order
+            order = payment.sync_attempt_order_and_commit(attempt=attempt)
             return jsonify(payment.serialize_order(order))
 
         try:

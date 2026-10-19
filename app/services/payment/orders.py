@@ -197,6 +197,30 @@ def sync_and_get_order(*, order_id: str) -> dict[str, Any]:
     return serialize_order(order)
 
 
+def sync_order_and_commit(*, order: Any) -> Any:
+    from app.services.payment.checkout import _sync_attempt_with_payos
+
+    latest_attempt = _latest_attempt(order)
+    if latest_attempt is not None and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
+        resolution = _sync_attempt_with_payos(order, latest_attempt, now=_utcnow())
+        if resolution in {"reuse", "completed", "block", "recreate"}:
+            db.session.commit()
+            order = payment_repository.get_order_by_id(order.id) or order
+    return order
+
+
+def sync_attempt_order_and_commit(*, attempt: Any) -> Any:
+    from app.services.payment.checkout import _sync_attempt_with_payos
+
+    order = attempt.order
+    if order is not None and attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
+        resolution = _sync_attempt_with_payos(order, attempt, now=_utcnow())
+        if resolution in {"reuse", "completed", "block", "recreate"}:
+            db.session.commit()
+            order = payment_repository.get_order_by_id(order.id) or order
+    return order
+
+
 def get_order_detail_for_user(*, order_id: str, user_id: int) -> dict[str, Any]:
     from app.services.payment.checkout import _sync_attempt_with_payos
 

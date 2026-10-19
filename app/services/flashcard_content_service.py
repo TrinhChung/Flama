@@ -587,12 +587,12 @@ def update_field(
             "Unsupported field_type.",
             field="field_type",
         )
-    if new_type == ARRAY_FIELD_TYPE and field.field_type != ARRAY_FIELD_TYPE:
-        # Existing values must be split into lines first; only the array
-        # conversion changes the type together with every Note's value.
+    if (new_type == ARRAY_FIELD_TYPE and field.field_type != ARRAY_FIELD_TYPE) or (
+        field.field_type == ARRAY_FIELD_TYPE and new_type != ARRAY_FIELD_TYPE
+    ):
         raise ContentApiError(
             "FIELD_TYPE_REQUIRES_CONVERSION",
-            "Use the array conversion to switch an existing field to array.",
+            "Direct type changes involving array fields are not permitted.",
             status=409,
             field="field_type",
         )

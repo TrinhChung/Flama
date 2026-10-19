@@ -32,6 +32,8 @@ The [**`reports/`**](reports/) directory contains completed codebase health audi
 | [**`ISSUE_BROWSE_DUPLICATE_CARDS_MULTI_TEMPLATE.md`**](reports/ISSUE_BROWSE_DUPLICATE_CARDS_MULTI_TEMPLATE.md) | Diagnostic report on duplicate card representations in browse under multi-template occurrences. |
 | [**`SECURITY_INCIDENT_2026-10-04_CLOUDFLARE_CLICKFIX.md`**](reports/SECURITY_INCIDENT_2026-10-04_CLOUDFLARE_CLICKFIX.md) | Incident report and remediation analysis regarding external security warnings. |
 | [**`legal_uiux_audit_report.md`**](reports/legal_uiux_audit_report.md) | Legal and UI/UX compliance assessment. |
+| [**`INVESTIGATION_EVENT_TIME_INVALID_STUDY_SESSION.md`**](reports/INVESTIGATION_EVENT_TIME_INVALID_STUDY_SESSION.md) | Diagnostic investigation of study session expiration and EVENT_TIME_INVALID synchronization issue. |
+| [**`FULL_TEST_FAILURE_REPORT_2026-09-01.md`**](reports/FULL_TEST_FAILURE_REPORT_2026-09-01.md) | Historical full test suite failure investigation, isolation analysis, and route snapshot audit (September 2026). |
 | [**`analytics-counts-2026-10-06/`**](reports/analytics-counts-2026-10-06/) | Raw snapshot outputs and execution metrics for prewarmed analytics count benchmarks. |
 
 ### Architecture & Code Reviews (`reviews/`)

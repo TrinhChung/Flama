@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_login import current_user, login_required
 
+from app.api.common.responses import error_response
 from app.services import support_ticket_service
 from app.services.support_ticket_service import TicketServiceError
 from app.utils.permissions import is_admin_user
@@ -19,7 +20,7 @@ def _get_upload_root() -> Path:
 def upload_ticket_image():
     file_obj = request.files.get("file")
     if not file_obj:
-        return jsonify({"error": "No file uploaded", "message": "Vui lòng chọn tập tin ảnh."}), 400
+        return error_response("NO_FILE_UPLOADED", "Vui lòng chọn tập tin ảnh.", status=400)
 
     try:
         url = support_ticket_service.save_ticket_attachment(
@@ -28,9 +29,9 @@ def upload_ticket_image():
         )
         return jsonify({"url": url})
     except TicketServiceError as exc:
-        return jsonify({"error": "UploadFailed", "message": exc.message}), exc.status_code
+        return error_response("UPLOAD_FAILED", exc.message, status=exc.status_code)
     except Exception as exc:
-        return jsonify({"error": "InternalError", "message": str(exc)}), 500
+        return error_response("INTERNAL_ERROR", str(exc), status=500)
 
 
 @tickets_bp.get("/tickets/attachments/<filename>")
@@ -41,7 +42,7 @@ def serve_ticket_attachment(filename: str):
             upload_root=_get_upload_root(),
         )
         if not full_path.exists() or not full_path.is_file():
-            return jsonify({"error": "NotFound", "message": "Không tìm thấy tập tin."}), 404
+            return error_response("NOT_FOUND", "Không tìm thấy tập tin.", status=404)
 
         ext = full_path.suffix.lower()
         mime_types = {
@@ -56,9 +57,9 @@ def serve_ticket_attachment(filename: str):
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
     except TicketServiceError as exc:
-        return jsonify({"error": "InvalidPath", "message": exc.message}), exc.status_code
+        return error_response("INVALID_PATH", exc.message, status=exc.status_code)
     except Exception:
-        return jsonify({"error": "NotFound", "message": "Không tìm thấy tập tin."}), 404
+        return error_response("NOT_FOUND", "Không tìm thấy tập tin.", status=404)
 
 
 @tickets_bp.post("/tickets")
@@ -84,9 +85,9 @@ def create_ticket():
         )
         return jsonify({"message": "Tạo ticket thành công", "item": ticket.to_dict(include_replies=True)}), 201
     except TicketServiceError as exc:
-        return jsonify({"error": "ValidationError", "message": exc.message}), exc.status_code
+        return error_response("VALIDATION_ERROR", exc.message, status=exc.status_code)
     except Exception as exc:
-        return jsonify({"error": "InternalError", "message": str(exc)}), 500
+        return error_response("INTERNAL_ERROR", str(exc), status=500)
 
 
 @tickets_bp.get("/tickets/my")
@@ -112,7 +113,8 @@ def get_ticket_details(ticket_id_or_code: str):
         )
         return jsonify({"item": ticket.to_dict(include_replies=True)})
     except TicketServiceError as exc:
-        return jsonify({"error": "PermissionDenied" if exc.status_code == 403 else "NotFound", "message": exc.message}), exc.status_code
+        code = "PERMISSION_DENIED" if exc.status_code == 403 else "NOT_FOUND"
+        return error_response(code, exc.message, status=exc.status_code)
 
 
 @tickets_bp.post("/tickets/<ticket_id_or_code>/replies")
@@ -134,7 +136,7 @@ def add_ticket_reply(ticket_id_or_code: str):
         )
         return jsonify({"message": "Gửi phản hồi thành công", "item": reply.to_dict()}), 201
     except TicketServiceError as exc:
-        return jsonify({"error": "ReplyError", "message": exc.message}), exc.status_code
+        return error_response("REPLY_ERROR", exc.message, status=exc.status_code)
 
 
 # Admin endpoints
@@ -142,7 +144,7 @@ def add_ticket_reply(ticket_id_or_code: str):
 @login_required
 def list_admin_tickets():
     if not is_admin_user(current_user):
-        return jsonify({"error": "Forbidden", "message": "Bạn không có quyền truy cập."}), 403
+        return error_response("FORBIDDEN", "Bạn không có quyền truy cập.", status=403)
 
     status = request.args.get("status")
     category = request.args.get("category")
@@ -170,7 +172,7 @@ def list_admin_tickets():
 @login_required
 def update_admin_ticket(ticket_id: str):
     if not is_admin_user(current_user):
-        return jsonify({"error": "Forbidden", "message": "Bạn không có quyền thực hiện."}), 403
+        return error_response("FORBIDDEN", "Bạn không có quyền thực hiện.", status=403)
 
     data = request.get_json(silent=True) or {}
     try:
@@ -182,4 +184,4 @@ def update_admin_ticket(ticket_id: str):
         )
         return jsonify({"message": "Cập nhật ticket thành công", "item": ticket.to_dict(include_replies=True)})
     except TicketServiceError as exc:
-        return jsonify({"error": "UpdateFailed", "message": exc.message}), exc.status_code
+        return error_response("UPDATE_FAILED", exc.message, status=exc.status_code)

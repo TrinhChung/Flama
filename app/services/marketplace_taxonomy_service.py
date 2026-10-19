@@ -1407,3 +1407,348 @@ def _dedupe_list(values: list[str]) -> list[str]:
         seen.add(lowered)
         result.append(text)
     return result
+
+
+def _commit_and_invalidate() -> None:
+    from models import db
+
+    db.session.commit()
+    invalidate_taxonomy_cache()
+
+
+def create_domain(
+    *,
+    domain_id: str,
+    label: str,
+    sort_order: int = 0,
+    is_active: bool = True,
+):
+    from models import db
+
+    try:
+        domain = marketplace_taxonomy_repository.create_domain(
+            domain_id=domain_id,
+            label=label,
+            sort_order=sort_order,
+            is_active=is_active,
+        )
+        _commit_and_invalidate()
+        return domain
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def update_domain(
+    *,
+    domain_id: str,
+    label: str | None = None,
+    sort_order: int | None = None,
+    is_active: bool | None = None,
+):
+    from models import db
+
+    domain = marketplace_taxonomy_repository.update_domain(
+        domain_id=domain_id,
+        label=label,
+        sort_order=sort_order,
+        is_active=is_active,
+    )
+    if not domain:
+        return None
+    try:
+        _commit_and_invalidate()
+        return domain
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def delete_domain(domain_id: str) -> bool:
+    success = marketplace_taxonomy_repository.delete_domain(domain_id)
+    if not success:
+        return False
+    _commit_and_invalidate()
+    return True
+
+
+def create_subject(
+    *,
+    subject_id: str,
+    domain_id: str,
+    label: str,
+    sort_order: int = 0,
+    is_active: bool = True,
+):
+    from models import db
+
+    try:
+        subject = marketplace_taxonomy_repository.create_subject(
+            subject_id=subject_id,
+            domain_id=domain_id,
+            label=label,
+            sort_order=sort_order,
+            is_active=is_active,
+        )
+        _commit_and_invalidate()
+        return subject
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def update_subject(
+    *,
+    subject_id: str,
+    domain_id: str | None = None,
+    label: str | None = None,
+    sort_order: int | None = None,
+    is_active: bool | None = None,
+):
+    from models import db
+
+    subject = marketplace_taxonomy_repository.update_subject(
+        subject_id=subject_id,
+        domain_id=domain_id,
+        label=label,
+        sort_order=sort_order,
+        is_active=is_active,
+    )
+    if not subject:
+        return None
+    try:
+        _commit_and_invalidate()
+        return subject
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def delete_subject(subject_id: str) -> bool:
+    success = marketplace_taxonomy_repository.delete_subject(subject_id)
+    if not success:
+        return False
+    _commit_and_invalidate()
+    return True
+
+
+def create_framework(
+    *,
+    framework_id: str,
+    subject_id: str,
+    label: str,
+    sort_order: int = 0,
+    is_active: bool = True,
+):
+    from models import db
+
+    try:
+        framework = marketplace_taxonomy_repository.create_framework(
+            framework_id=framework_id,
+            subject_id=subject_id,
+            label=label,
+            sort_order=sort_order,
+            is_active=is_active,
+        )
+        _commit_and_invalidate()
+        return framework
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def update_framework(
+    *,
+    framework_id: str,
+    subject_id: str | None = None,
+    label: str | None = None,
+    sort_order: int | None = None,
+    is_active: bool | None = None,
+):
+    from models import db
+
+    framework = marketplace_taxonomy_repository.update_framework(
+        framework_id=framework_id,
+        subject_id=subject_id,
+        label=label,
+        sort_order=sort_order,
+        is_active=is_active,
+    )
+    if not framework:
+        return None
+    try:
+        _commit_and_invalidate()
+        return framework
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def delete_framework(framework_id: str) -> bool:
+    success = marketplace_taxonomy_repository.delete_framework(framework_id)
+    if not success:
+        return False
+    _commit_and_invalidate()
+    return True
+
+
+def create_framework_level(
+    *,
+    level_id: str,
+    framework_id: str,
+    subject_id: str,
+    label: str,
+    difficulty_band: str = "beginner",
+    sort_order: int = 0,
+    is_active: bool = True,
+):
+    from models import db
+
+    try:
+        level = marketplace_taxonomy_repository.create_framework_level(
+            level_id=level_id,
+            framework_id=framework_id,
+            subject_id=subject_id,
+            label=label,
+            difficulty_band=difficulty_band,
+            sort_order=sort_order,
+            is_active=is_active,
+        )
+        _commit_and_invalidate()
+        return level
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def update_framework_level(
+    *,
+    level_id: str,
+    label: str | None = None,
+    difficulty_band: str | None = None,
+    sort_order: int | None = None,
+    is_active: bool | None = None,
+):
+    from models import db
+
+    level = marketplace_taxonomy_repository.update_framework_level(
+        level_id=level_id,
+        label=label,
+        difficulty_band=difficulty_band,
+        sort_order=sort_order,
+        is_active=is_active,
+    )
+    if not level:
+        return None
+    try:
+        _commit_and_invalidate()
+        return level
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def delete_framework_level(level_id: str) -> bool:
+    success = marketplace_taxonomy_repository.delete_framework_level(level_id)
+    if not success:
+        return False
+    _commit_and_invalidate()
+    return True
+
+
+def create_option(
+    *,
+    option_id: str,
+    option_type: str,
+    label: str,
+    sub_label: str | None = None,
+    sort_order: int = 0,
+    is_active: bool = True,
+):
+    from models import db
+
+    try:
+        opt = marketplace_taxonomy_repository.create_option(
+            option_id=option_id,
+            option_type=option_type,
+            label=label,
+            sub_label=sub_label,
+            sort_order=sort_order,
+            is_active=is_active,
+        )
+        _commit_and_invalidate()
+        return opt
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def update_option(
+    *,
+    option_id: str,
+    option_type: str | None = None,
+    label: str | None = None,
+    sub_label: str | None = None,
+    sort_order: int | None = None,
+    is_active: bool | None = None,
+):
+    from models import db
+
+    opt = marketplace_taxonomy_repository.update_option(
+        option_id=option_id,
+        option_type=option_type,
+        label=label,
+        sub_label=sub_label,
+        sort_order=sort_order,
+        is_active=is_active,
+    )
+    if not opt:
+        return None
+    try:
+        _commit_and_invalidate()
+        return opt
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def delete_option(option_id: str, *, option_type: str | None = None) -> bool:
+    success = marketplace_taxonomy_repository.delete_option(
+        option_id, option_type=option_type
+    )
+    if not success:
+        return False
+    _commit_and_invalidate()
+    return True
+
+
+def set_subject_option_maps(
+    *,
+    subject_id: str,
+    option_type: str,
+    option_ids: list[str],
+) -> None:
+    from models import db
+
+    try:
+        marketplace_taxonomy_repository.set_subject_option_maps(
+            subject_id=subject_id,
+            option_type=option_type,
+            option_ids=option_ids,
+        )
+        _commit_and_invalidate()
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def reseed_default_taxonomy_data() -> None:
+    from models import db
+
+    try:
+        ensure_default_taxonomy_data(db.session)
+        _commit_and_invalidate()
+    except Exception:
+        db.session.rollback()
+        raise
+

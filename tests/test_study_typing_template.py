@@ -194,7 +194,8 @@ class TypingTemplateArtifactTests(unittest.TestCase):
         )
         self.assertEqual(bare.status_code, 409, bare.get_json())
         back = self.client.patch(f"/api/note-types/{self.note_type['id']}/fields/{accepted_id}", json={"field_type": "text"})
-        self.assertEqual(back.status_code, 200, back.get_json())
+        self.assertEqual(back.status_code, 409, back.get_json())
+        self.assertEqual(back.get_json().get("error"), "FIELD_TYPE_REQUIRES_CONVERSION")
 
     def test_templates_without_array_input_keep_their_artifact(self):
         template = self._template([{"key": "prompt", "label": "Prompt", "type": "text", "required": True}])

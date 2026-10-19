@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import jsonify, request, redirect, url_for, flash
+from flask import current_app, jsonify, request, redirect, url_for, flash
 from flask_login import current_user, login_required
 from app.spa import serve_react_spa
 from models import db
@@ -298,6 +298,11 @@ def delete_field(note_type_id: str, field_id: str):
 @login_required
 def get_field_array_conversion(note_type_id: str, field_id: str):
     """Every owner Note value of the field, for the frontend to split and preview."""
+    if not current_app.config.get("ENABLE_FIELD_ARRAY_CONVERSION_API", False):
+        return jsonify({
+            "error": "CONVERSION_DISALLOWED",
+            "message": "Direct field array conversion has been deprecated and disabled. Please create a new array field.",
+        }), 403
     try:
         return jsonify(
             field_array_conversion_service.get_conversion_source(
@@ -314,6 +319,11 @@ def get_field_array_conversion(note_type_id: str, field_id: str):
 @login_required
 def apply_field_array_conversion(note_type_id: str, field_id: str):
     """Apply a frontend-split conversion (or a restore) to the field and all its Notes at once."""
+    if not current_app.config.get("ENABLE_FIELD_ARRAY_CONVERSION_API", False):
+        return jsonify({
+            "error": "CONVERSION_DISALLOWED",
+            "message": "Direct field array conversion has been deprecated and disabled. Please create a new array field.",
+        }), 403
     try:
         return jsonify(
             field_array_conversion_service.apply_conversion(
