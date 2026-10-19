@@ -2,7 +2,7 @@
 
 - **Domain**: Infrastructure, Deployment, Edge Routing & Runtime Operations
 - **Target Platform**: Hostinger Ubuntu VPS (Native Systemd) & Docker Containerization
-- **Last Verified**: 2026-10-15
+- **Last Verified**: 2026-10-19 (deployment ownership and frontend hosting)
 - **Status**: Production Reference
 
 ---
@@ -10,6 +10,11 @@
 ## 1. Executive Summary & Operational Topology
 
 Flama is deployed in production on a Hostinger Ubuntu VPS using a systemd-managed native runtime, paired with an Nginx reverse proxy and Cloudflare edge SSL termination.
+
+The frontend is deployed separately to Cloudflare Workers (`flama-frontend1001`,
+`flama.vn`). Backend release activation runs under a durable VPS systemd coordinator;
+SSH starts and observes it. See [Deployment and recovery](DEPLOY_RECOVERY.md) for
+the current commands, status files and post-migration rollback constraints.
 
 The production runtime is a multi-process architecture:
 1. **Core Web & REST API (`flama.service`)**: Gunicorn running Flask application factory (`wsgi.py`) bound to `0.0.0.0:4789` (reverse-proxied locally via Nginx at `127.0.0.1:4789`) with 2 worker processes and 4 gthread threads.

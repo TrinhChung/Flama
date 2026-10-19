@@ -24,6 +24,14 @@ BOOTSTRAP_PATH = (
 )
 
 
+ACTIVATION_PATH = WORKFLOW_PATH.parents[2] / "deploy" / "activate_release.sh"
+LAUNCHER_PATH = WORKFLOW_PATH.parents[2] / "deploy" / "run_remote_deploy.sh"
+
+
+def deployment_source():
+    return WORKFLOW_PATH.read_text(encoding="utf-8") + "\n" + ACTIVATION_PATH.read_text(encoding="utf-8")
+
+
 class DeployWorkflowTests(unittest.TestCase):
     def test_host_bootstrap_requires_headers_more_for_media_cache_headers(self):
         bootstrap = BOOTSTRAP_PATH.read_text(encoding="utf-8")
@@ -36,14 +44,14 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertIn("libnginx-mod-http-headers-more-filter", bootstrap)
 
     def test_deploy_is_reusable_and_has_manual_recovery_only(self):
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        workflow = deployment_source()
 
         self.assertIn("  workflow_call:\n", workflow)
         self.assertIn("  workflow_dispatch:\n", workflow)
         self.assertNotIn("  push:\n", workflow)
 
     def test_vps_release_does_not_build_or_package_frontend(self):
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        workflow = deployment_source()
 
         self.assertNotIn("actions/setup-node", workflow)
         self.assertNotIn("npm run build", workflow)
@@ -54,7 +62,7 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertIn("-- . ':(exclude)frontend'", workflow)
 
     def test_database_migration_runs_before_data_bootstrap_and_activation(self):
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        workflow = deployment_source()
 
         migration_position = workflow.index(
             '"$PROJECT_DIR/venv/bin/python" "$release_dir/deploy/migrate_database.py" --writers-quiesced'
@@ -71,7 +79,7 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertNotIn("seed-data-ensure", workflow)
 
     def test_database_migration_uses_release_directory_and_managed_environment(self):
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        workflow = deployment_source()
         migration_unit_start = workflow.index(
             '--unit="flama-db-migrate-$RELEASE_ID"'
         )
@@ -90,7 +98,7 @@ class DeployWorkflowTests(unittest.TestCase):
         )
 
     def test_consumer_is_installed_after_migrations_and_part_of_release_health(self):
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        workflow = deployment_source()
         activate = workflow[workflow.index('test -f "$environment_file"'):]
         self.assertLess(activate.index("deploy/migrate_database.py"), activate.index('install -m 0644 "$release_dir/deploy/flama-study-worker.service"'))
         self.assertLess(activate.index("systemctl stop flama-study-worker.service"), activate.index('mv -f "$desired_environment_file" "$environment_file"'))
@@ -101,7 +109,7 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertIn('STUDY_QUEUE_NAMESPACE: ${{ vars.STUDY_QUEUE_NAMESPACE || \'flama-production\' }}', workflow)
 
     def test_code_rollback_quiesces_writers_then_checks_data_before_restoring_environment(self):
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        workflow = deployment_source()
         rollback = workflow[workflow.index("rollback_activation() {"):workflow.index("cleanup() {")]
         stop_writers = rollback.index("systemctl stop flama.service flama-connect.service")
         check_data = rollback.index("study_worker.py --check-code-rollback --writers-quiesced")
@@ -136,8 +144,8 @@ class DeployRollbackShellTests(unittest.TestCase):
 
     def _rollback(self, *, check_exit=0, quiesce_exit=0, consumer_stop_exit=0,
                   history_exit=0, field_exit=0, previous_worker=True):
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
-        function = workflow[workflow.index("          rollback_activation() {"):workflow.index("          cleanup() {")]
+        workflow = deployment_source()
+        function = workflow[workflow.index("rollback_activation() {"):workflow.index("cleanup() {")]
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory)
             previous = fixture / "previous"
@@ -241,12 +249,89 @@ class DeployRollbackShellTests(unittest.TestCase):
         self.assertNotIn("restart flama-study-worker.service", output)
         self.assertIn("Previous release restored", errors)
 
-    def test_entire_remote_activation_block_has_valid_bash_syntax(self):
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
-        match = re.search(r"<<'REMOTE_SCRIPT'\n(.*?)^\s*REMOTE_SCRIPT", workflow, re.MULTILINE | re.DOTALL)
-        self.assertIsNotNone(match)
-        result = subprocess.run([self.bash, "--noprofile", "--norc", "-n"], input=textwrap.dedent(match.group(1)), text=True, capture_output=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_coordinator_and_transport_have_valid_bash_syntax(self):
+        for path in (ACTIVATION_PATH, LAUNCHER_PATH):
+            with self.subTest(path=path.name):
+                result = subprocess.run([self.bash, "--noprofile", "--norc", "-n", str(path)], text=True, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_deployment_lifetime_and_stdio_are_owned_by_systemd(self):
+        launcher = LAUNCHER_PATH.read_text(encoding="utf-8")
+        coordinator = ACTIVATION_PATH.read_text(encoding="utf-8")
+        self.assertIn("--property=StandardInput=null", launcher)
+        self.assertIn("--property=StandardOutput=journal", launcher)
+        self.assertIn("--property=StandardError=journal", launcher)
+        self.assertIn("--property=RemainAfterExit=yes", launcher)
+        self.assertNotIn("--pipe", coordinator)
+        self.assertIn('flock -n 9', coordinator)
+        self.assertIn('record_state failed', coordinator)
+        self.assertIn('record_state succeeded', coordinator)
+        self.assertIn('phase=migrating', coordinator)
+        self.assertIn('phase=activating', coordinator)
+        self.assertIn('phase=health', coordinator)
+
+    def test_failed_cleanup_preserves_recovery_files_and_original_error(self):
+        coordinator = ACTIVATION_PATH.read_text(encoding="utf-8")
+        cleanup = coordinator[coordinator.index("cleanup() {"):coordinator.index("trap cleanup EXIT")]
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory)
+            artifacts = [fixture / name for name in ("archive", "payload", "desired", "backup")]
+            for artifact in artifacts:
+                artifact.write_text("recovery evidence", encoding="utf-8")
+            assignments = "\n".join(name + "=" + shlex.quote(path.as_posix()) for name, path in zip(
+                ("archive_path", "managed_env_payload_path", "desired_environment_file", "environment_backup_file"), artifacts))
+            script = "\n".join(("set -Eeuo pipefail", assignments,
+                "rollback_activation() { return 1; }", "record_state() { echo STATE=$1; }",
+                cleanup, "trap cleanup EXIT", "exit 42"))
+            result = subprocess.run([self.bash, "--noprofile", "--norc", "-s"], input=script, text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 42, result.stderr)
+            self.assertIn("STATE=failed", result.stdout)
+            self.assertTrue(all(path.exists() for path in artifacts))
+
+    def test_ssh_loss_after_start_and_during_observation_reconnects_without_restarting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory)
+            script = "\n".join((
+                "set -Eeuo pipefail",
+                "fixture_path=" + shlex.quote(fixture.as_posix()),
+                "SSH_HOST=fixture SSH_USER=fixture SSH_PORT=22 PROJECT_DIR=/opt/flama",
+                "RELEASE_ID=" + "a" * 40,
+                "DEPLOYMENT_ID=" + "a" * 40 + "-123-1",
+                '''ssh() {
+                  case "${!#}" in
+                    *"cat >"*) cat >/dev/null ;;
+                    *"systemd-run"*)
+                      if [ ! -f "$fixture_path/started" ]; then
+                        echo once > "$fixture_path/started"
+                        echo 'running migrating' > "$fixture_path/state"
+                        # Emulate systemd ownership: the producer has its own
+                        # stdin/stdout/stderr, independent of the failed SSH.
+                        nohup bash -c 'sleep .2; echo "succeeded health" > "$1/state"' _ "$fixture_path" </dev/null >/dev/null 2>&1 &
+                        return 255
+                      fi
+                      ;;
+                    *"cat '"*)
+                      if [ ! -f "$fixture_path/observation_lost" ]; then
+                        touch "$fixture_path/observation_lost"
+                        return 255
+                      fi
+                      cat "$fixture_path/state"
+                      ;;
+                    *"systemctl show"*) echo active ;;
+                    *) return 2 ;;
+                  esac
+                }
+                sleep() { command sleep .03; }
+                ''',
+                "source " + shlex.quote(LAUNCHER_PATH.as_posix()),
+            ))
+            result = subprocess.run([self.bash, "--noprofile", "--norc", "-s"], input=script,
+                cwd=WORKFLOW_PATH.parents[2], text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            self.assertIn("SSH start response unavailable", result.stdout)
+            self.assertIn("SSH observation interrupted", result.stdout)
+            self.assertIn("succeeded health", result.stdout)
+            self.assertEqual((fixture / "started").read_text().strip(), "once")
 
 
 if __name__ == "__main__":
