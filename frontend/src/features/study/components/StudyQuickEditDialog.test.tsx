@@ -98,7 +98,6 @@ beforeEach(() => {
       { name: 'Word', position: 0, required: true },
       { name: 'Meaning', position: 1, required: false },
     ],
-    decks: [{ id: 5, name: 'N5 Deck' }],
   })
   mocks.mutate.mockResolvedValue({ success: true })
 })
@@ -148,7 +147,6 @@ describe('StudyQuickEditDialog', () => {
       note: { id: '101', deck_id: 5, deck_name: 'N5 Deck', tags: ['jlpt-n5'],
         field_values: mockContent.field_values, content_revision: 3, field_schema_revision: 4 },
       fields: mockTemplate.field_defs,
-      decks: [{ id: 5, name: 'N5 Deck' }],
     }
     mocks.get.mockResolvedValue(detail)
     container = document.createElement('div')
@@ -179,7 +177,7 @@ describe('StudyQuickEditDialog', () => {
     mocks.get.mockResolvedValue({
       card: { card_id: 'card-123', status: 'learning' },
       note: { id: '101', deck_id: 5, tags: ['jlpt-n5'], field_values: content.field_values },
-      fields: template.field_defs, decks: [{ id: 5, name: 'N5 Deck' }],
+      fields: template.field_defs,
     })
     const onCardUpdated = vi.fn()
     container = document.createElement('div')
@@ -249,7 +247,6 @@ describe('StudyQuickEditDialog', () => {
       note: { id: '101', deck_id: 5, deck_name: 'N5 Deck', tags: ['jlpt-n5'],
         field_values: { Word: 'dog', Meaning: 'animal' }, content_revision: 3, field_schema_revision: 4 },
       fields: projection.field_defs,
-      decks: [{ id: 5, name: 'N5 Deck' }],
     }))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
     expect(word.value).toBe('cat')
@@ -368,8 +365,12 @@ describe('StudyQuickEditDialog', () => {
           Word: '勉強',
           Meaning: 'Học hành, ôn luyện',
         }),
+        tags: ['jlpt-n5'],
       }),
     )
+    // Quick edit has no deck picker and never moves the card.
+    expect(document.querySelector('select')).toBeNull()
+    expect(mocks.mutate.mock.calls[0][2]).not.toHaveProperty('deck_id')
 
     expect(onCardUpdated).toHaveBeenCalledWith(
       'card-123',
@@ -456,7 +457,6 @@ describe('StudyQuickEditDialog', () => {
         tags: ['jlpt-n5'],
       },
       fields: mediaTemplate.field_defs,
-      decks: [{ id: 5, name: 'N5 Deck' }],
     })
 
     container = document.createElement('div')
@@ -535,7 +535,6 @@ describe('StudyQuickEditDialog', () => {
         tags: ['jlpt-n5'],
       },
       fields: implicitMediaTemplate.field_defs,
-      decks: [{ id: 5, name: 'N5 Deck' }],
     })
 
     container = document.createElement('div')
@@ -571,7 +570,7 @@ describe('StudyQuickEditDialog', () => {
     mocks.get.mockResolvedValue({
       card: { card_id: 'card-cat-1', status: 'learning' },
       note: { id: '789', deck_id: 1, tags: ['n5'], field_values: mockContent.field_values },
-      fields: mockTemplate.field_defs, decks: [{ id: 1, name: 'N5 Deck' }],
+      fields: mockTemplate.field_defs,
     })
 
     mocks.mutate.mockResolvedValueOnce({
@@ -704,7 +703,6 @@ describe('StudyQuickEditDialog', () => {
         { name: 'Meaning', position: 1, required: false },
         { name: 'StrokeDiagram', position: 2, required: false, field_type: 'diagram' },
       ],
-      decks: [{ id: 5, name: 'N5 Deck' }],
     })
 
     mocks.generateStrokes.mockResolvedValue({

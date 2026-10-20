@@ -75,7 +75,6 @@
     "description": "Chỉnh sửa các trường từ vựng và nội dung mà không làm gián đoạn phiên học.",
     "generate_stroke": "Tạo nét",
     "generate_stroke_tooltip": "Tạo sơ đồ thứ tự nét Kanji & Hanzi cho thẻ này",
-    "dest_deck": "Deck lưu trữ",
     "multiline": "nhiều dòng",
     "enter_field": "Nhập {{fieldName}}…",
     "tags_label": "Tags (Nhãn)",

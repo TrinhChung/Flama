@@ -75,7 +75,6 @@
     "description": "Edit vocabulary fields and contents without interrupting your study session.",
     "generate_stroke": "Stroke Diagram",
     "generate_stroke_tooltip": "Generate Kanji & Hanzi stroke order diagrams for this card",
-    "dest_deck": "Target Deck",
     "multiline": "multiline",
     "enter_field": "Enter {{fieldName}}…",
     "tags_label": "Tags",

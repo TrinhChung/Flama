@@ -1,7 +1,5 @@
 import '@/shared/config/i18n'
 import { useTranslation } from 'react-i18next'
-import { Label } from '@/components/ui/label'
-import { NativeSelect } from '@/components/ui/native-select'
 import { NoteFieldEditor } from '@/entities/flashcard'
 
 export type StudyQuickEditFieldDef = {
@@ -12,9 +10,6 @@ export type StudyQuickEditFieldDef = {
 }
 
 export type StudyQuickEditFieldsProps = {
-  deckList: Array<{ id: number; name: string; path?: string }>
-  deckId: number | null
-  onDeckChange: (deckId: number) => void
   fieldDefs: StudyQuickEditFieldDef[]
   fieldValues: Record<string, unknown>
   /** Stored values when the dialog opened; they fix Input vs Textarea per field. */
@@ -25,9 +20,6 @@ export type StudyQuickEditFieldsProps = {
 }
 
 export function StudyQuickEditFields({
-  deckList,
-  deckId,
-  onDeckChange,
   fieldDefs,
   fieldValues,
   initialFieldValues,
@@ -39,26 +31,6 @@ export function StudyQuickEditFields({
 
   return (
     <div className="space-y-3.5 sm:space-y-4">
-      {/* Destination Deck Selection (if available) */}
-      {deckList.length > 0 && (
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            {t('quick_edit.dest_deck')}
-          </Label>
-          <NativeSelect
-            value={deckId !== null ? String(deckId) : ''}
-            onChange={(e) => onDeckChange(Number(e.target.value))}
-            className="h-10 sm:h-9 text-base sm:text-sm rounded-lg bg-muted/50"
-          >
-            {deckList.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.path || d.name}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
-      )}
-
       {/* Dynamic Note Fields */}
       {fieldDefs.map((field) => (
         <NoteFieldEditor
