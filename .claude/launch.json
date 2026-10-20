@@ -13,6 +13,13 @@
       "runtimeArgs": ["--prefix", "frontend", "vite", "frontend", "--port", "5173", "--strictPort"],
       "port": 5173,
       "url": "http://localhost:5173"
+    },
+    {
+      "name": "vite-alt",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--prefix", "frontend", "vite", "frontend", "--port", "5184", "--strictPort"],
+      "port": 5184,
+      "url": "http://localhost:5184"
     }
   ]
 }
