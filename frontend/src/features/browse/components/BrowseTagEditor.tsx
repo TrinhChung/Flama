@@ -1,12 +1,12 @@
 import '@/shared/config/i18n'
-import type React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, Tag, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { BROWSE_TAG_MAX_LENGTH } from '../types'
+import { NOTE_TAG_MAX_LENGTH } from '@/entities/flashcard'
+import { isImeEnter } from '@/shared/lib/keyboard'
 
 export interface BrowseTagEditorProps {
   tags: string[]
@@ -17,11 +17,6 @@ export interface BrowseTagEditorProps {
   /** Read-only tags, e.g. on a cloned card where the backend rejects tag edits. */
   disabled?: boolean
   disabledReason?: string
-}
-
-/** Enter that only confirms an IME candidate (Japanese, Vietnamese Telex…) must not add a tag. */
-function isImeEnter(e: React.KeyboardEvent<HTMLInputElement>) {
-  return e.nativeEvent.isComposing || e.keyCode === 229
 }
 
 export function BrowseTagEditor({
@@ -48,7 +43,7 @@ export function BrowseTagEditor({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !isImeEnter(e)) onAddTag()
           }}
-          maxLength={BROWSE_TAG_MAX_LENGTH}
+          maxLength={NOTE_TAG_MAX_LENGTH}
           disabled={disabled}
           title={disabled ? disabledReason : undefined}
           className="h-8 rounded-lg text-xs bg-muted/50"

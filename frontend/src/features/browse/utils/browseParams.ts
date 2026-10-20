@@ -5,8 +5,3 @@ export function parseDeckIdParam(raw: string | null): number | null {
   const value = Number(trimmed)
   return Number.isSafeInteger(value) && value > 0 ? value : null
 }
-
-/** Approximates Python's str.casefold(), which the backend uses to dedupe tags. */
-export function tagDedupeKey(tag: string): string {
-  return tag.toUpperCase().toLowerCase()
-}

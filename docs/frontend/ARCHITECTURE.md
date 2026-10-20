@@ -224,6 +224,7 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
   8. `StatusPill`: Standardized colored state indicator for reviews and decks.
   9. `WorkspaceLayout`: Three-column responsive workspace drawer.
 - **Note field editing** lives in `src/entities/flashcard/ui/NoteFieldEditor.tsx` (media preview, native array input or text; Input vs Textarea is fixed at mount from field type, name and stored value). Browse edit/create and the Study quick-edit dialog share it.
+- **Note tags**: the backend limits (64 chars, 50 tags) and the casefold dedupe key are in `src/entities/flashcard/lib/noteTags.ts`; tag inputs ignore an IME-confirming Enter with `isImeEnter` from `src/shared/lib/keyboard.ts`. Browse and Study quick edit both use them, and both lock tags on cloned cards (`note.deck_install_id`).
 
 ---
 

@@ -7,6 +7,7 @@ import { appApi } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
 import { fieldValueEditorText, serializeArrayFieldValues } from '@/lib/arrayField'
 import { noteWritePreconditions } from '@/lib/noteWritePreconditions'
+import { NOTE_TAG_MAX_COUNT, NOTE_TAG_MAX_LENGTH, tagDedupeKey } from '@/entities/flashcard'
 import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
 import type { CardDetailResponse as BrowseCardDetailResponse } from '@/features/browse/types'
 
@@ -201,10 +202,13 @@ export function useStudyQuickEditForm({
         }
       })
       setInitialFieldValues(detailValues)
-      setTags((current) => [...new Set([
-        ...detailTags.filter((tag) => !initialTags.includes(tag) || current.includes(tag)),
-        ...current.filter((tag) => !initialTags.includes(tag)),
-      ])])
+      setTags((current) => {
+        // A clone's tags are read-only, so tags typed before detail arrived are dropped.
+        if (detail.note.deck_install_id) return detailTags
+        const kept = [...new Set(detailTags.filter((tag) => !initialTags.includes(tag) || current.includes(tag)))]
+        const keptKeys = new Set(kept.map(tagDedupeKey))
+        return [...kept, ...current.filter((tag) => !initialTags.includes(tag) && !keptKeys.has(tagDedupeKey(tag)))]
+      })
       setInitialTags(detailTags)
       setDeckId((current) => current !== initialDeckId ? current : detailDeckId)
       setInitialDeckId(detailDeckId)
@@ -212,11 +216,17 @@ export function useStudyQuickEditForm({
   }, [cardDetailQuery.data, open, initialFieldValues, fieldValues, tags, initialTags, deckId, initialDeckId])
 
   const handleAddTag = useCallback(() => {
-    const trimmed = newTagInput.trim()
-    if (!trimmed || tags.includes(trimmed)) return
-    setTags((prev) => [...prev, trimmed])
+    const tag = newTagInput.trim().slice(0, NOTE_TAG_MAX_LENGTH)
+    if (!tag) return
+    const key = tagDedupeKey(tag)
+    if (tags.some((existing) => tagDedupeKey(existing) === key)) return
+    if (tags.length >= NOTE_TAG_MAX_COUNT) {
+      toast.error(t('quick_edit.tag_limit', { count: NOTE_TAG_MAX_COUNT }))
+      return
+    }
+    setTags((prev) => [...prev, tag])
     setNewTagInput('')
-  }, [newTagInput, tags])
+  }, [newTagInput, tags, t])
 
   const handleRemoveTag = useCallback((tagToRemove: string) => {
     setTags((prev) => prev.filter((t) => t !== tagToRemove))
@@ -354,17 +364,18 @@ export function useStudyQuickEditForm({
   }, [open, cardDetailQuery.data?.fields, template?.binding_projection, template?.field_defs, fieldValues, initialFieldValues])
 
   const isDetailReady = Boolean(cardId && cardDetailQuery.data?.card.card_id === cardId)
+  // Logical-overlay clones: the backend rejects deck moves and tag edits.
+  const isCloneCard = Boolean(cardDetailQuery.data?.note.deck_install_id)
 
   const handleSubmit = useCallback(() => {
     if (!isDetailReady || hydratedDetailRef.current?.card.card_id !== cardId
       || !isDirty || updateMutation.isPending || !cardId || fieldDefs.some((field) => invalidArrayFields[field.name])) return
     const values = serializeArrayFieldValues(fieldValues, fieldDefs)
-    updateMutation.mutate({
-      field_values: values,
-      deck_id: deckId || undefined,
-      tags,
-    })
-  }, [isDetailReady, isDirty, updateMutation, cardId, fieldValues, fieldDefs, deckId, tags, invalidArrayFields])
+    // A clone keeps its deck and tags; sending them back only risks a 400.
+    updateMutation.mutate(isCloneCard
+      ? { field_values: values }
+      : { field_values: values, deck_id: deckId || undefined, tags })
+  }, [isDetailReady, isDirty, updateMutation, cardId, fieldValues, fieldDefs, deckId, tags, invalidArrayFields, isCloneCard])
 
   const deckList = cardDetailQuery.data?.decks || []
 
@@ -382,6 +393,7 @@ export function useStudyQuickEditForm({
     setDeckId,
     handleAddTag,
     handleRemoveTag,
+    isCloneCard,
     handleRevert,
     handleApplyStrokes,
     isDirty,

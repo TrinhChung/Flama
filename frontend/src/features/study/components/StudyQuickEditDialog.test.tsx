@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 
 ;(globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT: boolean
@@ -873,6 +874,126 @@ describe('StudyQuickEditDialog', () => {
     })
 
     expect(container.querySelector('[role="dialog"]')).toBeNull()
+  })
+})
+
+describe('StudyQuickEditDialog tags', () => {
+  async function renderDialog() {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => root?.render(renderWithClient(
+      <StudyQuickEditDialog open={true} onOpenChange={vi.fn()} cardId="card-123"
+        template={mockTemplate} content={mockContent} onCardUpdated={vi.fn()} />,
+    )))
+  }
+
+  const tagInput = () => document.querySelector<HTMLInputElement>('input[placeholder="Thêm tag mới…"]')!
+  const addTagButton = () => Array.from(document.querySelectorAll('button'))
+    .find((button) => button.textContent?.trim() === 'Thêm')!
+  const renderedTags = () => Array.from(tagInput().parentElement!.parentElement!
+    .querySelectorAll('[data-slot="badge"]')).map((badge) => badge.textContent)
+  const saveButton = () => Array.from(document.querySelectorAll('button'))
+    .find((button) => button.textContent?.includes('Lưu thay đổi'))!
+
+  async function typeTag(value: string, init: KeyboardEventInit = {}) {
+    await act(async () => setNativeValue(tagInput(), value))
+    await act(async () => tagInput().dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true, cancelable: true, ...init,
+    })))
+  }
+
+  it('ignores Enter that confirms an IME composition', async () => {
+    await renderDialog()
+
+    await typeTag('日本語', { isComposing: true })
+    expect(renderedTags()).toEqual(['jlpt-n5'])
+    await typeTag('tiếng', { keyCode: 229 })
+    expect(renderedTags()).toEqual(['jlpt-n5'])
+    expect(tagInput().value).toBe('tiếng')
+
+    await typeTag('tiếng')
+    expect(renderedTags()).toEqual(['jlpt-n5', 'tiếng'])
+    expect(tagInput().value).toBe('')
+  })
+
+  it('dedupes tags case-insensitively like the backend and caps their length', async () => {
+    await renderDialog()
+    expect(tagInput().maxLength).toBe(64)
+
+    await typeTag('JLPT-N5')
+    expect(renderedTags()).toEqual(['jlpt-n5'])
+    await typeTag('Kanji')
+    await typeTag('KANJI')
+    await typeTag('x'.repeat(70))
+    expect(renderedTags()).toEqual(['jlpt-n5', 'Kanji', 'x'.repeat(64)])
+
+    await act(async () => saveButton().click())
+    expect(mocks.mutate).toHaveBeenCalledWith('/browse/cards/card-123', 'PATCH', expect.objectContaining({
+      tags: ['jlpt-n5', 'Kanji', 'x'.repeat(64)],
+    }))
+  })
+
+  it('drops tags typed before detail loads when they only differ in case', async () => {
+    let resolveDetail!: (detail: unknown) => void
+    mocks.get.mockImplementation(() => new Promise((resolve) => { resolveDetail = resolve }))
+    await renderDialog()
+
+    await typeTag('JLPT-N5')
+    await typeTag('draft')
+    expect(renderedTags()).toEqual(['JLPT-N5', 'draft'])
+    await act(async () => resolveDetail({
+      card: { card_id: 'card-123', status: 'learning' },
+      note: { id: '101', deck_id: 5, tags: ['jlpt-n5'], field_values: mockContent.field_values },
+      fields: mockTemplate.field_defs,
+    }))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(renderedTags()).toEqual(['jlpt-n5', 'draft'])
+  })
+
+  it('stops at 50 tags', async () => {
+    const error = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    const tags = Array.from({ length: 50 }, (_, index) => `tag-${index}`)
+    mocks.get.mockResolvedValue({
+      card: { card_id: 'card-123', status: 'learning' },
+      note: { id: '101', deck_id: 5, tags, field_values: mockContent.field_values },
+      fields: mockTemplate.field_defs,
+    })
+    await renderDialog()
+
+    await typeTag('one-more')
+    expect(renderedTags()).toEqual(tags)
+    expect(tagInput().value).toBe('one-more')
+    expect(error).toHaveBeenCalledWith('Mỗi thẻ có tối đa 50 tag.')
+    error.mockRestore()
+  })
+
+  it('locks tags on a cloned card and leaves deck and tags out of the PATCH', async () => {
+    let resolveDetail!: (detail: unknown) => void
+    mocks.get.mockImplementation(() => new Promise((resolve) => { resolveDetail = resolve }))
+    await renderDialog()
+    await typeTag('typed-early')
+
+    await act(async () => resolveDetail({
+      card: { card_id: 'card-123', status: 'learning' },
+      note: { id: '101', deck_id: 5, tags: ['shared'], field_values: mockContent.field_values,
+        deck_install_id: '77', overlay_revision: 2 },
+      fields: mockTemplate.field_defs,
+    }))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(renderedTags()).toEqual(['shared'])
+    expect(tagInput().disabled).toBe(true)
+    expect(tagInput().title).toBe('Thẻ thuộc bộ deck đã cài đặt: không thể sửa tag.')
+    expect(addTagButton().disabled).toBe(true)
+    expect(document.querySelector('button[aria-label^="Remove tag"]')).toBeNull()
+
+    const word = document.querySelector('input[placeholder="Nhập Word…"]') as HTMLInputElement
+    await act(async () => setNativeValue(word, 'cat'))
+    await act(async () => saveButton().click())
+    expect(mocks.mutate).toHaveBeenCalledWith('/browse/cards/card-123', 'PATCH', {
+      field_values: { Word: 'cat', Meaning: 'Học tập' },
+      expected_overlay_revision: 2,
+    })
   })
 })
 

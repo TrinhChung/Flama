@@ -55,6 +55,7 @@ export function StudyQuickEditDialog({
     setDeckId,
     handleAddTag,
     handleRemoveTag,
+    isCloneCard,
     handleRevert,
     handleApplyStrokes,
     isDirty,
@@ -155,6 +156,8 @@ export function StudyQuickEditDialog({
               onNewTagInputChange={setNewTagInput}
               onAddTag={handleAddTag}
               onRemoveTag={handleRemoveTag}
+              disabled={isCloneCard}
+              disabledReason={t('quick_edit.clone_locked_hint')}
             />
           </div>
 

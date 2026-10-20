@@ -8,6 +8,7 @@ import { appApi } from '@/app/api'
 import { bootstrapQueryKey, useBootstrap } from '@/shared/api/bootstrap'
 import { ApiError, apiBlob } from '@/shared/api/client'
 import { updateCardFieldValues } from '@/entities/flashcard/model/cardContentUpdates'
+import { NOTE_TAG_MAX_COUNT, NOTE_TAG_MAX_LENGTH, tagDedupeKey } from '@/entities/flashcard'
 import {
   type BrowseTtsSettings,
   loadStoredBrowseTtsSettings,
@@ -18,8 +19,6 @@ import { cleanTextForTts } from '@/features/audio/services/ttsTextNormalizer'
 import { fieldValueEditorText } from '@/lib/arrayField'
 import { noteWritePreconditions } from '@/lib/noteWritePreconditions'
 import {
-  BROWSE_TAG_MAX_COUNT,
-  BROWSE_TAG_MAX_LENGTH,
   type BrowseCardRow,
   type BrowseCardsResponse,
   type BrowseDeck,
@@ -29,7 +28,7 @@ import {
   type CardDetailResponse,
   type NoteTypeSummary,
 } from '../types'
-import { parseDeckIdParam, tagDedupeKey } from '../utils/browseParams'
+import { parseDeckIdParam } from '../utils/browseParams'
 
 const EMPTY_BROWSE_CARDS: BrowseCardRow[] = []
 
@@ -945,12 +944,12 @@ export function useBrowseState() {
   const canUploadMedia = !isCloneCard && activeDetail?.can_upload_media !== false
 
   const handleAddTag = () => {
-    const tag = newTagInput.trim().slice(0, BROWSE_TAG_MAX_LENGTH)
+    const tag = newTagInput.trim().slice(0, NOTE_TAG_MAX_LENGTH)
     if (!tag) return
     const key = tagDedupeKey(tag)
     if (editTags.some((existing) => tagDedupeKey(existing) === key)) return
-    if (editTags.length >= BROWSE_TAG_MAX_COUNT) {
-      toast.error(t('editor.tag_limit', { count: BROWSE_TAG_MAX_COUNT }))
+    if (editTags.length >= NOTE_TAG_MAX_COUNT) {
+      toast.error(t('editor.tag_limit', { count: NOTE_TAG_MAX_COUNT }))
       return
     }
     setEditTags([...editTags, tag])

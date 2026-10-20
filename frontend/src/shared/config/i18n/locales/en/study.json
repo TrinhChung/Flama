@@ -82,6 +82,8 @@
     "add_tag_placeholder": "Add new tag…",
     "add_tag": "Add",
     "no_tags": "No tags attached",
+    "tag_limit": "A card can have at most {{count}} tags.",
+    "clone_locked_hint": "Card from an installed deck: its tags can't be changed.",
     "revert": "Revert",
     "cancel": "Cancel",
     "save_changes": "Save Changes",

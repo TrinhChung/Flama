@@ -17,9 +17,6 @@ export function isBrowseStatusFilter(value: string): value is BrowseStatusFilter
 
 /** `q` is sanitized with max_length=120. */
 export const BROWSE_SEARCH_MAX_LENGTH = 120
-/** MAX_TAG_LENGTH / MAX_TAG_COUNT in app/validators/flashcard_input.py. */
-export const BROWSE_TAG_MAX_LENGTH = 64
-export const BROWSE_TAG_MAX_COUNT = 50
 
 export type BrowseCardRow = {
   card_id: string
