@@ -1,11 +1,8 @@
 import '@/shared/config/i18n'
 import { useTranslation } from 'react-i18next'
 import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect } from '@/components/ui/native-select'
-import { MediaFieldPreview, ArrayFieldInput } from '@/entities/flashcard'
-import { fieldValueEditorText } from '@/lib/arrayField'
+import { NoteFieldEditor } from '@/entities/flashcard'
 
 export type StudyQuickEditFieldDef = {
   name: string
@@ -20,6 +17,8 @@ export type StudyQuickEditFieldsProps = {
   onDeckChange: (deckId: number) => void
   fieldDefs: StudyQuickEditFieldDef[]
   fieldValues: Record<string, unknown>
+  /** Stored values when the dialog opened; they fix Input vs Textarea per field. */
+  initialFieldValues?: Record<string, unknown>
   onFieldValueChange: (fieldName: string, value: string) => void
   onFieldValidityChange?: (fieldName: string, valid: boolean) => void
   resolveMediaUrl: (rawRef: string) => string | undefined
@@ -31,6 +30,7 @@ export function StudyQuickEditFields({
   onDeckChange,
   fieldDefs,
   fieldValues,
+  initialFieldValues,
   onFieldValueChange,
   onFieldValidityChange,
   resolveMediaUrl,
@@ -60,76 +60,21 @@ export function StudyQuickEditFields({
       )}
 
       {/* Dynamic Note Fields */}
-      {fieldDefs.map((field) => {
-        const val = fieldValueEditorText(fieldValues[field.name])
-        const ft = field.field_type
-
-        if (ft === 'image' || ft === 'audio' || ft === 'diagram') {
-          return (
-            <MediaFieldPreview
-              key={field.name}
-              fieldName={field.name}
-              fieldType={ft}
-              value={val}
-              onChange={(v) => onFieldValueChange(field.name, v)}
-              required={field.required}
-              resolveUrl={resolveMediaUrl}
-            />
-          )
-        }
-
-        if (ft === 'array') {
-          return (
-            <ArrayFieldInput
-              key={field.name}
-              fieldName={field.name}
-              value={fieldValues[field.name]}
-              onChange={(v) => onFieldValueChange(field.name, v)}
-              required={field.required}
-              onValidityChange={(valid) => onFieldValidityChange?.(field.name, valid)}
-              placeholderNormal={t('quick_edit.array_placeholder')}
-            />
-          )
-        }
-
-        const isMultiline =
-          val.length > 60 ||
-          val.includes('\n') ||
-          field.name.toLowerCase().includes('meaning') ||
-          field.name.toLowerCase().includes('example') ||
-          field.name.toLowerCase().includes('sentence') ||
-          field.name.toLowerCase().includes('notes')
-
-        return (
-          <div key={field.name} className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center justify-between">
-              <span>
-                {field.name} {field.required && <span className="text-destructive">*</span>}
-              </span>
-              {isMultiline && (
-                <span className="text-[10px] lowercase font-normal opacity-70">
-                  {t('quick_edit.multiline')}
-                </span>
-              )}
-            </Label>
-            {isMultiline ? (
-              <Textarea
-                value={val}
-                onChange={(e) => onFieldValueChange(field.name, e.target.value)}
-                placeholder={t('quick_edit.enter_field', { fieldName: field.name })}
-                className="min-h-20 text-base sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50 focus:bg-background transition-colors"
-              />
-            ) : (
-              <Input
-                value={val}
-                onChange={(e) => onFieldValueChange(field.name, e.target.value)}
-                placeholder={t('quick_edit.enter_field', { fieldName: field.name })}
-                className="h-10 sm:h-9 text-base sm:text-sm rounded-lg bg-muted/50 focus:bg-background transition-colors"
-              />
-            )}
-          </div>
-        )
-      })}
+      {fieldDefs.map((field) => (
+        <NoteFieldEditor
+          key={field.name}
+          field={field}
+          value={fieldValues[field.name]}
+          initialValue={initialFieldValues?.[field.name] ?? fieldValues[field.name]}
+          onChange={onFieldValueChange}
+          onValidityChange={onFieldValidityChange}
+          resolveMediaUrl={resolveMediaUrl}
+          placeholder={t('quick_edit.enter_field', { fieldName: field.name })}
+          arrayPlaceholder={t('quick_edit.array_placeholder')}
+          multilineHint={t('quick_edit.multiline')}
+          density="touch"
+        />
+      ))}
     </div>
   )
 }

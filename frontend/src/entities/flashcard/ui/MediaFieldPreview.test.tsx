@@ -189,6 +189,43 @@ describe('MediaFieldPreview', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  it('refuses pasted image files when uploads are disabled but still accepts links', async () => {
+    const { toast } = await import('sonner')
+    const toastErrorSpy = vi.spyOn(toast, 'error')
+    const client = await import('@/shared/api/client')
+    const requestSpy = vi.spyOn(client, 'apiRequest')
+    const onChange = vi.fn()
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <MediaFieldPreview fieldName="Picture" fieldType="image" value="" onChange={onChange} uploadDisabled />,
+      )
+    })
+    expect(container.textContent).toContain('Thẻ này không hỗ trợ tải ảnh lên')
+    const previewContainer = container.querySelector('[tabindex="0"]') as HTMLDivElement
+
+    const file = new File(['x'], 'cat.png', { type: 'image/png' })
+    const imagePaste = new Event('paste', { bubbles: true, cancelable: true }) as any
+    imagePaste.clipboardData = { items: [{ type: 'image/png', getAsFile: () => file }], files: [file], getData: () => '' }
+    await act(async () => {
+      previewContainer.dispatchEvent(imagePaste)
+    })
+    expect(toastErrorSpy).toHaveBeenCalledWith('Thẻ này không hỗ trợ tải ảnh lên. Hãy dán link ảnh.')
+    expect(requestSpy).not.toHaveBeenCalled()
+    expect(onChange).not.toHaveBeenCalled()
+
+    const linkPaste = new Event('paste', { bubbles: true, cancelable: true }) as any
+    linkPaste.clipboardData = { items: [], files: [], getData: (format: string) => (format === 'text' ? 'https://example.com/cat.png' : '') }
+    await act(async () => {
+      previewContainer.dispatchEvent(linkPaste)
+    })
+    expect(onChange).toHaveBeenCalledWith('https://example.com/cat.png')
+    act(() => root.unmount())
+  })
+
   it('safely handles non-string or array values without throwing TypeError', async () => {
     expect(resolveDisplayUrl(null)).toBe('')
     expect(resolveDisplayUrl(undefined)).toBe('')

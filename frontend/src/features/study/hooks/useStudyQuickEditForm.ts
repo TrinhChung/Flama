@@ -8,7 +8,12 @@ import { resolveBackendUrl } from '@/config/env'
 import { fieldValueEditorText, serializeArrayFieldValues } from '@/lib/arrayField'
 import { noteWritePreconditions } from '@/lib/noteWritePreconditions'
 import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
-import type { CardDetailResponse } from '@/features/browse/hooks/useBrowseState'
+import type { CardDetailResponse as BrowseCardDetailResponse } from '@/features/browse/types'
+
+/** The Browse card detail; `decks` is read here although the Browse API does not send it today. */
+type CardDetailResponse = BrowseCardDetailResponse & {
+  decks?: Array<{ id: number; name: string; path?: string }>
+}
 
 export type UpdateCardResponse = {
   success: boolean
@@ -363,6 +368,10 @@ export function useStudyQuickEditForm({
 
   const deckList = cardDetailQuery.data?.decks || []
 
+  // Available on the first open render, before the init effects above run, so
+  // each field editor picks Input or Textarea from the stored value.
+  const editorSeedValues = cardDetailQuery.data?.note.field_values ?? content?.field_values ?? initialFieldValues
+
   return {
     fieldValues,
     setFieldValues,
@@ -384,5 +393,6 @@ export function useStudyQuickEditForm({
     isSubmitting: updateMutation.isPending,
     fieldDefs,
     deckList,
+    editorSeedValues,
   }
 }

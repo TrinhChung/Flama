@@ -66,6 +66,7 @@ export function StudyQuickEditDialog({
     isSubmitting,
     fieldDefs,
     deckList,
+    editorSeedValues,
   } = useStudyQuickEditForm({
     open,
     cardId,
@@ -142,6 +143,7 @@ export function StudyQuickEditDialog({
               onDeckChange={setDeckId}
               fieldDefs={fieldDefs}
               fieldValues={fieldValues}
+              initialFieldValues={editorSeedValues}
               onFieldValueChange={handleFieldValueChange}
               onFieldValidityChange={handleFieldValidityChange}
               resolveMediaUrl={mediaResolver}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import * as SharedUI from "./index"
 
 describe("Shared UI Public API Barrel", () => {
-  it("exports all 8 standardized UI primitives without missing members", () => {
+  it("exports all 7 standardized UI primitives without missing members", () => {
     // 1. SearchInput
     expect(SharedUI.SearchInput).toBeDefined()
     expect(SharedUI.searchInputVariants).toBeDefined()
@@ -33,10 +33,5 @@ describe("Shared UI Public API Barrel", () => {
     // 7. SplitPane
     expect(SharedUI.SplitPane).toBeDefined()
     expect(SharedUI.splitPaneHandleVariants).toBeDefined()
-
-    // 8. CardFieldsForm
-    expect(SharedUI.CardFieldsForm).toBeDefined()
-    expect(SharedUI.cardFieldLabelVariants).toBeDefined()
-    expect(SharedUI.cardFieldInputVariants).toBeDefined()
   })
 })

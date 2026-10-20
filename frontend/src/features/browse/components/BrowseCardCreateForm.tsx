@@ -1,16 +1,15 @@
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
-import { Textarea } from '@/components/ui/textarea'
-import { LoaderCircle, Plus, RotateCcw, Tag, X } from 'lucide-react'
-import { fieldValueEditorText, isArrayField, serializeArrayFieldValues } from '@/lib/arrayField'
-import { MediaFieldPreview, ArrayFieldInput } from '@/entities/flashcard'
+import { LoaderCircle, Plus, RotateCcw, X } from 'lucide-react'
+import { fieldValueEditorText, serializeArrayFieldValues } from '@/lib/arrayField'
+import { NoteFieldEditor } from '@/entities/flashcard'
 import type { useBrowseState } from '../hooks/useBrowseState'
+import { BrowseTagEditor } from './BrowseTagEditor'
 
 export interface BrowseCardCreateFormProps {
   browse: ReturnType<typeof useBrowseState>
@@ -63,6 +62,15 @@ export function BrowseCardCreateForm({
   )
   const [invalidArrayFields, setInvalidArrayFields] = useState<Record<string, boolean>>({})
   const hasInvalidFields = fields.some((field) => invalidArrayFields[`${effectiveNoteTypeId}:${field.name}`])
+  const handleFieldChange = useCallback((fieldName: string, value: string) => {
+    setEditFieldValues((prev) => ({ ...prev, [fieldName]: value }))
+  }, [setEditFieldValues])
+  const handleFieldValidityChange = useCallback((fieldName: string, valid: boolean) => {
+    setInvalidArrayFields((previous) => {
+      const key = `${effectiveNoteTypeId}:${fieldName}`
+      return previous[key] === !valid ? previous : { ...previous, [key]: !valid }
+    })
+  }, [effectiveNoteTypeId])
 
   const submitCreateCard = () => {
     if (createMutation.isPending || hasInvalidFields || fields.length === 0) return
@@ -166,130 +174,26 @@ export function BrowseCardCreateForm({
             {noteTypesQuery.isPending ? t('editor.loading_template') : t('editor.no_fields_in_template')}
           </div>
         ) : (
-          fields.map((field) => {
-            const val = fieldValueEditorText(editFieldValues[field.name])
-            const ft = (field.field_type || 'text').toLowerCase()
-
-            // Media fields get a specialized preview/code editor.
-            if (ft === 'image' || ft === 'audio' || ft === 'diagram') {
-              return (
-                <MediaFieldPreview
-                  key={field.name}
-                  fieldName={field.name}
-                  fieldType={ft as 'image' | 'audio' | 'diagram'}
-                  value={val}
-                  onChange={(v) =>
-                    setEditFieldValues((prev) => ({ ...prev, [field.name]: v }))
-                  }
-                  required={field.required}
-                />
-              )
-            }
-
-            if (isArrayField(ft)) {
-              return (
-                <ArrayFieldInput
-                  key={`${effectiveNoteTypeId}:${field.name}`}
-                  fieldName={field.name}
-                  value={editFieldValues[field.name]}
-                  onChange={(v) =>
-                    setEditFieldValues((prev) => ({ ...prev, [field.name]: v }))
-                  }
-                  required={field.required}
-                  onValidityChange={(valid) => setInvalidArrayFields((previous) => {
-                    const key = `${effectiveNoteTypeId}:${field.name}`
-                    return previous[key] === !valid ? previous : { ...previous, [key]: !valid }
-                  })}
-                />
-              )
-            }
-
-            const isMultiline =
-              ft === 'richtext' || ft === 'markdown' ||
-              val.length > 50 ||
-              val.includes('\n') ||
-              field.name.toLowerCase().includes('meaning') ||
-              field.name.toLowerCase().includes('example') ||
-              field.name.toLowerCase().includes('sentence')
-
-            return (
-              <div key={field.name} className="space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  {field.name} {field.required && <span className="text-destructive">*</span>}
-                </Label>
-                {isMultiline ? (
-                  <Textarea
-                    placeholder={`Nhập ${field.name}...`}
-                    value={val}
-                    onChange={(e) =>
-                      setEditFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
-                    }
-                    className="min-h-20 text-xs sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50"
-                  />
-                ) : (
-                  <Input
-                    placeholder={`Nhập ${field.name}...`}
-                    value={val}
-                    onChange={(e) =>
-                      setEditFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
-                    }
-                    className="h-9 text-xs sm:text-sm rounded-lg bg-muted/50"
-                  />
-                )}
-              </div>
-            )
-          })
+          fields.map((field) => (
+            <NoteFieldEditor
+              key={`${effectiveNoteTypeId}:${field.name}`}
+              field={field}
+              value={editFieldValues[field.name]}
+              onChange={handleFieldChange}
+              onValidityChange={handleFieldValidityChange}
+              placeholder={`Nhập ${field.name}...`}
+            />
+          ))
         )}
 
         {/* Tags management */}
-        <div className="space-y-2">
-          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            {t('editor.tags_label')}
-          </Label>
-          <div className="flex gap-1.5">
-            <Input
-              placeholder={t('editor.new_tag_placeholder')}
-              value={newTagInput}
-              onChange={(e) => setNewTagInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-              className="h-8 rounded-lg text-xs bg-muted/50"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-2.5 rounded-lg text-xs bg-muted/50 hover:bg-muted border-border"
-              onClick={handleAddTag}
-            >
-              <Plus className="size-3.5" />
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5 pt-1.5">
-            {editTags.length === 0 ? (
-              <span className="text-[11px] text-muted-foreground italic">
-                {t('editor.no_tags')}
-              </span>
-            ) : (
-              editTags.map((tag) => (
-                <Badge
-                  key={tag}
-                  variant="secondary"
-                  className="gap-1 pl-1.5 pr-1 py-0.5 text-[11px] rounded-md font-semibold select-none group"
-                >
-                  <Tag className="size-2.5 opacity-60" />
-                  <span>{tag}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveTag(tag)}
-                    className="p-0.5 rounded-full hover:bg-muted-foreground/15 text-muted-foreground hover:text-foreground shrink-0"
-                  >
-                    <X className="size-2.5" />
-                  </button>
-                </Badge>
-              ))
-            )}
-          </div>
-        </div>
+        <BrowseTagEditor
+          tags={editTags}
+          newTagInput={newTagInput}
+          onNewTagInputChange={setNewTagInput}
+          onAddTag={handleAddTag}
+          onRemoveTag={handleRemoveTag}
+        />
       </div>
 
       {/* Editor Actions Footer */}

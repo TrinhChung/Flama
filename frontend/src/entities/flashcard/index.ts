@@ -9,6 +9,9 @@ export { MediaFieldPreview, resolveDisplayUrl } from './ui/MediaFieldPreview'
 export type { MediaFieldPreviewProps } from './ui/MediaFieldPreview'
 export { ArrayFieldInput } from './ui/ArrayFieldInput'
 export type { ArrayFieldInputProps, ArrayViewMode } from './ui/ArrayFieldInput'
+export { NoteFieldEditor } from './ui/NoteFieldEditor'
+export { prefersMultilineEditor } from './lib/noteFieldLayout'
+export type { NoteFieldEditorDensity, NoteFieldEditorField, NoteFieldEditorProps } from './ui/NoteFieldEditor'
 export type {
   CardRendererFrameProps,
   CardDisplayProps,

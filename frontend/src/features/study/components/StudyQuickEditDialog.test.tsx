@@ -121,6 +121,26 @@ function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
 }
 
 describe('StudyQuickEditDialog', () => {
+  it('lays out a long stored value as a textarea on open and keeps short fields as inputs while typing', async () => {
+    const longWord = '勉強'.repeat(30)
+    const content = { ...mockContent, field_values: { ...mockContent.field_values, Word: longWord } }
+    mocks.get.mockReturnValue(new Promise(() => {}))
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => root?.render(renderWithClient(
+      <StudyQuickEditDialog open={true} onOpenChange={vi.fn()} cardId="card-123"
+        template={mockTemplate} content={content} onCardUpdated={vi.fn()} />,
+    )))
+
+    const word = document.querySelector('textarea[placeholder="Nhập Word…"]') as HTMLTextAreaElement
+    expect(word.value).toBe(longWord)
+    expect(word.closest('div')!.textContent).toContain('nhiều dòng')
+
+    await act(async () => setNativeValue(word, 'ngắn'))
+    expect(document.querySelector('textarea[placeholder="Nhập Word…"]')).toBe(word)
+  })
+
   it('sends the revision captured before the user draft when detail refreshes in the background', async () => {
     const detail = {
       card: { card_id: 'card-123', status: 'learning' },
