@@ -8,7 +8,7 @@ import { StudyCompletionCard } from './StudyCompletionCard'
 import type { PersistedStudySession } from '../session/sessionStore'
 import type { StudySessionCommitReceipt } from '../types'
 
-vi.mock('@/features/worksheets/components/LazyDeckWorksheetModal', () => ({
+vi.mock('@/features/worksheets', () => ({
   LazyDeckWorksheetModal: vi.fn(({ open, deckId, deckName }: any) =>
     open ? (
       <div data-testid="deck-worksheet-modal" data-deck-id={deckId} data-deck-name={deckName}>

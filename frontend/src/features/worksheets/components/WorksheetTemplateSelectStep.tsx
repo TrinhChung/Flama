@@ -3,11 +3,6 @@ import { useTranslation } from 'react-i18next'
 import {
   LayoutGrid,
   FileText,
-  Type,
-  BookOpen,
-  Sparkles,
-  Table as TableIcon,
-  Layers,
   Check,
   ArrowRight,
   ArrowLeft,
@@ -15,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { WorksheetTemplate } from '../types'
+import { WIZARD_TEMPLATE_ICONS as TEMPLATE_ICONS } from '../config/templateIcons'
 
 export interface WorksheetTemplateSelectStepProps {
   templates: WorksheetTemplate[]
@@ -24,19 +20,6 @@ export interface WorksheetTemplateSelectStepProps {
   onBack: () => void
   isStandalone?: boolean
   className?: string
-}
-
-const TEMPLATE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  kanji_compact: LayoutGrid,
-  kanji_step_by_step: Sparkles,
-  kanji_stroke: Layers,
-  kanji_compound: Type,
-  vocab_writing: BookOpen,
-  vocab_recall: FileText,
-  sentence_writing: FileText,
-  grammar_practice: BookOpen,
-  deck_table: TableIcon,
-  genkouyoushi: FileText,
 }
 
 type CategoryFilter = 'all' | 'kanji' | 'vocabulary' | 'sentence' | 'table'

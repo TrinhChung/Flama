@@ -1,20 +1,21 @@
 import { Check, FileText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
+import { STUDIO_TEMPLATE_ICONS, type TemplateIcon } from '../../config/templateIcons'
 import type { DeckWorksheetMeta } from '../../types'
 
 export interface StudioTemplateTabProps {
   templates?: DeckWorksheetMeta['templates']
   selectedTemplateId: string
   onSelectTemplate: (templateId: string) => void
-  templateIcons?: Record<string, any>
+  templateIcons?: Record<string, TemplateIcon>
 }
 
 export function StudioTemplateTab({
   templates,
   selectedTemplateId,
   onSelectTemplate,
-  templateIcons = {},
+  templateIcons = STUDIO_TEMPLATE_ICONS,
 }: StudioTemplateTabProps) {
   const { t } = useTranslation('worksheets')
 

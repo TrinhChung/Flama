@@ -10,7 +10,7 @@ import {
   Printer,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
+import { LazyDeckWorksheetModal } from '@/features/worksheets'
 import { StudyCompletionBreakdown } from './StudyCompletionBreakdown'
 import { StudyCompletionDeckStatus } from './StudyCompletionDeckStatus'
 import { StudyCompletionStatsGrid } from './StudyCompletionStatsGrid'

@@ -31,14 +31,14 @@ describe('Lazy Worksheet modal', { timeout: 15000 }, () => {
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
-    vi.doUnmock('./DeckWorksheetModal')
+    vi.doUnmock('./WorksheetStudio')
     vi.restoreAllMocks()
   })
 
   it('loads only on open, allows cancelling the pending load, and forwards the original modal props', async () => {
-    const request = deferred<{ DeckWorksheetModal: ComponentType<DeckWorksheetModalProps> }>()
+    const request = deferred<{ WorksheetStudio: ComponentType<DeckWorksheetModalProps> }>()
     const load = vi.fn(() => request.promise)
-    vi.doMock('./DeckWorksheetModal', load)
+    vi.doMock('./WorksheetStudio', load)
     const { LazyDeckWorksheetModal } = await import('./LazyDeckWorksheetModal')
     function Host() {
       const [open, setOpen] = useState(false)
@@ -56,17 +56,34 @@ describe('Lazy Worksheet modal', { timeout: 15000 }, () => {
     await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     expect(document.querySelector('[role="dialog"]')).toBeNull()
 
-    const loaded = vi.fn((props: DeckWorksheetModalProps) => <div role="dialog">Loaded {props.deckId}</div>)
-    await act(async () => request.resolve({ DeckWorksheetModal: loaded }))
+    const loaded = vi.fn((props: DeckWorksheetModalProps) => <p>Loaded {props.deckId}</p>)
+    await act(async () => request.resolve({ WorksheetStudio: loaded }))
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     await act(async () => container.querySelector('button')?.click())
     expect(document.querySelector('[role="dialog"]')?.textContent).toBe('Loaded 42')
     expect(loaded.mock.calls[0][0]).toMatchObject({ open: true, deckId: 42, initialCardIds: ['card-1'] })
   })
 
+  it('keeps one dialog frame mounted while the studio loads', async () => {
+    const request = deferred<{ WorksheetStudio: ComponentType<DeckWorksheetModalProps> }>()
+    vi.doMock('./WorksheetStudio', () => request.promise)
+    const { LazyDeckWorksheetModal } = await import('./LazyDeckWorksheetModal')
+    await act(async () => root.render(<LazyDeckWorksheetModal open onOpenChange={() => undefined} deckId={7} />))
+
+    const loadingFrame = document.querySelector('[role="dialog"]')
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    expect(loadingFrame?.querySelector('[role="status"]')).not.toBeNull()
+
+    await act(async () => request.resolve({ WorksheetStudio: () => <p>Studio ready</p> }))
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    // Same DOM node: the frame was never torn down and reopened.
+    expect(document.querySelector('[role="dialog"]')).toBe(loadingFrame)
+    expect(loadingFrame?.textContent).toBe('Studio ready')
+  })
+
   it('keeps a failed chunk load local and leaves its dialog cancellable', async () => {
     const request = deferred<never>()
-    vi.doMock('./DeckWorksheetModal', () => request.promise)
+    vi.doMock('./WorksheetStudio', () => request.promise)
     const { LazyDeckWorksheetModal } = await import('./LazyDeckWorksheetModal')
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
     function Host() {

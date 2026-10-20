@@ -1,6 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
 import {
   FolderTree,
   FileText,
@@ -12,21 +11,9 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { apiRequest } from '@/shared/api/client'
-import {
-  DeckSelectionTreeView,
-  type DeckOption,
-} from '@/entities/deck/ui/DeckSelectionTreeView'
-import { fetchDeckWorksheetMeta } from '../api'
+import { DeckSelectionTreeView } from '@/entities/deck'
 import type { DeckWorksheetMeta } from '../types'
-
-export interface SimpleDeck {
-  id: number
-  name: string
-  parent_id?: number | null
-  path?: string
-  counts?: { total?: number; new?: number; learn?: number; due?: number }
-}
+import { useWorksheetDeckPicker } from '../hooks/useWorksheetDeckPicker'
 
 export interface WorksheetDeckSelectStepProps {
   selectedDeckId: number | null
@@ -44,86 +31,18 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
   className = '',
 }) => {
   const { t } = useTranslation('worksheets')
-  const [activeDeckId, setActiveDeckId] = useState<number | null>(selectedDeckId)
-  const [deckMeta, setDeckMeta] = useState<DeckWorksheetMeta | null>(null)
-  const [isLoadingMeta, setIsLoadingMeta] = useState<boolean>(false)
-  const [metaError, setMetaError] = useState<string | null>(null)
-
-  // 1. Fetch accessible deck list
-  const { data: rawDecks = [], isLoading: isLoadingDecks } = useQuery({
-    queryKey: ['browse-decks-tree'],
-    queryFn: async () => {
-      const res = await apiRequest<{ decks: SimpleDeck[] }>('/api/browse/decks')
-      return res.decks || []
-    },
-    staleTime: 60 * 1000,
-  })
-
-  // Format decks for DeckSelectionTreeView
-  const deckOptions: DeckOption[] = useMemo(() => {
-    const deckMap = new Map<number, SimpleDeck>()
-    rawDecks.forEach((d) => deckMap.set(d.id, d))
-
-    const buildPath = (deck: SimpleDeck): string => {
-      const parts = [deck.name]
-      let cur = deck
-      const seen = new Set<number>()
-      while (cur.parent_id != null && deckMap.has(cur.parent_id) && !seen.has(cur.parent_id)) {
-        seen.add(cur.parent_id)
-        cur = deckMap.get(cur.parent_id)!
-        parts.unshift(cur.name)
-      }
-      return parts.join('::')
-    }
-
-    return rawDecks.map((d) => ({
-      id: d.id,
-      name: d.name,
-      path: d.path || buildPath(d),
-      parent_id: d.parent_id,
-      notes_count: d.counts?.total ?? d.counts?.due ?? 0,
-    }))
-  }, [rawDecks])
-
-  // 2. Fetch metadata whenever a deck is selected
-  useEffect(() => {
-    if (!activeDeckId) {
-      setDeckMeta(null)
-      setMetaError(null)
-      return
-    }
-
-    let isMounted = true
-    setIsLoadingMeta(true)
-    setMetaError(null)
-
-    fetchDeckWorksheetMeta(activeDeckId)
-      .then((meta) => {
-        if (!isMounted) return
-        setDeckMeta(meta)
-      })
-      .catch((err) => {
-        if (!isMounted) return
-        setMetaError(String(err?.message || err || 'Không thể tải thông tin bộ thẻ'))
-      })
-      .finally(() => {
-        if (isMounted) setIsLoadingMeta(false)
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [activeDeckId])
-
-  // Validation rules:
-  // Deck must have exactly 1 note type
-  const hasMultipleNoteTypes = Boolean(
-    deckMeta && (deckMeta.has_mixed_note_types || (deckMeta.note_types && deckMeta.note_types.length > 1))
-  )
-  const isEmptyDeck = Boolean(deckMeta && deckMeta.total_notes === 0)
-  const canProceed = Boolean(
-    activeDeckId && deckMeta && !hasMultipleNoteTypes && !isEmptyDeck && !isLoadingMeta
-  )
+  const {
+    deckOptions,
+    isLoadingDecks,
+    activeDeckId,
+    setActiveDeckId,
+    deckMeta,
+    isLoadingMeta,
+    metaError,
+    hasMultipleNoteTypes,
+    isEmptyDeck,
+    canProceed,
+  } = useWorksheetDeckPicker(selectedDeckId)
 
   const handleConfirm = () => {
     if (canProceed && activeDeckId && deckMeta) {

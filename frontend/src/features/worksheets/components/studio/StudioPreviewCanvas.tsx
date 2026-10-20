@@ -4,17 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { NativeSelect } from '@/components/ui/native-select'
 import type { DeckWorksheetMeta, WorksheetFieldMapping, WorksheetLayoutOptions, WorksheetPreviewResponse } from '../../types'
+import { getFitZoom, stepZoom } from '../../utils/zoom'
 import { WorksheetPageRenderer } from '../WorksheetPageRenderer'
-
-export function getFitZoom(orientation?: 'portrait' | 'landscape', customWidth?: number): number {
-  const isLandscape = orientation === 'landscape'
-  const a4WidthPx = (isLandscape ? 297 : 210) * 3.7795
-  const winWidth = typeof window !== 'undefined' ? (customWidth || window.innerWidth) : 360
-  const padding = winWidth < 640 ? 24 : winWidth < 1024 ? 40 : 64
-  const availableWidth = Math.max(220, (winWidth < 768 ? winWidth : winWidth - 420) - padding)
-  const fit = Math.floor((availableWidth / a4WidthPx) * 100) / 100
-  return Math.min(1.4, Math.max(0.25, fit))
-}
 
 export interface StudioPreviewCanvasProps {
   mobileView: 'controls' | 'preview'
@@ -126,7 +117,7 @@ export function StudioPreviewCanvas({
               variant="ghost"
               size="icon"
               className="size-6"
-              onClick={() => setZoomLevel((z) => Math.max(0.25, Number((z - 0.08).toFixed(2))))}
+              onClick={() => setZoomLevel((z) => stepZoom(z, -0.08))}
               title={t('modal.zoom_out', 'Thu nhỏ')}
             >
               <ZoomOut className="size-3" />
@@ -144,7 +135,7 @@ export function StudioPreviewCanvas({
               variant="ghost"
               size="icon"
               className="size-6"
-              onClick={() => setZoomLevel((z) => Math.min(1.5, Number((z + 0.08).toFixed(2))))}
+              onClick={() => setZoomLevel((z) => stepZoom(z, 0.08))}
               title={t('modal.zoom_in', 'Phóng to')}
             >
               <ZoomIn className="size-3" />

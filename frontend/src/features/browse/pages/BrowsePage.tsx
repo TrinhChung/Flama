@@ -35,7 +35,7 @@ import { BrowseStrokeModal } from '../components/BrowseStrokeModal'
 import { BrowseAudioSelectorModal } from '../components/BrowseAudioSelectorModal'
 import { BrowseAudioDropdownMenu } from '../components/BrowseAudioDropdownMenu'
 import { BrowseMobileTabBar } from '../components/BrowseMobileTabBar'
-import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
+import { LazyDeckWorksheetModal } from '@/features/worksheets'
 import { ContextHelpButton } from '@/features/guide/components/ContextHelpButton'
 
 export function BrowsePage() {

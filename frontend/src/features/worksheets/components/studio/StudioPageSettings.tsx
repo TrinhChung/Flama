@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Badge } from '@/components/ui/badge'
-import { getFitZoom } from './StudioPreviewCanvas'
+import { getFitZoom } from '../../utils/zoom'
 import type { StudioLayoutTabProps } from './StudioLayoutTab'
 
 export function StudioPageSettings({

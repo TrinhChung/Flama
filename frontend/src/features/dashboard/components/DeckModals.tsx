@@ -22,7 +22,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
+import { LazyDeckWorksheetModal } from '@/features/worksheets'
 import { DeckCardTypesDialog } from './DeckCardTypesDialog'
 import { dashboardQueryKey } from '../api'
 import {
