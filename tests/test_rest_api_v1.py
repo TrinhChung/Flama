@@ -522,7 +522,8 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertEqual(decks_response.status_code, 200)
         decks_data = decks_response.get_json()
         self.assertIn("decks", decks_data)
-        self.assertIn("tree", decks_data)
+        # The nested form is served only by /decks/tree.
+        self.assertNotIn("tree", decks_data)
 
         tree_response = self.client.get("/api/browse/decks/tree")
         self.assertEqual(tree_response.status_code, 200)

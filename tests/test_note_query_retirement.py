@@ -263,7 +263,9 @@ class NoteQueryRetirementTests(unittest.TestCase):
         for timezone_name in timezones:
             for hour in (4, 17):
                 with self.subTest(timezone=timezone_name, boundary_hour=hour):
-                    runtime = SimpleNamespace(day_boundary_hour_local=hour, learn_ahead_seconds=1200)
+                    # Browse also hands this one settings read to every deck's options.
+                    runtime = SimpleNamespace(day_boundary_hour_local=hour, learn_ahead_seconds=1200,
+                                              scheduler_mode='legacy', fsrs_allow_short_term=False)
                     oracle = self._oracle(timezone_name=timezone_name, runtime=runtime)
                     expected = set(oracle.due_card_ids) - {learning.id, new.id}
                     self.assertTrue({past.id, later_today.id, undated.id} <= expected)

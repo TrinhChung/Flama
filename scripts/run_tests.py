@@ -270,6 +270,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "frontend/src/features/browse/**",
         ],
         "backend_tests": [
+            "tests/test_browse_query_bounds.py",
             "tests/test_flashcard_api_integration.py",
             "tests/test_flashcard_validation_security.py",
             "tests/test_rest_api_v1.py",
