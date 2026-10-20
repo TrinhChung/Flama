@@ -1,0 +1,215 @@
+/* Landing story preview. Everything is scoped under .story-root so the current
+   landing, global tokens and the rest of the app stay untouched. */
+
+.story-root {
+  --story-charcoal: #211a17;
+  --story-paper: #fff8ef;
+  --story-light: 0;
+  overflow-x: clip;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+/* The world opens from warm dark to paper light as knowledge spreads. */
+.story-root[data-mode='pinned'] main {
+  background:
+    linear-gradient(rgb(255 248 239 / var(--story-light)), rgb(255 248 239 / var(--story-light))),
+    var(--story-charcoal);
+}
+
+/* Sticky stage: no overflow-hidden ancestor between it and the viewport. */
+.story-stage {
+  position: sticky;
+  top: 4rem;
+  height: calc(100svh - 4rem);
+  display: flex;
+  align-items: center;
+}
+
+.story-stage .story-art {
+  max-height: 100%;
+}
+
+.story-scene {
+  opacity: var(--v, 1);
+}
+
+.story-scene[data-active='false'] {
+  display: none;
+}
+
+/* Soften the frame's sides so the ground melts into the page. */
+.story-art {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+
+.story-flicker {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: story-flicker 2.8s ease-in-out infinite alternate;
+}
+
+@keyframes story-flicker {
+  0% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(0.97, 1.05);
+  }
+  100% {
+    transform: scale(1.02, 0.98);
+  }
+}
+
+.story-root[data-mode='static'] .story-loop,
+.story-root[data-paused='true'] .story-loop,
+[data-offscreen='true'] .story-loop {
+  animation-play-state: paused;
+}
+
+.story-root[data-mode='static'] .story-loop {
+  animation: none;
+}
+
+/* Chapter text. */
+.story-chapter {
+  scroll-margin-top: 4rem;
+  outline: none;
+}
+
+.story-panel {
+  max-width: 34rem;
+}
+
+/* Pinned mode: each chapter's words stay put while its scene plays. */
+.story-panel-card {
+  position: sticky;
+  top: max(6rem, 24svh);
+}
+
+/* The hero can be taller than a short viewport; it scrolls normally. */
+.story-panel-card.story-panel-hero {
+  position: static;
+}
+
+.story-panel-card {
+  border-radius: 1.5rem;
+  padding: 2rem 2.25rem;
+  box-shadow: 0 18px 50px -30px rgb(33 26 23 / 0.6);
+}
+
+.story-panel-dark,
+.story-panel-dusk {
+  --story-text: var(--story-paper);
+  --story-muted: #f3dcc6;
+  color: var(--story-text);
+}
+
+.story-panel-card.story-panel-dark {
+  background: #2a211d;
+}
+
+.story-panel-card.story-panel-dusk {
+  background: #3a2b24;
+}
+
+.story-panel-light {
+  /* Fixed ink so the paper panels stay readable under the app's dark theme too. */
+  --story-text: #2b201b;
+  --story-muted: #6b5446;
+  color: var(--story-text);
+}
+
+.story-panel-card.story-panel-light {
+  background: var(--story-paper);
+  border: 1px solid color-mix(in oklch, var(--primary), transparent 82%);
+}
+
+.story-section-dark {
+  background: var(--story-charcoal);
+}
+
+.story-section-dusk {
+  background: #2e231e;
+}
+
+.story-section-light {
+  background: var(--story-paper);
+}
+
+.story-kicker {
+  margin-bottom: 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fea00e;
+}
+
+.story-eyebrow {
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+  color: var(--story-muted);
+}
+
+.story-hero-title {
+  font-size: clamp(2rem, 1.2rem + 3.4vw, 4.25rem);
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.story-chapter-title {
+  font-size: clamp(1.375rem, 1rem + 1.6vw, 2.5rem);
+  line-height: 1.18;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.story-chapter-line {
+  margin-top: 1rem;
+  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+  line-height: 1.65;
+  color: var(--story-muted);
+}
+
+.story-closing-note {
+  font-size: 1rem;
+  color: var(--story-muted);
+}
+
+.story-link {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #fea00e;
+  padding: 0 1.25rem;
+  font-weight: 600;
+  color: #fff4ec;
+  transition: background-color 150ms ease;
+}
+
+.story-link:hover {
+  background: rgb(254 160 14 / 0.16);
+}
+
+.story-link:focus-visible,
+.story-chapter:focus-visible {
+  outline: 3px solid #fea00e;
+  outline-offset: 3px;
+}
+
+.story-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--story-muted);
+}

@@ -342,6 +342,11 @@ const ProfilePage = lazy(() =>
     default: module.ProfilePage,
   })),
 )
+const LandingStoryPreviewPage = lazy(() =>
+  import('./features/landing-story/pages/LandingStoryPreviewPage').then((module) => ({
+    default: module.LandingStoryPreviewPage,
+  })),
+)
 const WalletPage = lazy(() =>
   import('./features/wallet/pages/WalletPage').then((module) => ({
     default: module.WalletPage,
@@ -375,6 +380,11 @@ const router = createBrowserRouter([
     path: 'oauth/consent',
     element: deferred(<OAuthConsentPage />),
     errorElement: <RouteErrorBoundary />,
+  },
+  {
+    // Review-only preview of the storytelling landing; `/` keeps the current landing.
+    path: 'landing-story-preview',
+    element: deferred(<LandingStoryPreviewPage />),
   },
   {
     element: <AppLayout />,
