@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 from types import SimpleNamespace
@@ -9,7 +10,7 @@ from typing import Any, Mapping
 
 from flask import current_app
 from sqlalchemy import LargeBinary, case, cast, false, func
-from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm import aliased
 
 UTC = timezone.utc
 
@@ -54,7 +55,7 @@ from models.study_progress_subject import StudyProgressSubject
 from models.card import forget_card_identities, get_card, load_cards
 from models.deck import Deck
 from models.field_types import stored_field_value
-from models.flashcard import Card, DeckInstall, Note, NoteType
+from models.flashcard import Card, DeckInstall, Note
 
 
 class BrowseCardUpdateError(ValueError):
@@ -97,6 +98,46 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+@contextmanager
+def _study_authority_conflict():
+    """Turn a learner fence or authority-read refusal into a rolled-back 409."""
+    try:
+        yield
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        raise BrowseApiError(str(exc), status=409, code=str(exc.code)) from exc
+
+
+def _visible_clone_scope(*, user_id: int, card_obj):
+    """The learner's logical-overlay scope that presents this source Card, or None.
+
+    ``resolve_clone_scope_for_card`` returns a scope only after running the
+    same membership query as ``is_card_visible_in_clone_scope``.
+    """
+    from app.services import flashcards_share as share_ctrl
+
+    return share_ctrl.resolve_clone_scope_for_card(user_id=user_id, card_obj=card_obj)
+
+
+def _clone_local_deck_id(clone_scope, note_obj) -> int | None:
+    """The learner's local deck for a source Note: its mapped deck, else the install root."""
+    return (clone_scope.source_to_local_deck_id or {}).get(
+        int(note_obj.deck_id or 0)
+    ) or clone_scope.install.local_deck_id
+
+
+def _with_clone_deck_names(
+    deck_lookup: dict[int, str],
+    source_to_local_deck_id: Mapping[int, int] | None,
+) -> dict[int, str]:
+    """Name each source deck after the local deck that presents it."""
+    for source_deck_id, local_deck_id in (source_to_local_deck_id or {}).items():
+        local_name = deck_lookup.get(int(local_deck_id))
+        if local_name:
+            deck_lookup.setdefault(int(source_deck_id), local_name)
+    return deck_lookup
+
+
 def update_browse_card(
     *,
     user_id: int,
@@ -106,8 +147,6 @@ def update_browse_card(
     payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Validate and persist browse editor mutations for a card."""
-    from app.services import flashcards_share as share_ctrl
-
     card_obj = browse_card_repository.load_card_for_browse_update(card_id=card_id)
     if not card_obj:
         raise BrowseCardUpdateError("Card not found", status=404)
@@ -119,14 +158,8 @@ def update_browse_card(
 
     clone_scope = None
     if not admin_mode and note_obj.user_id != user_id:
-        clone_scope = share_ctrl.resolve_clone_scope_for_card(
-            user_id=user_id,
-            card_obj=card_obj,
-        )
-        if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
-            scope=clone_scope,
-            card_obj=card_obj,
-        ):
+        clone_scope = _visible_clone_scope(user_id=user_id, card_obj=card_obj)
+        if clone_scope is None:
             raise BrowseCardUpdateError("Card not found", status=404)
 
     try:
@@ -178,8 +211,8 @@ def build_browse_deck_tree(
     admin_mode: bool,
     timezone_name: str,
 ) -> dict[str, Any]:
-    try:
-        authority_route = lock_study_authority_route(
+    with _study_authority_conflict():
+        lock_study_authority_route(
             db.session,
             learner_user_id=user_id,
             allow_note_authority=True,
@@ -241,13 +274,6 @@ def build_browse_deck_tree(
 
         for root in tree:
             rebuild_counts(root)
-    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
-        raise BrowseApiError(
-            str(exc),
-            status=409,
-            code=str(exc.code),
-        ) from exc
     return {"tree": tree}
 
 
@@ -283,7 +309,8 @@ def build_browse_decks(
             _flatten(node.get("children", []))
 
     _flatten(tree)
-    return {"decks": flat_items, "tree": tree}
+    # Every caller reads only the flat list; the nested form stays on /decks/tree.
+    return {"decks": flat_items}
 
 
 def _authority_progress_view(authority_read: StudyAuthorityCardRead) -> SimpleNamespace:
@@ -303,8 +330,8 @@ def _load_mode_aware_browse_progress(
     now_utc: datetime,
     admin_mode: bool = False,
 ):
-    try:
-        route = lock_study_authority_route(
+    with _study_authority_conflict():
+        lock_study_authority_route(
             db.session,
             learner_user_id=user_id,
             allow_note_authority=True,
@@ -317,23 +344,13 @@ def _load_mode_aware_browse_progress(
         options_deck_id = card_obj.note.deck_id
         if int(card_obj.note.user_id) != int(user_id) and not admin_mode:
             # Only a visible logical-overlay source Card may be read.
-            from app.services import flashcards_share as share_ctrl
-
-            clone_scope = share_ctrl.resolve_clone_scope_for_card(
-                user_id=user_id,
-                card_obj=card_obj,
-            )
-            if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
-                scope=clone_scope,
-                card_obj=card_obj,
-            ):
+            clone_scope = _visible_clone_scope(user_id=user_id, card_obj=card_obj)
+            if clone_scope is None:
                 raise StudyAuthorityReadError(
                     "NOTE_BROWSE_CONTEXT_UNAVAILABLE",
                     "NOTE authority Browse cannot read a foreign source Card.",
                 )
-            options_deck_id = (clone_scope.source_to_local_deck_id or {}).get(
-                int(card_obj.note.deck_id or 0)
-            ) or clone_scope.install.local_deck_id
+            options_deck_id = _clone_local_deck_id(clone_scope, card_obj.note)
         authority_read = load_study_authority_card_read(
             db.session,
             learner_user_id=user_id,
@@ -346,17 +363,13 @@ def _load_mode_aware_browse_progress(
             ),
         )
         return _authority_progress_view(authority_read)
-    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
-        raise BrowseApiError(
-            str(exc),
-            status=409,
-            code=str(exc.code),
-        ) from exc
 
 
 def _join_note_availability(query, *, learner_user_id: int):
-    """Outer-join each Card's canonical Note availability (ADR P10 §2.7)."""
+    """Outer-join each Card's canonical Note availability (ADR P10 §2.7).
+
+    Integrity is checked on the returned page only (``page_window_integrity``).
+    """
 
     subject = aliased(StudyProgressSubject)
     query = query.outerjoin(subject, db.and_(
@@ -371,9 +384,6 @@ def _join_note_availability(query, *, learner_user_id: int):
         is_suspended=subject.is_suspended,
         is_buried=subject.is_buried,
         buried_until_day=subject.buried_until_day,
-        integrity_violation=note_analytics_read_repository.subject_integrity_violation(
-            subject, note_id=Card.note_id, learner_user_id=learner_user_id,
-        ),
     )
 
 
@@ -422,19 +432,14 @@ def list_browse_cards(
         per_page = max(1, min(500, int(query_args.get("per_page") or "100")))
     except (TypeError, ValueError) as exc:
         raise BrowseApiError("Invalid page/per_page") from exc
-    try:
-        authority_route = lock_study_authority_route(
+    # The fence is held before any scope or Note-state read below.
+    # load_study_authority_card_reads takes it again for its own contract.
+    with _study_authority_conflict():
+        lock_study_authority_route(
             db.session,
             learner_user_id=user_id,
             allow_note_authority=True,
         )
-    except StudyAuthorityFenceError as exc:
-        db.session.rollback()
-        raise BrowseApiError(
-            str(exc),
-            status=409,
-            code=str(exc.code),
-        ) from exc
 
     def _empty_result() -> dict[str, Any]:
         return {
@@ -450,9 +455,10 @@ def list_browse_cards(
         user_id=user_id,
         admin_mode=admin_mode,
     )
+    deck_by_id = {deck.id: deck for deck in scoped_decks}
     deck_lookup = {deck.id: deck.name for deck in scoped_decks}
     children_by_parent = vocabulary_ctrl.deck_children_map(scoped_decks)
-    scoped_ids = {deck.id for deck in scoped_decks}
+    scoped_ids = set(deck_by_id)
     selected_ids: set[int] | None = None
     if deck_id_raw:
         try:
@@ -472,10 +478,6 @@ def list_browse_cards(
     # Status and due order come from the learner's Note row (verified
     # on the returned page), NULL for pristine Notes.
     query, progress_alias = _join_note_availability(query, learner_user_id=user_id)
-    query = query.options(
-        selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
-        selectinload(Card.template),
-    )
     clone_scopes = []
     clone_scope_conditions: list[tuple[Any, Any]] = []
     owned_visibility_condition = None
@@ -569,11 +571,7 @@ def list_browse_cards(
         if not visibility_filters:
             return _empty_result()
         query = query.filter(db.or_(*visibility_filters))
-
-        for source_deck_id, local_deck_id in source_to_local_deck_id.items():
-            local_name = deck_lookup.get(local_deck_id)
-            if local_name:
-                deck_lookup.setdefault(source_deck_id, local_name)
+        _with_clone_deck_names(deck_lookup, source_to_local_deck_id)
 
     clone_projections: list[dict[str, Any]] = []
     if (
@@ -739,6 +737,8 @@ def list_browse_cards(
         )
 
     now = _utcnow()
+    # One settings read serves the due filter and every deck's options.
+    runtime_settings = resolve_scheduler_runtime_settings(user_id=user_id)
     # Consolidated availability is already a normalized, writer-owned enum.
     normalized_progress_queue = progress_alias.queue
     eligible = active_progress_expr(progress_alias)
@@ -757,15 +757,14 @@ def list_browse_cards(
         eligible = db.and_(eligible,
             normalized_progress_queue == REVIEW_QUEUE,
             review_due_expr(progress_alias, now=now, timezone_name=timezone_name,
-                            day_boundary_hour_local=int(resolve_scheduler_runtime_settings(
-                                user_id=user_id,
-                            ).day_boundary_hour_local)),
+                            day_boundary_hour_local=int(runtime_settings.day_boundary_hour_local)),
         )
 
     query = query.filter(eligible)
     if not include_all_templates:
         query = browse_card_repository.one_visible_card_per_note(query)
-    total, _ = browse_card_repository.page_total_and_integrity(query)
+    total = browse_card_repository.count_distinct_cards(query)
+    query = query.options(*browse_card_repository.browse_page_load_options())
 
     if sort_by == "deck":
         query = query.outerjoin(Deck, Note.deck_id == Deck.id)
@@ -850,9 +849,11 @@ def list_browse_cards(
             options_by_deck_id[effective_deck_id] = resolve_deck_options(
                 user_id=user_id,
                 deck_id=effective_deck_id,
+                deck_obj=deck_by_id.get(effective_deck_id),
+                runtime_settings=runtime_settings,
             )
         deck_options_by_card_id[str(card_obj.id)] = options_by_deck_id[effective_deck_id]
-    try:
+    with _study_authority_conflict():
         authority_reads = load_study_authority_card_reads(
             db.session,
             learner_user_id=user_id,
@@ -861,19 +862,13 @@ def list_browse_cards(
             timezone_name=timezone_name,
             deck_options_by_card_id=deck_options_by_card_id,
         )
-    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
-        raise BrowseApiError(
-            str(exc),
-            status=409,
-            code=str(exc.code),
-        ) from exc
     clone_scope_by_card_id: dict[str, Any] = {}
     release_note_ids: dict[str, set[str]] = {}
     release_install_by_id: dict[str, Any] = {}
     clone_install_ids: set[str] = set()
     clone_source_note_ids: set[str] = set()
     if not admin_mode and clone_scopes:
+        scope_source_deck_ids = [(scope, set(scope.source_deck_ids)) for scope in clone_scopes]
         for card_obj in pagination.items:
             note_obj = card_obj.note
             if note_obj is None or note_obj.user_id == user_id or note_obj.deck_id is None:
@@ -881,8 +876,8 @@ def list_browse_cards(
             matching_scope = next(
                 (
                     scope
-                    for scope in clone_scopes
-                    if int(note_obj.deck_id) in set(scope.source_deck_ids)
+                    for scope, source_deck_ids in scope_source_deck_ids
+                    if int(note_obj.deck_id) in source_deck_ids
                     and (
                         scope.source_owner_user_id is None
                         or int(note_obj.user_id) == int(scope.source_owner_user_id)
@@ -922,30 +917,40 @@ def list_browse_cards(
                 release_values_by_note[(release_id, str(note_id))] = values
 
     rows = []
+    schema_views: dict[tuple[str, str], Any] = {}
     for card_obj in pagination.items:
+        progress_view = _authority_progress_view(authority_reads[str(card_obj.id)])
+        clone_scope = clone_scope_by_card_id.get(str(card_obj.id))
+        if clone_scope is None:
+            rows.append(vocabulary_ctrl.build_browse_row(
+                card_obj,
+                deck_lookup,
+                now,
+                progress_obj=progress_view,
+                timezone_name=timezone_name,
+            ))
+            continue
+        release_id = str(clone_scope.install.applied_release_id or "")
+        override_key = (str(clone_scope.install.id), str(card_obj.note.id))
+        overlay = _clone_overlay_fields(
+            card_obj=card_obj,
+            clone_scope=clone_scope,
+            base_field_values=release_values_by_note.get((release_id, str(card_obj.note.id))),
+            # The batch above holds every override of this page; none means none.
+            note_override_rows=batch_overrides.get(override_key, []),
+            schema_views=schema_views,
+        )
+        # The overlay supplies the displayed values, so the source Note's own
+        # (owner working) values are never decoded for this row.
         row_payload = vocabulary_ctrl.build_browse_row(
             card_obj,
             deck_lookup,
             now,
-            progress_obj=_authority_progress_view(authority_reads[str(card_obj.id)]),
+            progress_obj=progress_view,
             timezone_name=timezone_name,
+            display_triplet=overlay.display_triplet,
         )
-        if not admin_mode and card_obj.note and card_obj.note.user_id != user_id:
-            clone_scope = clone_scope_by_card_id.get(str(card_obj.id))
-            if clone_scope is not None:
-                release_id = str(clone_scope.install.applied_release_id or "")
-                override_key = (str(clone_scope.install.id), str(card_obj.note.id))
-                adjusted_payload = _apply_clone_overlay_to_browse_payload(
-                    payload={"card": row_payload, "note": {}, "fields": []},
-                    card_obj=card_obj,
-                    clone_scope=clone_scope,
-                    deck_lookup=deck_lookup,
-                    base_field_values=release_values_by_note.get(
-                        (release_id, str(card_obj.note.id))
-                    ),
-                    note_override_rows=batch_overrides.get(override_key),
-                )
-                row_payload = adjusted_payload.get("card") or row_payload
+        _apply_clone_card_fields(row_payload, overlay=overlay, deck_lookup=deck_lookup)
         rows.append(row_payload)
     return {
         "items": rows,
@@ -964,21 +969,12 @@ def get_browse_card_detail(
     timezone_name: str,
     card_id: str,
 ) -> dict[str, Any]:
-    from app.services import flashcards_share as share_ctrl
-
-    try:
-        authority_route = lock_study_authority_route(
+    with _study_authority_conflict():
+        lock_study_authority_route(
             db.session,
             learner_user_id=user_id,
             allow_note_authority=True,
         )
-    except StudyAuthorityFenceError as exc:
-        db.session.rollback()
-        raise BrowseApiError(
-            str(exc),
-            status=409,
-            code=str(exc.code),
-        ) from exc
     card_obj = browse_card_repository.load_card_for_browse_update(card_id=card_id)
     if not card_obj:
         raise BrowseApiError("Card not found", status=404)
@@ -989,21 +985,10 @@ def get_browse_card_detail(
     )
     clone_scope = None
     if not admin_mode and card_obj.note and card_obj.note.user_id != user_id:
-        clone_scope = share_ctrl.resolve_clone_scope_for_card(
-            user_id=user_id,
-            card_obj=card_obj,
-        )
-        if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
-            scope=clone_scope,
-            card_obj=card_obj,
-        ):
+        clone_scope = _visible_clone_scope(user_id=user_id, card_obj=card_obj)
+        if clone_scope is None:
             raise BrowseApiError("Card not found", status=404)
-        for source_deck_id, local_deck_id in (
-            clone_scope.source_to_local_deck_id or {}
-        ).items():
-            local_name = deck_lookup.get(int(local_deck_id))
-            if local_name:
-                deck_lookup.setdefault(int(source_deck_id), local_name)
+        _with_clone_deck_names(deck_lookup, clone_scope.source_to_local_deck_id)
 
     # Admin-wide detail reads the admin's own state on any Card.
     if not admin_mode and clone_scope is None and card_obj.note.user_id != user_id:
@@ -1014,10 +999,8 @@ def get_browse_card_detail(
         )
     options_deck_id = card_obj.note.deck_id
     if clone_scope is not None:
-        options_deck_id = (clone_scope.source_to_local_deck_id or {}).get(
-            int(card_obj.note.deck_id or 0)
-        ) or clone_scope.install.local_deck_id
-    try:
+        options_deck_id = _clone_local_deck_id(clone_scope, card_obj.note)
+    with _study_authority_conflict():
         authority_read = load_study_authority_card_read(
             db.session,
             learner_user_id=user_id,
@@ -1029,13 +1012,6 @@ def get_browse_card_detail(
                 deck_id=options_deck_id,
             ),
         )
-    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
-        raise BrowseApiError(
-            str(exc),
-            status=409,
-            code=str(exc.code),
-        ) from exc
     progress = _authority_progress_view(authority_read)
     payload = vocabulary_ctrl.build_browse_card_detail(
         card_obj,
@@ -1370,10 +1346,7 @@ def _update_clone_browse_card(
 ) -> dict[str, Any]:
     from app.services import flashcards_share as share_ctrl
 
-    mapped_local_deck_id = (
-        (clone_scope.source_to_local_deck_id or {}).get(int(note_obj.deck_id or 0))
-        or clone_scope.install.local_deck_id
-    )
+    mapped_local_deck_id = _clone_local_deck_id(clone_scope, note_obj)
     if validated.update_deck:
         selected_deck_id = validated.deck_id
         if selected_deck_id != (int(mapped_local_deck_id) if mapped_local_deck_id is not None else None):
@@ -1423,7 +1396,10 @@ def _update_clone_browse_card(
         payload=detail_payload,
         card_obj=card_obj,
         clone_scope=clone_scope,
-        deck_lookup=_clone_scope_deck_lookup(user_id=user_id, clone_scope=clone_scope),
+        deck_lookup=_with_clone_deck_names(
+            browse_card_repository.deck_lookup_for_browse(user_id=user_id, admin_mode=False),
+            clone_scope.source_to_local_deck_id,
+        ),
     )
     return {
         "success": True,
@@ -1584,18 +1560,6 @@ def _build_browse_detail_payload(
     )
 
 
-def _clone_scope_deck_lookup(*, user_id: int, clone_scope) -> dict[int, str]:
-    deck_lookup = browse_card_repository.deck_lookup_for_browse(
-        user_id=user_id,
-        admin_mode=False,
-    )
-    for source_deck_id, local_deck_id in (clone_scope.source_to_local_deck_id or {}).items():
-        local_name = deck_lookup.get(int(local_deck_id))
-        if local_name:
-            deck_lookup.setdefault(int(source_deck_id), local_name)
-    return deck_lookup
-
-
 def _collect_note_media_refs(note_obj):
     from app.services.media_field_codec import build_media_reference_lookup
 
@@ -1612,27 +1576,34 @@ def _normalize_tags_payload(raw_tags: object) -> list[str]:
     return []
 
 
-def _apply_clone_overlay_to_browse_payload(
+def _clone_overlay_fields(
     *,
-    payload: dict[str, Any],
     card_obj,
     clone_scope,
-    deck_lookup: dict[int, str],
     base_field_values: dict[str, Any] | None = None,
     note_override_rows: list[Any] | None = None,
-) -> dict[str, Any]:
+    schema_views: dict[tuple[str, str], Any] | None = None,
+) -> SimpleNamespace:
+    """A source Note's fields as this learner's install presents them.
+
+    Values come from the install's pinned release (or snapshot) plus its
+    overlay; the source Note is never mutated. ``schema_views`` memoizes the
+    install schema across the rows of one page. The Note must have a deck.
+    """
     from app.services import flashcards_share as share_ctrl
 
     note_obj = card_obj.note
-    if note_obj is None or note_obj.deck_id is None:
-        return payload
-
     source_note_type_id = (clone_scope.install.source_note_type_id or note_obj.note_type_id or "").strip()
     if source_note_type_id:
-        schema_view = share_ctrl.build_clone_schema_view(
-            install=clone_scope.install,
-            source_note_type_id=source_note_type_id,
-        )
+        schema_key = (str(clone_scope.install.id), source_note_type_id)
+        schema_view = (schema_views or {}).get(schema_key)
+        if schema_view is None:
+            schema_view = share_ctrl.build_clone_schema_view(
+                install=clone_scope.install,
+                source_note_type_id=source_note_type_id,
+            )
+            if schema_views is not None:
+                schema_views[schema_key] = schema_view
         overlay_field_defs = schema_view.field_defs or (note_obj.note_type.field_defs if note_obj.note_type else [])
         overlay_field_values = share_ctrl.apply_clone_note_field_overrides(
             install=clone_scope.install,
@@ -1654,28 +1625,51 @@ def _apply_clone_overlay_to_browse_payload(
         overlay_field_defs or [],
         key=lambda item: (int(getattr(item, "position", 0) or 0), str(getattr(item, "name", "")).lower()),
     )
-
-    local_deck_id = (
-        (clone_scope.source_to_local_deck_id or {}).get(int(note_obj.deck_id))
-        or clone_scope.install.local_deck_id
-    )
-    local_deck_name = deck_lookup.get(int(local_deck_id or 0), "")
-
     proxy_note = SimpleNamespace(
         field_values=normalized_values,
         note_type=SimpleNamespace(field_defs=ordered_defs),
     )
-    display_triplet = vocabulary_ctrl.note_display_triplet(proxy_note)
+    return SimpleNamespace(
+        field_defs=overlay_field_defs,
+        ordered_defs=ordered_defs,
+        values=normalized_values,
+        display_triplet=vocabulary_ctrl.note_display_triplet(proxy_note),
+        local_deck_id=_clone_local_deck_id(clone_scope, note_obj),
+    )
+
+
+def _apply_clone_card_fields(card_payload: dict[str, Any], *, overlay, deck_lookup: dict[int, str]) -> None:
+    card_payload["word"] = overlay.display_triplet.get("word", "")
+    card_payload["reading"] = overlay.display_triplet.get("reading", "")
+    card_payload["meaning"] = overlay.display_triplet.get("meaning", "")
+    if overlay.local_deck_id is not None:
+        card_payload["deck_id"] = int(overlay.local_deck_id)
+    local_deck_name = deck_lookup.get(int(overlay.local_deck_id or 0), "")
+    if local_deck_name:
+        card_payload["deck_name"] = local_deck_name
+
+
+def _apply_clone_overlay_to_browse_payload(
+    *,
+    payload: dict[str, Any],
+    card_obj,
+    clone_scope,
+    deck_lookup: dict[int, str],
+) -> dict[str, Any]:
+    note_obj = card_obj.note
+    if note_obj is None or note_obj.deck_id is None:
+        return payload
+
+    overlay = _clone_overlay_fields(card_obj=card_obj, clone_scope=clone_scope)
+    overlay_field_defs = overlay.field_defs
+    normalized_values = overlay.values
+    ordered_defs = overlay.ordered_defs
+    local_deck_id = overlay.local_deck_id
+    local_deck_name = deck_lookup.get(int(local_deck_id or 0), "")
 
     card_payload = payload.get("card")
     if isinstance(card_payload, dict):
-        card_payload["word"] = display_triplet.get("word", "")
-        card_payload["reading"] = display_triplet.get("reading", "")
-        card_payload["meaning"] = display_triplet.get("meaning", "")
-        if local_deck_id is not None:
-            card_payload["deck_id"] = int(local_deck_id)
-        if local_deck_name:
-            card_payload["deck_name"] = local_deck_name
+        _apply_clone_card_fields(card_payload, overlay=overlay, deck_lookup=deck_lookup)
 
     note_payload = payload.get("note")
     if isinstance(note_payload, dict):
@@ -1688,12 +1682,15 @@ def _apply_clone_overlay_to_browse_payload(
             note_payload["deck_id"] = int(local_deck_id)
         note_payload["deck_name"] = local_deck_name
 
-    from app.services.media_field_codec import media_field_label_for_schema
-    assets_by_id = {str(asset.id): asset for asset in note_obj.media_assets or []}
-    for asset_payload in payload.get("media_assets") or []:
-        asset = assets_by_id.get(str(asset_payload.get("id")))
-        if asset is not None:
-            asset_payload["field_name"] = media_field_label_for_schema(asset, overlay_field_defs)
+    media_payloads = payload.get("media_assets") or []
+    if media_payloads:
+        from app.services.media_field_codec import media_field_label_for_schema
+
+        assets_by_id = {str(asset.id): asset for asset in note_obj.media_assets or []}
+        for asset_payload in media_payloads:
+            asset = assets_by_id.get(str(asset_payload.get("id")))
+            if asset is not None:
+                asset_payload["field_name"] = media_field_label_for_schema(asset, overlay_field_defs)
 
     note_type_fields_payload = []
     for field_def in ordered_defs:
