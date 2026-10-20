@@ -29,11 +29,11 @@ if echo "$STAGED_FILES" | grep -qE '^(app/|models/|tests/test_api_v1_route_map\.
     echo "[pre-commit] API route snapshot verified and auto-staged."
 fi
 
-# Keep Claude Code's mirror of the repo-local skills in step with skills/
+# Keep both repository skill discovery mirrors in step with skills/
 if echo "$STAGED_FILES" | grep -qE '^skills/'; then
-    echo "[pre-commit] Agent skills modified. Mirroring skills/ into .claude/skills/..."
+    echo "[pre-commit] Agent skills modified. Updating Claude Code and Codex repo mirrors..."
     $PYTHON scripts/sync_claude_skills.py --stage
-    echo "[pre-commit] .claude/skills mirrored and auto-staged."
+    echo "[pre-commit] Both repository skill mirrors updated and auto-staged."
 fi
 
 exit 0

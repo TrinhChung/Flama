@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nihongo Engineer"
+  short_description: "Route Flama work to current repository skills"
+  default_prompt: "Use $nihongo-engineer to load current Flama guidance for this task."

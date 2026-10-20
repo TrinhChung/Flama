@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Mirror the repo-local agent skills from skills/ into .claude/skills/.
+Mirror repo-local agent skills into Claude Code and Codex discovery folders.
 
-skills/ stays the source of truth for Codex and the other agents; Claude Code
-only discovers skills under .claude/skills/. Only files git does not ignore are
+skills/ stays the source of truth; .claude/skills/ and .agents/skills/ are
+generated discovery mirrors. Only files git does not ignore are
 mirrored, so external skills kept locally in skills/ never reach the repo.
 
 Usage:
-  python scripts/sync_claude_skills.py            # rewrite .claude/skills/<name>
+  python scripts/sync_claude_skills.py            # rewrite both repo mirrors
   python scripts/sync_claude_skills.py --stage    # ...and git add the mirror
   python scripts/sync_claude_skills.py --check    # exit 1 when out of sync
 """
@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 SOURCE_DIR = "skills"
 TARGET_DIR = ".claude/skills"
+TARGET_DIRS = (TARGET_DIR, ".agents/skills")
 
 
 def list_project_skill_files(root: Path = ROOT_DIR) -> dict[str, list[str]]:
@@ -55,6 +56,7 @@ def list_project_skill_files(root: Path = ROOT_DIR) -> dict[str, list[str]]:
 def find_drift(
     root: Path = ROOT_DIR,
     skills: dict[str, list[str]] | None = None,
+    target_dir: str = TARGET_DIR,
 ) -> list[str]:
     """Describe every difference between skills/<name> and its mirror."""
     if skills is None:
@@ -63,7 +65,7 @@ def find_drift(
     drift: list[str] = []
     for name, files in sorted(skills.items()):
         source = root / SOURCE_DIR / name
-        target = root / TARGET_DIR / name
+        target = root / target_dir / name
         mirrored = (
             {
                 path.relative_to(target).as_posix()
@@ -75,24 +77,32 @@ def find_drift(
         )
         for relative in files:
             if relative not in mirrored:
-                drift.append(f"missing {TARGET_DIR}/{name}/{relative}")
+                drift.append(f"missing {target_dir}/{name}/{relative}")
             elif (source / relative).read_bytes() != (target / relative).read_bytes():
-                drift.append(f"changed {TARGET_DIR}/{name}/{relative}")
+                drift.append(f"changed {target_dir}/{name}/{relative}")
         for relative in sorted(mirrored - set(files)):
-            drift.append(f"extra {TARGET_DIR}/{name}/{relative}")
+            drift.append(f"extra {target_dir}/{name}/{relative}")
     return drift
 
 
 def sync(
     root: Path = ROOT_DIR,
     skills: dict[str, list[str]] | None = None,
+    target_dir: str = TARGET_DIR,
 ) -> list[str]:
-    """Replace .claude/skills/<name> with a copy of skills/<name>."""
+    """Replace managed skill folders in one repository mirror."""
+    if target_dir not in TARGET_DIRS:
+        raise ValueError(f"Unsupported repository mirror: {target_dir}")
     if skills is None:
         skills = list_project_skill_files(root)
 
     for name, files in sorted(skills.items()):
-        target = root / TARGET_DIR / name
+        target = root / target_dir / name
+        mirror_root = (root / target_dir).absolute()
+        if not mirror_root.resolve().is_relative_to(root.resolve()):
+            raise ValueError(f"Mirror resolves outside the repository: {mirror_root}")
+        if not target.resolve().is_relative_to(mirror_root.resolve()) or target.is_symlink():
+            raise ValueError(f"Unsafe mirror target: {target}")
         if target.exists():
             shutil.rmtree(target)
         for relative in files:
@@ -104,7 +114,7 @@ def sync(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Mirror skills/ into .claude/skills/ for Claude Code."
+        description="Mirror skills/ into repository Claude Code and Codex skill folders."
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -120,23 +130,27 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.check:
-        drift = find_drift()
+        skills = list_project_skill_files()
+        drift = [item for target in TARGET_DIRS for item in find_drift(skills=skills, target_dir=target)]
         for line in drift:
             print(line)
         if drift:
             print("Out of sync. Run: python scripts/sync_claude_skills.py")
             return 1
-        print(f"{TARGET_DIR}/ matches {SOURCE_DIR}/.")
+        print(f"Both repository mirrors match {SOURCE_DIR}/.")
         return 0
 
-    names = sync()
+    skills = list_project_skill_files()
+    names = sorted(skills)
+    for target in TARGET_DIRS:
+        sync(skills=skills, target_dir=target)
     if args.stage and names:
         subprocess.run(
-            ["git", "add", "-A", "--", *(f"{TARGET_DIR}/{name}" for name in names)],
+            ["git", "add", "-A", "--", *(f"{target}/{name}" for target in TARGET_DIRS for name in names)],
             cwd=ROOT_DIR,
             check=True,
         )
-    print(f"Mirrored {len(names)} skill(s) into {TARGET_DIR}/: {', '.join(names)}")
+    print(f"Mirrored {len(names)} skill(s) into both repository mirrors: {', '.join(names)}")
     return 0
 
 

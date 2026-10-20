@@ -15,11 +15,35 @@ class ClaudeSkillsSyncTests(unittest.TestCase):
         skills = sync_claude_skills.list_project_skill_files()
 
         self.assertIn("flama-database-architecture", skills)
-        self.assertEqual(
-            sync_claude_skills.find_drift(skills=skills),
-            [],
-            "Out of sync. Run: python scripts/sync_claude_skills.py",
-        )
+        for target in sync_claude_skills.TARGET_DIRS:
+            with self.subTest(target=target):
+                self.assertEqual(
+                    sync_claude_skills.find_drift(skills=skills, target_dir=target),
+                    [],
+                    "Out of sync. Run: python scripts/sync_claude_skills.py",
+                )
+
+    def test_codex_sync_preserves_other_agent_artifacts_and_external_skills(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "skills/demo").mkdir(parents=True)
+            (root / "skills/demo/SKILL.md").write_text("shared", encoding="utf-8")
+            (root / ".agents/reviews").mkdir(parents=True)
+            (root / ".agents/reviews/keep.txt").write_text("review", encoding="utf-8")
+            (root / ".agents/skills/external").mkdir(parents=True)
+            (root / ".agents/skills/external/SKILL.md").write_text("private", encoding="utf-8")
+            skills = {"demo": ["SKILL.md"]}
+
+            sync_claude_skills.sync(root, skills, target_dir=".agents/skills")
+
+            self.assertEqual(sync_claude_skills.find_drift(root, skills, target_dir=".agents/skills"), [])
+            self.assertEqual((root / ".agents/reviews/keep.txt").read_text(), "review")
+            self.assertEqual((root / ".agents/skills/external/SKILL.md").read_text(), "private")
+
+    def test_sync_rejects_targets_outside_managed_mirrors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                sync_claude_skills.sync(Path(tmp), {}, target_dir="../global-skills")
 
     def test_sync_replaces_stale_mirror(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -33,7 +33,7 @@ Server-rendered HTML templates (Jinja2) have been eliminated; Flask serves only 
 
 ### Architectural Guarantees
 1. **Zero Server Rendering**: All UI components, state machines, and view routing execute entirely on the client.
-2. **Pragmatic Feature-Sliced Design (FSD v2.1) & Opportunistic Migration**: Code is organized into functional layers (`app`, `pages`, `features`, `entities`, `shared`, `components`). All agents and developers follow an opportunistic migration rule (Boy Scout Rule): whenever any file in `frontend/src/` is touched or modified, it must be migrated to strict FSD (layer alignment, slice public API `index.ts`, eliminating cross-feature imports, hook decoupling, and eliminating legacy `app/api.ts` calls).
+2. **Feature-Sliced Design & Opportunistic Migration**: Target dependency direction is `app -> pages -> widgets (optional) -> features -> entities -> shared`. Existing root `components`, `hooks`, `lib`, `config` and `layouts` are migration debt, not additional FSD layers. On touch, follow `AGENTS.md` and the canonical frontend skill for layer placement, public APIs, hook extraction and removal of legacy API calls.
 3. **Triple-Tier State Persistence**: Server state caching (TanStack Query) is decoupled from offline study execution (IndexedDB) and UI preferences (`localStorage`).
 4. **Anti-AI-Slop & Zero Visual Regression**: Strict design system based on linear OKLCH color spaces ("Tone màu Hỏa ấm"), Geist typography, and ambient backdrops.
 5. **Native Array Preservation**: Array fields are maintained as JSON lists; no Anki flat-string degeneration is permitted.
@@ -149,7 +149,7 @@ Routing Hierarchy (frontend/src/App.tsx)
 
 ## 5. Feature-Sliced Design (FSD) Structure & Component Map
 
-The application follows Pragmatic Feature-Sliced Design (FSD v2.1):
+Current physical layout (legacy paths below are still used; this is not the target architecture):
 
 ```
 frontend/src/
@@ -167,6 +167,8 @@ frontend/src/
 ├── pages/                # Top-level standalone page components
 └── shared/               # Reusable infrastructure (API, UI primitives, i18n)
 ```
+
+The migration target is `app -> pages -> widgets (optional) -> features -> entities -> shared`, with imports toward lower layers and no sibling feature imports. New primitives/utilities go under `shared`; shared domain models/UI go under `entities`; page/widget composition coordinates independent feature workflows. Existing paths above remain until their callers, lazy routes, tests and generator aliases are migrated. See [the FSD proposal and Codex review](../architecture/FLAMA_FRONTEND_FSD_CONSOLIDATION_AND_AGENT_ALIGNMENT_PROPOSAL.md) and `skills/flama-frontend-architecture/SKILL.md` at the repository root. No bulk relocation is implied by this documentation update.
 
 ### 5.1 Domain Entities (`frontend/src/entities/`)
 Entities encapsulate domain schemas, persistent data types, and isolated API query keys:

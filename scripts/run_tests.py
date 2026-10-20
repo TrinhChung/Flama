@@ -961,6 +961,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "source_patterns": [
             "skills/**",
             ".claude/skills/**",
+            ".agents/skills/**",
             "scripts/sync_claude_skills.py",
         ],
         "backend_tests": [

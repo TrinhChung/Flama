@@ -1,0 +1,4 @@
+interface:
+  display_name: "MySQL for Flama"
+  short_description: "Review MySQL tuning against Flama constraints"
+  default_prompt: "Use $mysql with the Flama database skill to investigate this MySQL workload before proposing changes."

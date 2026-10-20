@@ -9,6 +9,9 @@ Welcome to the central documentation portal for **Flama** (Nihongo Flashcard Lea
 | Master Report | Description |
 |---|---|
 | [**`DOCUMENTATION_AUDIT_REPORT.md`**](DOCUMENTATION_AUDIT_REPORT.md) | **Authoritative Codebase Reality & Documentation Audit Report**: Exhaustive analysis of legacy documentation inaccuracies, underspecified areas, factual discrepancies catalog across Frontend/Backend/Ops/Logs, technical debt matrix, and documentation governance. |
+| [Shared skill audit and review](architecture/MULTI_AGENT_SKILLS_AUDIT_AND_UNIFICATION.md) | Source inventory, Codex review, shared-skill synchronization and missing export queue. |
+| [Frontend FSD proposal and review](architecture/FLAMA_FRONTEND_FSD_CONSOLIDATION_AND_AGENT_ALIGNMENT_PROPOSAL.md) | Proposed migration, corrections required before implementation, and reviewer status. |
+| [Claude Code independent review](architecture/MULTI_AGENT_SKILLS_REVIEW_CLAUDE_CODE_2026-10-20.md) | Conditional sign-off, local development skill contribution and remaining integration findings. |
 
 ---
 

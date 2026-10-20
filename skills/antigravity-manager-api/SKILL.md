@@ -1,6 +1,6 @@
 ---
 name: antigravity-manager-api
-description: Manage the local Antigravity Manager through its HTTP Admin API: health checks, current account, account listing, quota refresh, and explicit account switching. Use for Antigravity Manager account operations; do not use for ordinary `agy` CLI execution.
+description: "Manage the local Antigravity Manager through its HTTP Admin API: health checks, current account, account listing, quota refresh, and explicit account switching. Use for Antigravity Manager account operations; do not use for ordinary `agy` CLI execution."
 ---
 
 # Antigravity Manager API

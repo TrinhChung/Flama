@@ -77,6 +77,7 @@ When determining facts about the database, prioritize evidence in this strict or
 - **No Fabricated Relations**: Never assume a foreign key or unique constraint exists unless found in `models/` or `migrations/`. Note when relationships are maintained only in application logic.
 - **Documentation Discrepancies**: If documentation conflicts with ORM code or migrations, document the conflict explicitly. The implementation is the runtime truth.
 - **Unverified Production State**: Clearly label data distributions, row counts, and deployment-specific flags as *Needs Verification*.
+- **Local MySQL First (Tuyệt đối tránh SQLite khi phát triển & migration)**: Toàn bộ quá trình thiết kế schema, kiểm thử DDL/Alembic migrations, seed dữ liệu, và debug truy vấn PHẢI chạy trên MySQL 8.0 cục bộ (Local hoặc Docker `mysql:8.0`). Không dùng SQLite cho dev hoặc kiểm thử migration do sự khác biệt lớn về dynamic type affinity, thiếu FK enforcement mặc định, khác biệt hàm JSON và cơ chế khóa bảng.
 
 ---
 

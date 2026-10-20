@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex CLI"
+  short_description: "Run scoped Codex workers and read-only reviews"
+  default_prompt: "Use $codex-cli to run this authorized task with the installed CLI and review its result."
