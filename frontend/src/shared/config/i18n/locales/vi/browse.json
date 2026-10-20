@@ -79,7 +79,9 @@
       "learning": "Đang học",
       "due": "Đến hạn",
       "other": "Khác"
-    }
+    },
+    "load_error": "Không tải được danh sách thẻ",
+    "retry": "Thử lại"
   },
   "pagination": {
     "aria_label": "Điều hướng phân trang",
@@ -145,7 +147,9 @@
     "items_count": "{{count}} phần tử",
     "edit_list": "Chỉnh sửa",
     "array_line_hint": "Mỗi dòng một phần tử (tự động lưu mảng).",
-    "items_label": "phần tử"
+    "items_label": "phần tử",
+    "clone_locked_hint": "Thẻ thuộc bộ deck đã cài đặt: không thể chuyển deck, sửa tag hay tải ảnh lên.",
+    "tag_limit": "Mỗi thẻ có tối đa {{count}} tag."
   },
   "stroke_modal": {
     "title": "Tạo sơ đồ thứ tự nét Kanji & Hanzi",

@@ -1,26 +1,23 @@
 import '@/shared/config/i18n'
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
-import { Textarea } from '@/components/ui/textarea'
 import {
   LoaderCircle,
   PenTool,
-  Plus,
   RotateCcw,
   Save,
-  Tag,
   Trash2,
   X,
 } from 'lucide-react'
-import { fieldValueEditorText, isArrayField, serializeArrayFieldValues } from '@/lib/arrayField'
-import { MediaFieldPreview, ArrayFieldInput } from '@/entities/flashcard'
+import { serializeArrayFieldValues } from '@/lib/arrayField'
+import { NoteFieldEditor } from '@/entities/flashcard'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import type { useBrowseState } from '../hooks/useBrowseState'
+import { BrowseTagEditor } from './BrowseTagEditor'
 
 export interface BrowseCardEditFormProps {
   browse: ReturnType<typeof useBrowseState>
@@ -49,6 +46,8 @@ export function BrowseCardEditForm({
     setNewTagInput,
     decksQuery,
     isDirty,
+    isCloneCard,
+    canUploadMedia,
     handleRevert,
     handleAddTag,
     handleRemoveTag,
@@ -64,21 +63,27 @@ export function BrowseCardEditForm({
   const detail = cardDetailQuery.data
   const [invalidArrayFields, setInvalidArrayFields] = useState<Record<string, boolean>>({})
   const hasInvalidFields = detail?.fields.some((field) => invalidArrayFields[field.name]) ?? false
+  const handleFieldChange = useCallback((fieldName: string, value: string) => {
+    setEditFieldValues((prev) => ({ ...prev, [fieldName]: value }))
+  }, [setEditFieldValues])
+  const handleFieldValidityChange = useCallback((fieldName: string, valid: boolean) => {
+    setInvalidArrayFields((previous) =>
+      previous[fieldName] === !valid ? previous : { ...previous, [fieldName]: !valid })
+  }, [])
 
   if (!detail) return null
 
-  const deckList = detail.decks || decksQuery.data?.decks || []
+  const deckList = decksQuery.data?.decks || []
 
   const submitUpdateCard = () => {
     if (!isDirty || updateMutation.isPending || hasInvalidFields) return
     const changedFields = Object.fromEntries(Object.entries(editFieldValues).filter(([name, value]) =>
       JSON.stringify(value) !== JSON.stringify(browse.initialFieldValues[name])))
     const fieldValues = serializeArrayFieldValues(changedFields, detail.fields)
-    void updateMutation.mutate({
-      field_values: fieldValues,
-      deck_id: editDeckId || undefined,
-      tags: editTags,
-    })
+    // A clone keeps its deck and tags; sending them back only risks a 400.
+    void updateMutation.mutate(isCloneCard
+      ? { field_values: fieldValues }
+      : { field_values: fieldValues, deck_id: editDeckId || undefined, tags: editTags })
   }
 
   return (
@@ -146,6 +151,8 @@ export function BrowseCardEditForm({
           <NativeSelect
             value={editDeckId !== null ? String(editDeckId) : ''}
             onChange={(e) => setEditDeckId(Number(e.target.value))}
+            disabled={isCloneCard}
+            title={isCloneCard ? t('editor.clone_locked_hint') : undefined}
             className="h-9 text-xs sm:text-sm rounded-lg bg-muted/50"
           >
             {deckList.map((d) => (
@@ -154,122 +161,34 @@ export function BrowseCardEditForm({
               </option>
             ))}
           </NativeSelect>
+          {isCloneCard && (
+            <p className="text-[11px] text-muted-foreground">{t('editor.clone_locked_hint')}</p>
+          )}
         </div>
 
         {/* Dynamic Card fields */}
-        {detail.fields.map((field) => {
-          const val = fieldValueEditorText(editFieldValues[field.name])
-          const ft = (field.field_type || 'text').toLowerCase()
-
-          // Media fields get a specialized preview/code editor.
-          if (ft === 'image' || ft === 'audio' || ft === 'diagram') {
-            return (
-              <MediaFieldPreview
-                key={field.name}
-                fieldName={field.name}
-                fieldType={ft as 'image' | 'audio' | 'diagram'}
-                value={val}
-                onChange={(v) =>
-                  setEditFieldValues((prev) => ({ ...prev, [field.name]: v }))
-                }
-                required={field.required}
-              />
-            )
-          }
-
-          if (isArrayField(ft)) {
-            return (
-              <ArrayFieldInput
-                key={field.name}
-                fieldName={field.name}
-                value={editFieldValues[field.name]}
-                onChange={(v) =>
-                  setEditFieldValues((prev) => ({ ...prev, [field.name]: v }))
-                }
-                required={field.required}
-                onValidityChange={(valid) => setInvalidArrayFields((previous) =>
-                  previous[field.name] === !valid ? previous : { ...previous, [field.name]: !valid })}
-              />
-            )
-          }
-
-          const isMultiline = ft === 'richtext' || ft === 'markdown' || val.length > 50 || val.includes('\n') || field.name.toLowerCase().includes('meaning')
-
-          return (
-            <div key={field.name} className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                {field.name} {field.required && <span className="text-destructive">*</span>}
-              </Label>
-              {isMultiline ? (
-                <Textarea
-                  value={val}
-                  onChange={(e) =>
-                    setEditFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
-                  }
-                  className="min-h-20 text-xs sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50"
-                />
-              ) : (
-                <Input
-                  value={val}
-                  onChange={(e) =>
-                    setEditFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
-                  }
-                  className="h-9 text-xs sm:text-sm rounded-lg bg-muted/50"
-                />
-              )}
-            </div>
-          )
-        })}
+        {detail.fields.map((field) => (
+          <NoteFieldEditor
+            key={field.name}
+            field={field}
+            value={editFieldValues[field.name]}
+            initialValue={detail.note.field_values[field.name]}
+            onChange={handleFieldChange}
+            onValidityChange={handleFieldValidityChange}
+            mediaUploadDisabled={!canUploadMedia}
+          />
+        ))}
 
         {/* Tags management */}
-        <div className="space-y-2">
-          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            {t('editor.tags_label')}
-          </Label>
-          <div className="flex gap-1.5">
-            <Input
-              placeholder={t('editor.new_tag_placeholder')}
-              value={newTagInput}
-              onChange={(e) => setNewTagInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-              className="h-8 rounded-lg text-xs bg-muted/50"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-2.5 rounded-lg text-xs bg-muted/50 hover:bg-muted border-border"
-              onClick={handleAddTag}
-            >
-              <Plus className="size-3.5" />
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5 pt-1.5">
-            {editTags.length === 0 ? (
-              <span className="text-[11px] text-muted-foreground italic">
-                {t('editor.no_tags')}
-              </span>
-            ) : (
-              editTags.map((tag) => (
-                <Badge
-                  key={tag}
-                  variant="secondary"
-                  className="gap-1 pl-1.5 pr-1 py-0.5 text-[11px] rounded-md font-semibold select-none group"
-                >
-                  <Tag className="size-2.5 opacity-60" />
-                  <span>{tag}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveTag(tag)}
-                    className="p-0.5 rounded-full hover:bg-muted-foreground/15 text-muted-foreground hover:text-foreground shrink-0"
-                  >
-                    <X className="size-2.5" />
-                  </button>
-                </Badge>
-              ))
-            )}
-          </div>
-        </div>
+        <BrowseTagEditor
+          tags={editTags}
+          newTagInput={newTagInput}
+          onNewTagInputChange={setNewTagInput}
+          onAddTag={handleAddTag}
+          onRemoveTag={handleRemoveTag}
+          disabled={isCloneCard}
+          disabledReason={t('editor.clone_locked_hint')}
+        />
       </div>
 
       {/* Editor Actions Footer sticky */}

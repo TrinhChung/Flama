@@ -25,6 +25,8 @@ export interface MediaFieldPreviewProps {
   onChange: (value: string) => void
   required?: boolean
   resolveUrl?: (raw: string) => string | undefined
+  /** Block pasting image files (e.g. cloned cards, where the backend rejects uploads); links still work. */
+  uploadDisabled?: boolean
 }
 
 export function resolveDisplayUrl(
@@ -120,6 +122,7 @@ export function MediaFieldPreview({
   onChange,
   required,
   resolveUrl,
+  uploadDisabled = false,
 }: MediaFieldPreviewProps) {
   const [viewMode, setViewMode] = useState<'preview' | 'url' | 'code'>('preview')
   const [isUploading, setIsUploading] = useState(false)
@@ -185,6 +188,11 @@ export function MediaFieldPreview({
           return
         }
 
+        if (uploadDisabled) {
+          toast.error('Thẻ này không hỗ trợ tải ảnh lên. Hãy dán link ảnh.')
+          return
+        }
+
         setIsUploading(true)
         try {
           let fileToSend: File = imageFile
@@ -241,7 +249,7 @@ export function MediaFieldPreview({
         toast.success('Đã dán liên kết media!')
       }
     },
-    [fieldType, value, onChange],
+    [fieldType, uploadDisabled, value, onChange],
   )
 
   return (
@@ -297,7 +305,9 @@ export function MediaFieldPreview({
           tabIndex={0}
           onPaste={handlePaste}
           className="relative rounded-xl border border-border/60 bg-muted/30 overflow-hidden focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all cursor-pointer select-none group"
-          title="Bấm vào đây rồi nhấn Ctrl+V để dán ảnh hoặc link trực tiếp"
+          title={uploadDisabled
+            ? 'Bấm vào đây rồi nhấn Ctrl+V để dán link trực tiếp'
+            : 'Bấm vào đây rồi nhấn Ctrl+V để dán ảnh hoặc link trực tiếp'}
         >
           {isUploading && (
             <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center">
@@ -316,7 +326,9 @@ export function MediaFieldPreview({
               <p className="text-[10px] text-muted-foreground/70 mt-1 max-w-xs">
                 {fieldType === 'audio'
                   ? 'Chuyển sang tab URL để dán link âm thanh.'
-                  : 'Bấm vào đây và nhấn Ctrl+V để dán ảnh trực tiếp, hoặc chuyển sang tab URL để nhập link.'}
+                  : uploadDisabled
+                    ? 'Thẻ này không hỗ trợ tải ảnh lên. Chuyển sang tab URL để nhập link ảnh.'
+                    : 'Bấm vào đây và nhấn Ctrl+V để dán ảnh trực tiếp, hoặc chuyển sang tab URL để nhập link.'}
               </p>
             </div>
           ) : fieldType === 'audio' ? (
@@ -348,7 +360,9 @@ export function MediaFieldPreview({
                 ))}
               </div>
               <p className="text-[10px] text-muted-foreground/60 text-right pr-1 italic">
-                Bấm vào đây rồi nhấn Ctrl+V để dán thêm ảnh/link
+                {uploadDisabled
+                  ? 'Bấm vào đây rồi nhấn Ctrl+V để dán thêm link'
+                  : 'Bấm vào đây rồi nhấn Ctrl+V để dán thêm ảnh/link'}
               </p>
             </div>
           )}

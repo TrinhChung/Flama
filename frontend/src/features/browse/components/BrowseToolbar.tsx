@@ -6,6 +6,14 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Search, Sliders, Trash2, Plus, AlertTriangle, AlignLeft, Code } from 'lucide-react'
 import type { useBrowseState } from '../hooks/useBrowseState'
+import { BROWSE_SEARCH_MAX_LENGTH, isBrowseStatusFilter, type BrowseStatusFilter } from '../types'
+
+const STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'toolbar.status_filter.all' },
+  { value: 'new', label: 'toolbar.status_filter.new' },
+  { value: 'learn', label: 'toolbar.status_filter.learning' },
+  { value: 'review', label: 'toolbar.status_filter.review' },
+] as const satisfies ReadonlyArray<{ value: BrowseStatusFilter; label: string }>
 
 export interface BrowseToolbarProps {
   browse: ReturnType<typeof useBrowseState>
@@ -35,6 +43,7 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
           placeholder={t('toolbar.search_placeholder')}
           value={queryText}
           onChange={(e) => setQueryText(e.target.value)}
+          maxLength={BROWSE_SEARCH_MAX_LENGTH}
           className="pl-9 h-9 rounded-xl text-xs sm:text-sm bg-muted/50"
         />
       </div>
@@ -86,13 +95,14 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
           <Sliders className="size-3.5 text-muted-foreground" />
           <NativeSelect
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              if (isBrowseStatusFilter(e.target.value)) setStatusFilter(e.target.value)
+            }}
             className="h-8 py-0 pl-2 pr-6 text-xs rounded-lg bg-muted/50"
           >
-            <option value="all">{t('toolbar.status_filter.all')}</option>
-            <option value="new">{t('toolbar.status_filter.new')}</option>
-            <option value="learning">{t('toolbar.status_filter.learning')}</option>
-            <option value="review">{t('toolbar.status_filter.review')}</option>
+            {STATUS_FILTER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{t(option.label)}</option>
+            ))}
           </NativeSelect>
         </div>
 

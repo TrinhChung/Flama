@@ -79,7 +79,9 @@
       "learning": "Learning",
       "due": "Due",
       "other": "Other"
-    }
+    },
+    "load_error": "Couldn't load cards",
+    "retry": "Retry"
   },
   "pagination": {
     "aria_label": "Pagination navigation",
@@ -145,7 +147,9 @@
     "items_count": "{{count}} items",
     "edit_list": "Edit",
     "array_line_hint": "One item per line (auto-saved as array).",
-    "items_label": "items"
+    "items_label": "items",
+    "clone_locked_hint": "Card from an installed deck: its deck, tags and image uploads can't be changed.",
+    "tag_limit": "A card can have at most {{count}} tags."
   },
   "stroke_modal": {
     "title": "Generate Kanji & Hanzi Stroke Order Diagrams",

@@ -215,17 +215,18 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
   - `client.ts`: Canonical HTTP client providing `apiRequest`, `apiJson`, `apiJsonKeepalive`, `setCsrfToken`, `getCsrfToken`.
   - Configures `credentials: "include"` for secure session cookies.
   - Automatically parses Flask-WTF CSRF tokens from cookies or response headers and injects `X-CSRFToken` on mutating requests (POST, PUT, PATCH, DELETE).
-- **10 Domain-Level Tested UI Primitives (`src/shared/ui/`)**:
-  1. `CardFieldsForm`: Dynamic form builder for note fields with validation.
-  2. `CodeSnippetBox`: Formatted code container with one-click copy feedback.
-  3. `ConfirmDialog`: Standardized modal for destructive actions.
-  4. `FilterPillGroup`: Multi-selection filter buttons with active counter badges.
-  5. `ImageUploadDropzone`: Drag-and-drop image uploader with preview thumbnail.
-  6. `LanguageSwitcher`: Bilingual selector supporting instant locale swap.
-  7. `SearchInput`: Standardized debounced search input with clear icon.
-  8. `SplitPane`: Resizable two-pane layout with persistent divider positions.
-  9. `StatusPill`: Standardized colored state indicator for reviews and decks.
-  10. `WorkspaceLayout`: Three-column responsive workspace drawer.
+- **9 Domain-Level Tested UI Primitives (`src/shared/ui/`)**:
+  1. `CodeSnippetBox`: Formatted code container with one-click copy feedback.
+  2. `ConfirmDialog`: Standardized modal for destructive actions.
+  3. `FilterPillGroup`: Multi-selection filter buttons with active counter badges.
+  4. `ImageUploadDropzone`: Drag-and-drop image uploader with preview thumbnail.
+  5. `LanguageSwitcher`: Bilingual selector supporting instant locale swap.
+  6. `SearchInput`: Standardized debounced search input with clear icon.
+  7. `SplitPane`: Resizable two-pane layout with persistent divider positions.
+  8. `StatusPill`: Standardized colored state indicator for reviews and decks.
+  9. `WorkspaceLayout`: Three-column responsive workspace drawer.
+- **Note field editing** lives in `src/entities/flashcard/ui/NoteFieldEditor.tsx` (media preview, native array input or text; Input vs Textarea is fixed at mount from field type, name and stored value). Browse edit/create and the Study quick-edit dialog share it.
+- **Note tags**: the backend limits (64 chars, 50 tags) and the casefold dedupe key are in `src/entities/flashcard/lib/noteTags.ts`; tag inputs ignore an IME-confirming Enter with `isImeEnter` from `src/shared/lib/keyboard.ts`. Browse and Study quick edit both use them, and both lock tags on cloned cards (`note.deck_install_id`).
 
 ---
 

@@ -1,13 +1,14 @@
 import '@/shared/config/i18n'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { bootstrapQueryKey, useBootstrap } from '@/shared/api/bootstrap'
-import { apiBlob } from '@/shared/api/client'
+import { ApiError, apiBlob } from '@/shared/api/client'
 import { updateCardFieldValues } from '@/entities/flashcard/model/cardContentUpdates'
+import { NOTE_TAG_MAX_COUNT, NOTE_TAG_MAX_LENGTH, tagDedupeKey } from '@/entities/flashcard'
 import {
   type BrowseTtsSettings,
   loadStoredBrowseTtsSettings,
@@ -17,93 +18,24 @@ import {
 import { cleanTextForTts } from '@/features/audio/services/ttsTextNormalizer'
 import { fieldValueEditorText } from '@/lib/arrayField'
 import { noteWritePreconditions } from '@/lib/noteWritePreconditions'
-
-export type BrowseCardRow = {
-  card_id: string
-  note_id: string
-  deck_id: number | null
-  deck_name: string
-  word: string
-  reading: string
-  meaning: string
-  tags: string[]
-  status: string
-  due_label: string
-}
-
-export type BrowseCardsResponse = {
-  items: BrowseCardRow[]
-  page: number
-  total: number
-  pages: number
-  has_next: boolean
-}
+import {
+  type BrowseCardRow,
+  type BrowseCardsResponse,
+  type BrowseDeck,
+  type BrowseSortBy,
+  type BrowseSortDir,
+  type BrowseStatusFilter,
+  type CardDetailResponse,
+  type NoteTypeSummary,
+} from '../types'
+import { parseDeckIdParam } from '../utils/browseParams'
 
 const EMPTY_BROWSE_CARDS: BrowseCardRow[] = []
 
-export type BrowseDeck = {
-  id: number
-  name: string
-  parent_id?: number | null
-  path?: string
-  note_type_id?: string | null
-  note_type_name?: string | null
-  note_type_ids?: string[]
-  note_type_names?: string[]
-  has_mixed_note_types?: boolean
-  counts?: {
-    total?: number
-    new?: number
-    learn?: number
-    due?: number
-  }
-}
-
-export type CardDetailField = {
-  name: string
-  position: number
-  required?: boolean
-  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'array'
-}
-
-export type NoteTypeFieldDef = {
-  name: string
-  position: number
-  required?: boolean
-  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'array'
-}
-
-export type NoteTypeSummary = {
-  id: string
-  name: string
-  title?: string
-  field_defs?: NoteTypeFieldDef[]
-}
-
-export type CardDetailResponse = {
-  card: BrowseCardRow
-  note: {
-    id: string
-    note_type_id?: string | null
-    note_type_name?: string | null
-    deck_id: number
-    deck_name: string
-    field_values: Record<string, unknown>
-    content_revision?: number
-    field_schema_revision?: number
-    overlay_revision?: number
-    deck_install_id?: string
-    tags: string[]
-  }
-  fields: CardDetailField[]
-  media_assets?: Array<{
-    id: string
-    field_name: string
-    filename: string
-    mime_type: string
-    url: string
-  }>
-  decks?: Array<{ id: number; name: string; path?: string }>
+/** A 4xx (bad filter, missing deck) will fail the same way again. */
+function retryUnlessClientError(failureCount: number, error: Error) {
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false
+  return failureCount < 1
 }
 
 export function useBrowseState() {
@@ -120,17 +52,15 @@ export function useBrowseState() {
   const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
 
   // Left Pane: Deck Selection & Search
-  const [selectedDeckId, setSelectedDeckId] = useState<number | null>(
-    urlDeckId ? Number(urlDeckId) : null,
-  )
+  const [selectedDeckId, setSelectedDeckId] = useState<number | null>(() => parseDeckIdParam(urlDeckId))
   const [deckSearch, setDeckSearch] = useState('')
 
   // Center Pane: Filter, Search, Sort & Paging
   const [queryText, setQueryText] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [sortBy, setSortBy] = useState('due')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [statusFilter, setStatusFilterState] = useState<BrowseStatusFilter>('all')
+  const [sortBy, setSortBy] = useState<BrowseSortBy>('due')
+  const [sortDir, setSortDir] = useState<BrowseSortDir>('asc')
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState<number>(() => {
     const saved = localStorage.getItem('flama_browse_per_page')
@@ -143,15 +73,31 @@ export function useBrowseState() {
     return 100
   })
   const [selectedCards, setSelectedCards] = useState<string[]>([])
+  const selectedCardSet = useMemo(() => new Set(selectedCards), [selectedCards])
 
-  const handlePerPageChange = (newPerPage: number) => {
+  const handlePerPageChange = useCallback((newPerPage: number) => {
     setPerPage(newPerPage)
     setPage(1)
     localStorage.setItem('flama_browse_per_page', String(newPerPage))
-  }
+  }, [])
 
-  // VoiceVox TTS Audio Generation Modal State
-  const initialTtsSettings = loadStoredBrowseTtsSettings()
+  const setStatusFilter = useCallback((next: BrowseStatusFilter) => {
+    setStatusFilterState(next)
+    setPage(1)
+  }, [])
+
+  const handleSortChange = useCallback((field: BrowseSortBy) => {
+    if (field === sortBy) {
+      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortBy(field)
+      setSortDir('asc')
+    }
+    setPage(1)
+  }, [sortBy])
+
+  // VoiceVox TTS Audio Generation Modal State (read from storage once)
+  const [initialTtsSettings] = useState(loadStoredBrowseTtsSettings)
   const [isTtsModalOpen, setIsTtsModalOpen] = useState(false)
   const [isLocalAudioModalOpen, setIsLocalAudioModalOpen] = useState(false)
   const [isStrokeModalOpen, setIsStrokeModalOpen] = useState(false)
@@ -320,8 +266,9 @@ export function useBrowseState() {
   useEffect(() => {
     if (!initialUrlDeckSyncedRef.current) {
       initialUrlDeckSyncedRef.current = true
-      if (urlDeckId) {
-        setSelectedDeckId(Number(urlDeckId))
+      const parsedDeckId = parseDeckIdParam(urlDeckId)
+      if (parsedDeckId !== null) {
+        setSelectedDeckId(parsedDeckId)
       }
     }
     if (urlCardId) {
@@ -352,14 +299,16 @@ export function useBrowseState() {
     initialFields: initialFieldValues, initialDeckId, initialTags,
   }
 
-  // Debounce main search query
+  // Debounce main search query; only a changed query sends paging back to 1.
   useEffect(() => {
+    const nextQuery = queryText.trim()
+    if (nextQuery === debouncedQuery) return
     const timer = window.setTimeout(() => {
-      setDebouncedQuery(queryText.trim())
+      setDebouncedQuery(nextQuery)
       setPage(1)
     }, 400)
     return () => window.clearTimeout(timer)
-  }, [queryText])
+  }, [queryText, debouncedQuery])
 
   // Decks Tree Query
   const decksQuery = useQuery({
@@ -402,21 +351,30 @@ export function useBrowseState() {
         page,
         per_page: perPage,
       }),
+    placeholderData: keepPreviousData,
+    retry: retryUnlessClientError,
   })
 
   const cards = cardsQuery.data?.items || EMPTY_BROWSE_CARDS
 
+  // Pull the page back inside the result, e.g. after deleting the last rows.
+  const confirmedPageCount = cardsQuery.isPlaceholderData ? null : cardsQuery.data?.pages
+  useEffect(() => {
+    if (confirmedPageCount === undefined || confirmedPageCount === null) return
+    const lastPage = Math.max(1, confirmedPageCount)
+    if (page > lastPage) setPage(lastPage)
+  }, [confirmedPageCount, page])
+
   // Retain identity only for selected rows, including selections on other pages.
   const selectedNoteIdsRef = useRef(new Map<string, string>())
   useEffect(() => {
-    const selected = new Set(selectedCards)
     for (const id of selectedNoteIdsRef.current.keys()) {
-      if (!selected.has(id)) selectedNoteIdsRef.current.delete(id)
+      if (!selectedCardSet.has(id)) selectedNoteIdsRef.current.delete(id)
     }
     for (const row of cards) {
-      if (selected.has(row.card_id)) selectedNoteIdsRef.current.set(row.card_id, row.note_id)
+      if (selectedCardSet.has(row.card_id)) selectedNoteIdsRef.current.set(row.card_id, row.note_id)
     }
-  }, [cards, selectedCards])
+  }, [cards, selectedCardSet])
 
   // Keyboard shortcuts
   const cardsRef = useRef(cards)
@@ -776,8 +734,9 @@ export function useBrowseState() {
     },
     onSuccess: ({ count, cardIds }) => {
       toast.success(t('toasts.bulk_delete_success', { count }), { id: 'bulk-delete-cards' })
-      setActiveCardId((current) => current && cardIds.includes(current) ? null : current)
-      setSelectedCards((current) => current.filter((id) => !cardIds.includes(id)))
+      const deleted = new Set(cardIds)
+      setActiveCardId((current) => current && deleted.has(current) ? null : current)
+      setSelectedCards((current) => current.filter((id) => !deleted.has(id)))
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] })
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
@@ -856,6 +815,7 @@ export function useBrowseState() {
       })
       setIsKeySaved(true)
       void queryClient.invalidateQueries({ queryKey: ['voicevox-profile'] })
+      void queryClient.invalidateQueries({ queryKey: ['voicevox-voices'] })
       if (showToast) {
         toast.success(t('toasts.api_key_saved'))
       }
@@ -866,14 +826,17 @@ export function useBrowseState() {
     }
   }
 
-  // Dynamic fetch voices
+  // Dynamic fetch voices. The key stays out of the queryKey so typing it does
+  // not POST per keystroke; saving a key invalidates the list instead.
+  const ttsApiKeyRef = useRef(ttsApiKey)
+  ttsApiKeyRef.current = ttsApiKey
   const ttsVoicesQuery = useQuery({
-    queryKey: ['voicevox-voices', ttsApiKey],
+    queryKey: ['voicevox-voices'],
     queryFn: () =>
       appApi.mutate<{ items: Array<{ id: string; label: string; speaker_name: string; style_name: string }> }>(
         '/api/tts/providers/voicevox/voices',
         'POST',
-        { api_key: ttsApiKey || undefined },
+        { api_key: ttsApiKeyRef.current || undefined },
       ),
     enabled: isTtsModalOpen,
     staleTime: 5 * 60 * 1000,
@@ -943,32 +906,54 @@ export function useBrowseState() {
     toast.info(t('toasts.reset_defaults'))
   }
 
-  const allSelected =
-    cards.length > 0 && cards.every((card) => selectedCards.includes(card.card_id))
-
-  const handleToggleSelectAllCards = () => {
-    if (allSelected) {
-      setSelectedCards([])
-    } else {
-      setSelectedCards(cards.map((c) => c.card_id))
-    }
-  }
-
-  const filteredDecks = (decksQuery.data?.decks || []).filter((deck) =>
-    deck.name.toLowerCase().includes(deckSearch.trim().toLowerCase()),
+  const allSelected = useMemo(
+    () => cards.length > 0 && cards.every((card) => selectedCardSet.has(card.card_id)),
+    [cards, selectedCardSet],
   )
+
+  const handleToggleSelectAllCards = useCallback(() => {
+    setSelectedCards(allSelected ? [] : cards.map((c) => c.card_id))
+  }, [allSelected, cards])
+
+  const handleToggleCardSelected = useCallback((cardId: string, selected: boolean) => {
+    setSelectedCards((current) => {
+      if (selected) return current.includes(cardId) ? current : [...current, cardId]
+      return current.filter((id) => id !== cardId)
+    })
+  }, [])
+
+  const handleActivateCard = useCallback((cardId: string) => {
+    setIsCreatingCard(false)
+    setActiveCardId(cardId)
+    setMobileTab('editor')
+  }, [])
+
+  const { refetch: refetchCardsQuery } = cardsQuery
+  const refetchCards = useCallback(() => {
+    void refetchCardsQuery()
+  }, [refetchCardsQuery])
 
   const selectedDeck =
     selectedDeckId !== null
       ? (decksQuery.data?.decks || []).find((deck) => deck.id === selectedDeckId) || null
       : null
 
+  // Logical-overlay clones: the backend rejects deck moves, tag edits and media uploads.
+  const activeDetail = cardDetailQuery.data
+  const isCloneCard = Boolean(activeDetail?.note.deck_install_id)
+  const canUploadMedia = !isCloneCard && activeDetail?.can_upload_media !== false
+
   const handleAddTag = () => {
-    const tag = newTagInput.trim()
-    if (tag && !editTags.includes(tag)) {
-      setEditTags([...editTags, tag])
-      setNewTagInput('')
+    const tag = newTagInput.trim().slice(0, NOTE_TAG_MAX_LENGTH)
+    if (!tag) return
+    const key = tagDedupeKey(tag)
+    if (editTags.some((existing) => tagDedupeKey(existing) === key)) return
+    if (editTags.length >= NOTE_TAG_MAX_COUNT) {
+      toast.error(t('editor.tag_limit', { count: NOTE_TAG_MAX_COUNT }))
+      return
     }
+    setEditTags([...editTags, tag])
+    setNewTagInput('')
   }
 
   const handleRemoveTag = (tagToRemove: string) => {
@@ -1016,15 +1001,18 @@ export function useBrowseState() {
     statusFilter,
     setStatusFilter,
     sortBy,
-    setSortBy,
     sortDir,
-    setSortDir,
     page,
     setPage,
     perPage,
     handlePerPageChange,
+    handleSortChange,
     selectedCards,
+    selectedCardSet,
     setSelectedCards,
+    handleToggleCardSelected,
+    handleActivateCard,
+    refetchCards,
     isTtsModalOpen,
     setIsTtsModalOpen,
     isLocalAudioModalOpen,
@@ -1099,8 +1087,9 @@ export function useBrowseState() {
     initialDeckId,
     initialTags,
     isDirty,
+    isCloneCard,
+    canUploadMedia,
     allSelected,
-    filteredDecks,
     availableSourceFieldNames,
     availableAudioFieldNames,
     targetTtsCardIds,
