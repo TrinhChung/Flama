@@ -648,6 +648,30 @@
       "    }",
       "  });",
       "  installMediaPlaybackBridge();",
+      "  function isTextEntryElement(element) {",
+      "    if (!element || element === document.body || element === document.documentElement) {",
+      "      return false;",
+      "    }",
+      "    if (element.isContentEditable) {",
+      "      return true;",
+      "    }",
+      "    var tagName = String(element.tagName || '').toLowerCase();",
+      "    if (tagName === 'textarea' || tagName === 'select') {",
+      "      return true;",
+      "    }",
+      "    return tagName === 'input'",
+      "      && !/^(?:button|submit|reset|checkbox|radio|range|color|file|image)$/.test(String(element.type || 'text').toLowerCase());",
+      "  }",
+      "  function releaseFocusAfterPointer() {",
+      "    window.setTimeout(function () {",
+      "      var selection = typeof window.getSelection === 'function' ? window.getSelection() : null;",
+      "      if (isTextEntryElement(document.activeElement) || (selection && !selection.isCollapsed)) {",
+      "        return;",
+      "      }",
+      "      post('release_focus', {});",
+      "    }, 0);",
+      "  }",
+      "  window.addEventListener('pointerup', releaseFocusAfterPointer, true);",
       "  window.addEventListener('message', function (event) {",
       "    var data = event && event.data;",
       "    if (!data || data.channel !== channel || data.direction !== '" + HOST_DIRECTION + "' || data.instanceId !== instanceId) {",
@@ -1037,6 +1061,15 @@
         const message = typeof payload.message === "string" ? payload.message.trim() : "";
         if (message) {
           global.console.warn("Flama card renderer:", message);
+        }
+        return;
+      }
+      if (action === "release_focus") {
+        // A click inside the card moves keyboard focus into the sandbox, where
+        // the page's shortcuts cannot hear keys. The sandbox may only hand that
+        // focus back; it never gains a reveal/answer action.
+        if (global.document.activeElement === frameEl) {
+          frameEl.blur();
         }
         return;
       }

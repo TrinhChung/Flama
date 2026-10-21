@@ -1,9 +1,13 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   resolveReviewAction,
   type ReviewAction,
   type ReviewRating,
 } from '../interactions/reviewInteraction'
+
+// Radix keeps an open menu or dialog in the DOM under these roles; keys typed
+// there belong to it, not to the card behind it.
+const OPEN_OVERLAY_SELECTOR = '[role="dialog"], [role="alertdialog"], [role="menu"]'
 
 export type UseStudyKeyboardShortcutsOptions = {
   cardId?: string | null
@@ -30,11 +34,22 @@ export function useStudyKeyboardShortcuts({
   onOpenEdit,
   onToggleFullscreen,
 }: UseStudyKeyboardShortcutsOptions) {
+  // A button or link keeps its native Space/Enter only when the learner reached
+  // it with Tab. Focus left there by a mouse click, or handed back by a closing
+  // menu or dialog, must not swallow the study shortcuts.
+  const tabPendingRef = useRef(false)
+  const tabFocusedRef = useRef<EventTarget | null>(null)
+
   useEffect(() => {
     if (leaseConflict || hasReceipt || isQuickEditOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const activeEl = document.activeElement
+      if (event.key === 'Tab') {
+        tabPendingRef.current = true
+        return
+      }
+
+      const activeEl = document.activeElement as HTMLElement | null
       const activeTag = (activeEl?.tagName || '').toLowerCase()
       if (
         event.defaultPrevented
@@ -43,8 +58,16 @@ export function useStudyKeyboardShortcuts({
         || activeTag === 'input'
         || activeTag === 'textarea'
         || activeTag === 'select'
-        || (activeEl as HTMLElement)?.isContentEditable
+        || activeEl?.isContentEditable
+        || document.querySelector(OPEN_OVERLAY_SELECTOR)
       ) return
+
+      const onControl = activeTag === 'button' || activeTag === 'a'
+      const tabFocusedControl = onControl && activeEl === tabFocusedRef.current
+      const claim = () => {
+        event.preventDefault()
+        if (onControl && !tabFocusedControl) activeEl?.blur()
+      }
 
       const code = event.code
       const key = event.key
@@ -56,22 +79,16 @@ export function useStudyKeyboardShortcuts({
       )
 
       if (isUndo) {
-        event.preventDefault()
+        claim()
         void onUndo()
         return
       }
 
-      if (
-        event.altKey
-        || event.ctrlKey
-        || event.metaKey
-        || activeTag === 'button'
-        || activeTag === 'a'
-      ) return
+      if (event.altKey || event.ctrlKey || event.metaKey) return
 
       const isEditKey = key === 'e' || key === 'E' || code === 'KeyE'
       if (isEditKey) {
-        event.preventDefault()
+        claim()
         onOpenEdit()
         return
       }
@@ -80,7 +97,8 @@ export function useStudyKeyboardShortcuts({
       const isFullscreenKey = key === 'f' || key === 'F' || code === 'KeyF'
 
       if (isSpaceOrEnter) {
-        event.preventDefault()
+        if (tabFocusedControl) return
+        claim()
         if (!cardId) return
         if (!revealed) onReveal()
         else void onReviewAction(resolveReviewAction('good'))
@@ -104,16 +122,25 @@ export function useStudyKeyboardShortcuts({
         const mappedKey = codeMap[code] ?? key
         const rating = ratingByKey[mappedKey]
         if (rating) {
-          event.preventDefault()
+          claim()
           void onReviewAction(resolveReviewAction(rating))
         } else if (isFullscreenKey) {
-          event.preventDefault()
+          claim()
           onToggleFullscreen()
         }
       } else if (isFullscreenKey) {
-        event.preventDefault()
+        claim()
         onToggleFullscreen()
       }
+    }
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') tabPendingRef.current = false
+    }
+
+    const handleFocusIn = (event: FocusEvent) => {
+      tabFocusedRef.current = tabPendingRef.current ? event.target : null
+      tabPendingRef.current = false
     }
 
     const handleFocusBack = () => {
@@ -124,10 +151,16 @@ export function useStudyKeyboardShortcuts({
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
+    // Capture runs before React handlers, so a focused Radix trigger cannot turn
+    // Space/Enter into "open menu" before the shortcut claims the key.
+    window.addEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('focusin', handleFocusIn)
     window.addEventListener('focus', handleFocusBack)
     return () => {
-      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('focusin', handleFocusIn)
       window.removeEventListener('focus', handleFocusBack)
     }
   }, [

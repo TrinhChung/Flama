@@ -103,6 +103,7 @@
   - `play_audio`
   - `pause_audio`
   - `log_error`
+  - `release_focus`
 - Host to renderer:
   - `reveal`
   - `patch_content`
@@ -110,6 +111,8 @@
   - `audio_event`
 
 There is deliberately no generic `keydown_event` or progress-changing Action in this bridge. The 2026-08-27 study-runtime slice removed the former keyboard relay because Template code could synthesize the same message as a real key press. Study shortcuts continue to be owned by the React study host while focus is in the parent document. A replacement for shortcuts while focus is inside the iframe must use a reviewed trusted-gesture/capability design; it must not restore raw `KeyboardEvent` redispatch.
+
+Since 2026-10-21 the shell posts `release_focus` after a pointer click that leaves focus on non-text content (not an `input`/`textarea`/`select`/contenteditable, and no active text selection). The host only calls `iframe.blur()`, and only while that iframe holds focus, so later real key presses reach the parent's shortcuts. The message carries no key, rating or action, so a forged one can only move focus out of the card. Residual risk: a Template could forge it while the learner types in the Template's own text field, sending the following keys to the study shortcuts. That is the same class of problem as a Template telling the learner which key to press.
 
 ### Renderer CSP
 - `default-src 'none'`
