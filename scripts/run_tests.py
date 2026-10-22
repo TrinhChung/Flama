@@ -1628,6 +1628,14 @@ def available_memory_bytes() -> int | None:
     return None
 
 
+def memory_worker_limit() -> int | None:
+    """Workers that fit in free memory at the measured per-worker peak, if known."""
+    memory = available_memory_bytes()
+    if memory is None:
+        return None
+    return max(1, memory // BACKEND_WORKER_MEMORY_BYTES)
+
+
 def resolve_backend_jobs(requested: str | int | None, file_count: int) -> int:
     """Return the worker count for ``--jobs``.
 
@@ -1637,11 +1645,11 @@ def resolve_backend_jobs(requested: str | int | None, file_count: int) -> int:
     """
     if requested is None or str(requested).strip().lower() in {"", "auto"}:
         jobs = effective_cpu_count()
-        memory = available_memory_bytes()
-        if memory is None:
+        limit = memory_worker_limit()
+        if limit is None:
             jobs = min(jobs, BACKEND_AUTO_JOBS_WITHOUT_MEMORY_INFO)
         else:
-            jobs = min(jobs, max(1, memory // BACKEND_WORKER_MEMORY_BYTES))
+            jobs = min(jobs, limit)
     else:
         try:
             jobs = int(requested)
@@ -2362,12 +2370,22 @@ def main() -> int:
     all_passed = True
 
     if run_backend and selected_backend_tests:
+        backend_jobs = resolve_backend_jobs(args.jobs, len(selected_backend_tests))
+        if str(args.jobs).strip().lower() != "auto" and backend_jobs > 1:
+            limit = memory_worker_limit()
+            if limit is not None and backend_jobs > limit:
+                # An explicit count is honoured, but say when it may swap.
+                print(
+                    f"[WARN] --jobs {backend_jobs} exceeds the {limit} worker(s) that fit in free "
+                    f"memory at {BACKEND_WORKER_MEMORY_BYTES // (1024 * 1024)} MiB each; "
+                    "workers may swap or be killed."
+                )
         backend_ok = run_backend_tests(
             python_cmd=python_cmd,
             test_files=sorted(selected_backend_tests),
             failfast=args.failfast,
             verbose=args.verbose,
-            jobs=resolve_backend_jobs(args.jobs, len(selected_backend_tests)),
+            jobs=backend_jobs,
             bin_timeout=args.bin_timeout or None,
             manifest=args.manifest,
             partition_seed=args.partition_seed,

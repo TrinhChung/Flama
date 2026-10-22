@@ -338,6 +338,19 @@ class ParallelBackendRunnerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 run_tests.resolve_backend_jobs(invalid, 300)
 
+    def test_explicit_jobs_above_memory_estimate_warn_but_are_kept(self):
+        per_worker = run_tests.BACKEND_WORKER_MEMORY_BYTES
+        argv = ["run_tests.py", "--module", "tooling", "--backend-only", "--jobs", "4"]
+        with mock.patch.object(sys, "argv", argv), \
+                mock.patch("scripts.run_tests.available_memory_bytes", return_value=per_worker * 2), \
+                mock.patch("scripts.run_tests.run_backend_tests", return_value=True) as run_mock, \
+                mock.patch("builtins.print") as print_mock:
+            self.assertEqual(run_tests.main(), 0)
+
+        printed = " ".join(str(call.args[0]) for call in print_mock.call_args_list if call.args)
+        self.assertIn("[WARN] --jobs 4 exceeds the 2 worker(s)", printed)
+        self.assertEqual(run_mock.call_args.kwargs["jobs"], 4)
+
     @mock.patch("scripts.run_tests.effective_cpu_count", return_value=16)
     def test_auto_jobs_leave_memory_for_each_worker(self, _cpus):
         per_worker = run_tests.BACKEND_WORKER_MEMORY_BYTES
@@ -573,6 +586,19 @@ class MysqlProbeRunnerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("ok    scripts/run_mysql_probes.py --help", result.stdout)
         self.assertIn("FAIL  scripts/run_mysql_probes.py --jobs 0", result.stdout)
+
+    def test_probe_running_past_its_timeout_is_killed_and_fails(self):
+        from scripts import run_mysql_probes
+
+        started = time.time()
+        returncode, elapsed, output = run_mysql_probes.run_probe(
+            ["-c", "import time; time.sleep(60)"], timeout=2
+        )
+
+        self.assertNotEqual(returncode, 0)
+        self.assertIn("[TIMEOUT]", output)
+        self.assertLess(time.time() - started, 30)
+        self.assertLess(elapsed, 30)
 
     def test_missing_probe_script_is_rejected_before_running(self):
         result = self._run("scripts/run_mysql_probes.py --help", "scripts/no_such_probe.py")

@@ -118,6 +118,14 @@ class CiWorkflowTests(unittest.TestCase):
             )
         self.assertIn("    if: needs.changes.outputs.backend == 'true'\n", backend_block)
 
+    def test_backend_job_and_workers_have_time_limits(self):
+        backend_block = self.workflow.split("\n  backend:\n", 1)[1].split(
+            "\n  redis-contract:\n", 1
+        )[0]
+
+        self.assertIn("    timeout-minutes: 30\n", backend_block)
+        self.assertIn("extra=(--bin-timeout 1200)", backend_block)
+
     def test_expensive_environment_contracts_are_explicit(self):
         frontend = self.workflow.split("\n  frontend:\n", 1)[1].split("\n  backend:\n", 1)[0]
         self.assertIn("FLAMA_REQUIRE_REAL_SPA_ARTIFACT: '1'", frontend)
