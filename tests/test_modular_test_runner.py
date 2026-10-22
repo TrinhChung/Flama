@@ -550,5 +550,37 @@ class ParallelBackendRunnerTests(unittest.TestCase):
         self.assertLess(time.time() - started, 30)
 
 
+class MysqlProbeRunnerTests(unittest.TestCase):
+    """The probe runner only orchestrates processes; these use no database."""
+
+    SCRIPT = run_tests.ROOT_DIR / "scripts" / "run_mysql_probes.py"
+
+    def _run(self, *probes):
+        import subprocess
+
+        args = [sys.executable, str(self.SCRIPT), "--jobs", "2"]
+        for probe in probes:
+            args += ["--probe", probe]
+        return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+    def test_any_failing_probe_fails_the_run_after_all_finish(self):
+        # The runner invoking itself: --help exits 0, --jobs 0 exits 2.
+        result = self._run(
+            "scripts/run_mysql_probes.py --help",
+            "scripts/run_mysql_probes.py --jobs 0 --probe scripts/run_mysql_probes.py",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ok    scripts/run_mysql_probes.py --help", result.stdout)
+        self.assertIn("FAIL  scripts/run_mysql_probes.py --jobs 0", result.stdout)
+
+    def test_missing_probe_script_is_rejected_before_running(self):
+        result = self._run("scripts/run_mysql_probes.py --help", "scripts/no_such_probe.py")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("probe script not found", result.stderr)
+        self.assertNotIn("Probe timings", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

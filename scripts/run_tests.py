@@ -960,6 +960,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/launch_chrome_devtools.*",
             "scripts/run_lighthouse_audit.*",
             "scripts/run_tests.py",
+            "scripts/run_mysql_probes.py",
             "scripts/check_*.py",
             "scripts/stress_test_cicd_quota.py",
             "scripts/setup_github_workspace.sh",
@@ -1102,6 +1103,7 @@ REDIS_CONTRACT_SOURCE_PATTERNS = (
 
 MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "scripts/archive_retired_tables.py",
+    "scripts/run_mysql_probes.py",
     "scripts/bootstrap_historical_schema.py",
     "scripts/prepare_retirement_mysql_rehearsal.py",
     "scripts/verify_retirement_protected_state.py",
