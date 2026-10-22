@@ -12,7 +12,6 @@ Usage:
   python scripts/run_tests.py --backend-only          # Limit to backend unittest
   python scripts/run_tests.py --frontend-only         # Limit to frontend vitest
   python scripts/run_tests.py --all                   # Run entire test suite
-  python scripts/run_tests.py --all --jobs auto       # Run backend files in parallel processes
   python scripts/run_tests.py --list-modules          # Inspect all modules & test files
 """
 
@@ -24,16 +23,18 @@ from dataclasses import dataclass, field
 import fnmatch
 import hashlib
 import json
+import math
 import os
+from pathlib import Path
 import random
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import threading
 import time
-from pathlib import Path
 
 # Ensure UTF-8 output on Windows consoles
 if sys.platform == "win32":
@@ -44,6 +45,9 @@ if sys.platform == "win32":
 
 # Repo root directory
 ROOT_DIR = Path(__file__).resolve().parent.parent
+# Direct CLI execution starts with scripts/ on sys.path; helpers live in the repo package.
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 # -----------------------------------------------------------------------------
 # Module Mapping Definitions
@@ -962,9 +966,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/launch_chrome_devtools.*",
             "scripts/run_lighthouse_audit.*",
             "scripts/run_tests.py",
-            "scripts/run_mysql_probes.py",
             "scripts/unittest_manifest.py",
             "scripts/compare_test_manifests.py",
+            "scripts/run_mysql_probes.py",
             "scripts/check_*.py",
             "scripts/stress_test_cicd_quota.py",
             "scripts/setup_github_workspace.sh",
@@ -982,6 +986,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_deploy_workflow.py",
             "tests/test_flama_audio_release_workflow.py",
             "tests/test_modular_test_runner.py",
+            "tests/test_parallel_backend_runner.py",
+            "tests/test_unittest_manifest.py",
             "tests/test_test_mapping_coverage.py",
         ],
         "frontend_tests": [],
@@ -1106,8 +1112,8 @@ REDIS_CONTRACT_SOURCE_PATTERNS = (
 )
 
 MYSQL_CONTRACT_SOURCE_PATTERNS = (
-    "scripts/archive_retired_tables.py",
     "scripts/run_mysql_probes.py",
+    "scripts/archive_retired_tables.py",
     "scripts/bootstrap_historical_schema.py",
     "scripts/prepare_retirement_mysql_rehearsal.py",
     "scripts/verify_retirement_protected_state.py",
@@ -1354,9 +1360,30 @@ def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], 
     for file_path in changed_files:
         norm_path = file_path.replace("\\", "/")
 
+        # If a changed file does not exist on disk, check if its filename
+        # matches any known test in MODULES (e.g. file was renamed/relocated).
+        if not (ROOT_DIR / norm_path).exists():
+            target_name = Path(norm_path).name
+            resolved = None
+            for mod_info in MODULES.values():
+                for bt in mod_info["backend_tests"]:
+                    if Path(bt).name == target_name and (ROOT_DIR / bt).exists():
+                        resolved = bt
+                        break
+                if resolved:
+                    break
+                for ft in mod_info["frontend_tests"]:
+                    if Path(ft).name == target_name and (ROOT_DIR / "frontend" / ft).exists():
+                        resolved = f"frontend/{ft}"
+                        break
+                if resolved:
+                    break
+            if resolved:
+                norm_path = resolved
+
         # A direct test edit runs that test only. Module names remain useful in
         # diagnostics, but must not expand one test file into a whole domain.
-        if norm_path.startswith("tests/test_") and norm_path.endswith(".py"):
+        if norm_path.startswith("tests/") and Path(norm_path).name.startswith("test_") and norm_path.endswith(".py"):
             backend_tests.add(norm_path)
             for mod_name, mod_info in MODULES.items():
                 if norm_path in mod_info["backend_tests"]:
@@ -1555,6 +1582,9 @@ def build_backend_test_environment(
     env["EMAIL_ENABLED"] = "0"
     env["EMAIL_PROVIDER"] = "memory"
     env["EMAIL_ENVIRONMENT"] = "test"
+    # Correctness runs must compare committed snapshots in every worker mode.
+    env["UPDATE_SNAPSHOT"] = "0"
+    env["UPDATE_ROUTE_SNAPSHOT"] = "0"
     return env
 
 
@@ -1581,6 +1611,44 @@ BACKEND_WORKER_MEMORY_BYTES = 768 * 1024 * 1024
 BACKEND_AUTO_JOBS_WITHOUT_MEMORY_INFO = 2
 # Only the end of a worker log is parsed for unittest's summary.
 UNITTEST_SUMMARY_TAIL_BYTES = 64 * 1024
+# A noisy test cannot fill runner disk or flood hosted logs. The entire pipe is
+# drained; only a bounded head and tail are retained, with an explicit marker.
+BACKEND_LOG_LIMIT_BYTES = 1024 * 1024
+BACKEND_CLEANUP_TIMEOUT = 5.0
+
+
+def _resource_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="ascii").strip()
+    except OSError:
+        return None
+
+
+def _cgroup_directories(controller: str) -> list[tuple[Path, bool]]:
+    """Standard Linux cgroup mounts, including limits inherited from ancestors."""
+    text = _resource_text(Path("/proc/self/cgroup")) or ""
+    paths: list[tuple[Path, bool]] = []
+    for line in text.splitlines():
+        parts = line.split(":", 2)
+        if len(parts) != 3:
+            continue
+        hierarchy, controllers, relative = parts
+        unified = hierarchy == "0" and not controllers
+        if not unified and controller not in controllers.split(","):
+            continue
+        root = Path("/sys/fs/cgroup") if unified else Path("/sys/fs/cgroup") / controllers
+        # A private cgroup namespace can expose '/' as its own root.
+        current = root / relative.lstrip("/")
+        if ".." in current.parts:
+            # Namespace-relative paths can point above the visible mount;
+            # its root still exposes the effective inherited limits.
+            current = root
+        while True:
+            paths.append((current, unified))
+            if current == root:
+                break
+            current = current.parent
+    return list(dict.fromkeys(paths))
 
 UNITTEST_RAN_RE = re.compile(r"^Ran (\d+) tests? in ", re.MULTILINE)
 UNITTEST_RESULT_RE = re.compile(r"^(OK|FAILED)(?: \(([^)]*)\))?\s*$", re.MULTILINE)
@@ -1588,11 +1656,54 @@ UNITTEST_RESULT_RE = re.compile(r"^(OK|FAILED)(?: \(([^)]*)\))?\s*$", re.MULTILI
 
 def effective_cpu_count() -> int:
     """CPUs this process may use, honouring affinity where the OS reports it."""
-    if hasattr(os, "process_cpu_count"):  # Python 3.13+
-        return os.process_cpu_count() or 1
-    if hasattr(os, "sched_getaffinity"):
-        return len(os.sched_getaffinity(0)) or 1
-    return os.cpu_count() or 1
+    counts = [os.cpu_count() or 1]
+    try:
+        if hasattr(os, "process_cpu_count"):
+            counts.append(os.process_cpu_count() or 1)
+        elif hasattr(os, "sched_getaffinity"):
+            counts.append(len(os.sched_getaffinity(0)) or 1)
+        elif sys.platform == "win32":
+            import ctypes
+            from ctypes import wintypes
+            api = ctypes.WinDLL("kernel32", use_last_error=True)
+            api.GetCurrentProcess.restype = wintypes.HANDLE
+            api.GetProcessAffinityMask.argtypes = [
+                wintypes.HANDLE, ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_size_t)
+            ]
+            process_mask, system_mask = ctypes.c_size_t(), ctypes.c_size_t()
+            if not api.GetProcessAffinityMask(
+                api.GetCurrentProcess(), ctypes.byref(process_mask), ctypes.byref(system_mask)
+            ):
+                raise OSError("GetProcessAffinityMask failed")
+            counts.append(bin(process_mask.value).count("1") or 1)
+        else:
+            counts.append(BACKEND_AUTO_JOBS_WITHOUT_MEMORY_INFO)
+    except (OSError, AttributeError):
+        counts.append(BACKEND_AUTO_JOBS_WITHOUT_MEMORY_INFO)
+    if sys.platform.startswith("linux"):
+        directories = _cgroup_directories("cpu")
+        observed_limit = False
+        for directory, unified in directories:
+            if unified:
+                values = (_resource_text(directory / "cpu.max") or "").split()
+            else:
+                values = [
+                    _resource_text(directory / "cpu.cfs_quota_us"),
+                    _resource_text(directory / "cpu.cfs_period_us"),
+                ]
+            try:
+                if len(values) == 2 and values[0] == "max" and int(values[1]) > 0:
+                    observed_limit = True
+                    continue
+                quota, period = map(int, values)
+                observed_limit = True
+                if quota > 0 and period > 0:
+                    counts.append(max(1, quota // period))
+            except (ValueError, TypeError):
+                pass
+        if directories and not observed_limit:
+            counts.append(BACKEND_AUTO_JOBS_WITHOUT_MEMORY_INFO)
+    return max(1, min(counts))
 
 
 def available_memory_bytes() -> int | None:
@@ -1622,7 +1733,26 @@ def available_memory_bytes() -> int | None:
         with open("/proc/meminfo", encoding="ascii") as meminfo:
             for line in meminfo:
                 if line.startswith("MemAvailable:"):
-                    return int(line.split()[1]) * 1024
+                    memory = int(line.split()[1]) * 1024
+                    if sys.platform.startswith("linux"):
+                        directories = _cgroup_directories("memory")
+                        observed_limit = False
+                        for directory, unified in directories:
+                            maximum = _resource_text(directory / ("memory.max" if unified else "memory.limit_in_bytes"))
+                            used = _resource_text(directory / ("memory.current" if unified else "memory.usage_in_bytes"))
+                            try:
+                                if maximum == "max" and int(used) >= 0:
+                                    observed_limit = True
+                                    continue
+                                memory = min(memory, max(0, int(maximum) - int(used)))
+                                observed_limit = True
+                            except (ValueError, TypeError):
+                                pass
+                        if directories and not observed_limit:
+                            # If a container hides its limits, choose one
+                            # worker rather than infer headroom from host RAM.
+                            memory = min(memory, BACKEND_WORKER_MEMORY_BYTES)
+                    return memory
     except (OSError, ValueError, AttributeError):
         return None
     return None
@@ -1726,6 +1856,7 @@ class BackendBinResult:
     summary: UnittestSummary | None
     note: str = ""
     manifest_path: str | None = None
+    manifest_data: dict | None = None
 
     @property
     def started(self) -> bool:
@@ -1733,13 +1864,20 @@ class BackendBinResult:
 
     @property
     def passed(self) -> bool:
-        # Exit 0 alone is not enough: unittest must also report an OK summary
-        # for tests that actually ran.
+        # Printed text is untrusted test output. Only the validated wrapper's
+        # completion record proves that unittest actually ran and finished.
         return (
             self.returncode == 0
+            and self.manifest_data is not None
+            and self.manifest_data.get("complete") is True
+            and self.manifest_data.get("success") is True
+            # A fully skipped class/module can legitimately have Ran 0. The
+            # manifest reader proves a nonempty loaded inventory and explicit
+            # fixture skips; an unexpected empty suite is rejected there.
+            and self.manifest_data.get("tests_run", -1) >= 0
             and self.summary is not None
             and self.summary.ok
-            and self.summary.ran > 0
+            and self.summary.ran == self.manifest_data.get("tests_run")
         )
 
     def read_output(self) -> str:
@@ -1790,328 +1928,532 @@ def _manifest_command(
     return cmd[:index] + ["scripts.unittest_manifest"] + cmd[index + 1:]
 
 
+class _WindowsJob:
+    """Kill-on-close ownership, assigned before the gated worker loads tests."""
+    def __init__(self):
+        import ctypes
+        from ctypes import wintypes as w
+        class Basic(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
+                ("LimitFlags", w.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", w.DWORD),
+                ("Affinity", ctypes.c_size_t), ("PriorityClass", w.DWORD), ("SchedulingClass", w.DWORD),
+            ]
+        class Io(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_ulonglong) for name in (
+                "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
+            )]
+        class Extended(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", Basic), ("IoInfo", Io),
+                ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+        class Accounting(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_longlong) for name in (
+                "TotalUserTime", "TotalKernelTime", "ThisPeriodTotalUserTime", "ThisPeriodTotalKernelTime",
+            )] + [(name, w.DWORD) for name in (
+                "TotalPageFaultCount", "TotalProcesses", "ActiveProcesses", "TotalTerminatedProcesses",
+            )]
+        api = ctypes.WinDLL("kernel32", use_last_error=True)
+        api.CreateJobObjectW.argtypes = [ctypes.c_void_p, w.LPCWSTR]
+        api.CreateJobObjectW.restype = w.HANDLE
+        api.SetInformationJobObject.argtypes = [w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD]
+        api.AssignProcessToJobObject.argtypes = [w.HANDLE, w.HANDLE]
+        api.IsProcessInJob.argtypes = [w.HANDLE, w.HANDLE, ctypes.POINTER(w.BOOL)]
+        api.OpenProcess.argtypes = [w.DWORD, w.BOOL, w.DWORD]
+        api.OpenProcess.restype = w.HANDLE
+        api.TerminateJobObject.argtypes = [w.HANDLE, w.UINT]
+        api.TerminateProcess.argtypes = [w.HANDLE, w.UINT]
+        api.QueryInformationJobObject.argtypes = [w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD, ctypes.c_void_p]
+        api.CloseHandle.argtypes = [w.HANDLE]
+        self.api, self.ctypes, self.Accounting = api, ctypes, Accounting
+        self.handle = api.CreateJobObjectW(None, None)
+        self._lock = threading.Lock()
+        if not self.handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        limits = Extended()
+        limits.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not api.SetInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+            error = ctypes.WinError(ctypes.get_last_error())
+            api.CloseHandle(self.handle)
+            self.handle = None
+            raise error
+
+    def assign_handle(self, handle):
+        from ctypes import wintypes
+        already = wintypes.BOOL()
+        if not self.api.IsProcessInJob(handle, self.handle, self.ctypes.byref(already)):
+            raise self.ctypes.WinError(self.ctypes.get_last_error())
+        if not already.value and not self.api.AssignProcessToJobObject(self.handle, handle):
+            raise self.ctypes.WinError(self.ctypes.get_last_error())
+
+    def assign_pid(self, pid):
+        handle = self.api.OpenProcess(0x100 | 0x1 | 0x1000, False, pid)
+        if not handle:
+            raise self.ctypes.WinError(self.ctypes.get_last_error())
+        try:
+            self.assign_handle(handle)
+        except BaseException:
+            # A launcher may have created this gated interpreter before the
+            # launcher joined the job. Never leave it outside job ownership
+            # when assignment fails: no test code has been released yet.
+            self.api.TerminateProcess(handle, 1)
+            raise
+        finally:
+            self.api.CloseHandle(handle)
+
+    def stop(self):
+        with self._lock:
+            if not self.handle:
+                return
+            try:
+                if not self.api.TerminateJobObject(self.handle, 1):
+                    raise self.ctypes.WinError(self.ctypes.get_last_error())
+                deadline = time.monotonic() + BACKEND_CLEANUP_TIMEOUT
+                while True:
+                    status = self.Accounting()
+                    if not self.api.QueryInformationJobObject(
+                        self.handle, 1, self.ctypes.byref(status), self.ctypes.sizeof(status), None
+                    ):
+                        raise self.ctypes.WinError(self.ctypes.get_last_error())
+                    if status.ActiveProcesses == 0:
+                        break
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("Windows worker job did not terminate")
+                    time.sleep(0.01)
+            finally:
+                self.api.CloseHandle(self.handle)
+                self.handle = None
+
+
 def _terminate_process_tree(proc: subprocess.Popen) -> None:
-    """Stop a worker and, on Windows, the processes it started."""
-    if proc.poll() is not None:
-        return
-    if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    # Workers share the parent's process group so terminal and CI signals reach
-    # them directly; a direct kill is the fallback when taskkill did not stop it.
+    """Kill descendants even after the root exited, then reap the root."""
+    job = getattr(proc, "_flama_job", None)
+    cleanup_error = None
+    if job is not None:
+        try:
+            job.stop()
+        except Exception as exc:
+            cleanup_error = exc
+    elif sys.platform != "win32" and getattr(proc, "_flama_session", False):
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
     if proc.poll() is None:
-        proc.kill()
+        if sys.platform == "win32":
+            # Setup failure can leave a root outside its job. Its bootstrap
+            # still waits at the gate, so bounded taskkill can stop the tree
+            # before any user test gets a chance to spawn an unowned process.
+            try:
+                subprocess.run(
+                    ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=BACKEND_CLEANUP_TIMEOUT,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        if proc.poll() is None:
+            proc.kill()
     try:
-        proc.wait(timeout=30)
-    except subprocess.TimeoutExpired:
-        pass
+        proc.wait(timeout=BACKEND_CLEANUP_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"worker {proc.pid} could not be reaped") from exc
+    if cleanup_error is not None:
+        raise RuntimeError(f"worker tree cleanup failed: {cleanup_error}") from cleanup_error
+
+
+_WORKER_BOOTSTRAP = """\
+import os, runpy, sys
+gate_path = os.environ.pop("FLAMA_TEST_GATE_PID_PATH")
+with open(gate_path + ".tmp", "w", encoding="ascii") as gate:
+    gate.write(str(os.getpid()))
+os.replace(gate_path + ".tmp", gate_path)
+if os.read(0, 1) != b"1":
+    raise SystemExit(125)
+mode, target, *arguments = sys.argv[1:]
+sys.argv = [target if mode == "-m" else "-c", *arguments]
+if mode == "-m":
+    runpy.run_module(target, run_name="__main__", alter_sys=True)
+else:
+    exec(compile(target, "<string>", "exec"), {"__name__": "__main__", "__file__": "<string>"})
+"""
+
+
+def _gated_command(command: list[str]) -> list[str]:
+    index = next(i for i, value in enumerate(command) if value in {"-m", "-c"})
+    return command[:index] + ["-c", _WORKER_BOOTSTRAP, *command[index:]]
 
 
 class _WorkerRegistry:
-    """Track running worker processes so they can be stopped together."""
-
-    def __init__(self) -> None:
+    """Serialize launch/release against stop: late workers cannot load tests."""
+    def __init__(self):
         self._lock = threading.Lock()
         self._active: set[subprocess.Popen] = set()
         self.stopped = threading.Event()
 
-    def add(self, proc: subprocess.Popen) -> None:
+    def add(self, proc):
         with self._lock:
             self._active.add(proc)
-        if self.stopped.is_set():
+            stopped = self.stopped.is_set()
+        if stopped:
             _terminate_process_tree(proc)
 
-    def discard(self, proc: subprocess.Popen) -> None:
+    def launch(self, command, env, gate_path):
+        # stop_all sets its event before acquiring the lock. A racing launch
+        # remains gated until it sees the event, so no late test code executes.
+        with self._lock:
+            if self.stopped.is_set():
+                return None
+            proc = None
+            job = _WindowsJob() if sys.platform == "win32" else None
+            try:
+                options = (
+                    {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+                    if sys.platform == "win32" else {"start_new_session": True}
+                )
+                proc = subprocess.Popen(
+                    _gated_command(command), cwd=str(ROOT_DIR), env=env,
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **options,
+                )
+                proc._flama_job = job
+                proc._flama_session = sys.platform != "win32"
+                self._active.add(proc)
+                if job is not None:
+                    job.assign_handle(proc._handle)
+                deadline = time.monotonic() + BACKEND_CLEANUP_TIMEOUT
+                while not os.path.exists(gate_path):
+                    if self.stopped.is_set():
+                        _terminate_process_tree(proc)
+                        return proc
+                    if proc.poll() is not None:
+                        raise RuntimeError("worker bootstrap exited before launch gate")
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("worker bootstrap did not reach launch gate")
+                    time.sleep(0.01)
+                # py.exe may have created the gated interpreter before root
+                # assignment; explicitly include that interpreter in the job.
+                if job is not None:
+                    job.assign_pid(int(Path(gate_path).read_text(encoding="ascii")))
+                if self.stopped.is_set():
+                    _terminate_process_tree(proc)
+                else:
+                    proc.stdin.write(b"1")
+                    proc.stdin.flush()
+                proc.stdin.close()
+                return proc
+            except BaseException:
+                if proc is not None:
+                    try:
+                        _terminate_process_tree(proc)
+                    finally:
+                        self._active.discard(proc)
+                        for pipe in (proc.stdin, proc.stdout):
+                            if pipe is not None:
+                                pipe.close()
+                elif job is not None:
+                    job.stop()
+                raise
+
+    def discard(self, proc):
         with self._lock:
             self._active.discard(proc)
 
-    def stop_all(self) -> None:
+    def stop_all(self):
         self.stopped.set()
         with self._lock:
             active = list(self._active)
+        errors = []
         for proc in active:
-            _terminate_process_tree(proc)
+            try:
+                _terminate_process_tree(proc)
+            except Exception as exc:
+                errors.append(str(exc))
+        if errors:
+            raise RuntimeError("; ".join(errors))
 
 
-def _read_tail(path: str, size: int = UNITTEST_SUMMARY_TAIL_BYTES) -> str:
-    with open(path, "rb") as handle:
-        handle.seek(0, os.SEEK_END)
-        handle.seek(max(0, handle.tell() - size))
-        return handle.read().decode("utf-8", errors="replace")
+class _BoundedWorkerLog:
+    """Drain all output, retaining only bounded head/tail diagnostics."""
+    def __init__(self, pipe, limit=BACKEND_LOG_LIMIT_BYTES):
+        self.pipe, self.limit = pipe, limit
+        self.head, self.tail = bytearray(), bytearray()
+        self.total = 0
+        self.error = None
+        self.thread = threading.Thread(target=self._drain, name="flama-worker-output", daemon=True)
+
+    def start(self):
+        self.thread.start()
+
+    def _drain(self):
+        part = max(1, (self.limit - 256) // 2)
+        try:
+            while True:
+                chunk = os.read(self.pipe.fileno(), 64 * 1024)
+                if not chunk:
+                    break
+                self.total += len(chunk)
+                keep = min(len(chunk), max(0, part - len(self.head)))
+                self.head.extend(chunk[:keep])
+                self.tail.extend(chunk[keep:])
+                if len(self.tail) > part:
+                    del self.tail[:-part]
+        except (OSError, ValueError) as exc:
+            self.error = f"worker output drain failed: {exc}"
+
+    def finish(self, path):
+        self.thread.join(timeout=BACKEND_CLEANUP_TIMEOUT)
+        if self.thread.is_alive():
+            self.error = "worker output pipe stayed open after tree cleanup"
+        self.pipe.close()
+        kept = len(self.head) + len(self.tail)
+        marker = (
+            f"\n[OUTPUT TRUNCATED: retained head/tail; discarded {self.total - kept} bytes]\n".encode("ascii")
+            if self.total > kept else b""
+        )
+        Path(path).write_bytes(bytes(self.head) + marker + bytes(self.tail))
+
+
+def _validated_timeout(value):
+    if value is None:
+        return None
+    number = float(value)
+    if not math.isfinite(number) or number < 0:
+        raise ValueError("--bin-timeout must be a finite non-negative number")
+    return number or None
+
+
+def _summary_from_manifest(document):
+    names = {
+        "FAIL": "failures", "ERROR": "errors", "skipped": "skipped",
+        "expected failure": "expected failures", "unexpected success": "unexpected successes",
+    }
+    counts = {}
+    for event in document["events"]:
+        name = names.get(event["outcome"])
+        if event["kind"] in {"outcome", "subtest", "fixture"} and name:
+            counts[name] = counts.get(name, 0) + 1
+    return UnittestSummary(document["tests_run"], document["success"], counts)
 
 
 def _run_backend_bin(
-    python_cmd: list[str],
-    test_files: list[str],
-    failfast: bool,
-    verbose: bool,
-    registry: _WorkerRegistry | None = None,
-    *,
-    log_path: str,
-    base_env: dict[str, str],
-    timeout: float | None = None,
-    manifest_path: str | None = None,
-) -> BackendBinResult:
-    start = time.time()
+    python_cmd, test_files, failfast, verbose, registry=None, *,
+    log_path, base_env, timeout=None, manifest_path=None,
+):
+    from scripts.unittest_manifest import read_manifest
+    timeout = _validated_timeout(timeout)
+    start = time.monotonic()
+    registry = registry or _WorkerRegistry()
+    proc = capture = document = summary = None
     note = ""
-    with tempfile.TemporaryDirectory(prefix="flama-backend-tests-") as media_root, \
-            open(log_path, "wb") as log:
+    returncode = -1
+    with tempfile.TemporaryDirectory(prefix="flama-backend-tests-") as media_root:
+        internal_manifest = manifest_path or os.path.join(media_root, "manifest.json")
+        gate_path = os.path.join(media_root, "launch.pid")
         env = build_parallel_worker_environment(media_root, base_env)
-        if manifest_path:
-            command = _manifest_command(python_cmd, test_files, failfast, verbose)
-            env["FLAMA_TEST_MANIFEST_PATH"] = manifest_path
-        else:
-            command = _unittest_command(python_cmd, test_files, failfast, verbose)
-        proc = subprocess.Popen(
-            command,
-            cwd=str(ROOT_DIR),
-            env=env,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-        )
-        if registry is not None:
-            registry.add(proc)
+        env["FLAMA_TEST_MANIFEST_PATH"] = internal_manifest
+        env["FLAMA_TEST_GATE_PID_PATH"] = gate_path
+        env.update(TMPDIR=media_root, TMP=media_root, TEMP=media_root)
         try:
-            returncode = proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            _terminate_process_tree(proc)
-            returncode = proc.returncode if proc.returncode not in (None, 0) else -1
-            note = f"\n[TIMEOUT] worker stopped after {timeout:.0f}s"
-        finally:
-            if registry is not None:
-                registry.discard(proc)
-            if proc.poll() is None:
+            proc = registry.launch(_manifest_command(python_cmd, test_files, failfast, verbose), env, gate_path)
+            if proc is None:
+                return BackendBinResult(test_files, None, None, time.monotonic() - start, None)
+            capture = _BoundedWorkerLog(proc.stdout)
+            capture.start()
+            remaining = max(0.0, timeout - (time.monotonic() - start)) if timeout else None
+            try:
+                returncode = proc.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                note = f"\n[TIMEOUT] worker stopped after {timeout:g}s"
                 _terminate_process_tree(proc)
+                returncode = proc.returncode if proc.returncode not in (None, 0) else -1
+        finally:
+            if proc is not None:
+                try:
+                    _terminate_process_tree(proc)
+                finally:
+                    registry.discard(proc)
+                    if capture is not None:
+                        capture.finish(log_path)
+                    else:
+                        proc.stdout.close()
+                    if proc.stdin is not None and not proc.stdin.closed:
+                        proc.stdin.close()
+        if capture is not None and capture.error:
+            note += "\n[CLEANUP ERROR] " + capture.error
+            returncode = -1
+        try:
+            document = read_manifest(internal_manifest)
+            summary = _summary_from_manifest(document)
+            if (returncode == 0) != document["success"]:
+                note += "\n[MANIFEST ERROR] process exit disagrees with unittest completion"
+                document = None
+        except (OSError, ValueError) as exc:
+            note += "\n[MANIFEST ERROR] " + str(exc)[:1024]
     return BackendBinResult(
-        files=test_files,
-        returncode=returncode,
-        log_path=log_path,
-        elapsed=time.time() - start,
-        summary=parse_unittest_summary(_read_tail(log_path)),
-        note=note,
-        manifest_path=manifest_path,
+        files=test_files, returncode=returncode, log_path=log_path,
+        elapsed=time.monotonic() - start, summary=summary, note=note,
+        manifest_path=manifest_path, manifest_data=document,
     )
 
 
-def _format_counts(counts: dict[str, int]) -> str:
+def _format_counts(counts):
     return ", ".join(f"{name}={value}" for name, value in sorted(counts.items()) if value)
 
 
-def write_test_manifest(bin_manifests: list[str], destination: str) -> tuple[int, dict[str, int], str]:
-    """Merge per-bin manifests into one sorted file; return lines, outcomes, SHA-256.
-
-    Duplicate records are kept, so a case that ran twice or not at all changes
-    the hash. Missing bin manifests are the caller's failure to report.
-    """
-    lines: list[str] = []
-    for path in bin_manifests:
-        with open(path, encoding="utf-8") as handle:
-            lines.extend(line.rstrip("\n") for line in handle if line.strip())
-    lines.sort()
-    data = "".join(line + "\n" for line in lines).encode("utf-8")
-    Path(destination).parent.mkdir(parents=True, exist_ok=True)
-    Path(destination).write_bytes(data)
-    outcomes: dict[str, int] = {}
-    for line in lines:
-        outcome = (line.split("\t") + [""])[1]
-        outcomes[outcome] = outcomes.get(outcome, 0) + 1
-    return len(lines), outcomes, hashlib.sha256(data).hexdigest()
+def write_test_manifest(bin_manifests, destination):
+    from scripts.unittest_manifest import merge_manifests
+    return merge_manifests(bin_manifests, destination)
 
 
 def run_backend_tests_parallel(
-    python_cmd: list[str],
-    test_files: list[str],
-    jobs: int,
-    failfast: bool = False,
-    verbose: bool = False,
-    weights: dict[str, float] | None = None,
-    timeout: float | None = None,
-    manifest: str | None = None,
-    seed: int | None = None,
-) -> bool:
-    """Run backend files in ``jobs`` concurrent unittest processes.
-
-    Each process keeps the normal per-file app/database setup, gets its own
-    media directory and an environment copied from one parent snapshot.
-    Output is spooled to a file per bin and printed whole when the bin ends,
-    so results never interleave; a failed bin prints its full output. Any bin
-    without an OK unittest summary fails the run.
-    """
-    import signal
-
-    # One job keeps one process (one bin), as without --jobs.
+    python_cmd, test_files, jobs, failfast=False, verbose=False,
+    weights=None, timeout=None, manifest=None, seed=None,
+):
+    """Run managed unittest bins with bounded logs and process-tree cleanup."""
+    from scripts.unittest_manifest import manifest_fingerprints, read_manifest
+    timeout = _validated_timeout(timeout)
+    if jobs < 1:
+        raise ValueError("--jobs must be positive")
+    if not test_files:
+        return True
+    # An interrupted/partial run must never leave an older successful export
+    # at the requested path for another process to compare accidentally.
+    if manifest:
+        Path(manifest).unlink(missing_ok=True)
     bin_count = 1 if jobs == 1 else jobs * BACKEND_BINS_PER_JOB
     bins = partition_backend_tests(test_files, bin_count, weights, seed)
     registry = _WorkerRegistry()
     base_env = dict(os.environ)
-    results: list[BackendBinResult] = []
-    start_time = time.time()
+    results = []
+    started = time.monotonic()
+    selected = json.dumps(sorted(test_files), ensure_ascii=True, separators=(",", ":")).encode("ascii")
+    print(f"[SELECTION] {len(test_files)} files sha256={hashlib.sha256(selected).hexdigest()}")
     seed_note = f", partition seed {seed}" if seed is not None else ""
-    print(f"[BACKEND] {len(test_files)} files in {len(bins)} bins across {jobs} parallel jobs{seed_note}")
+    print(f"[BACKEND] {len(test_files)} files in {len(bins)} bins across {jobs} jobs{seed_note}")
     sys.stdout.flush()
+    previous_signals = {}
+    executor = None
+    futures = []
+    manifest_error = False
 
-    previous_sigterm = None
-    if threading.current_thread() is threading.main_thread() and hasattr(signal, "SIGTERM"):
-        def _on_sigterm(_signum, _frame):
-            raise KeyboardInterrupt
-        previous_sigterm = signal.signal(signal.SIGTERM, _on_sigterm)
+    def on_signal(_signum, _frame):
+        registry.stopped.set()
+        raise KeyboardInterrupt
 
-    with tempfile.TemporaryDirectory(prefix="flama-backend-logs-") as log_dir:
-        def run_bin(index: int, files: list[str]) -> BackendBinResult:
-            if registry.stopped.is_set():
-                return BackendBinResult(files, None, None, 0.0, None)
-            try:
-                result = _run_backend_bin(
-                    python_cmd,
-                    files,
-                    failfast,
-                    verbose,
-                    registry,
-                    log_path=os.path.join(log_dir, f"bin-{index:03d}.log"),
-                    base_env=base_env,
-                    timeout=timeout,
-                    manifest_path=(
-                        os.path.join(log_dir, f"bin-{index:03d}.manifest") if manifest else None
-                    ),
-                )
-            except Exception as exc:  # A worker that cannot start fails the run.
-                result = BackendBinResult(files, -1, None, 0.0, None, f"[WORKER ERROR] {exc!r}")
-            if failfast and not result.passed and not registry.stopped.is_set():
-                registry.stop_all()
-            return result
-
-        try:
-            with ThreadPoolExecutor(max_workers=jobs) as executor:
-                futures = [executor.submit(run_bin, index, files) for index, files in enumerate(bins)]
+    try:
+        if threading.current_thread() is threading.main_thread():
+            for name in ("SIGINT", "SIGTERM"):
+                signum = getattr(signal, name, None)
+                if signum is not None:
+                    previous_signals[signum] = signal.signal(signum, on_signal)
+        with tempfile.TemporaryDirectory(prefix="flama-backend-logs-") as log_dir:
+            def run_bin(index, files):
+                if registry.stopped.is_set():
+                    return BackendBinResult(files, None, None, 0.0, None)
                 try:
-                    for future in as_completed(futures):
-                        result = future.result()
-                        results.append(result)
-                        if not result.started:
-                            continue
-                        label = "PASS" if result.passed else "FAIL"
-                        ran = result.summary.ran if result.summary else "?"
-                        print(f"[{label}] {len(result.files)} files, {ran} tests in {result.elapsed:.1f}s")
-                        if verbose or not result.passed:
-                            print("-" * 60)
-                            print("  " + "\n  ".join(result.files))
-                            print("-" * 60)
-                            sys.stdout.flush()
-                            result.write_output(sys.stdout)
-                            print("-" * 60)
-                        sys.stdout.flush()
-                except KeyboardInterrupt:
+                    result = _run_backend_bin(
+                        python_cmd, files, failfast, verbose, registry,
+                        log_path=os.path.join(log_dir, f"bin-{index:03d}.log"),
+                        base_env=base_env, timeout=timeout,
+                        manifest_path=os.path.join(log_dir, f"bin-{index:03d}.json"),
+                    )
+                except Exception as exc:
+                    result = BackendBinResult(files, -1, None, 0.0, None, f"[WORKER ERROR] {exc!r}"[:2048])
+                if failfast and result.started and not result.passed:
                     registry.stop_all()
-                    raise
-            manifest_missing: list[BackendBinResult] = []
-            if manifest:
-                written = [r for r in results if r.manifest_path and os.path.exists(r.manifest_path)]
-                manifest_missing = [r for r in results if r.started and r not in written]
-                lines, outcomes, digest = write_test_manifest([r.manifest_path for r in written], manifest)
-                print(
-                    f"[MANIFEST] {lines} records ({_format_counts(outcomes) or 'none'}) "
-                    f"sha256={digest} -> {manifest}"
-                )
-                for r in manifest_missing:
-                    print("[MANIFEST] no records from bin: " + ", ".join(r.files))
-        finally:
-            if previous_sigterm is not None:
-                signal.signal(signal.SIGTERM, previous_sigterm)
-    elapsed = time.time() - start_time
+                return result
 
+            try:
+                executor = ThreadPoolExecutor(max_workers=jobs)
+                # Dispatch and consumption share the same cancellation scope.
+                for index, files in enumerate(bins):
+                    futures.append(executor.submit(run_bin, index, files))
+                for future in as_completed(futures):
+                    result = future.result()
+                    results.append(result)
+                    if not result.started:
+                        continue
+                    label = "PASS" if result.passed else "FAIL"
+                    ran = result.summary.ran if result.summary else "?"
+                    print(f"[{label}] {len(result.files)} files, {ran} tests in {result.elapsed:.1f}s")
+                    if verbose or not result.passed:
+                        print("  " + "\n  ".join(result.files))
+                        result.write_output(sys.stdout)
+                    sys.stdout.flush()
+            except BaseException:
+                for signum in previous_signals:
+                    signal.signal(signum, signal.SIG_IGN)
+                registry.stop_all()
+                for future in futures:
+                    future.cancel()
+                raise
+            finally:
+                # Stop before shutdown(wait=True), including during submit.
+                try:
+                    registry.stop_all()
+                finally:
+                    if executor is not None:
+                        executor.shutdown(wait=True, cancel_futures=True)
+                        executor = None
+            if manifest:
+                valid = [r for r in results if r.started and r.manifest_data is not None]
+                if len(valid) != len(bins):
+                    print("[MANIFEST] export unavailable: one or more bins did not finish validly")
+                    manifest_error = True
+                else:
+                    try:
+                        count, outcomes, digest = write_test_manifest([r.manifest_path for r in valid], manifest)
+                        document = read_manifest(manifest)
+                        print(f"[MANIFEST] {count} events ({_format_counts(outcomes) or 'none'}) sha256={digest} -> {manifest}")
+                        print("[MANIFEST DETAILS] " + json.dumps(manifest_fingerprints(document), sort_keys=True))
+                    except (OSError, ValueError) as exc:
+                        print(f"[MANIFEST ERROR] {exc}")
+                        manifest_error = True
+    finally:
+        for signum, previous in previous_signals.items():
+            signal.signal(signum, previous)
     executed = [r for r in results if r.started]
     skipped_bins = [r for r in results if not r.started]
     failed = [r for r in executed if not r.passed]
     total_ran = sum(r.summary.ran for r in executed if r.summary)
-    totals: dict[str, int] = {}
-    for r in executed:
-        for name, value in (r.summary.counts if r.summary else {}).items():
+    totals = {}
+    for result in executed:
+        for name, value in (result.summary.counts if result.summary else {}).items():
             totals[name] = totals.get(name, 0) + value
-    detail = _format_counts(totals)
-    detail = f", {detail}" if detail else ""
-
     if skipped_bins:
-        not_run = sum(len(r.files) for r in skipped_bins)
-        print(f"[FAILFAST] {not_run} files were not started after the first failure.")
-    if not failed and not skipped_bins and not manifest_missing:
-        print(
-            f"\n[PASS] BACKEND PASSED ({len(test_files)} files, {total_ran} tests{detail} "
-            f"in {elapsed:.2f}s with {jobs} jobs)"
-        )
-        return True
+        print(f"[FAILFAST] {sum(len(r.files) for r in skipped_bins)} files were not started.")
+    passed = not failed and not skipped_bins and not manifest_error and len(results) == len(bins)
+    detail = _format_counts(totals)
     print(
-        f"\n[FAIL] BACKEND FAILED ({len(failed)} of {len(executed)} bins failed, "
-        f"{total_ran} tests{detail} in {elapsed:.2f}s with {jobs} jobs)"
+        f"\n[{'PASS' if passed else 'FAIL'}] BACKEND {'PASSED' if passed else 'FAILED'} "
+        f"({len(test_files)} files, {total_ran} tests"
+        f"{', ' + detail if detail else ''} in {time.monotonic() - started:.2f}s with {jobs} jobs)"
     )
-    for r in failed:
-        print("  failed bin: " + ", ".join(r.files))
-    return False
+    for result in failed:
+        print("  failed bin: " + ", ".join(result.files))
+    return passed
 
 
 def run_backend_tests(
-    python_cmd: list[str],
-    test_files: list[str],
-    failfast: bool = False,
-    verbose: bool = False,
-    jobs: int = 1,
-    bin_timeout: float | None = None,
-    manifest: str | None = None,
-    partition_seed: int | None = None,
-) -> bool:
-    """Execute targeted Python backend tests using unittest."""
+    python_cmd, test_files, failfast=False, verbose=False, jobs=1,
+    bin_timeout=None, manifest=None, partition_seed=None,
+):
+    """Keep one process by default, with identical correctness safeguards."""
+    bin_timeout = _validated_timeout(bin_timeout)
     if not test_files:
         return True
-
-    # Filter to files that actually exist on disk
-    existing_tests = [f for f in test_files if (ROOT_DIR / f).exists()]
-    if not existing_tests:
-        print("[BACKEND] No existing backend test files to run.")
-        return True
-
-    print("\n" + "=" * 60)
-    print(f"[*] Running {len(existing_tests)} Backend Test Suite(s)")
-    print("=" * 60)
-    for tf in existing_tests:
-        print(f"  * {tf}")
-    print("-" * 60)
-
-    if manifest or (jobs > 1 and len(existing_tests) > 1):
-        return run_backend_tests_parallel(
-            python_cmd,
-            existing_tests,
-            jobs=max(1, min(jobs, len(existing_tests))),
-            failfast=failfast,
-            verbose=verbose,
-            timeout=bin_timeout,
-            manifest=manifest,
-            seed=partition_seed,
-        )
-
-    cmd = list(python_cmd) + ["-m", "unittest"]
-    if failfast:
-        cmd.append("-f")
-    if verbose:
-        cmd.append("-v")
-    cmd.extend(existing_tests)
-
-    start_time = time.time()
-    with tempfile.TemporaryDirectory(prefix="flama-backend-tests-") as media_root:
-        res = subprocess.run(
-            cmd,
-            cwd=str(ROOT_DIR),
-            env=build_backend_test_environment(media_root),
-        )
-    elapsed = time.time() - start_time
-
-    if res.returncode == 0:
-        print(f"\n[PASS] BACKEND PASSED ({len(existing_tests)} files in {elapsed:.2f}s)")
-        return True
-    else:
-        print(f"\n[FAIL] BACKEND FAILED ({len(existing_tests)} files in {elapsed:.2f}s, exit code {res.returncode})")
+    missing = [f for f in test_files if not (ROOT_DIR / f).is_file()]
+    if missing:
+        print("[BACKEND] Missing requested test files: " + ", ".join(missing))
         return False
+    return run_backend_tests_parallel(
+        python_cmd, list(test_files), jobs=max(1, min(jobs, len(test_files))),
+        failfast=failfast, verbose=verbose, timeout=bin_timeout, manifest=manifest, seed=partition_seed,
+    )
 
 
 def run_frontend_tests(
@@ -2127,11 +2469,17 @@ def run_frontend_tests(
     if not fe_dir.exists():
         return True
 
-    # Filter to files that exist in frontend/
-    existing_tests = [f for f in test_files if (fe_dir / f).exists()]
-    if not existing_tests:
-        print("[FRONTEND] No existing frontend test files to run.")
-        return True
+    # Ensure all test files actually exist on disk
+    missing_tests = [f for f in test_files if not (fe_dir / f).exists()]
+    if missing_tests:
+        print(
+            f"[ERROR] Frontend test file(s) do not exist on disk:\n"
+            + "\n".join(f"  * {f}" for f in missing_tests),
+            file=sys.stderr,
+        )
+        return False
+
+    existing_tests = test_files
 
     print("\n" + "=" * 60)
     print(f"[*] Running {len(existing_tests)} Frontend Test Suite(s)")
@@ -2228,7 +2576,7 @@ def main() -> int:
         "-j", "--jobs",
         default="1",
         help=(
-            "Parallel backend unittest processes: a number or 'auto' (all CPUs). "
+            "Parallel backend unittest processes: a number or 'auto' (CPU/RAM capped). "
             "Default 1 keeps a single process; tests sharing one external "
             "database must keep it."
         ),
@@ -2238,8 +2586,8 @@ def main() -> int:
         "--manifest",
         metavar="PATH",
         help=(
-            "Write one sorted line per backend test outcome (id, outcome, skip reason) "
-            "to PATH and print its SHA-256; compare runs with scripts/compare_test_manifests.py."
+            "Write the structured backend case/outcome manifest to PATH and print "
+            "its fingerprints; compare runs with scripts/compare_test_manifests.py."
         ),
     )
     parser.add_argument(
@@ -2251,16 +2599,15 @@ def main() -> int:
         "--bin-timeout",
         type=float,
         default=0,
-        help="With --jobs above 1, stop and fail a worker running longer than this many seconds (0 = no limit).",
+        help="Stop and fail any backend worker running longer than this many seconds (0 = no limit).",
     )
 
     args = parser.parse_args()
     try:
         resolve_backend_jobs(args.jobs, 1)
+        _validated_timeout(args.bin_timeout)
     except ValueError as exc:
         parser.error(str(exc))
-    if args.bin_timeout < 0:
-        parser.error("--bin-timeout must not be negative")
 
     # List modules mode
     if args.list_modules:
@@ -2331,12 +2678,23 @@ def main() -> int:
         print(f"[TARGET] Modules: {', '.join(sorted(target_modules))}")
 
     elif args.file:
+        missing = [f for f in args.file if not (ROOT_DIR / f).exists()]
+        if missing:
+            print(
+                f"[ERROR] Specified test/source file(s) do not exist:\n"
+                + "\n".join(f"  * {f}" for f in missing),
+                file=sys.stderr,
+            )
+            return 1
         mods, b_tests, f_tests = map_files_to_modules(args.file)
         target_modules.update(mods)
         selected_backend_tests.update(b_tests)
         selected_frontend_tests.update(f_tests)
         print(f"[TARGET] Files: {', '.join(args.file)}")
         print(f"[TARGET] Resolved Modules: {', '.join(sorted(target_modules)) if target_modules else 'None'}")
+        if not selected_backend_tests and not selected_frontend_tests:
+            print(f"[ERROR] No test suites resolved for specified file(s): {', '.join(args.file)}", file=sys.stderr)
+            return 1
 
     elif args.changed or len(sys.argv) == 1:
         # Default behavior: run changed files

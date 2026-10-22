@@ -207,9 +207,9 @@ jobs:
           SECRET_KEY: ci-secret
           BACKEND_JOBS: ${{ inputs.backend_jobs || '1' }}
           BACKEND_PARTITION_SEED: ${{ inputs.backend_partition_seed || '' }}
-          BACKEND_MANIFEST: ${{ github.event_name == 'workflow_dispatch' && 'output/backend-test-manifest.tsv' || '' }}
+          BACKEND_MANIFEST: ${{ github.event_name == 'workflow_dispatch' && 'output/backend-test-manifest.json' || '' }}
         run: |
-          # --bin-timeout applies when workers run (manifest or --jobs above 1).
+          # Bound every backend bin, including the single-process baseline.
           extra=(--bin-timeout 1200)
           if [ -n "$BACKEND_MANIFEST" ]; then extra+=(--manifest "$BACKEND_MANIFEST"); fi
           if [ -n "$BACKEND_PARTITION_SEED" ]; then extra+=(--partition-seed "$BACKEND_PARTITION_SEED"); fi

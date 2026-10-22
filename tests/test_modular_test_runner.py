@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -11,6 +12,14 @@ from unittest import mock
 import unittest
 
 from scripts import run_tests
+
+
+def _case_manifest(cases):
+    events = []
+    for test_id, outcome, reason in cases:
+        for kind in ("loaded", "started", "finished", "outcome"):
+            events.append(dict(kind=kind, scope="", id=test_id, outcome=outcome if kind == "outcome" else "", reason=reason if kind == "outcome" else "", parent_id=""))
+    return dict(schema_version=1, complete=True, tests_run=len(cases), success=all(outcome not in {"FAIL", "ERROR", "unexpected success"} for _, outcome, _ in cases), events=events)
 
 
 class ModularTestRunnerTests(unittest.TestCase):
@@ -231,6 +240,12 @@ class ModularTestRunnerTests(unittest.TestCase):
         self.assertIsNone(run_tests.files_changed_since(""))
         self.assertIsNone(run_tests.files_changed_since("HEAD; rm -rf /"))
 
+    def test_probe_runner_change_keeps_mysql_contract_gate(self):
+        plan = run_tests.build_ci_change_plan(["scripts/run_mysql_probes.py"])
+        self.assertTrue(plan["backend"])
+        self.assertTrue(plan["mysql_contract"])
+        self.assertFalse(plan["deploy"])
+
     def test_ci_plan_selects_external_contracts_by_source(self):
         redis_plan = run_tests.build_ci_change_plan(
             ["app/services/redis_state_service.py"]
@@ -292,6 +307,54 @@ class ModularTestRunnerTests(unittest.TestCase):
             run_mock.call_args_list[2].args[0],
             ["git", "diff", "--name-only", "origin/develop...HEAD"],
         )
+
+    @mock.patch("sys.stderr")
+    @mock.patch("sys.argv", ["run_tests.py", "--file", "tests/test_nonexistent.py"])
+    def test_missing_explicit_file_exits_with_code_1(self, mock_stderr):
+        exit_code = run_tests.main()
+        self.assertEqual(exit_code, 1)
+
+    @mock.patch("sys.stderr")
+    @mock.patch("sys.argv", ["run_tests.py", "--file", "tests/test_modular_test_runner.py", "tests/test_nonexistent.py"])
+    def test_mixed_existing_and_nonexisting_files_in_file_arg_triggers_error_exit(self, mock_stderr):
+        exit_code = run_tests.main()
+        self.assertEqual(exit_code, 1)
+
+    @mock.patch("sys.stderr")
+    @mock.patch("sys.argv", ["run_tests.py", "--file", "README.md"])
+    def test_file_arg_with_no_resolved_test_suites_exits_with_code_1(self, mock_stderr):
+        exit_code = run_tests.main()
+        self.assertEqual(exit_code, 1)
+
+    def test_direct_selection_of_nested_test_files(self):
+        archive_path = "tests/example_nested/test_nested_contract.py"
+        modules, backend_tests, frontend_tests = run_tests.map_files_to_modules([archive_path])
+        self.assertIn(archive_path, backend_tests)
+        self.assertEqual(frontend_tests, set())
+
+    def test_ci_change_plan_marks_backend_for_nested_test_files(self):
+        archive_path = "tests/example_nested/test_nested_contract.py"
+        plan = run_tests.build_ci_change_plan([archive_path])
+        self.assertTrue(plan["backend"])
+        self.assertFalse(plan["frontend"])
+        self.assertFalse(plan["deploy"])
+
+    @mock.patch("sys.stderr")
+    def test_run_backend_tests_returns_false_if_test_file_missing(self, mock_stderr):
+        result = run_tests.run_backend_tests([run_tests.sys.executable], ["tests/test_nonexistent.py"])
+        self.assertFalse(result)
+
+    def test_map_files_to_modules_resolves_renamed_test_against_manifest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            target = root / "tests/nested/test_relocated.py"
+            target.parent.mkdir(parents=True)
+            target.write_text("", encoding="utf-8")
+            modules = {"fixture": {"source_patterns": [], "backend_tests": ["tests/nested/test_relocated.py"], "frontend_tests": []}}
+            with mock.patch.object(run_tests, "ROOT_DIR", root), mock.patch.object(run_tests, "MODULES", modules):
+                _, backend_tests, _ = run_tests.map_files_to_modules(["tests/test_relocated.py"])
+            self.assertEqual(backend_tests, {"tests/nested/test_relocated.py"})
+
 
 
 class ParallelBackendRunnerTests(unittest.TestCase):
@@ -383,11 +446,10 @@ class ParallelBackendRunnerTests(unittest.TestCase):
 
     def _bin_result(self, files, returncode, output):
         path = os.path.join(self.temp.name, f"bin-{len(os.listdir(self.temp.name))}.log")
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(output)
-        return run_tests.BackendBinResult(
-            files, returncode, path, 0.1, run_tests.parse_unittest_summary(output)
-        )
+        Path(path).write_text(output, encoding="utf-8")
+        summary = run_tests.parse_unittest_summary(output)
+        data = _case_manifest([(f"t.C.test_{i}", "ok" if summary.ok else "ERROR", "") for i in range(summary.ran)]) if summary and summary.ran else None
+        return run_tests.BackendBinResult(files, returncode, path, 0.1, summary, manifest_data=data)
 
     def test_bin_passes_only_with_exit_zero_and_an_ok_summary_of_run_tests(self):
         cases = {
@@ -401,26 +463,26 @@ class ParallelBackendRunnerTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertIs(self._bin_result(["a"], returncode, output).passed, expected)
 
-    @mock.patch("scripts.run_tests.subprocess.run")
+    @mock.patch("scripts.run_tests.run_backend_tests_parallel", return_value=True)
     def test_single_job_keeps_one_unittest_process_for_all_files(self, run_mock):
-        run_mock.return_value = mock.Mock(returncode=0)
         files = ["tests/test_ci_workflow.py", "tests/test_modular_test_runner.py"]
-
         with mock.patch("builtins.print"):
             passed = run_tests.run_backend_tests(["python"], files, failfast=True, jobs=1)
-
         self.assertTrue(passed)
         run_mock.assert_called_once()
-        self.assertEqual(run_mock.call_args.args[0], ["python", "-m", "unittest", "-f", *files])
+        self.assertEqual(run_mock.call_args.args[:2], (["python"], files))
+        self.assertEqual(run_mock.call_args.kwargs["jobs"], 1)
+        self.assertTrue(run_mock.call_args.kwargs["failfast"])
 
     def _fake_bin(self, outcome):
         def fake(_python_cmd, files, _failfast, _verbose, _registry=None, **kwargs):
+            from scripts.unittest_manifest import _write_manifest
             returncode, output = outcome(files)
-            with open(kwargs["log_path"], "w", encoding="utf-8") as handle:
-                handle.write(output)
-            return run_tests.BackendBinResult(
-                files, returncode, kwargs["log_path"], 0.1, run_tests.parse_unittest_summary(output)
-            )
+            Path(kwargs["log_path"]).write_text(output, encoding="utf-8")
+            summary = run_tests.parse_unittest_summary(output)
+            data = _case_manifest([(f, "ok" if returncode == 0 else "FAIL", "") for f in files])
+            _write_manifest(data, kwargs["manifest_path"])
+            return run_tests.BackendBinResult(files, returncode, kwargs["log_path"], 0.1, summary, manifest_path=kwargs["manifest_path"], manifest_data=data)
         return fake
 
     def test_parallel_run_fails_when_any_bin_fails(self):
@@ -492,34 +554,24 @@ class ParallelBackendRunnerTests(unittest.TestCase):
         """Patch the unittest command so each fake file runs a small script."""
         def command(_python_cmd, files, _failfast, _verbose):
             return [sys.executable, "-c", scripts[files[0]]]
-        return mock.patch("scripts.run_tests._unittest_command", side_effect=command)
+        return mock.patch("scripts.run_tests._manifest_command", side_effect=command)
 
     def test_parallel_worker_spools_output_and_isolates_media(self):
+        from scripts.unittest_manifest import _write_manifest
+        data = _case_manifest([("t.C.test_output", "ok", "")])
         code = (
-            "import os, sys; print('media=' + os.environ['FLASHCARD_MEDIA_UPLOAD_ROOT']); "
-            "print('x' * 200000); sys.stderr.write('Ran 1 test in 0.0s\\n\\nOK\\n')"
+            "import os,sys,json; print('media='+os.environ['FLASHCARD_MEDIA_UPLOAD_ROOT']); "
+            "print('x'*200000); open(os.environ['FLAMA_TEST_MANIFEST_PATH'],'w',encoding='utf-8').write(" + repr(json.dumps(data)) + "); "
+            "print('worker complete')"
         )
         base_env = dict(os.environ, UPDATE_SNAPSHOT="1")
         with self._command_for({"a": code, "b": code}):
-            first = run_tests._run_backend_bin(
-                [sys.executable], ["a"], False, False,
-                log_path=os.path.join(self.temp.name, "a.log"), base_env=base_env,
-            )
-            second = run_tests._run_backend_bin(
-                [sys.executable], ["b"], False, False,
-                log_path=os.path.join(self.temp.name, "b.log"), base_env=base_env,
-            )
-
-        self.assertTrue(first.passed)
+            first = run_tests._run_backend_bin([sys.executable], ["a"], False, False, log_path=os.path.join(self.temp.name, "a.log"), base_env=base_env)
+            second = run_tests._run_backend_bin([sys.executable], ["b"], False, False, log_path=os.path.join(self.temp.name, "b.log"), base_env=base_env)
+        self.assertTrue(first.passed, first.read_output())
         self.assertEqual(first.summary.ran, 1)
-        output = first.read_output()
-        self.assertIn("x" * 200000, output)
-        media = [
-            line
-            for result in (first, second)
-            for line in result.read_output().splitlines()
-            if line.startswith("media=")
-        ]
+        self.assertIn("x"*200000, first.read_output())
+        media = [line for r in (first,second) for line in r.read_output().splitlines() if line.startswith("media=")]
         self.assertEqual(len(set(media)), 2)
 
     def test_worker_environment_comes_from_one_snapshot_without_snapshot_updates(self):
@@ -647,24 +699,21 @@ class TestManifestTests(unittest.TestCase):
 
     def _run(self, module_source, *args, manifest=True):
         import subprocess
-
         name = "test_manifest_sample.py"
         with open(os.path.join(self.temp.name, name), "w", encoding="utf-8") as handle:
             handle.write(module_source)
         env = dict(os.environ, PYTHONPATH=str(run_tests.ROOT_DIR))
-        manifest_path = os.path.join(self.temp.name, "out.tsv")
+        manifest_path = os.path.join(self.temp.name, "out.json")
         env.pop("FLAMA_TEST_MANIFEST_PATH", None)
         if manifest:
             env["FLAMA_TEST_MANIFEST_PATH"] = manifest_path
         module = "scripts.unittest_manifest" if manifest else "unittest"
-        result = subprocess.run(
-            [sys.executable, "-m", module, *args, name],
-            cwd=self.temp.name, env=env, capture_output=True, text=True,
-        )
+        result = subprocess.run([sys.executable, "-m", module, *args, name], cwd=self.temp.name, env=env, capture_output=True, text=True)
         records = []
         if manifest and os.path.exists(manifest_path):
             with open(manifest_path, encoding="utf-8") as handle:
-                records = [tuple(line.rstrip("\n").split("\t")) for line in handle]
+                document = json.load(handle)
+            records = [(e["id"], e["outcome"], e["reason"]) for e in document["events"] if e["kind"] in {"outcome", "fixture", "subtest"}]
         return result, records
 
     def test_wrapper_records_every_outcome_and_keeps_unittest_exit_codes(self):
@@ -693,23 +742,17 @@ class TestManifestTests(unittest.TestCase):
                 self.assertEqual((wrapped.returncode, plain.returncode), (expected, expected))
 
     def test_merged_manifest_is_sorted_keeps_duplicates_and_changes_hash(self):
-        first = os.path.join(self.temp.name, "a.manifest")
-        second = os.path.join(self.temp.name, "b.manifest")
-        with open(first, "w", encoding="utf-8") as handle:
-            handle.write("t.B.test_b\tok\t\nt.A.test_a\tskipped\twhy\n")
-        with open(second, "w", encoding="utf-8") as handle:
-            handle.write("t.C.test_c\tok\t\n")
-        out = os.path.join(self.temp.name, "merged.tsv")
-
-        lines, outcomes, digest = run_tests.write_test_manifest([first, second], out)
-        duplicate_lines, _, duplicate_digest = run_tests.write_test_manifest([first, second, second], out)
-
-        with open(out, encoding="utf-8") as handle:
-            merged = handle.read().splitlines()
-        self.assertEqual((lines, outcomes), (3, {"ok": 2, "skipped": 1}))
-        self.assertEqual(duplicate_lines, 4)
+        from scripts.unittest_manifest import _write_manifest, read_manifest
+        first, second, out = [os.path.join(self.temp.name, name) for name in ("a.json", "b.json", "merged.json")]
+        _write_manifest(_case_manifest([("t.B.test_b", "ok", ""), ("t.A.test_a", "skipped", "why")]), first)
+        _write_manifest(_case_manifest([("t.C.test_c", "ok", "")]), second)
+        count, outcomes, digest = run_tests.write_test_manifest([first, second], out)
+        duplicate_count, _, duplicate_digest = run_tests.write_test_manifest([first, second, second], out)
+        events = read_manifest(out)["events"]
+        self.assertEqual((count, outcomes), (12, {"ok": 2, "skipped": 1}))
+        self.assertEqual(duplicate_count, 16)
         self.assertNotEqual(digest, duplicate_digest)
-        self.assertEqual(merged, sorted(merged))
+        self.assertEqual(events, sorted(events, key=lambda e: (e["kind"], e["scope"], e["id"], e["outcome"], e["reason"], e["parent_id"])))
 
     def test_partition_seed_changes_grouping_but_never_loses_a_file(self):
         files = [f"tests/test_seed_{index:02d}.py" for index in range(20)]
@@ -725,30 +768,20 @@ class TestManifestTests(unittest.TestCase):
         self.assertNotEqual(sorted(map(tuple, plain)), sorted(map(tuple, seeded)))
 
     def test_parallel_run_fails_when_a_bin_writes_no_manifest(self):
+        from scripts.unittest_manifest import _write_manifest
         files = ["tests/test_fake_a.py", "tests/test_fake_b.py"]
-
         def fake(_python_cmd, bin_files, _failfast, _verbose, _registry=None, **kwargs):
             output = f"Ran {len(bin_files)} tests in 0.1s\n\nOK\n"
-            with open(kwargs["log_path"], "w", encoding="utf-8") as handle:
-                handle.write(output)
+            Path(kwargs["log_path"]).write_text(output, encoding="utf-8")
+            data = _case_manifest([(f, "ok", "") for f in bin_files])
             if files[0] in bin_files:
-                with open(kwargs["manifest_path"], "w", encoding="utf-8") as handle:
-                    handle.write(f"{files[0]}\tok\t\n")
-            return run_tests.BackendBinResult(
-                bin_files, 0, kwargs["log_path"], 0.1, run_tests.parse_unittest_summary(output),
-                manifest_path=kwargs["manifest_path"],
-            )
-
-        out = os.path.join(self.temp.name, "run.tsv")
-        with mock.patch("scripts.run_tests._run_backend_bin", side_effect=fake), \
-                mock.patch("builtins.print"), mock.patch("sys.stdout"):
-            passed = run_tests.run_backend_tests_parallel(
-                ["python"], files, jobs=2, weights={files[0]: 1, files[1]: 2}, manifest=out
-            )
-
+                _write_manifest(data, kwargs["manifest_path"])
+            return run_tests.BackendBinResult(bin_files, 0, kwargs["log_path"], 0.1, run_tests.parse_unittest_summary(output), manifest_path=kwargs["manifest_path"], manifest_data=data)
+        out = os.path.join(self.temp.name, "run.json")
+        with mock.patch("scripts.run_tests._run_backend_bin", side_effect=fake), mock.patch("builtins.print"), mock.patch("sys.stdout"):
+            passed = run_tests.run_backend_tests_parallel(["python"], files, jobs=2, weights={files[0]: 1, files[1]: 2}, manifest=out)
         self.assertFalse(passed)
-        with open(out, encoding="utf-8") as handle:
-            self.assertEqual(handle.read(), f"{files[0]}\tok\t\n")
+        self.assertFalse(Path(out).exists(), "Incomplete evidence must never be exported as a completed manifest")
 
     def _compare(self, *args):
         from scripts import compare_test_manifests
@@ -757,42 +790,26 @@ class TestManifestTests(unittest.TestCase):
             return compare_test_manifests.main(list(args))
 
     def test_compare_reports_identical_and_different_manifests(self):
-        base = os.path.join(self.temp.name, "base.tsv")
-        same = os.path.join(self.temp.name, "same.tsv")
-        changed = os.path.join(self.temp.name, "changed.tsv")
-        with open(base, "w", encoding="utf-8") as handle:
-            handle.write("t.A.test_a\tok\t\nt.A.test_b\tskipped\twhy\n")
-        with open(same, "w", encoding="utf-8") as handle:
-            handle.write("t.A.test_b\tskipped\twhy\nt.A.test_a\tok\t\n")
-        with open(changed, "w", encoding="utf-8") as handle:
-            handle.write("t.A.test_a\tok\t\nt.A.test_b\tskipped\tother reason\n")
-
+        from scripts.unittest_manifest import _write_manifest
+        base, same, changed = [os.path.join(self.temp.name, name) for name in ("base.json", "same.json", "changed.json")]
+        events = [("t.A.test_a", "ok", ""), ("t.A.test_b", "skipped", "why")]
+        _write_manifest(_case_manifest(events), base)
+        _write_manifest(_case_manifest(list(reversed(events))), same)
+        _write_manifest(_case_manifest([(events[0]), ("t.A.test_b", "skipped", "other reason")]), changed)
         self.assertEqual(self._compare(base, same), 0)
         self.assertEqual(self._compare(base, changed), 1)
-        self.assertEqual(self._compare(base, changed, "--ignore-prefix", "t.A.test_b"), 0)
+        with mock.patch("sys.stderr"), self.assertRaises(SystemExit) as rejected:
+            self._compare(base, changed, "--ignore-prefix", "t.A.test_b")
+        self.assertEqual(rejected.exception.code, 2)
 
     def test_compare_reads_verbose_logs_with_interleaved_output(self):
-        log = (
-            "test_a (t.A.test_a) ... DeprecationWarning: noisy\nok\n"
-            "test_b (t.A.test_b)\nDocstring line ... skipped 'why'\n"
-            "test_c (t.A.test_c) ... FAIL\n"
-            "======\nFAIL: test_c (t.A.test_c)\n------\nRan 3 tests in 0.1s\n\nFAILED (failures=1, skipped=1)\n"
-        )
-        before = os.path.join(self.temp.name, "before.log")
-        after = os.path.join(self.temp.name, "after.log")
-        for path, text in ((before, log), (after, log.replace("test_c (t.A.test_c) ... FAIL", "test_c (t.A.test_c) ... ok").replace("FAIL: test_c (t.A.test_c)\n", ""))):
-            with open(path, "w", encoding="utf-8") as handle:
-                handle.write(text)
-
-        from scripts import compare_test_manifests
-
-        records = compare_test_manifests.read_verbose_log(before)
-        self.assertEqual(
-            sorted(records.elements()),
-            [("t.A.test_a", "ok", ""), ("t.A.test_b", "skipped", "why"), ("t.A.test_c", "FAIL", "")],
-        )
-        self.assertEqual(self._compare("--verbose-logs", before, before), 0)
-        self.assertEqual(self._compare("--verbose-logs", before, after), 1)
+        before = os.path.join(self.temp.name, "truncated.log")
+        Path(before).write_text("test_a (t.A.test_a) ... noisy\n", encoding="utf-8")
+        # A truncated text log cannot qualify exact execution parity.
+        self.assertEqual(self._compare(before, before), 2)
+        with mock.patch("sys.stderr"), self.assertRaises(SystemExit) as rejected:
+            self._compare("--verbose-logs", before, before)
+        self.assertEqual(rejected.exception.code, 2)
 
 
 if __name__ == "__main__":

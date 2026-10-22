@@ -99,7 +99,7 @@ class CiWorkflowTests(unittest.TestCase):
 
         # Only manual runs write a manifest; it stays on the runner as a hash.
         self.assertIn(
-            "BACKEND_MANIFEST: ${{ github.event_name == 'workflow_dispatch' && 'output/backend-test-manifest.tsv' || '' }}",
+            "BACKEND_MANIFEST: ${{ github.event_name == 'workflow_dispatch' && 'output/backend-test-manifest.json' || '' }}",
             backend_block,
         )
         self.assertIn('extra+=(--manifest "$BACKEND_MANIFEST")', backend_block)

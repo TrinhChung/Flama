@@ -9,6 +9,16 @@
   - 6.0: POC được park ở nhánh local `experiment/test-harness-poc` (bước 2, lựa chọn (a)). Theo yêu cầu của người dùng, P0 được commit thẳng lên nhánh `fix/deploy-disconnect-cloudflare` thay cho bước 3–4.
   - 6.1: đã xoá job `spa-contract`. Bằng chứng local nằm trong `docs/architecture/TEST_ARCHITECTURE_RFC.md`; phần nghiệm thu trên GitHub (bước 6) vẫn chờ.
 
+### Checkpoint tích hợp theo yêu cầu người dùng (Codex, 2026-10-23)
+
+Đã fetch và rà toàn bộ refs/worktree trước khi sửa, xác nhận bản PR B mới nhất của Claude là `wip/test-speed` tại `72ce0f5c`. Người dùng yêu cầu merge vào nhánh chung: đã fast-forward `fix/deploy-disconnect-cloudflare` từ `57738edd` lên commit đó, bảo toàn lịch sử Claude và ghép lại các thay đổi local. Không push. Dùng bản A của Claude; bản B của Antigravity được thay thế, không triển khai lại PR B từ đầu.
+
+Đã bổ sung sau review: hủy worker cả lúc submit/consume, cleanup process tree với Windows Job Object và POSIX session, timeout áp dụng cả một file/jobs=1, launch gate chống late spawn, snapshot flags thống nhất. Log giữ head/tail tối đa 1 MiB/bin và tiếp tục drain pipe. Manifest JSON v1 atomic giới hạn 32 MiB, ghi loaded/started/finished/outcome/subtest/fixture với scope của case, giữ duplicate và skip reason chính xác, kiểm tra schema/count/completion, từ chối kết quả rỗng hoặc log giả. Hash theo từng category và skip diagnostics có giới hạn được in vào CI log, không upload artifact.
+
+Bằng chứng local trên patch tích hợp: 8 file tooling (`test_modular_test_runner`, `test_parallel_backend_runner`, `test_unittest_manifest`, `test_ci_workflow`, `test_test_mapping_coverage`, `test_deploy_workflow`, `test_cloudflare_cache_rule`, `test_flama_audio_release_workflow`). Ba lượt jobs=1, jobs=2 seed 0 và jobs=2 seed 13 đều có **156 loaded/started/finished cases, 1 skip POSIX, 683 event**, SHA-256 `e1943e749675eaa86a165cfc72563ccb783b522a4f4cb85cfe66ee48496e0372`. Hai phép so multiset đều `only before: 0`, `only after: 0`. Hai seed thay đổi grouping thật ở 6 bin. Wall time local lần lượt 24,38 / 15,78 / 15,80 giây; đây là số đo tooling, không phải full-suite hay dự báo minutes CI. Evidence/log local ở `%LOCALAPPDATA%/Flama/test-coordinator/prb-evidence`.
+
+S2 đã hoàn tác chuyển thư mục theo quyết định người dùng qua MSG-10: giữ đủ 22 test tại `tests/`, phục hồi import/path, không giảm gate. CI push/PR vẫn jobs=1 và có timeout; full-suite parity trên revision tích hợp, Linux lifecycle thực và hosted benchmark còn chờ, nên PR B là `LOCAL_VERIFIED` cho tooling và `HOSTED_PENDING` cho rollout. Không chạy ứng dụng, DB, migrations hoặc SQLite integration trong đợt PR B này. Wrapper yêu cầu suite có inventory cố định trước run; custom suite thêm case động trong `run()` sẽ báo lỗi qualification. Hash TSV lịch sử không so trực tiếp với schema JSON mới.
+
 ## 1. Kết luận ngắn
 
 1. Không có khủng hoảng quota. Số đo thực tế trong 30 ngày là khoảng **1.045 phút tính phí**, không phải 2.940 phút như báo cáo Gemini giả định. Trần của gói Free cho repo private là 2.000 phút.
