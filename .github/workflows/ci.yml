@@ -25,6 +25,11 @@ on:
       - '.vscode/**'
       - 'flama-audio/**'
   workflow_dispatch:
+    inputs:
+      backend_jobs:
+        description: 'Backend unittest processes for a paired timing run (push and PR runs use 1)'
+        required: false
+        default: '1'
 
 permissions:
   contents: read
@@ -176,18 +181,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # Push and PR runs stay single-process until paired hosted runs show the
+      # parallel runner keeps the same cases and fits this runner's resources.
+      # A manual dispatch can pass backend_jobs to collect that evidence.
       - name: Run backend tests
         env:
           DB_USER: ci
           DB_NAME: ci
           SECRET_KEY: ci-secret
+          BACKEND_JOBS: ${{ inputs.backend_jobs || '1' }}
         run: |
           if [ "${{ github.ref_name }}" = "master" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Running full backend test suite on master..."
-            python scripts/run_tests.py --all --backend-only
+            python scripts/run_tests.py --all --backend-only --jobs "$BACKEND_JOBS"
           else
             echo "Running modular backend test suite for changed modules..."
-            python scripts/run_tests.py --changed --backend-only
+            python scripts/run_tests.py --changed --backend-only --jobs "$BACKEND_JOBS"
           fi
 
   redis-contract:

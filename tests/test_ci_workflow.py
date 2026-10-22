@@ -74,6 +74,20 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertNotIn("Download React build", backend_block)
         self.assertNotIn("image: redis", backend_block)
 
+    def test_backend_parallelism_is_single_process_unless_dispatched(self):
+        backend_block = self.workflow.split("\n  backend:\n", 1)[1].split(
+            "\n  redis-contract:\n", 1
+        )[0]
+        dispatch = self.workflow.split("\n  workflow_dispatch:\n", 1)[1].split("\npermissions:", 1)[0]
+
+        # The input reaches the shell through env, never interpolated into run.
+        self.assertIn("BACKEND_JOBS: ${{ inputs.backend_jobs || '1' }}", backend_block)
+        self.assertIn('--all --backend-only --jobs "$BACKEND_JOBS"', backend_block)
+        self.assertIn('--changed --backend-only --jobs "$BACKEND_JOBS"', backend_block)
+        self.assertNotIn("--jobs auto", self.workflow)
+        self.assertIn("backend_jobs:", dispatch)
+        self.assertIn("default: '1'", dispatch)
+
     def test_expensive_environment_contracts_are_explicit(self):
         frontend = self.workflow.split("\n  frontend:\n", 1)[1].split("\n  backend:\n", 1)[0]
         self.assertIn("FLAMA_REQUIRE_REAL_SPA_ARTIFACT: '1'", frontend)

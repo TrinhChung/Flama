@@ -12,19 +12,24 @@ Usage:
   python scripts/run_tests.py --backend-only          # Limit to backend unittest
   python scripts/run_tests.py --frontend-only         # Limit to frontend vitest
   python scripts/run_tests.py --all                   # Run entire test suite
+  python scripts/run_tests.py --all --jobs auto       # Run backend files in parallel processes
   python scripts/run_tests.py --list-modules          # Inspect all modules & test files
 """
 
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 import fnmatch
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -1528,9 +1533,12 @@ def discover_all_frontend_tests() -> list[str]:
     )
 
 
-def build_backend_test_environment(media_root: str) -> dict[str, str]:
+def build_backend_test_environment(
+    media_root: str,
+    base: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Build an isolated environment for the backend test subprocess."""
-    env = dict(os.environ)
+    env = dict(os.environ if base is None else base)
     env["FLAMA_TEST_MEDIA_UPLOAD_ROOT"] = media_root
     env["FLASHCARD_MEDIA_UPLOAD_ROOT"] = media_root
     # Rate-limit tests opt in explicitly through their app config. Disabling the
@@ -1543,11 +1551,428 @@ def build_backend_test_environment(media_root: str) -> dict[str, str]:
     env["EMAIL_ENVIRONMENT"] = "test"
     return env
 
+
+def build_parallel_worker_environment(media_root: str, base: dict[str, str]) -> dict[str, str]:
+    """Environment of one ``--jobs`` worker, derived from one parent snapshot."""
+    env = build_backend_test_environment(media_root, base)
+    # Output is spooled and decoded by the parent: pin the encoding and keep
+    # stdout unbuffered so test prints cannot split unittest's summary lines.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUNBUFFERED"] = "1"
+    # A parallel run verifies; it must never rewrite committed snapshots.
+    env["UPDATE_SNAPSHOT"] = "0"
+    env["UPDATE_ROUTE_SNAPSHOT"] = "0"
+    return env
+
+
+# Each backend worker process pays roughly 4-8s to import the app, so files are
+# grouped into a few bins per worker instead of one process per file.
+BACKEND_BINS_PER_JOB = 3
+# Memory ``--jobs auto`` reserves per worker. The largest worker working set
+# measured on the full suite was 653 MB (Windows, --jobs 2, 2026-10-23).
+BACKEND_WORKER_MEMORY_BYTES = 768 * 1024 * 1024
+# Without a memory reading, ``auto`` does not assume every CPU can be fed.
+BACKEND_AUTO_JOBS_WITHOUT_MEMORY_INFO = 2
+# Only the end of a worker log is parsed for unittest's summary.
+UNITTEST_SUMMARY_TAIL_BYTES = 64 * 1024
+
+UNITTEST_RAN_RE = re.compile(r"^Ran (\d+) tests? in ", re.MULTILINE)
+UNITTEST_RESULT_RE = re.compile(r"^(OK|FAILED)(?: \(([^)]*)\))?\s*$", re.MULTILINE)
+
+
+def effective_cpu_count() -> int:
+    """CPUs this process may use, honouring affinity where the OS reports it."""
+    if hasattr(os, "process_cpu_count"):  # Python 3.13+
+        return os.process_cpu_count() or 1
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0)) or 1
+    return os.cpu_count() or 1
+
+
+def available_memory_bytes() -> int | None:
+    """Physical memory available to new processes, or None when unknown."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = MemoryStatus()
+            status.dwLength = ctypes.sizeof(MemoryStatus)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return int(status.ullAvailPhys)
+            return None
+        with open("/proc/meminfo", encoding="ascii") as meminfo:
+            for line in meminfo:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, AttributeError):
+        return None
+    return None
+
+
+def resolve_backend_jobs(requested: str | int | None, file_count: int) -> int:
+    """Return the worker count for ``--jobs``.
+
+    ``auto`` uses the CPUs available to this process, capped by available
+    memory (or at two workers when memory cannot be read); an explicit number
+    is used as given. Both are capped by the number of files.
+    """
+    if requested is None or str(requested).strip().lower() in {"", "auto"}:
+        jobs = effective_cpu_count()
+        memory = available_memory_bytes()
+        if memory is None:
+            jobs = min(jobs, BACKEND_AUTO_JOBS_WITHOUT_MEMORY_INFO)
+        else:
+            jobs = min(jobs, max(1, memory // BACKEND_WORKER_MEMORY_BYTES))
+    else:
+        try:
+            jobs = int(requested)
+        except ValueError:
+            jobs = 0
+        if jobs < 1:
+            raise ValueError("--jobs must be a positive integer or 'auto'")
+    return max(1, min(jobs, file_count))
+
+
+def partition_backend_tests(
+    test_files: list[str],
+    bin_count: int,
+    weights: dict[str, float] | None = None,
+) -> list[list[str]]:
+    """Split files into balanced bins, heaviest bin first (LPT scheduling).
+
+    Every file lands in exactly one bin. Without measured weights, file size
+    stands in for runtime; the order is deterministic for a given input.
+    """
+    def weight(path: str) -> float:
+        if weights and path in weights:
+            return float(weights[path])
+        return float((ROOT_DIR / path).stat().st_size)
+
+    bin_count = max(1, min(bin_count, len(test_files)))
+    bins: list[list[str]] = [[] for _ in range(bin_count)]
+    loads = [0.0] * bin_count
+    for path in sorted(test_files, key=lambda p: (-weight(p), p)):
+        target = min(range(bin_count), key=lambda i: (loads[i], i))
+        bins[target].append(path)
+        loads[target] += weight(path)
+    order = sorted(range(bin_count), key=lambda i: (-loads[i], i))
+    return [sorted(bins[i]) for i in order if bins[i]]
+
+
+@dataclass
+class UnittestSummary:
+    ran: int = 0
+    ok: bool = False
+    counts: dict[str, int] = field(default_factory=dict)
+
+
+def parse_unittest_summary(output: str) -> UnittestSummary | None:
+    """Parse the final ``Ran N tests`` / ``OK|FAILED (...)`` lines of unittest."""
+    ran = UNITTEST_RAN_RE.findall(output)
+    results = UNITTEST_RESULT_RE.findall(output)
+    if not ran or not results:
+        return None
+    status, details = results[-1]
+    counts: dict[str, int] = {}
+    for part in filter(None, (piece.strip() for piece in details.split(","))):
+        name, _, value = part.partition("=")
+        if value.isdigit():
+            counts[name.strip()] = int(value)
+    return UnittestSummary(ran=int(ran[-1]), ok=status == "OK", counts=counts)
+
+
+@dataclass
+class BackendBinResult:
+    files: list[str]
+    returncode: int | None
+    log_path: str | None
+    elapsed: float
+    summary: UnittestSummary | None
+    note: str = ""
+
+    @property
+    def started(self) -> bool:
+        return self.returncode is not None
+
+    @property
+    def passed(self) -> bool:
+        # Exit 0 alone is not enough: unittest must also report an OK summary
+        # for tests that actually ran.
+        return (
+            self.returncode == 0
+            and self.summary is not None
+            and self.summary.ok
+            and self.summary.ran > 0
+        )
+
+    def read_output(self) -> str:
+        if not self.log_path or not os.path.exists(self.log_path):
+            return self.note
+        with open(self.log_path, "rb") as handle:
+            return handle.read().decode("utf-8", errors="replace") + self.note
+
+    def write_output(self, stream) -> None:
+        """Copy the spooled log to ``stream`` in chunks (bounded memory)."""
+        import codecs
+
+        if self.log_path and os.path.exists(self.log_path):
+            decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+            with open(self.log_path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(64 * 1024), b""):
+                    stream.write(decoder.decode(chunk))
+            stream.write(decoder.decode(b"", final=True))
+        if self.note:
+            stream.write(self.note)
+        stream.write("\n")
+
+
+def _unittest_command(
+    python_cmd: list[str],
+    test_files: list[str],
+    failfast: bool,
+    verbose: bool,
+) -> list[str]:
+    cmd = list(python_cmd) + ["-m", "unittest"]
+    if failfast:
+        cmd.append("-f")
+    if verbose:
+        cmd.append("-v")
+    cmd.extend(test_files)
+    return cmd
+
+
+def _terminate_process_tree(proc: subprocess.Popen) -> None:
+    """Stop a worker and, on Windows, the processes it started."""
+    if proc.poll() is not None:
+        return
+    if sys.platform == "win32":
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    # Workers share the parent's process group so terminal and CI signals reach
+    # them directly; a direct kill is the fallback when taskkill did not stop it.
+    if proc.poll() is None:
+        proc.kill()
+    try:
+        proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+class _WorkerRegistry:
+    """Track running worker processes so they can be stopped together."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._active: set[subprocess.Popen] = set()
+        self.stopped = threading.Event()
+
+    def add(self, proc: subprocess.Popen) -> None:
+        with self._lock:
+            self._active.add(proc)
+        if self.stopped.is_set():
+            _terminate_process_tree(proc)
+
+    def discard(self, proc: subprocess.Popen) -> None:
+        with self._lock:
+            self._active.discard(proc)
+
+    def stop_all(self) -> None:
+        self.stopped.set()
+        with self._lock:
+            active = list(self._active)
+        for proc in active:
+            _terminate_process_tree(proc)
+
+
+def _read_tail(path: str, size: int = UNITTEST_SUMMARY_TAIL_BYTES) -> str:
+    with open(path, "rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        handle.seek(max(0, handle.tell() - size))
+        return handle.read().decode("utf-8", errors="replace")
+
+
+def _run_backend_bin(
+    python_cmd: list[str],
+    test_files: list[str],
+    failfast: bool,
+    verbose: bool,
+    registry: _WorkerRegistry | None = None,
+    *,
+    log_path: str,
+    base_env: dict[str, str],
+    timeout: float | None = None,
+) -> BackendBinResult:
+    start = time.time()
+    note = ""
+    with tempfile.TemporaryDirectory(prefix="flama-backend-tests-") as media_root, \
+            open(log_path, "wb") as log:
+        proc = subprocess.Popen(
+            _unittest_command(python_cmd, test_files, failfast, verbose),
+            cwd=str(ROOT_DIR),
+            env=build_parallel_worker_environment(media_root, base_env),
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+        if registry is not None:
+            registry.add(proc)
+        try:
+            returncode = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _terminate_process_tree(proc)
+            returncode = proc.returncode if proc.returncode not in (None, 0) else -1
+            note = f"\n[TIMEOUT] worker stopped after {timeout:.0f}s"
+        finally:
+            if registry is not None:
+                registry.discard(proc)
+            if proc.poll() is None:
+                _terminate_process_tree(proc)
+    return BackendBinResult(
+        files=test_files,
+        returncode=returncode,
+        log_path=log_path,
+        elapsed=time.time() - start,
+        summary=parse_unittest_summary(_read_tail(log_path)),
+        note=note,
+    )
+
+
+def _format_counts(counts: dict[str, int]) -> str:
+    return ", ".join(f"{name}={value}" for name, value in sorted(counts.items()) if value)
+
+
+def run_backend_tests_parallel(
+    python_cmd: list[str],
+    test_files: list[str],
+    jobs: int,
+    failfast: bool = False,
+    verbose: bool = False,
+    weights: dict[str, float] | None = None,
+    timeout: float | None = None,
+) -> bool:
+    """Run backend files in ``jobs`` concurrent unittest processes.
+
+    Each process keeps the normal per-file app/database setup, gets its own
+    media directory and an environment copied from one parent snapshot.
+    Output is spooled to a file per bin and printed whole when the bin ends,
+    so results never interleave; a failed bin prints its full output. Any bin
+    without an OK unittest summary fails the run.
+    """
+    import signal
+
+    bins = partition_backend_tests(test_files, jobs * BACKEND_BINS_PER_JOB, weights)
+    registry = _WorkerRegistry()
+    base_env = dict(os.environ)
+    results: list[BackendBinResult] = []
+    start_time = time.time()
+    print(f"[BACKEND] {len(test_files)} files in {len(bins)} bins across {jobs} parallel jobs")
+
+    previous_sigterm = None
+    if threading.current_thread() is threading.main_thread() and hasattr(signal, "SIGTERM"):
+        def _on_sigterm(_signum, _frame):
+            raise KeyboardInterrupt
+        previous_sigterm = signal.signal(signal.SIGTERM, _on_sigterm)
+
+    with tempfile.TemporaryDirectory(prefix="flama-backend-logs-") as log_dir:
+        def run_bin(index: int, files: list[str]) -> BackendBinResult:
+            if registry.stopped.is_set():
+                return BackendBinResult(files, None, None, 0.0, None)
+            try:
+                result = _run_backend_bin(
+                    python_cmd,
+                    files,
+                    failfast,
+                    verbose,
+                    registry,
+                    log_path=os.path.join(log_dir, f"bin-{index:03d}.log"),
+                    base_env=base_env,
+                    timeout=timeout,
+                )
+            except Exception as exc:  # A worker that cannot start fails the run.
+                result = BackendBinResult(files, -1, None, 0.0, None, f"[WORKER ERROR] {exc!r}")
+            if failfast and not result.passed and not registry.stopped.is_set():
+                registry.stop_all()
+            return result
+
+        try:
+            with ThreadPoolExecutor(max_workers=jobs) as executor:
+                futures = [executor.submit(run_bin, index, files) for index, files in enumerate(bins)]
+                try:
+                    for future in as_completed(futures):
+                        result = future.result()
+                        results.append(result)
+                        if not result.started:
+                            continue
+                        label = "PASS" if result.passed else "FAIL"
+                        ran = result.summary.ran if result.summary else "?"
+                        print(f"[{label}] {len(result.files)} files, {ran} tests in {result.elapsed:.1f}s")
+                        if verbose or not result.passed:
+                            print("-" * 60)
+                            print("  " + "\n  ".join(result.files))
+                            print("-" * 60)
+                            sys.stdout.flush()
+                            result.write_output(sys.stdout)
+                            print("-" * 60)
+                        sys.stdout.flush()
+                except KeyboardInterrupt:
+                    registry.stop_all()
+                    raise
+        finally:
+            if previous_sigterm is not None:
+                signal.signal(signal.SIGTERM, previous_sigterm)
+    elapsed = time.time() - start_time
+
+    executed = [r for r in results if r.started]
+    skipped_bins = [r for r in results if not r.started]
+    failed = [r for r in executed if not r.passed]
+    total_ran = sum(r.summary.ran for r in executed if r.summary)
+    totals: dict[str, int] = {}
+    for r in executed:
+        for name, value in (r.summary.counts if r.summary else {}).items():
+            totals[name] = totals.get(name, 0) + value
+    detail = _format_counts(totals)
+    detail = f", {detail}" if detail else ""
+
+    if skipped_bins:
+        not_run = sum(len(r.files) for r in skipped_bins)
+        print(f"[FAILFAST] {not_run} files were not started after the first failure.")
+    if not failed and not skipped_bins:
+        print(
+            f"\n[PASS] BACKEND PASSED ({len(test_files)} files, {total_ran} tests{detail} "
+            f"in {elapsed:.2f}s with {jobs} jobs)"
+        )
+        return True
+    print(
+        f"\n[FAIL] BACKEND FAILED ({len(failed)} of {len(executed)} bins failed, "
+        f"{total_ran} tests{detail} in {elapsed:.2f}s with {jobs} jobs)"
+    )
+    for r in failed:
+        print("  failed bin: " + ", ".join(r.files))
+    return False
+
+
 def run_backend_tests(
     python_cmd: list[str],
     test_files: list[str],
     failfast: bool = False,
     verbose: bool = False,
+    jobs: int = 1,
+    bin_timeout: float | None = None,
 ) -> bool:
     """Execute targeted Python backend tests using unittest."""
     if not test_files:
@@ -1565,6 +1990,16 @@ def run_backend_tests(
     for tf in existing_tests:
         print(f"  * {tf}")
     print("-" * 60)
+
+    if jobs > 1 and len(existing_tests) > 1:
+        return run_backend_tests_parallel(
+            python_cmd,
+            existing_tests,
+            jobs=min(jobs, len(existing_tests)),
+            failfast=failfast,
+            verbose=verbose,
+            timeout=bin_timeout,
+        )
 
     cmd = list(python_cmd) + ["-m", "unittest"]
     if failfast:
@@ -1700,8 +2135,30 @@ def main() -> int:
         action="store_true",
         help="Verbose test execution output.",
     )
+    parser.add_argument(
+        "-j", "--jobs",
+        default="1",
+        help=(
+            "Parallel backend unittest processes: a number or 'auto' (all CPUs). "
+            "Default 1 keeps a single process; tests sharing one external "
+            "database must keep it."
+        ),
+    )
+
+    parser.add_argument(
+        "--bin-timeout",
+        type=float,
+        default=0,
+        help="With --jobs above 1, stop and fail a worker running longer than this many seconds (0 = no limit).",
+    )
 
     args = parser.parse_args()
+    try:
+        resolve_backend_jobs(args.jobs, 1)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if args.bin_timeout < 0:
+        parser.error("--bin-timeout must not be negative")
 
     # List modules mode
     if args.list_modules:
@@ -1816,6 +2273,8 @@ def main() -> int:
             test_files=sorted(selected_backend_tests),
             failfast=args.failfast,
             verbose=args.verbose,
+            jobs=resolve_backend_jobs(args.jobs, len(selected_backend_tests)),
+            bin_timeout=args.bin_timeout or None,
         )
         if not backend_ok:
             all_passed = False
