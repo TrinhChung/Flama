@@ -1,11 +1,13 @@
 """Publication, user-scoped receipt, immutable pins and three-way parity."""
 
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from app import create_app
 from app.repositories import template_release_repository as repository
 from app.services import template_release_service as service
+from app.services.template_subscription_sync_service import drain_template_sync_jobs
 from models import db
 from models.deck import Deck
 from models.deck_install import DeckInstall
@@ -23,6 +25,7 @@ from models.user import User
 from models.field_def import FieldDef
 from models.study_application import StudyApplication
 from tests.study_note_fixtures import attach_template, create_note_user
+from tests.note_type_publication_fixtures import stage_note_type_release
 
 
 class TemplateReleaseServiceTests(unittest.TestCase):
@@ -45,6 +48,17 @@ class TemplateReleaseServiceTests(unittest.TestCase):
         db.session.flush()
         self.source_id, self.nt_id = source.id, nt.id
         db.session.add(NoteTypeInstall(user_id=learner.id, source_note_type_id=nt.id))
+        # A bare NoteType marker grants no template license; an installed
+        # author's deck is a supported receipt path for these service tests.
+        deck = Deck(owner_user_id=owner.id, note_type_id=nt.id, name="Licensed source")
+        db.session.add(deck)
+        db.session.flush()
+        item = DeckMarketplaceItem(owner_user_id=owner.id, source_deck_id=deck.id,
+            source_note_type_id=nt.id, title="Licensed source", publish_status="published")
+        db.session.add(item)
+        db.session.flush()
+        db.session.add(DeckInstall(user_id=learner.id, deck_item_id=item.id,
+            source_deck_id=deck.id, source_note_type_id=nt.id, source_owner_user_id=owner.id))
         db.session.commit()
         self.first = self.publish("1.0.0")
 
@@ -100,6 +114,8 @@ class TemplateReleaseServiceTests(unittest.TestCase):
         self.assertEqual(TemplateRelease.query.count(), 1)
 
     def test_receipt_requires_install_and_keeps_one_copy_with_no_downgrade(self):
+        db.session.add(NoteTypeInstall(user_id=self.stranger_id, source_note_type_id=self.nt_id))
+        db.session.commit()
         with self.assertRaises(service.TemplateReleaseError) as caught:
             service.ensure_subscription(db.session, user_id=self.stranger_id, source_template_id=self.source_id)
         self.assertEqual(caught.exception.code, "TEMPLATE_ACCESS_DENIED")
@@ -147,20 +163,28 @@ class TemplateReleaseServiceTests(unittest.TestCase):
                 service.list_releases(user_id=user_id, template_id=template_id)
             self.assertEqual(caught.exception.status, 404)
 
-    def test_standalone_note_type_receipt_uses_published_copy_and_one_user_identity(self):
+    def test_standalone_note_type_receipt_keeps_pinned_content_and_one_editable_subscription(self):
         from app.services.flashcards_share_service import install_shared_note_type
         NoteTypeInstall.query.filter_by(user_id=self.learner_id, source_note_type_id=self.nt_id).delete()
+        stage_note_type_release(db.session, db.session.get(NoteType, self.nt_id))
         db.session.commit()
         self.edit(self.source_id, front_html="AUTHOR DRAFT")
         installed, _ = install_shared_note_type(db.session.get(NoteType, self.nt_id), self.learner_id)
         subscription = repository.subscription(db.session, user_id=self.learner_id, source_template_id=self.source_id)
         self.assertEqual(repository.template(db.session, subscription["local_template_id"])["front_html"], "FRONT")
-        self.assertEqual(Template.query.filter_by(owner_user_id=self.learner_id, source_template_id=self.source_id).count(), 1)
+        self.assertEqual(Template.query.filter_by(owner_user_id=self.learner_id,
+            source_template_id=self.source_id, archived_at=None).count(), 1)
         active = StudyApplication.query.filter_by(note_type_id=installed.id, status_code="ACTIVE").all()
-        self.assertEqual([row.template_id for row in active], [subscription["local_template_id"]])
+        self.assertEqual(len(active), 1)
+        pinned = db.session.get(Template, active[0].template_id)
+        self.assertNotEqual(pinned.id, subscription["local_template_id"])
+        self.assertEqual(pinned.source_template_id, self.source_id)
+        self.assertIsNotNone(pinned.archived_at)
+        self.edit(subscription["local_template_id"], front_html="PERSONAL EDIT")
+        self.assertEqual(pinned.front_html, "FRONT")
         self.assertEqual(service.ensure_subscription(db.session, user_id=self.learner_id, source_template_id=self.source_id)["local_template_id"], subscription["local_template_id"])
 
-    def test_received_attachment_cannot_be_redistributed_as_own_note_type(self):
+    def test_unlisted_received_attachment_cannot_be_redistributed_as_own_note_type(self):
         from app.services import flashcards_share_service as share
         local_id = self.receive()
         note_type = NoteType(user_id=self.learner_id, name="Own NoteType", description="Mine", primary_category="General", preview_text="Preview")
@@ -170,7 +194,7 @@ class TemplateReleaseServiceTests(unittest.TestCase):
         db.session.add(app)
         db.session.commit()
         self.assertEqual(share.get_note_type_publish_eligibility(note_type=note_type, user_id=self.learner_id)["block_code"], "marketplace_template")
-        self.assertIn("cannot be redistributed", share.validate_note_type_publish_requirements(note_type))
+        self.assertIn("published original listing", share.validate_note_type_publish_requirements(note_type))
         item = DeckMarketplaceItem(owner_user_id=self.learner_id, source_note_type_id=note_type.id, title="Own deck")
         self.assertIn("cannot be redistributed", share.validate_deck_source_note_type_provenance(deck_item=item, source_note_type=note_type))
         app.status_code = "RETIRED"
@@ -193,6 +217,8 @@ class TemplateReleaseServiceTests(unittest.TestCase):
         app.input_bindings = {"Prompt": field.id}
         db.session.commit()
         self.publish("2.0.0")
+        stage_note_type_release(db.session, note_type)
+        db.session.commit()
         source.front_html = "AUTHOR DRAFT"
         db.session.commit()
         owned = marketplace_query_service.serialize_note_type(note_type)
@@ -212,6 +238,10 @@ class TemplateReleaseServiceTests(unittest.TestCase):
         local_field_id = received["templates"][0]["input_bindings"]["Prompt"]
         self.assertEqual(db.session.get(FieldDef, local_field_id).note_type_id, installed.id)
         app.status_code = "RETIRED"
+        db.session.commit()
+        self.assertEqual(len(marketplace_query_service.serialize_note_type_marketplace_card(note_type)["templates"]), 1)
+        note_type.version = "2.0.0"
+        stage_note_type_release(db.session, note_type)
         db.session.commit()
         self.assertEqual(marketplace_query_service.serialize_note_type_marketplace_card(note_type)["templates"], [])
         with self.assertRaises(marketplace_note_type_service.MarketplaceNoteTypeError) as caught:
@@ -272,6 +302,9 @@ class TemplateReleaseServiceTests(unittest.TestCase):
         self.edit(local_id, front_html="MINE")
         self.edit(self.source_id, front_html="THEIRS")
         self.publish("3.0.0")
+        drain_template_sync_jobs(max_jobs=100,
+            now_utc=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=1))
+        db.session.rollback()
         subscription = repository.subscription(db.session, user_id=self.learner_id, local_template_id=local_id)
         self.assertEqual(subscription["applied_release_id"], target["id"])
         self.assertEqual(subscription["pending_update_json"]["status"], "has_conflict")
@@ -289,6 +322,11 @@ class TemplateReleaseServiceTests(unittest.TestCase):
         db.session.commit()
         head = service.get_publication(user_id=self.owner_id, template_id=self.source_id)["current_release"]
         self.assertEqual(head["publish_mode"], "automatic")
+        self.assertEqual(repository.template(db.session, local_id)["back_html"], "BACK")
+        db.session.rollback()
+        drain_template_sync_jobs(max_jobs=100,
+            now_utc=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=1))
+        db.session.rollback()
         self.assertEqual(repository.template(db.session, local_id)["back_html"], "AUTOMATIC")
         self.assertEqual(TemplateRelease.query.count(), 2)
 
@@ -414,8 +452,10 @@ class TemplateReleaseServiceTests(unittest.TestCase):
         published = service.publish_release(user_id=self.owner_id, template_id=independent["id"], payload={
             "version_label": "1", "expected_current_release_id": None, "expected_current_version_id": independent["current_version_id"],
         }, idempotency_key="independent-preview")["release"]
+        stage_note_type_release(db.session, nt)
+        db.session.commit()
         library.update_template(user_id=self.owner_id, template_id=independent["id"], payload={"front_html": "SECRET DRAFT"})
-        items = queries.serialize_note_type_templates(nt, published=True)
+        items = queries.serialize_note_type(nt, published_template_content=True)["templates"]
         row = next(row for row in items if row["id"] == independent["id"])
         self.assertEqual(row["front_html"], "<b>PUBLISHED {{term}}</b>")
         self.assertEqual(row["current_version_id"], published["version_id"])
@@ -428,7 +468,11 @@ class TemplateReleaseServiceTests(unittest.TestCase):
             self.assertNotIn("{{term}}", preview["front_html"])
             self.assertNotIn("SECRET", preview["front_html"])
             library.retire_application(user_id=self.owner_id, note_type_id=nt.id, application_id=application["id"])
-            self.assertNotIn(independent["id"], {row["id"] for row in queries.serialize_note_type_templates(nt, published=True)})
+            self.assertIn(independent["id"], {row["id"] for row in queries.serialize_note_type(nt, published_template_content=True)["templates"]})
+            nt.version = "2.0.0"
+            stage_note_type_release(db.session, nt)
+            db.session.commit()
+            self.assertNotIn(independent["id"], {row["id"] for row in queries.serialize_note_type(nt, published_template_content=True)["templates"]})
             with self.assertRaises(marketplace.MarketplaceNoteTypeError) as caught:
                 marketplace.preview_shared_note_type_template(user_id=self.stranger_id, note_type_id=nt.id, template_id=independent["id"])
             self.assertEqual(caught.exception.status, 404)

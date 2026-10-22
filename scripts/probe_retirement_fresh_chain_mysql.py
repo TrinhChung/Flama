@@ -67,7 +67,7 @@ def main():
                 upgrade(directory=str(ROOT/'migrations'))
                 tables = set(sa.inspect(db.engine).get_table_names())
                 head = db.session.execute(sa.text('SELECT version_num FROM alembic_version')).scalar_one()
-                if head != '20261014_000068' or tables & RETIRED:
+                if head != '20261020_000071' or tables & RETIRED:
                     raise RuntimeError('Retirement head/table contract failed.')
                 if tables != set(db.metadata.tables) | {'alembic_version'}:
                     raise RuntimeError('Fresh migration schema differs from current runtime metadata.')

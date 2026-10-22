@@ -29,6 +29,7 @@ from models.template import Template
 from models.user import User
 
 from tests.study_note_fixtures import attach_template, create_note_user
+from tests.note_type_publication_fixtures import stage_note_type_release
 
 class PaymentOrderFlowTests(unittest.TestCase):
     def setUp(self):
@@ -114,6 +115,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
                     is_default=True,
                 )
             )
+            stage_note_type_release(db.session, note_type)
             db.session.commit()
             return note_type.id
 

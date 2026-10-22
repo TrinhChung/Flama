@@ -13,6 +13,7 @@ from models.payment_order_item import PaymentOrderItem
 from models.payment_webhook_event import PaymentWebhookEvent
 from models.user import User
 from models.user_role import UserRole
+from tests.note_type_publication_fixtures import stage_note_type_release
 
 
 class PaymentManagementViewTests(unittest.TestCase):
@@ -79,6 +80,7 @@ class PaymentManagementViewTests(unittest.TestCase):
             )
             db.session.add(product)
             db.session.flush()
+            release = stage_note_type_release(db.session, product)
 
             now = datetime.utcnow()
             paid_order = PaymentOrder(
@@ -128,7 +130,7 @@ class PaymentManagementViewTests(unittest.TestCase):
                 unit_amount_minor=50000,
                 line_total_amount_minor=50000,
                 title_snapshot="Kana Pack",
-                product_snapshot_json={"seller_name": "creator-one"},
+                product_snapshot_json={"seller_name": "creator-one", "note_type_release_id": release.id},
             )
             pending_item = PaymentOrderItem(
                 order_id=pending_order.id,
@@ -138,7 +140,7 @@ class PaymentManagementViewTests(unittest.TestCase):
                 unit_amount_minor=75000,
                 line_total_amount_minor=75000,
                 title_snapshot="Kana Pack Premium",
-                product_snapshot_json={"seller_name": "creator-one"},
+                product_snapshot_json={"seller_name": "creator-one", "note_type_release_id": release.id},
             )
             failed_item = PaymentOrderItem(
                 order_id=failed_order.id,
@@ -148,7 +150,7 @@ class PaymentManagementViewTests(unittest.TestCase):
                 unit_amount_minor=65000,
                 line_total_amount_minor=65000,
                 title_snapshot="Kana Pack Failed",
-                product_snapshot_json={"seller_name": "creator-one"},
+                product_snapshot_json={"seller_name": "creator-one", "note_type_release_id": release.id},
             )
             db.session.add_all([paid_item, pending_item, failed_item])
             db.session.flush()
