@@ -66,7 +66,7 @@ class CiWorkflowTests(unittest.TestCase):
 
     def test_backend_is_independent_from_frontend_and_redis(self):
         backend_block = self.workflow.split("\n  backend:\n", 1)[1].split(
-            "\n  spa-contract:\n", 1
+            "\n  redis-contract:\n", 1
         )[0]
 
         self.assertIn("needs: changes", backend_block)
@@ -75,8 +75,8 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertNotIn("image: redis", backend_block)
 
     def test_expensive_environment_contracts_are_explicit(self):
-        self.assertIn("  spa-contract:\n", self.workflow)
-        self.assertIn("FLAMA_REQUIRE_REAL_SPA_ARTIFACT: '1'", self.workflow)
+        frontend = self.workflow.split("\n  frontend:\n", 1)[1].split("\n  backend:\n", 1)[0]
+        self.assertIn("FLAMA_REQUIRE_REAL_SPA_ARTIFACT: '1'", frontend)
         self.assertIn("  redis-contract:\n", self.workflow)
         self.assertIn("image: redis:7-alpine", self.workflow)
         self.assertIn("  mysql-contract:\n", self.workflow)
@@ -86,18 +86,24 @@ class CiWorkflowTests(unittest.TestCase):
 
     def test_ci_uses_no_actions_artifact_storage(self):
         # An exhausted account artifact quota must never block validation, so
-        # the SPA contract builds its own dist instead of passing an artifact.
+        # Flask checks the build on the frontend runner without transferring it.
         for workflow in (self.workflow, self.audio_workflow):
             self.assertNotIn("actions/upload-artifact", workflow)
             self.assertNotIn("actions/download-artifact", workflow)
-        spa_block = self.workflow.split("\n  spa-contract:\n", 1)[1].split(
-            "\n  redis-contract:\n", 1
-        )[0]
-        build = spa_block.index("npm run build:ci")
-        self.assertIn("node-version: '22.22.2'", spa_block)
-        self.assertIn("working-directory: frontend", spa_block)
-        self.assertLess(spa_block.index("npm ci"), build)
-        self.assertLess(build, spa_block.index("tests.test_spa_artifact_contract"))
+        frontend = self.workflow.split("\n  frontend:\n", 1)[1].split("\n  backend:\n", 1)[0]
+        self.assertEqual(self.workflow.count("npm ci"), 1)
+        self.assertEqual(self.workflow.count("npm run build:ci"), 1)
+        self.assertIn("node-version: '22.22.2'", frontend)
+        self.assertLess(frontend.index("npm ci"), frontend.index("npm run build:ci"))
+        self.assertLess(frontend.index("npm run build:ci"), frontend.index("tests.test_spa_artifact_contract"))
+        self.assertIn("working-directory: .", frontend)
+        self.assertIn("if: needs.changes.outputs.spa_contract == 'true'", frontend)
+
+    def test_spa_contract_has_no_separate_runner(self):
+        # The repository has no branch protection to require a check name, so
+        # a pass-through job would only bill another runner minute.
+        self.assertNotIn("\n  spa-contract:\n", self.workflow)
+        self.assertNotIn("needs.spa-contract", self.workflow)
 
     def test_frontend_typecheck_is_not_repeated_during_ci_build(self):
         self.assertIn("npm run typecheck", self.workflow)
@@ -107,7 +113,7 @@ class CiWorkflowTests(unittest.TestCase):
         deploy_block = self.workflow.split("\n  deploy:\n", 1)[1]
 
         self.assertIn(
-            "needs: [changes, frontend, backend, spa-contract, redis-contract, mysql-contract]",
+            "needs: [changes, frontend, backend, redis-contract, mysql-contract]",
             deploy_block,
         )
         self.assertIn("github.event_name == 'push'", deploy_block)

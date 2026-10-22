@@ -9,6 +9,7 @@ Welcome to the central documentation portal for **Flama** (Nihongo Flashcard Lea
 - [Deck, Note Type and Template stability](architecture/deck-notetype-template-stability-design.md): immutable releases, pinned presentation, receipt parity, asynchronous subscriber delivery and rollout checks.
 - [Marketplace bundle completeness review](architecture/marketplace-bundle-completeness-review-2026-10-21.md): five findings fixed and verified locally, with test evidence and production limits.
 - [Marketplace local rollout rehearsal](runbooks/MARKETPLACE_BUNDLE_LOCAL_ROLLOUT_20261021.md): reviewed publication plans, local results, verification and rollback.
+- [Test architecture P0 review](architecture/TEST_ARCHITECTURE_RFC.md): SPA contract checked in the frontend job, parked harness prototype and remaining MySQL rollout gates. Follow-up: [CI/CD test upgrade plan](plans/TEST_CICD_UPGRADE_IMPLEMENTATION_PLAN_2026-10-23.md).
 
 | Master Report | Description |
 |---|---|

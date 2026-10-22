@@ -381,9 +381,9 @@ Flama implements a 4-tier GitHub Actions continuous integration and deployment p
 ```text
 [.github/workflows/ci.yml]
   ├── minimal-matrix-planner (scripts/run_tests.py --ci-plan)
-  ├── frontend (Oxlint, Typecheck, Vitest)
+  ├── frontend (Oxlint, Typecheck, Vitest, Vite build, Flask SPA artifact contract)
   ├── backend (Modular Unittest/Pytest based on git diff)
-  ├── spa-contract & redis-contract
+  ├── redis-contract
   └── mysql-contract (MySQL 8 service container: probes & migrations)
           │
   (Master branch success)
