@@ -636,7 +636,6 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(changed.get_json()["notes"][0]["state"], "changed")
 
     def test_note_authority_progress_snapshot_projects_all_siblings_atomically(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
         self._login()
         session_id = self._create_session()["importSessionId"]
         note_record = {
@@ -837,7 +836,6 @@ class AnkiImportApiTests(unittest.TestCase):
         )
 
     def test_note_authority_revlog_is_history_only_and_card_atomic(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
         self._login()
         session_id = self._create_session()["importSessionId"]
         note_record = {
@@ -1034,7 +1032,6 @@ class AnkiImportApiTests(unittest.TestCase):
             self.assertEqual(db.session.get(Deck, self.deck_id).name, "Renamed")
 
     def test_note_authority_card_import_updates_content_and_snapshot_starts_state(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
         self._login()
         initial_session_id = self._create_session()["importSessionId"]
         original = {
@@ -1141,7 +1138,6 @@ class AnkiImportApiTests(unittest.TestCase):
             assert_retired_progress_absent(self, db.session)
 
     def test_progress_snapshot_conflict_and_idempotency_contract(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
         self._login()
         session_id = self._create_session()["importSessionId"]
         note_record = {
@@ -1369,8 +1365,6 @@ class AnkiImportApiTests(unittest.TestCase):
     def test_progress_and_full_revlog_are_separate_idempotent_sync_streams(self):
         from app.services.stats_overview import build_stats_overview
 
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
-        self.app.config["STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED"] = True
         self.app.config["STUDY_PROGRESS_SHADOW_COMPARE_ENABLED"] = True
         self._login()
         created = self._create_session()

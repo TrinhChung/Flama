@@ -44,7 +44,6 @@ class StudyConsolidatedConnectTests(unittest.TestCase):
         return ConnectSourceCardRef.query.filter_by(user_id=self.admin_id, external_card_id="4101").one()
 
     def _prepare_note_learner(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
         self._login()
         self.session_id = self._create_session()["importSessionId"]
         imported = self._upload_package(self.session_id, "cards", 0, [{

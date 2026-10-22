@@ -60,7 +60,6 @@ def _probe_app(uri):
         "WTF_CSRF_ENABLED": False, "STARTUP_RUN_MAINTENANCE": False,
         "STARTUP_RUN_DB_CREATE_ALL": False, "STARTUP_CHECK_DB_CONNECTIVITY": False,
         "REDIS_URL": "", "STUDY_QUEUE_NAMESPACE": "",
-        "STUDY_PROGRESS_SHADOW_WRITE_ENABLED": False,
         "STUDY_WIRE_V4_ENABLED": True, "STUDY_ASYNC_BATCH_ENABLED": False,
     })
 

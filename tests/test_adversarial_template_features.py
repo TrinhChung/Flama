@@ -52,8 +52,6 @@ class AdversarialGT01DefaultTemplateSourcesTests(unittest.TestCase):
         )
 
     def setUp(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = False
-        self.app.config["STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED"] = False
         self.app.config["STUDY_PROGRESS_SHADOW_COMPARE_ENABLED"] = False
         self.client = self.app.test_client()
 
@@ -188,8 +186,6 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
         )
 
     def setUp(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = False
-        self.app.config["STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED"] = False
         self.app.config["STUDY_PROGRESS_SHADOW_COMPARE_ENABLED"] = False
         self.client = self.app.test_client()
 
@@ -371,8 +367,6 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
         )
 
     def setUp(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = False
-        self.app.config["STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED"] = False
         self.app.config["STUDY_PROGRESS_SHADOW_COMPARE_ENABLED"] = False
         self.client = self.app.test_client()
 

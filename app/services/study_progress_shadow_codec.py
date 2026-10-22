@@ -1,4 +1,4 @@
-"""Bounded canonical JSON codecs for Phase 4 shadow progress.
+"""Bounded canonical JSON codecs for live NOTE authority and historical evidence.
 
 The codec is deliberately independent from Flask, SQLAlchemy sessions and the
 scheduler clock.  It preserves values already read from authority; it never
