@@ -1,10 +1,9 @@
 # RFC-2026-TEST-01: Test architecture and CI improvements
 
-Status: CI P0 implemented locally (shared SPA build, no separate SPA job).
-Harness P0 is parked: the hardened `scripts/poc_harness.py` described below was
-replaced at 2026-10-23 00:32 by a shim over the earlier `tests/test_harness_poc.py`
-draft, so the harness findings and evidence below no longer describe the checkout.
-Reviewed: 2026-10-23 (Asia/Tokyo). Follow-up plan:
+Status: CI P0 committed on `fix/deploy-disconnect-cloudflare` (shared SPA build,
+no separate SPA job); hosted Actions execution is not yet verified. The harness
+prototype is parked on the local branch `experiment/test-harness-poc` and is not
+on the CI branch. Reviewed: 2026-10-23 (Asia/Tokyo). Follow-up plan:
 `docs/plans/TEST_CICD_UPGRADE_IMPLEMENTATION_PLAN_2026-10-23.md`.
 
 ## Scope and repository policy
@@ -18,9 +17,13 @@ concurrency, startup and migrations require local MySQL 8.0. Existing isolated
 in-memory unit tests may remain; this RFC does not authorize new SQLite
 integration tests. An SQLite auth benchmark cannot qualify MySQL behavior.
 
-## Review findings and implemented fixes
+## Prototype review findings
 
-| Priority | Finding in the draft POC | Implemented behavior |
+Codex implemented these fixes in a hardened harness, which another agent then
+overwrote in the working tree with the earlier draft. The parked draft still has
+every defect below, so this column is the behavior a future harness must prove.
+
+| Priority | Finding in the draft POC | Required behavior |
 | --- | --- | --- |
 | P0 | `--compare` could exit zero when either test run failed | Either failure or mismatched test IDs/counts/skips produces a nonzero exit. Empty suites and invalid repeat counts are rejected. |
 | P0 | Cleanup and rate-limit reset exceptions were swallowed | Isolation errors fail the run. Raw connections close in `finally`; remaining apps are still cleaned when one fails. |
@@ -31,9 +34,14 @@ integration tests. An SQLite auth benchmark cannot qualify MySQL behavior.
 | P0 | Benchmark import changed environment globally; comparison reused warm imports and patched objects | Scoped test environment/media directories; baseline and POC comparisons run in independent Python subprocesses. JSON stdout is separate from diagnostics. |
 | P0 | Destructive cleanup lacked a target contract | Require explicit `TESTING=True`, exactly `sqlite:///:memory:` and no binds. Only harness-owned apps can be restored. No MySQL cleanup adapter is inferred. |
 | P0 | An intentionally crashing top-level test made normal discovery fail | Lifecycle regression tests nest expected failures and assert their results, using mocks without creating an integration database. |
-| P1 | SPA contract repeated `npm ci` and `build:ci` on another runner | Execute Flask assertions beside the existing frontend build and remove the `spa-contract` job. The private Free-plan repository has no branch protection (API 403), so no required check name needs preserving; a pass-through job would still bill a rounded runner minute. |
 
 ## Implemented CI topology
+
+The separate SPA contract job repeated `npm ci` and `build:ci` on another runner.
+Its assertions now run beside the existing frontend build, and the job is gone.
+The private Free-plan repository has no branch protection (API 403), so no
+required check name needs preserving; a pass-through job would still bill a
+rounded runner minute.
 
 `.github/workflows/ci.yml` now runs:
 
@@ -60,21 +68,20 @@ This removes one runner, one npm installation and one Vite build per selected
 SPA contract run. Over the 30 days to 2026-10-23 the separate job billed about
 41 rounded minutes; hosted savings after this change have not yet been measured.
 
-## Prototype contract and limits
+## Parked prototype and limits
 
-`scripts/poc_harness.py` remains an opt-in experiment for the eight existing
-auth test modules selected in `scripts/poc_test_runner.py`. It is not a generic
-replacement for the test lifecycle and is never activated by the modular runner.
+The local branch `experiment/test-harness-poc` holds the Antigravity draft as of
+2026-10-23 00:34: `tests/test_harness_poc.py` (`FastTestHarness`), its re-export
+`scripts/poc_harness.py`, `scripts/poc_test_runner.py` for eight auth test modules,
+`scripts/test_repeatability_benchmark.py`, `scripts/stress_test_poc_adversarial.py`,
+their two tooling tests and their `tooling` mapping in `scripts/run_tests.py`.
+CI and the modular runner never activate it. Its own tooling tests pass there
+(20 tests); no MySQL behavior was checked.
 
-The prototype caches apps by explicit config, environment and audit mode, restores deep
-config copies, snapshots each owned in-memory database, resets the six existing
-rate-limit services and limits the number of cached profiles. DDL calls for
-unowned apps retain their normal behavior. Shutdown disposes engines and closes
-snapshots rather than keeping a singleton cache alive across runs.
-
-The earlier `tests/test_harness_poc.py` draft was being edited by another session
-during this review. It is preserved separately and is not imported by the POC
-runner or its safety tests. Use `scripts/poc_harness.py` for this implementation.
+The hardened Codex harness is in no branch. Its patches remain in the local Codex
+session log `~/.codex/sessions/2026/10/22/rollout-2026-10-22T23-50-19-01a16417-6dd1-7cc3-9137-1de6593730e4.jsonl`;
+rebuilding it means replaying about 25 add, update and delete patches in order,
+which has not been attempted.
 
 Database/config restoration does not establish complete Flask object isolation:
 extensions, registered callbacks, WSGI middleware and arbitrary process caches
@@ -83,8 +90,7 @@ modules, parallel workers, schema tests or MySQL is approved by this P0 result.
 
 The initial draft's 39.46s/20.62s comparison and 48% speedup were historical
 observations without a trustworthy cold-process comparison contract. They are
-not acceptance criteria or verified performance claims. Three successful runs
-show no observed repeat failure; they do not prove zero flakiness. Timing while
+not acceptance criteria or verified performance claims. Timing while
 `tracemalloc` is active includes instrumentation overhead and depends on host load.
 
 ## Local verification
@@ -92,7 +98,7 @@ show no observed repeat failure; they do not prove zero flakiness. Timing while
 Use the repository virtualenv in PowerShell:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/run_tests.py --file tests/test_adversarial_poc_harness.py tests/test_poc_test_runner.py tests/test_ci_workflow.py tests/test_modular_test_runner.py tests/test_test_mapping_coverage.py --backend-only
+.\.venv\Scripts\python.exe scripts/run_tests.py --file tests/test_ci_workflow.py tests/test_deploy_workflow.py tests/test_modular_test_runner.py tests/test_test_mapping_coverage.py --backend-only
 
 $env:FLAMA_REQUIRE_REAL_SPA_ARTIFACT = '1'
 .\.venv\Scripts\python.exe scripts/run_tests.py --file tests/test_spa_artifact_contract.py --backend-only
@@ -102,39 +108,23 @@ Remove-Item Env:FLAMA_REQUIRE_REAL_SPA_ARTIFACT
 The SPA command requires an existing `frontend/dist` produced by
 `npm --prefix frontend run build:ci`; CI builds it in the same job. Keep this
 test enabled with `FLAMA_REQUIRE_REAL_SPA_ARTIFACT=1` so absence is a failure.
+A worktree without `.env` also needs the CI values `DB_USER=ci`, `DB_NAME=ci`
+and `SECRET_KEY=ci-secret`; the test never connects to that database.
 
-Opt-in checks of the existing auth prototype:
+The prototype's opt-in commands exist only on `experiment/test-harness-poc`.
 
-```powershell
-.\.venv\Scripts\python.exe scripts/poc_test_runner.py --compare --json
-.\.venv\Scripts\python.exe scripts/poc_test_runner.py --poc --repeat 2 --shuffle 42 --json
-.\.venv\Scripts\python.exe scripts/test_repeatability_benchmark.py
-.\.venv\Scripts\python.exe scripts/stress_test_poc_adversarial.py
-```
-
-`--compare` launches a fresh process for each side. `--repeat` repeats those
-isolated runs; comparison timing includes process startup and shutdown, and
-in-process timing includes harness imports on the POC side. The repeatability
-script instead runs three complete lifecycle
-activations in one process, shuffled with seed 42 by default, and writes
-`output/poc-repeatability.json`; it derives
-case identity from loaded tests rather than hardcoding 107. None of these
-commands verifies live MySQL semantics or deployment.
-
-Local review evidence (2026-10-23):
+Local evidence for the CI commit, in a clean detached worktree (2026-10-23):
 
 | Check | Result |
 | --- | --- |
-| Focused tooling, isolation, CI/deploy and real SPA contracts (7 files) | 80 tests passed |
-| Fresh `npm --prefix frontend run build:ci` | Passed |
-| Independent baseline and hardened POC executions | Both 107/107 passed; identical case IDs and outcomes |
-| Same-process repeatability, shuffled seed 42 | Three runs of 107/107 passed after fixing first-import factory alias restoration |
-| Workflow YAML parse, ordering and deploy dependencies | Passed locally; hosted Actions execution remains unverified |
+| `tests.test_ci_workflow`, `tests.test_deploy_workflow`, `tests.test_modular_test_runner`, `tests.test_test_mapping_coverage` | 57 tests passed |
+| Fresh `npm ci` and `npm run build:ci` | Passed |
+| Real SPA contract with `FLAMA_REQUIRE_REAL_SPA_ARTIFACT=1` and the CI env values | 2 tests passed |
+| Workflow YAML parse, `needs` resolution, `Build` before the SPA step | Passed |
 | `git diff --check` | Passed |
+| Hosted GitHub Actions run | Not yet run |
 
-Performance percentages are deliberately not accepted from these local runs:
-host load varied and instrumentation is enabled. No MySQL schema, data or
-production deployment was changed.
+No MySQL schema, data or production deployment was changed.
 
 ## Deferred changes and acceptance gates
 

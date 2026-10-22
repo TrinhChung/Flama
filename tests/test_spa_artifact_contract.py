@@ -17,7 +17,7 @@ SPA_INDEX = ROOT / "frontend" / "dist" / "index.html"
 
 @unittest.skipUnless(
     os.getenv("FLAMA_REQUIRE_REAL_SPA_ARTIFACT") == "1",
-    "real SPA artifact contract runs in its dedicated CI tier",
+    "real SPA artifact contract runs after the CI frontend build",
 )
 class SpaArtifactContractTests(unittest.TestCase):
     def setUp(self):

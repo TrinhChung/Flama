@@ -5,7 +5,9 @@
   - Gemini, báo cáo 2026-10-13: `docs/plans/TEST_ARCHITECTURE_AND_CICD_OPTIMIZATION_REPORT.md` (Tiered CI, D2, nightly, gate MySQL).
   - Gemini Teamwork 2026-10-22: POC `FastTestHarness` (`tests/test_harness_poc.py`) và bản nháp RFC.
   - Codex P0 (chưa commit, đang nằm trên nhánh `fix/deploy-disconnect-cloudflare` của PR TrinhChung/Flama#239): `.github/workflows/ci.yml`, `tests/test_ci_workflow.py`, `tests/test_spa_artifact_contract.py`, `scripts/run_tests.py`, `docs/architecture/TEST_ARCHITECTURE_RFC.md`, các file POC.
-- Trạng thái: PR A (mục 6.1) đã được thực hiện trực tiếp trên nhánh `fix/deploy-disconnect-cloudflare` theo yêu cầu của người dùng, chưa commit. Các mục còn lại vẫn đang là kế hoạch.
+- Trạng thái (2026-10-23): mục 6.0 và 6.1 đã làm và commit ở local, chưa push, chưa chạy trên GitHub Actions. Các mục còn lại vẫn là kế hoạch.
+  - 6.0: POC được park ở nhánh local `experiment/test-harness-poc` (bước 2, lựa chọn (a)). Theo yêu cầu của người dùng, P0 được commit thẳng lên nhánh `fix/deploy-disconnect-cloudflare` thay cho bước 3–4.
+  - 6.1: đã xoá job `spa-contract`. Bằng chứng local nằm trong `docs/architecture/TEST_ARCHITECTURE_RFC.md`; phần nghiệm thu trên GitHub (bước 6) vẫn chờ.
 
 ## 1. Kết luận ngắn
 
