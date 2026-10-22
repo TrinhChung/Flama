@@ -49,14 +49,15 @@ def _iso(value):
     return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)).isoformat()
 
 
-def _received_block(row) -> tuple[str, str] | None:
-    if row.get("origin") == "market_copy" or row.get("source_template_id"):
+def _received_block(row, *, session=None) -> tuple[str, str] | None:
+    from app.services.legacy_template_provenance_service import is_received_template
+    if is_received_template(session if session is not None else db.session, row):
         return "MARKET_TEMPLATE_REPUBLISH_FORBIDDEN", "Giao diện thẻ tải từ chợ không thể đăng hoặc bán lại."
     return None
 
 
-def _publish_block(row) -> tuple[str, str] | None:
-    blocked = _received_block(row)
+def _publish_block(row, *, session=None) -> tuple[str, str] | None:
+    blocked = _received_block(row, session=session)
     if blocked:
         return blocked
     if row.get("archived_at") is not None:
@@ -210,45 +211,49 @@ def get_listing(*, user_id: int, template_id: str) -> dict[str, Any]:
     }
 
 
-def update_listing(*, user_id: int, template_id: str, payload) -> dict[str, Any]:
-    """Publish, reprice or delist an authored template; listing also releases its content."""
+def stage_listing(session, *, user_id: int, template_id: str, payload):
+    """Stage a standalone listing; the composing service owns commit/rollback."""
     if not isinstance(payload, dict) or set(payload) - LISTING_KEYS:
         raise TemplateReleaseError("VALIDATION_ERROR", "Request body contains unsupported properties.")
     status = payload.get("marketplace_status")
     if status is not None and status not in STATUSES:
         raise TemplateReleaseError("VALIDATION_ERROR", "marketplace_status must be 'private' or 'published'.", field="marketplace_status")
 
-    def operation():
-        row = _owned(user_id, template_id, lock=True)
-        blocked = _received_block(row)
+    row = releases.template(session, template_id, lock=True)
+    if row is None or releases.template_owner(session, row) != int(user_id):
+        raise TemplateReleaseError("TEMPLATE_NOT_FOUND", "Template not found.", status=404)
+    blocked = _received_block(row, session=session)
+    if blocked:
+        raise TemplateReleaseError(blocked[0], blocked[1], status=403)
+    publication = releases.ensure_publication(session, row["id"])
+    target = status or publication["marketplace_status"] or "private"
+    mode, price, error = normalize_pricing(
+        payload, current_mode=publication["pricing_mode"] or "free",
+        current_price_amount_minor=int(publication["price_amount_minor"] or 0),
+    )
+    if error:
+        raise TemplateReleaseError("VALIDATION_ERROR", error, field="price_amount_minor")
+    values = {"marketplace_status": target, "pricing_mode": mode, "price_amount_minor": price, "updated_at": _now()}
+    if target == market.LISTED:
+        blocked = _publish_block(row, session=session)
         if blocked:
-            raise TemplateReleaseError(blocked[0], blocked[1], status=403)
-        publication = releases.ensure_publication(db.session, row["id"])
-        target = status or publication["marketplace_status"] or "private"
-        mode, price, error = normalize_pricing(
-            payload, current_mode=publication["pricing_mode"] or "free",
-            current_price_amount_minor=int(publication["price_amount_minor"] or 0),
-        )
-        if error:
-            raise TemplateReleaseError("VALIDATION_ERROR", error, field="price_amount_minor")
-        values = {"marketplace_status": target, "pricing_mode": mode, "price_amount_minor": price, "updated_at": _now()}
-        if target == market.LISTED:
-            blocked = _publish_block(row)
-            if blocked:
-                raise TemplateReleaseError(blocked[0], blocked[1], status=409)
-            missing = _missing_requirements(row)
-            if missing:
-                raise TemplateReleaseError("VALIDATION_ERROR", f"{missing[0]} is required to publish.", field=missing[0])
-            template_release_service.stage_marketplace_release(db.session, row, actor_user_id=user_id)
-            if publication["marketplace_status"] != market.LISTED:
-                values["marketplace_published_at"] = _now()
-        releases.update_row(db.session, TemplatePublication, [TemplatePublication.template_id == row["id"]], values)
-        db.session.add(AuditLog(user_id=user_id, action="template.marketplace", payload={
-            "template_id": row["id"], "marketplace_status": target, "pricing_mode": mode, "price_amount_minor": price,
-        }))
+            raise TemplateReleaseError(blocked[0], blocked[1], status=409)
+        missing = _missing_requirements(row)
+        if missing:
+            raise TemplateReleaseError("VALIDATION_ERROR", f"{missing[0]} is required to publish.", field=missing[0])
+        template_release_service.stage_marketplace_release(session, row, actor_user_id=user_id)
+        if publication["marketplace_status"] != market.LISTED:
+            values["marketplace_published_at"] = _now()
+    releases.update_row(session, TemplatePublication, [TemplatePublication.template_id == row["id"]], values)
+    session.add(AuditLog(user_id=user_id, action="template.marketplace", payload={
+        "template_id": row["id"], "marketplace_status": target, "pricing_mode": mode, "price_amount_minor": price,
+    }))
 
+
+def update_listing(*, user_id: int, template_id: str, payload) -> dict[str, Any]:
+    """Publish, reprice or delist an authored template; listing also releases its content."""
     try:
-        operation()
+        stage_listing(db.session, user_id=user_id, template_id=template_id, payload=payload)
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -258,16 +263,22 @@ def update_listing(*, user_id: int, template_id: str, payload) -> dict[str, Any]
 
 def install(*, user_id: int, template_id: str, return_url: str | None = None, cancel_url: str | None = None):
     from app.services import payment
+    from app.services.payment.checkout import reconcile_stale_template_quotes
 
     row = market.item(db.session, template_id)
     if row is None or _received_block(row):
         raise TemplateReleaseError("TEMPLATE_NOT_FOUND", "Không tìm thấy giao diện thẻ trên chợ.", status=404)
     if row["owner_user_id"] == int(user_id):
         raise TemplateReleaseError("OWN_TEMPLATE", "Bạn không thể tải giao diện thẻ của chính mình.", status=409)
+    try:
+        reconcile_stale_template_quotes(user_id=user_id)
+    except payment.PaymentServiceError as exc:
+        raise TemplateReleaseError(exc.error, exc.message, status=exc.status) from exc
     existing = existing_access(user_id=user_id, template_id=row["id"])
     if existing:
         return existing, 200
-    entitled = market.active_entitlement(db.session, user_id=user_id, template_id=row["id"])
+    from app.services.note_type_bundle_pricing_service import has_template_access
+    entitled = has_template_access(db.session, user_id=user_id, template_id=row["id"])
     if not _is_listed(row) and not entitled:
         raise TemplateReleaseError("TEMPLATE_NOT_LISTED", "Giao diện thẻ này hiện không còn trên chợ.", status=409)
     if row.get("pricing_mode") == "paid" and not entitled:
@@ -286,7 +297,8 @@ def install(*, user_id: int, template_id: str, return_url: str | None = None, ca
             raise TemplateReleaseError(exc.error, exc.message, status=exc.status, field=exc.field) from exc
         return checkout, 202 if checkout.get("payment_required") else 200
     try:
-        subscription = template_release_service.ensure_subscription(db.session, user_id=user_id, source_template_id=row["id"])
+        subscription = template_release_service.ensure_subscription(db.session, user_id=user_id,
+            source_template_id=row["id"], access_granted=entitled)
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
@@ -297,12 +309,17 @@ def install(*, user_id: int, template_id: str, return_url: str | None = None, ca
     except Exception:
         db.session.rollback()
         raise
-    return {"source_template_id": row["id"], "local_template_id": subscription["local_template_id"], "already_installed": False}, 201
+    from app.services.payment.checkout import reconcile_template_quotes_after_grant
+    return {"source_template_id": row["id"], "local_template_id": subscription["local_template_id"], "already_installed": False,
+        **reconcile_template_quotes_after_grant(user_id=user_id)}, 201
 
 
 # Payment integration: the checkout, fulfillment and wallet modules call these.
 
 def existing_access(*, user_id: int, template_id: str) -> dict[str, Any] | None:
+    from app.services.note_type_bundle_pricing_service import has_template_access
+    if not has_template_access(db.session, user_id=user_id, template_id=str(template_id)):
+        return None
     subscription = releases.subscription(db.session, user_id=user_id, source_template_id=str(template_id))
     if subscription is None:
         return None
@@ -313,12 +330,19 @@ def checkout_context(*, template_id: str, user_id: int) -> dict[str, Any]:
     row = market.item(db.session, template_id)
     if row is None or _received_block(row):
         raise TemplateCheckoutError("FIELD_NOT_FOUND", "Không tìm thấy giao diện thẻ cần thanh toán.", status=404)
-    if not _is_listed(row):
-        raise TemplateCheckoutError("VALIDATION_ERROR", "Giao diện thẻ này hiện không mở bán hoặc không còn khả dụng để thanh toán.", status=409)
     if row["owner_user_id"] == int(user_id):
         raise TemplateCheckoutError("VALIDATION_ERROR", "Bạn không thể mua giao diện thẻ do chính mình đăng.", status=409)
+    from app.services.note_type_bundle_pricing_service import has_template_access
+    access = existing_access(user_id=user_id, template_id=row["id"])
+    if access is None and has_template_access(db.session, user_id=user_id, template_id=row["id"]):
+        subscription = template_release_service.ensure_subscription(db.session,
+            user_id=user_id, source_template_id=row["id"], access_granted=True)
+        access = {"already_installed": True, "source_template_id": row["id"],
+            "local_template_id": subscription["local_template_id"]}
+    if not _is_listed(row) and access is None:
+        raise TemplateCheckoutError("VALIDATION_ERROR", "Giao diện thẻ này hiện không mở bán hoặc không còn khả dụng để thanh toán.", status=409)
     price = int(row.get("price_amount_minor") or 0)
-    if row.get("pricing_mode") != "paid" or price <= 0:
+    if (row.get("pricing_mode") != "paid" or price <= 0) and access is None:
         raise TemplateCheckoutError("PAYMENT_NOT_REQUIRED", "Giao diện thẻ này hiện không yêu cầu thanh toán.", status=409)
     return {
         "product_type": PRODUCT_TYPE, "product_ref_id": row["id"], "title_snapshot": row["name"],
@@ -328,16 +352,16 @@ def checkout_context(*, template_id: str, user_id: int) -> dict[str, Any]:
             "source_price_integer": price, "version": row.get("version_label"),
             "release_id": row.get("current_release_id"), "owner_user_id": row["owner_user_id"],
         },
-        "existing_access": existing_access(user_id=user_id, template_id=row["id"]),
+        "existing_access": access,
     }
 
 
-def fulfill_purchase(*, user_id: int, template_id: str) -> dict[str, Any]:
+def fulfill_purchase(*, user_id: int, template_id: str, release_id: str | None = None) -> dict[str, Any]:
     if releases.template(db.session, template_id) is None:
         raise TemplateCheckoutError("FIELD_NOT_FOUND", "Giao diện thẻ đã thanh toán không còn tồn tại để cấp quyền.", status=404)
     try:
         subscription = template_release_service.ensure_subscription(
-            db.session, user_id=user_id, source_template_id=str(template_id), access_granted=True,
+            db.session, user_id=user_id, source_template_id=str(template_id), release_id=release_id, access_granted=True,
         )
     except TemplateReleaseError as exc:
         raise TemplateCheckoutError(exc.code, str(exc), status=exc.status) from exc

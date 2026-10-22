@@ -180,6 +180,7 @@
   ["GET", "/api/marketplace/note-types/<note_type_id>"],
   ["POST", "/api/marketplace/note-types/<note_type_id>/install"],
   ["POST", "/api/marketplace/note-types/<note_type_id>/publish"],
+  ["GET", "/api/marketplace/note-types/<note_type_id>/publish-options"],
   ["POST", "/api/marketplace/note-types/<note_type_id>/rate"],
   ["DELETE", "/api/marketplace/note-types/<note_type_id>/save"],
   ["POST", "/api/marketplace/note-types/<note_type_id>/save"],

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { appApi } from '@/app/api'
+import { apiRequest } from '@/shared/api/client'
 import {
   TAXONOMY_DOMAINS as FALLBACK_DOMAINS,
   TAXONOMY_SUBJECTS as FALLBACK_SUBJECTS,
@@ -62,7 +62,7 @@ export type TaxonomySchemaResponse = {
 export function useTaxonomySchema(contentType: 'deck_marketplace_item' | 'note_type' = 'deck_marketplace_item') {
   const query = useQuery({
     queryKey: ['taxonomy-schema', contentType],
-    queryFn: () => appApi.get<TaxonomySchemaResponse>(`/api/marketplace/taxonomy/schema?content_type=${contentType}`),
+    queryFn: () => apiRequest<TaxonomySchemaResponse>(`/api/marketplace/taxonomy/schema?content_type=${contentType}`),
     staleTime: 1000 * 60 * 30, // 30 minutes
   })
 

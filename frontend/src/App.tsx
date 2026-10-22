@@ -139,7 +139,7 @@ const SharedNoteTypesPage = lazy(() =>
   })),
 )
 const SharedNoteTypeDetailPage = lazy(() =>
-  import('./features/marketplace/pages/MarketplacePages').then((module) => ({
+  import('./pages/marketplace-note-type-detail').then((module) => ({
     default: module.SharedNoteTypeDetailPage,
   })),
 )
@@ -239,7 +239,7 @@ const MarketplacePublishDeckPage = lazy(() =>
   })),
 )
 const MarketplacePublishNoteTypePage = lazy(() =>
-  import('./features/marketplace/pages/MarketplacePublishNoteTypePage').then((module) => ({
+  import('./pages/marketplace-note-type-publish').then((module) => ({
     default: module.MarketplacePublishNoteTypePage,
   })),
 )

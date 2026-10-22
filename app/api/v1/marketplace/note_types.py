@@ -99,6 +99,18 @@ def publish_note_type(note_type_id: str):
     return jsonify(payload)
 
 
+@marketplace_note_types_bp.get("/marketplace/note-types/<note_type_id>/publish-options")
+@login_required
+def note_type_publish_options(note_type_id: str):
+    from app.services.note_type_bundle_publication_service import get_publish_options
+    from app.services.template_release_service import TemplateReleaseError
+    try:
+        payload = get_publish_options(user_id=current_user.id, note_type_id=note_type_id)
+    except TemplateReleaseError as exc:
+        return error_response(exc.code, str(exc), status=exc.status, field=exc.field)
+    return jsonify(payload)
+
+
 @marketplace_note_types_bp.post(
     "/shared/note-types/<note_type_id>/templates/<template_id>/preview"
 )
@@ -107,11 +119,15 @@ def publish_note_type(note_type_id: str):
 )
 @login_required
 def preview_shared_note_type_template(note_type_id: str, template_id: str):
+    body = request.get_json(silent=True)
+    if body is not None and not isinstance(body, dict):
+        return error_response("VALIDATION_ERROR", "Preview request must be a JSON object.", status=400)
     try:
         payload = marketplace_note_type_service.preview_shared_note_type_template(
             user_id=current_user.id,
             note_type_id=note_type_id,
             template_id=template_id,
+            application_id=(body or {}).get("application_id"),
         )
     except MarketplaceNoteTypeError as exc:
         return _handle_error(exc)
@@ -131,10 +147,12 @@ def install_shared_note_type_template(note_type_id: str, template_id: str):
             user_id=current_user.id,
             note_type_id=note_type_id,
             template_id=template_id,
+            return_url=url_for("payments.marketplace_payment_result_page", _external=True),
+            cancel_url=url_for("payments.marketplace_payment_result_page", _external=True),
         )
     except MarketplaceNoteTypeError as exc:
         return _handle_error(exc)
-    return jsonify(payload), 200
+    return jsonify(payload), 202 if payload.get("payment_required") else 200
 
 
 @marketplace_note_types_bp.post("/shared/note-types/<note_type_id>/install")

@@ -46,50 +46,60 @@ def _validate_note_type_for_checkout(source_note_type: NoteType, *, user_id: int
     if status not in DEFAULT_VISIBLE_PUBLISH_STATUSES:
         raise PaymentServiceError(
             "VALIDATION_ERROR",
-            "Template này hiện không mở bán hoặc không còn khả dụng để thanh toán.",
+            "Note Type này hiện không mở bán hoặc không còn khả dụng để thanh toán.",
             status=409,
         )
     if source_note_type.user_id == user_id:
         raise PaymentServiceError(
             "VALIDATION_ERROR",
-            "Bạn không thể mua chính template do mình phát hành.",
+            "Bạn không thể mua Note Type do chính mình phát hành.",
             status=409,
         )
-    if source_note_type.pricing_mode != "paid" or int(source_note_type.price_amount_minor or 0) <= 0:
-        raise PaymentServiceError(
-            "PAYMENT_NOT_REQUIRED",
-            "Template này hiện không yêu cầu thanh toán.",
-            status=409,
-        )
-
     existing = payment_repository.get_note_type_install(
         user_id=user_id,
         source_note_type_id=source_note_type.id,
     )
+    from app.services.note_type_release_service import current_release
+    release = current_release(db.session, source_note_type)
+    existing_access = _resolve_existing_access_for_product(product_type="note_type",
+        product_ref_id=source_note_type.id, user_id=user_id) if existing else None
+    if release is None and existing_access is None:
+        raise PaymentServiceError("NOTE_TYPE_RELEASE_NOT_READY",
+            "The author must publish a complete Note Type release before purchase.", status=409)
+    from app.services.note_type_bundle_pricing_service import (
+        order_items_for_bundle, pricing_breakdown, require_available,
+    )
+    from app.services.note_type_release_service import NoteTypeReleaseError
+    try:
+        breakdown = pricing_breakdown(db.session, note_type=source_note_type, user_id=user_id, release=release)
+        if existing_access is None:
+            require_available(breakdown)
+            if not breakdown["payment_required"]:
+                raise PaymentServiceError("PAYMENT_NOT_REQUIRED", "Gói này hiện không yêu cầu thanh toán.", status=409)
+    except NoteTypeReleaseError as exc:
+        raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
+    # Existing legacy access remains usable without inventing a release. No
+    # payable order is created when existing_access is present.
+    title = release.manifest_json["metadata"]["name"] if release else source_note_type.name
     return {
         "product_type": "note_type",
         "product_ref_id": source_note_type.id,
-        "title_snapshot": source_note_type.name,
-        "amount_minor": int(source_note_type.price_amount_minor or 0),
-        "subtotal_amount_minor": int(source_note_type.price_amount_minor or 0),
+        "title_snapshot": title,
+        "amount_minor": breakdown["total_amount_minor"],
+        "subtotal_amount_minor": breakdown["total_amount_minor"],
         "discount_amount_minor": 0,
         "product_snapshot": {
-            "title": source_note_type.name,
+            "title": title,
             "pricing_mode": source_note_type.pricing_mode,
             "source_price_amount_minor": int(source_note_type.price_amount_minor or 0),
             "source_price_integer": int(source_note_type.price_amount_minor or 0),
-            "version": source_note_type.version,
+            "version": release.version_label if release else source_note_type.version,
+            "note_type_release_id": release.id if release else None,
             "owner_user_id": source_note_type.user_id,
         },
-        "existing_access": (
-            {
-                "already_installed": True,
-                "source_note_type_id": source_note_type.id,
-                "installed_note_type_id": existing.installed_note_type_id,
-            }
-            if existing is not None
-            else None
-        ),
+        "existing_access": existing_access,
+        "order_items": order_items_for_bundle(note_type=source_note_type, release=release,
+            breakdown=breakdown) if release else [],
     }
 
 
@@ -180,10 +190,23 @@ def _resolve_existing_access_for_product(*, product_type: str, product_ref_id: s
         )
         if install is None:
             return None
+        if not install.installed_note_type_id or db.session.get(NoteType, install.installed_note_type_id) is None:
+            from app.services.note_type_release_service import stage_receipt, NoteTypeReleaseError
+            source = db.session.get(NoteType, product_ref_id)
+            if source is None:
+                return None
+            try:
+                install, _created = stage_receipt(db.session, source_note_type=source, user_id=user_id)
+                db.session.commit()
+            except NoteTypeReleaseError as exc:
+                db.session.rollback()
+                raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
         return {
             "already_installed": True,
             "source_note_type_id": product_ref_id,
             "installed_note_type_id": install.installed_note_type_id,
+            "applied_release_id": install.applied_release_id,
+            "legacy_installation": not bool(install.applied_release_id),
         }
 
     if product_type == "template":
@@ -211,7 +234,7 @@ def _load_checkout_context(*, product_type: str, product_ref_id: str, user_id: i
     if product_type == "note_type":
         source_note_type = db.session.get(NoteType, product_ref_id)
         if source_note_type is None:
-            raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy template cần thanh toán.", status=404)
+            raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy Note Type cần thanh toán.", status=404)
         context = _validate_note_type_for_checkout(source_note_type, user_id=user_id)
         context["product"] = source_note_type
         return context
@@ -321,6 +344,12 @@ def _build_checkout_attempt(
 def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, now: datetime) -> str:
     # Fulfillment serializes orders; keep this edge lazy to avoid an import cycle.
     from app.services.payment.fulfillment import _ensure_entitlements_for_confirmed_order
+    payment_repository.lock_buyer_for_payment(order.user_id)
+    order, attempt = payment_repository.get_order_and_latest_attempt_for_update(order_id=order.id, attempt_id=attempt.id)
+    if order.status == "paid" and order.grant_status == "completed":
+        return "completed"
+    if order.status == "under_review":
+        return "block"
 
     if attempt.provider_code != PAYMENT_PROVIDER_CODE or not attempt.checkout_url:
         attempt.status = "failed"
@@ -435,7 +464,14 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         order.status = "paid"
         order.paid_at = order.paid_at or now
         order.closed_at = now
-        _ensure_entitlements_for_confirmed_order(order, attempt, now=now)
+        try:
+            _ensure_entitlements_for_confirmed_order(order, attempt, now=now)
+        except PaymentServiceError as exc:
+            from app.services.payment.template_quotes import DUPLICATE_TEMPLATE_PAYMENT, mark_duplicate_payment_for_review
+            if exc.code != DUPLICATE_TEMPLATE_PAYMENT:
+                raise
+            mark_duplicate_payment_for_review(order, attempt, exc, now=now, source="provider_state")
+            return "block"
         return "completed"
 
     attempt.status = "manual_review"
@@ -445,6 +481,99 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
     order.status = "under_review"
     order.closed_at = None
     return "block"
+
+
+def _quote_signature(lines):
+    return sorted((line["product_type"], line["product_ref_id"], int(line["amount_minor"]),
+        str(line["product_snapshot"].get("note_type_release_id") or ""),
+        str(line["product_snapshot"].get("release_id") or ""),
+        str(line["product_snapshot"].get("owner_user_id") or "")) for line in lines)
+
+
+def _same_quote(order, context):
+    previous = [{"product_type": item.product_type, "product_ref_id": item.product_ref_id,
+        "amount_minor": item.line_total_amount_minor, "product_snapshot": item.product_snapshot_json or {}}
+        for item in order.items]
+    return int(order.total_amount_minor) == int(context["amount_minor"]) and _quote_signature(previous) == _quote_signature(context.get("order_items") or [context])
+
+
+def _cancel_replaced_quote(order, attempt, *, now):
+    try:
+        state = payos_provider.cancel_checkout_session(provider_payment_id=attempt.provider_payment_id,
+            provider_order_code=attempt.provider_order_code)
+    except payos_provider.PayOSProviderError as exc:
+        # Payment may have won the race with cancellation. Reconcile it before
+        # allowing a new payable quote to be created.
+        resolution = _sync_attempt_with_payos(order, attempt, now=now)
+        if resolution in {"completed", "block"}:
+            return resolution
+        raise PaymentServiceError(exc.code, str(exc), status=exc.status) from exc
+    if state.get("status") not in {"CANCELLED", "CANCELED", "EXPIRED"}:
+        resolution = _sync_attempt_with_payos(order, attempt, now=now)
+        if resolution in {"completed", "block", "recreate"}:
+            return resolution
+        raise PaymentServiceError("CHECKOUT_QUOTE_CHANGED", "Giá đã thay đổi; chưa thể đóng phiên thanh toán cũ. Vui lòng thử lại.", status=409)
+    attempt.status = "canceled"
+    attempt.failed_at = now
+    attempt.failure_code = "quote_replaced"
+    attempt.failure_message = "Phiên thanh toán đã được thay thế để dùng giá và quyền template hiện tại."
+    order.status = "canceled"
+    order.closed_at = now
+    return "recreate"
+
+
+def reconcile_stale_template_quotes(*, user_id: int, product_type=None, product_ref_id=None) -> dict[str, Any]:
+    """Close all independently issued quotes invalidated by acquired licenses.
+
+    Owns a short transaction so provider cancellations/review evidence survive
+    a later failed install. Callers acquire the buyer lock again before writes.
+    """
+    from app.services.payment.template_quotes import duplicate_template_charge_ids
+    payment_repository.lock_buyer_for_payment(user_id)
+    closed, review = [], []
+    try:
+        for order in payment_repository.list_pending_template_orders(user_id=user_id):
+            attempt = _latest_attempt(order)
+            if attempt is None:
+                continue
+            if order.status == "under_review":
+                if (attempt.provider_metadata_json or {}).get("duplicate_license_review"):
+                    review.append(order.id)
+                continue
+            if not duplicate_template_charge_ids(order):
+                continue
+            if attempt.status not in ACTIVE_ATTEMPT_STATUSES:
+                continue
+            resolution = _cancel_replaced_quote(order, attempt, now=_utcnow())
+            if resolution == "block":
+                review.append(order.id)
+            elif resolution == "recreate":
+                closed.append(order.id)
+        db.session.commit()
+    except PaymentServiceError:
+        # Do not lose already confirmed cancellations if another provider link
+        # cannot be reconciled in this pass.
+        db.session.commit()
+        raise
+    if review:
+        raise PaymentServiceError("PAYMENT_REQUIRES_REVIEW",
+            "An earlier template quote was paid after its license was acquired. The payment needs review before continuing.",
+            status=409, extra={"order_ids": review})
+    return {"invalidated_order_ids": closed}
+
+
+def reconcile_template_quotes_after_grant(*, user_id: int) -> dict[str, Any]:
+    """Best-effort cleanup after the receipt is committed and cannot be undone."""
+    try:
+        result = reconcile_stale_template_quotes(user_id=user_id)
+        if result["invalidated_order_ids"]:
+            return {"quote_reconciliation": {"status": "complete", **result}}
+        return {}
+    except PaymentServiceError as exc:
+        from flask import current_app
+        current_app.logger.warning("Template quote reconciliation requires attention user_id=%s error=%s", user_id, exc.code)
+        return {"quote_reconciliation": {"status": "requires_review" if exc.code == "PAYMENT_REQUIRES_REVIEW" else "retry_required",
+            "error": exc.code, "order_ids": list(exc.extra.get("order_ids") or [])}}
 
 
 def _create_or_reuse_order_for_context(
@@ -463,9 +592,16 @@ def _create_or_reuse_order_for_context(
     )
     dirty = False
     for order in pending_orders:
+        # A standalone template must not reuse an entire bundle order merely
+        # because it appears as a dependency line in that order.
+        primary = order.items[0] if order.items else None
+        if primary is None or primary.product_type != context["product_type"] or primary.product_ref_id != context["product_ref_id"]:
+            continue
         latest_attempt = _latest_attempt(order)
         if latest_attempt and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
             resolution = _sync_attempt_with_payos(order, latest_attempt, now=now)
+            if resolution == "reuse" and not _same_quote(order, context):
+                resolution = _cancel_replaced_quote(order, latest_attempt, now=now)
             dirty = dirty or resolution != "reuse"
             if resolution in {"reuse", "completed", "block"}:
                 db.session.commit()
@@ -487,17 +623,17 @@ def _create_or_reuse_order_for_context(
     db.session.add(order)
     db.session.flush()
 
-    order_item = PaymentOrderItem(
-        order_id=order.id,
-        product_type=context["product_type"],
-        product_ref_id=context["product_ref_id"],
-        quantity=1,
-        unit_amount_minor=context["amount_minor"],
-        line_total_amount_minor=context["amount_minor"],
-        title_snapshot=context["title_snapshot"],
-        product_snapshot_json=context["product_snapshot"],
-    )
-    db.session.add(order_item)
+    for line in context.get("order_items") or [context]:
+        db.session.add(PaymentOrderItem(
+            order_id=order.id,
+            product_type=line["product_type"],
+            product_ref_id=line["product_ref_id"],
+            quantity=1,
+            unit_amount_minor=line["amount_minor"],
+            line_total_amount_minor=line["amount_minor"],
+            title_snapshot=line["title_snapshot"],
+            product_snapshot_json=line["product_snapshot"],
+        ))
     db.session.flush()
 
     attempt = _build_checkout_attempt(
@@ -524,6 +660,8 @@ def prepare_checkout_for_product(
     cancel_url: str | None = None,
 ) -> dict[str, Any]:
     _require_payments_enabled()
+    reconcile_stale_template_quotes(user_id=user_id, product_type=product_type, product_ref_id=product_ref_id)
+    payment_repository.lock_buyer_for_payment(user_id)
     context = _load_checkout_context(
         product_type=product_type,
         product_ref_id=product_ref_id,
@@ -531,6 +669,7 @@ def prepare_checkout_for_product(
     )
     existing_access = context.get("existing_access")
     if existing_access is not None:
+        db.session.commit()
         return {
             "payment_required": False,
             **existing_access,

@@ -1,29 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Ban, Globe, Info, Loader2, Palette, Store } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import {
-  cardTemplateQueryKeys,
-  fetchLibraryTemplate,
-  fetchTemplateLibrary,
-  updateLibraryTemplate,
-  type TemplateWriteBody,
-} from '@/entities/card-template'
+import { TemplateListingFields } from '@/entities/card-template'
+import { useTemplateListingForm } from '../hooks/useTemplateListingForm'
+import { usePublishTemplateSelection, useTemplatePublishPicker } from '../hooks/useTemplatePublishPicker'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
 import { PageError } from '@/shared/components/PageState'
 import { SearchInput } from '@/shared/ui'
-import { fetchTemplateListing, templateMarketQueryKeys, updateTemplateListing } from '../api/templateMarketApi'
-import type { MarketTemplatePricing, TemplateListingStatus } from '../model/types'
-import { TEMPLATE_MARKET_CATEGORIES } from '../lib/categories'
 
-const MIN_PRICE = 1000
 
 type PublishTemplateDialogProps = {
   open: boolean
@@ -36,10 +22,7 @@ type PublishTemplateDialogProps = {
 
 export function PublishTemplateDialog({ open, onOpenChange, templateId, onTemplateChanged }: PublishTemplateDialogProps) {
   const { t } = useTranslation('marketplace')
-  const [selectedId, setSelectedId] = useState(templateId ?? '')
-  useEffect(() => {
-    if (open) setSelectedId(templateId ?? '')
-  }, [open, templateId])
+  const [selectedId, setSelectedId] = usePublishTemplateSelection(open, templateId)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90svh] overflow-y-auto">
@@ -65,18 +48,7 @@ export function PublishTemplateDialog({ open, onOpenChange, templateId, onTempla
 
 function TemplatePicker({ onSelect }: { onSelect: (id: string) => void }) {
   const { t } = useTranslation('marketplace')
-  const [search, setSearch] = useState('')
-  const [query, setQuery] = useState('')
-  useEffect(() => {
-    const timer = window.setTimeout(() => setQuery(search.trim()), 250)
-    return () => window.clearTimeout(timer)
-  }, [search])
-  // "mine" excludes received copies: those can never be listed again.
-  const params = useMemo(() => ({ group: 'mine' as const, compact: true, page_size: 50, ...(query ? { q: query } : {}) }), [query])
-  const library = useQuery({
-    queryKey: [...cardTemplateQueryKeys.library(params), 'publish-picker'],
-    queryFn: ({ signal }) => fetchTemplateLibrary(params, signal),
-  })
+  const { search, setSearch, library } = useTemplatePublishPicker()
   const items = library.data?.items ?? []
   return (
     <div className="space-y-3">
@@ -118,66 +90,7 @@ function ListingForm({ templateId, onBack, onDone, onTemplateChanged }: {
   onTemplateChanged?: () => void
 }) {
   const { t } = useTranslation('marketplace')
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const listingQuery = useQuery({
-    queryKey: templateMarketQueryKeys.listing(templateId),
-    queryFn: ({ signal }) => fetchTemplateListing(templateId, signal),
-  })
-  const templateQuery = useQuery({
-    queryKey: cardTemplateQueryKeys.libraryDetail(templateId),
-    queryFn: ({ signal }) => fetchLibraryTemplate(templateId, signal),
-  })
-  const [description, setDescription] = useState('')
-  const [category, setCategory] = useState('')
-  const [pricing, setPricing] = useState<MarketTemplatePricing>('free')
-  const [price, setPrice] = useState('')
-  const [formError, setFormError] = useState<string | null>(null)
-  const initialized = useRef(false)
-  const listing = listingQuery.data
-  const template = templateQuery.data
-  useEffect(() => {
-    if (initialized.current || !listing || !template) return
-    initialized.current = true
-    setDescription(template.description || '')
-    setCategory(template.primary_category || '')
-    setPricing(listing.pricing_mode)
-    setPrice(listing.pricing_mode === 'paid' ? String(listing.price_amount_minor) : '')
-  }, [listing, template])
-
-  const mutation = useMutation({
-    mutationFn: async (status: TemplateListingStatus) => {
-      let templateChanged = false
-      if (status === 'published' && template) {
-        const metadata: TemplateWriteBody = {}
-        if (description.trim() !== (template.description || '')) metadata.description = description.trim()
-        if (category.trim() !== (template.primary_category || '')) metadata.primary_category = category.trim() || null
-        if (Object.keys(metadata).length) {
-          await updateLibraryTemplate(templateId, metadata)
-          templateChanged = true
-        }
-      }
-      const body = status === 'published'
-        ? { marketplace_status: status, pricing_mode: pricing, price_amount_minor: pricing === 'paid' ? Number(price) : 0 }
-        : { marketplace_status: status }
-      return { listing: await updateTemplateListing(templateId, body), templateChanged }
-    },
-    onSuccess: ({ listing: saved, templateChanged }) => {
-      queryClient.setQueryData(templateMarketQueryKeys.listing(templateId), saved)
-      void queryClient.invalidateQueries({ queryKey: templateMarketQueryKeys.all })
-      void queryClient.invalidateQueries({ queryKey: ['card-template'] })
-      if (templateChanged) onTemplateChanged?.()
-      if (saved.marketplace_status === 'published') {
-        toast.success(t('templates.publish.toast_published'), {
-          action: { label: t('templates.publish.view_on_market'), onClick: () => navigate(`/marketplace/templates/${encodeURIComponent(templateId)}`) },
-        })
-      } else {
-        toast.success(t('templates.publish.toast_unlisted'))
-      }
-      onDone()
-    },
-    onError: (error: Error) => setFormError(error.message),
-  })
+  const { listingQuery, templateQuery, listing, template, description, setDescription, category, setCategory, pricing, setPricing, price, setPrice, formError, mutation, submit } = useTemplateListingForm(templateId, onDone, onTemplateChanged)
 
   if (listingQuery.error || templateQuery.error) return <PageError error={listingQuery.error || templateQuery.error} />
   if (!listing || !template) {
@@ -207,15 +120,6 @@ function ListingForm({ templateId, onBack, onDone, onTemplateChanged }: {
     )
   }
 
-  const submit = () => {
-    setFormError(null)
-    if (!description.trim()) return setFormError(t('templates.publish.error_description'))
-    if (!category.trim()) return setFormError(t('templates.publish.error_category'))
-    if (pricing === 'paid' && (!Number.isInteger(Number(price)) || Number(price) < MIN_PRICE)) {
-      return setFormError(t('templates.publish.error_price', { min: MIN_PRICE.toLocaleString('vi-VN') }))
-    }
-    mutation.mutate('published')
-  }
 
   return (
     <form className="space-y-4" noValidate onSubmit={(event) => { event.preventDefault(); submit() }}>
@@ -229,45 +133,7 @@ function ListingForm({ templateId, onBack, onDone, onTemplateChanged }: {
         {backButton}
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="market-template-description" className="text-xs font-semibold">{t('templates.publish.description_label')} <span className="text-destructive">*</span></Label>
-        <Textarea id="market-template-description" value={description} maxLength={1000} rows={3} onChange={(event) => setDescription(event.target.value)} placeholder={t('templates.publish.description_placeholder')} disabled={mutation.isPending} />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="market-template-category" className="text-xs font-semibold">{t('templates.publish.category_label')} <span className="text-destructive">*</span></Label>
-        <Input id="market-template-category" list="market-template-categories" value={category} maxLength={120} onChange={(event) => setCategory(event.target.value)} placeholder={t('templates.publish.category_placeholder')} disabled={mutation.isPending} />
-        <datalist id="market-template-categories">{TEMPLATE_MARKET_CATEGORIES.map((name) => <option key={name} value={name} />)}</datalist>
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {TEMPLATE_MARKET_CATEGORIES.map((name) => (
-            <button key={name} type="button" onClick={() => setCategory(name)} disabled={mutation.isPending}
-              className={cn('rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors', category === name ? 'border-primary bg-primary/10 text-primary' : 'border-border/70 text-muted-foreground hover:bg-muted')}>
-              {name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <fieldset className="space-y-2" disabled={mutation.isPending}>
-        <legend className="text-xs font-semibold">{t('templates.publish.pricing_label')}</legend>
-        <div className="grid grid-cols-2 gap-2">
-          {(['free', 'paid'] as const).map((mode) => (
-            <label key={mode} className={cn('flex cursor-pointer flex-col gap-0.5 rounded-xl border p-3 text-sm transition-colors', pricing === mode ? 'border-primary bg-primary/5' : 'hover:bg-muted')}>
-              <span className="flex items-center gap-2 font-semibold">
-                <input type="radio" name="market-template-pricing" value={mode} checked={pricing === mode} onChange={() => setPricing(mode)} />
-                {mode === 'free' ? t('card.free', { defaultValue: 'Miễn phí' }) : t('templates.publish.paid')}
-              </span>
-              <span className="text-[11px] text-muted-foreground">{mode === 'free' ? t('templates.publish.free_hint') : t('templates.publish.paid_hint')}</span>
-            </label>
-          ))}
-        </div>
-        {pricing === 'paid' ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="market-template-price" className="text-xs font-semibold">{t('templates.publish.price_label')} <span className="text-destructive">*</span></Label>
-            <Input id="market-template-price" type="number" inputMode="numeric" min={MIN_PRICE} step={1000} value={price} onChange={(event) => setPrice(event.target.value)} placeholder="20000" />
-          </div>
-        ) : null}
-      </fieldset>
+      <TemplateListingFields description={description} category={category} pricing={pricing} price={price} disabled={mutation.isPending} setDescription={setDescription} setCategory={setCategory} setPricing={setPricing} setPrice={setPrice} />
 
       {listing.has_unpublished_changes ? (
         <p className="flex items-start gap-1.5 rounded-lg bg-muted/50 p-2.5 text-[11px] text-muted-foreground"><Info className="mt-0.5 size-3 shrink-0" />{t('templates.publish.release_note')}</p>

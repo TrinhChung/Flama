@@ -134,6 +134,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from models.template_version import TemplateVersion  # noqa: F401
     from models.template_publication import TemplatePublication  # noqa: F401
     from models.template_release import TemplateRelease  # noqa: F401
+    from models.note_type_release import NoteTypeRelease  # noqa: F401
     from models.template_subscription import TemplateSubscription  # noqa: F401
     from models.study_template_preset import StudyTemplatePreset  # noqa: F401
     from models.deck_release_template_pin import DeckReleaseTemplatePin  # noqa: F401

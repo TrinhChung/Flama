@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   Award,
@@ -15,11 +14,7 @@ import {
   Share2,
   Star,
 } from 'lucide-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from 'react-router-dom'
-import { toast } from 'sonner'
-import { useTranslation } from 'react-i18next'
-import { appApi } from '@/app/api'
+import { Link } from 'react-router-dom'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,236 +28,14 @@ import {
 import { CardPreviewPanel } from '@/entities/flashcard'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-import { SharedNoteTypeSidebar } from '../components/notetype-detail/SharedNoteTypeSidebar'
-import { SharedNoteTypeReviews } from '../components/notetype-detail/SharedNoteTypeReviews'
+import { SharedNoteTypeSidebar, SharedNoteTypeReviews } from '@/features/marketplace'
+import { useSharedNoteTypeDetail } from '../hooks/useSharedNoteTypeDetail'
+import { NoteTypeBundlePrice } from './NoteTypeBundlePrice'
+import { canonicalTemplateId, templateOccurrenceId } from '../model/types'
 
-type FieldDef = {
-  name: string
-  label?: string
-  type?: string
-}
-
-type TemplateItem = {
-  id: string
-  name: string
-  front_html?: string
-  back_html?: string
-  is_installed?: boolean
-  installed_template_id?: string | null
-}
-
-type ReviewItem = {
-  id?: string
-  username?: string
-  rating: number
-  comment?: string | null
-  updated_at?: string | null
-}
-
-type SharedNoteTypeDetail = {
-  id: string
-  name?: string
-  title?: string
-  description?: string | null
-  preview_text?: string | null
-  primary_category?: string | null
-  price_display?: string
-  pricing_mode?: string
-  rating_avg: number
-  rating_count: number
-  install_count: number
-  updated_at?: string
-  badges?: string[]
-  tags?: string[]
-  display_tags?: string[]
-  is_installed: boolean
-  installed_note_type_id?: string | null
-  is_owner: boolean
-  is_saved: boolean
-  can_rate: boolean
-  review_submission_count?: number
-  review_submissions_remaining?: number
-  my_review?: ReviewItem | null
-  author?: { id: number; username: string } | null
-  author_profile?: {
-    username?: string
-    published_count?: number
-  }
-  field_defs?: FieldDef[]
-  templates?: TemplateItem[]
-  recent_reviews?: ReviewItem[]
-  publish_status?: 'private' | 'published' | 'unlisted' | 'archived'
-}
-
-type PreviewResponse = {
-  front_html?: string
-  back_html?: string
-  front_renderer_payload?: unknown
-  back_renderer_payload?: unknown
-}
 
 export function SharedNoteTypeDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const queryClient = useQueryClient()
-  const { t, i18n } = useTranslation('marketplace')
-  const numberLocale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
-
-  const [previewSide, setPreviewSide] = useState<'front' | 'back'>('front')
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
-  const [isCopied, setIsCopied] = useState(false)
-
-  // Rating state
-  const [ratingScore, setRatingScore] = useState<number>(5)
-  const [hoverScore, setHoverScore] = useState<number | null>(null)
-  const [ratingComment, setRatingComment] = useState<string>('')
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null)
-
-  const noteTypeQuery = useQuery({
-    queryKey: ['shared-note-type-detail', id],
-    queryFn: () => appApi.get<SharedNoteTypeDetail>(`/api/shared/note-types/${id}`),
-    enabled: Boolean(id),
-  })
-
-  const noteType = noteTypeQuery.data
-  const templates = noteType?.templates || []
-  const firstTemplateId = noteType?.templates?.[0]?.id
-
-  useEffect(() => {
-    if (firstTemplateId && !selectedTemplateId) {
-      setSelectedTemplateId(firstTemplateId)
-    }
-  }, [firstTemplateId, selectedTemplateId])
-
-  // Template Preview Query
-  const previewQuery = useQuery({
-    queryKey: ['shared-note-type-preview', id, selectedTemplateId],
-    // The preview endpoint renders server-side and only accepts POST.
-    queryFn: () =>
-      appApi.mutate<PreviewResponse>(
-        `/api/shared/note-types/${id}/templates/${selectedTemplateId}/preview`,
-        'POST'
-      ),
-    enabled: Boolean(id && selectedTemplateId),
-  })
-
-  // Install Mutation
-  const installMutation = useMutation({
-    mutationFn: () => appApi.mutate(`/api/shared/note-types/${id}/install`, 'POST'),
-    onSuccess: (data: any) => {
-      if (data?.payment_required && data?.order?.active_attempt?.checkout_url) {
-        window.location.href = data.order.active_attempt.checkout_url
-        return
-      }
-      queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
-      queryClient.invalidateQueries({ queryKey: ['note-types'] })
-      toast.success(
-        t('detail.install_notetype_success', 'Cài đặt Note Type thành công! Mẫu đã được lưu vào thư viện của bạn.')
-      )
-    },
-    onError: (err: any) => {
-      toast.error(err?.message || t('common.error', 'Không thể cài đặt loại thẻ này.'))
-    },
-  })
-
-  // Install Individual Template Mutation
-  const [installingTemplateId, setInstallingTemplateId] = useState<string | null>(null)
-  const installTemplateMutation = useMutation({
-    mutationFn: (templateId: string) => {
-      setInstallingTemplateId(templateId)
-      return appApi.mutate<{
-        local_template_id: string
-        source_template_id: string
-        already_installed: boolean
-      }>(`/api/shared/note-types/${id}/templates/${templateId}/install`, 'POST')
-    },
-    onSuccess: () => {
-      setInstallingTemplateId(null)
-      queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
-      queryClient.invalidateQueries({ queryKey: ['card-templates'] })
-      queryClient.invalidateQueries({ queryKey: ['card-templates-library'] })
-      toast.success(
-        t('notetype_detail.toast_template_installed', {
-          defaultValue: 'Đã thêm mẫu giao diện vào thư viện của bạn!',
-        })
-      )
-    },
-    onError: (err: any) => {
-      setInstallingTemplateId(null)
-      toast.error(
-        err?.message ||
-          t('notetype_detail.error_install_template', {
-            defaultValue: 'Không thể thêm mẫu giao diện vào thư viện.',
-          })
-      )
-    },
-  })
-
-  // Save/Bookmark Mutation
-  const saveMutation = useMutation({
-    mutationFn: (currentlySaved: boolean) =>
-      appApi.mutate(
-        `/api/shared/note-types/${id}/save`,
-        currentlySaved ? 'DELETE' : 'POST'
-      ),
-    onSuccess: (_, currentlySaved) => {
-      queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
-      toast.success(
-        currentlySaved
-          ? t('notetype_detail.toast_unsaved', 'Đã bỏ lưu loại thẻ')
-          : t('notetype_detail.toast_saved', 'Đã lưu loại thẻ')
-      )
-    },
-    onError: (err: any) => {
-      toast.error(err?.message || t('common.error', 'Không thể cập nhật trạng thái lưu.'))
-    },
-  })
-
-  // Rate Mutation
-  const rateMutation = useMutation({
-    mutationFn: () =>
-      appApi.mutate(`/api/shared/note-types/${id}/rate`, 'POST', {
-        rating: ratingScore,
-        comment: ratingComment.trim() || undefined,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
-      setSubmitSuccess(
-        t('detail.reviews.success_toast', 'Đã gửi đánh giá thành công! Cảm ơn đóng góp của bạn.')
-      )
-      setSubmitError(null)
-      setRatingComment('')
-    },
-    onError: (err: any) => {
-      setSubmitError(err?.message || t('common.error', 'Không thể gửi đánh giá. Vui lòng thử lại.'))
-    },
-  })
-
-  // Publish Status Mutation for Creator
-  const publishStatusMutation = useMutation({
-    mutationFn: (newStatus: 'private' | 'published') =>
-      appApi.mutate(`/api/creator/note-types/${id}/publish-status`, 'PATCH', {
-        publish_status: newStatus,
-      }),
-    onSuccess: (_, newStatus) => {
-      queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
-      toast.success(
-        newStatus === 'private'
-          ? t('notetype_detail.toast_revoked', 'Đã thu hồi loại thẻ khỏi Marketplace.')
-          : t('notetype_detail.toast_republished', 'Đã xuất bản lại loại thẻ lên Marketplace.')
-      )
-    },
-    onError: (err: any) => {
-      toast.error(err?.message || t('common.error', 'Không thể cập nhật trạng thái xuất bản.'))
-    },
-  })
-
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href)
-    setIsCopied(true)
-    toast.success(t('notetype_detail.toast_copied', 'Đã sao chép liên kết!'))
-    setTimeout(() => setIsCopied(false), 2000)
-  }
+  const { id, t, numberLocale, previewSide, setPreviewSide, selectedApplicationId, setSelectedApplicationId, isCopied, ratingScore, setRatingScore, hoverScore, setHoverScore, ratingComment, setRatingComment, submitError, submitSuccess, noteTypeQuery, noteType, templates, previewQuery, installMutation, installingTemplateId, installTemplateMutation, saveMutation, rateMutation, publishStatusMutation, handleCopyLink } = useSharedNoteTypeDetail()
 
   if (noteTypeQuery.isPending) {
     return (
@@ -315,9 +88,9 @@ export function SharedNoteTypeDetailPage() {
         }
       />
 
-      <div className="grid gap-4 sm:gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* Main Left Content */}
-        <div className="space-y-4 sm:space-y-5">
+        <div className="min-w-0 space-y-4 sm:space-y-5">
           {/* Main Card */}
           <Card className="border-border/80 bg-card shadow-xs rounded-2xl">
             <CardHeader className="space-y-3 p-4 sm:p-6 pb-3">
@@ -488,7 +261,7 @@ export function SharedNoteTypeDetailPage() {
                 <Button
                   className="w-full h-11 font-bold text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
                   onClick={() => installMutation.mutate()}
-                  disabled={installMutation.isPending}
+                  disabled={installMutation.isPending || noteType.pricing_breakdown?.available === false}
                 >
                   {installMutation.isPending ? (
                     <>
@@ -506,14 +279,16 @@ export function SharedNoteTypeDetailPage() {
             </Card>
           </div>
 
+          {noteType.pricing_breakdown ? <NoteTypeBundlePrice pricing={noteType.pricing_breakdown} /> : null}
+
           {/* Live Preview Section */}
           <CardPreviewPanel
             cardId={`note-type-preview-${id}`}
             side={previewSide}
             onSideChange={setPreviewSide}
-            templates={templates.map((tmpl) => ({ id: tmpl.id, name: tmpl.name }))}
-            selectedTemplateId={selectedTemplateId || undefined}
-            onSelectTemplate={setSelectedTemplateId}
+            templates={templates.map((tmpl) => ({ id: templateOccurrenceId(tmpl), name: tmpl.name }))}
+            selectedTemplateId={selectedApplicationId || undefined}
+            onSelectTemplate={setSelectedApplicationId}
             frontPayload={previewQuery.data?.front_renderer_payload}
             backPayload={previewQuery.data?.back_renderer_payload}
             frontHtml={previewQuery.data?.front_html}
@@ -569,12 +344,12 @@ export function SharedNoteTypeDetailPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-5 pt-0">
-                <div className="grid gap-2.5 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   {templates.map((tmpl, idx) => (
                     <div
-                      key={tmpl.id}
+                      key={templateOccurrenceId(tmpl)}
                       className={`flex items-center justify-between p-3 sm:p-3.5 rounded-xl border transition-all ${
-                        tmpl.id === selectedTemplateId
+                        templateOccurrenceId(tmpl) === selectedApplicationId
                           ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-2xs'
                           : 'border-border/80 bg-muted/20 hover:bg-muted/40'
                       }`}
@@ -582,7 +357,7 @@ export function SharedNoteTypeDetailPage() {
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div
                           className={`flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                            tmpl.id === selectedTemplateId
+                            templateOccurrenceId(tmpl) === selectedApplicationId
                               ? 'bg-primary text-primary-foreground shadow-2xs'
                               : 'bg-primary/10 text-primary'
                           }`}
@@ -595,19 +370,25 @@ export function SharedNoteTypeDetailPage() {
                             <span className="text-[10px] text-muted-foreground font-mono">#{idx + 1}</span>
                           </div>
                           <p className="text-[11px] text-muted-foreground truncate">
-                            {tmpl.id === selectedTemplateId
+                            {t('card.author')}: {tmpl.author?.username || t('card.community_author')}
+                            {' · '}{tmpl.pricing_mode === 'paid' ? `${(tmpl.price_amount_minor ?? 0).toLocaleString(numberLocale)} đ` : t('card.free')}
+                          </p>
+                          {tmpl.already_entitled ? <p className="text-[10px] text-emerald-600 dark:text-emerald-400">{t('bundle.already_entitled')}</p> : null}
+                          {tmpl.source_template_id ? <Link className="text-[10px] font-semibold text-primary hover:underline" to={`/marketplace/templates/${encodeURIComponent(tmpl.source_template_id)}`}>{t('bundle.publish.view_original')}</Link> : null}
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {templateOccurrenceId(tmpl) === selectedApplicationId
                               ? t('notetype_detail.template_active_preview', { defaultValue: 'Đang xem trước' })
                               : t('notetype_detail.template_available', { defaultValue: 'Giao diện hiển thị' })}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                        {tmpl.id !== selectedTemplateId ? (
+                        {templateOccurrenceId(tmpl) !== selectedApplicationId ? (
                           <Button
                             variant="outline"
                             size="sm"
                             className="h-7 px-2.5 text-[11px] font-semibold text-primary hover:text-primary hover:bg-primary/10 rounded-lg shrink-0 cursor-pointer"
-                            onClick={() => setSelectedTemplateId(tmpl.id)}
+                            onClick={() => setSelectedApplicationId(templateOccurrenceId(tmpl))}
                           >
                             {t('notetype_detail.btn_select_preview', { defaultValue: 'Xem' })}
                           </Button>
@@ -616,7 +397,7 @@ export function SharedNoteTypeDetailPage() {
                             {t('notetype_detail.badge_previewing', { defaultValue: 'Đang xem' })}
                           </Badge>
                         )}
-                        {noteType?.is_owner ? (
+                        {noteType.is_owner && tmpl.is_owned_by_author ? (
                           <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-md text-muted-foreground border-border/80">
                             {t('notetype_detail.badge_owned_template', { defaultValue: 'Của bạn' })}
                           </Badge>
@@ -636,16 +417,16 @@ export function SharedNoteTypeDetailPage() {
                           <Button
                             variant="secondary"
                             size="sm"
-                            disabled={installTemplateMutation.isPending && installingTemplateId === tmpl.id}
+                            disabled={installTemplateMutation.isPending && installingTemplateId === canonicalTemplateId(tmpl)}
                             className="h-7 px-2.5 text-[11px] font-semibold rounded-lg shrink-0 cursor-pointer gap-1"
-                            onClick={() => installTemplateMutation.mutate(tmpl.id)}
+                            onClick={() => installTemplateMutation.mutate(canonicalTemplateId(tmpl))}
                           >
-                            {installTemplateMutation.isPending && installingTemplateId === tmpl.id ? (
+                            {installTemplateMutation.isPending && installingTemplateId === canonicalTemplateId(tmpl) ? (
                               <Loader2 className="size-3 animate-spin" />
                             ) : (
                               <Plus className="size-3" />
                             )}
-                            {t('notetype_detail.btn_add_template_to_library', { defaultValue: 'Thêm vào thư viện' })}
+                            {tmpl.pricing_mode === 'paid' && !tmpl.already_entitled ? t('bundle.buy_template') : t('notetype_detail.btn_add_template_to_library', { defaultValue: 'Thêm vào thư viện' })}
                           </Button>
                         )}
                       </div>
@@ -687,6 +468,7 @@ export function SharedNoteTypeDetailPage() {
           authorName={authorName}
           onInstall={() => installMutation.mutate()}
           isInstallPending={installMutation.isPending}
+          isInstallUnavailable={noteType.pricing_breakdown?.available === false}
           onSave={() => saveMutation.mutate(noteType.is_saved)}
           isSavePending={saveMutation.isPending}
           onCopyLink={handleCopyLink}

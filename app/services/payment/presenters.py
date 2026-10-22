@@ -41,7 +41,7 @@ WEBHOOK_STATUS_LABELS = {
 }
 
 PRODUCT_TYPE_LABELS = {
-    "note_type": "Template",
+    "note_type": "Note Type",
     "deck_marketplace_item": "Deck",
     "template": "Giao diện thẻ",
     "support_donation": "Ủng hộ",

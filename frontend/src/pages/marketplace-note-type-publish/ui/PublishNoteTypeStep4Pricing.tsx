@@ -48,6 +48,7 @@ export function PublishNoteTypeStep4Pricing({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
+      <p className="text-xs leading-relaxed text-muted-foreground">{t('bundle.publish.discount_hint')}</p>
       {/* Pricing Selector Cards */}
       <div className="space-y-2">
         <Label className="text-xs font-semibold">

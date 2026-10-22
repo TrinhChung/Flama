@@ -327,6 +327,15 @@
       "unknown": "Unknown"
     },
     "original_release": "Original",
+    "legacy_unpinned": {
+      "status": "Historical version unknown",
+      "title": "This older copy has no recorded original release",
+      "description": "The original release for this older copy is unknown. Upstream update controls are unavailable.",
+      "version_unknown": "Unknown historical version",
+      "preserved": "Your personal content is preserved. Automatic updates, updating and resetting are disabled because this copy has no recorded original release.",
+      "receive_separately": "Open the original listing to receive the current original as a separate template. This copy will stay unchanged.",
+      "view_original": "View original listing"
+    },
     "not_available": "N/A",
     "conflicts": {
       "badge": "Conflict",

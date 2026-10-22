@@ -17,21 +17,22 @@ SORTS = {"newest", "popular", "price_asc", "price_desc", "name"}
 
 def listed_conditions():
     # Received copies keep their provenance and can never be listed again.
+    from app.repositories.legacy_template_provenance_repository import legacy_received_condition
     return (
         TemplatePublication.marketplace_status == LISTED,
         TemplatePublication.current_release_id.isnot(None),
         Template.archived_at.is_(None),
         Template.origin == "authored",
         Template.source_template_id.is_(None),
+        ~legacy_received_condition(),
     )
 
 
 def active_entitlement(session, *, user_id, template_id):
+    from app.repositories.note_type_bundle_repository import active_entitlement_conditions
     statement = select(PaymentEntitlement.id).where(
-        PaymentEntitlement.user_id == int(user_id),
-        PaymentEntitlement.resource_type == PRODUCT_TYPE,
+        *active_entitlement_conditions(user_id=user_id),
         PaymentEntitlement.resource_ref_id == str(template_id),
-        PaymentEntitlement.status == "active",
     ).limit(1)
     return session.execute(statement).first() is not None
 
@@ -47,7 +48,8 @@ def marketplace_access(session, *, user_id, template_id):
     ).limit(1)
     if session.execute(listed_free).first():
         return True
-    return active_entitlement(session, user_id=user_id, template_id=template_id)
+    from app.repositories.note_type_bundle_repository import licensed_template_ids
+    return str(template_id) in licensed_template_ids(session, user_id=user_id, template_ids=[str(template_id)])
 
 
 def _install_counts():
@@ -139,11 +141,10 @@ def received(session, *, user_id, source_template_ids):
 def purchased(session, *, user_id, template_ids):
     if not template_ids:
         return set()
+    from app.repositories.note_type_bundle_repository import active_entitlement_conditions
     return set(session.execute(select(PaymentEntitlement.resource_ref_id).where(
-        PaymentEntitlement.user_id == int(user_id),
-        PaymentEntitlement.resource_type == PRODUCT_TYPE,
+        *active_entitlement_conditions(user_id=user_id),
         PaymentEntitlement.resource_ref_id.in_([str(value) for value in template_ids]),
-        PaymentEntitlement.status == "active",
     )).scalars())
 
 

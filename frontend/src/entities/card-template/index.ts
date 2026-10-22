@@ -78,3 +78,7 @@ export { isTypeCompatible, suggestBindings, validateBindings } from './lib/field
 export type { MappingField, MappingInput, MappingIssue } from './lib/fieldMapping'
 export { inputSchemaPreviewFields } from './lib/previewFields'
 export type { PreviewFieldDef } from './lib/previewFields'
+
+export { TemplateListingFields } from './ui/TemplateListingFields'
+export { TEMPLATE_MARKET_CATEGORIES, TEMPLATE_MIN_PRICE, templateListingValidationError } from './model/listing'
+export type { TemplateListingDraft } from './model/listing'

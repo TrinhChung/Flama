@@ -510,7 +510,11 @@ def _build_deck_available_filters(items: list[DeckMarketplaceItem]) -> dict[str,
 
 
 
-def _filter_note_types(items: list[NoteType], *, filters: dict[str, Any]) -> list[NoteType]:
+def _filter_note_types(items: list[NoteType], *, filters: dict[str, Any], user_id: int = 0) -> list[NoteType]:
+    amounts = {}
+    if filters.get("pricing_mode") in {"free", "paid"} or filters.get("min_price") is not None or filters.get("max_price") is not None:
+        from app.services.note_type_bundle_pricing_service import pricing_breakdown
+        amounts = {item.id: pricing_breakdown(db.session, note_type=item, user_id=user_id)["total_amount_minor"] for item in items}
     return [
         item
         for item in items
@@ -520,8 +524,8 @@ def _filter_note_types(items: list[NoteType], *, filters: dict[str, Any]) -> lis
             author_username=(item.owner.username if item.owner else ""),
             category=item.primary_category,
             tags=item.tags or [],
-            pricing_mode=str(item.pricing_mode or "free"),
-            price_amount_minor=int(item.price_amount_minor or 0),
+            pricing_mode=("paid" if amounts[item.id] else "free") if item.id in amounts else str(item.pricing_mode or "free"),
+            price_amount_minor=amounts.get(item.id, int(item.price_amount_minor or 0)),
             rating_avg=float(item.rating_avg or 0.0),
             install_count=int(item.install_count or 0),
             content_type="note_type",
@@ -556,14 +560,14 @@ def _filter_deck_items(items: list[DeckMarketplaceItem], *, filters: dict[str, A
 
 
 
-def _sort_note_types(items: list[NoteType], *, sort_key: str) -> list[NoteType]:
+def _sort_note_types(items: list[NoteType], *, sort_key: str, user_id: int = 0) -> list[NoteType]:
     token = str(sort_key or "popular").strip().lower()
     if token == "best_selling":
         return sorted(items, key=lambda item: (int(item.install_count or 0), int(item.active_usage_count or 0)), reverse=True)
-    if token == "price_low":
-        return sorted(items, key=lambda item: (int(item.price_amount_minor or 0), (item.updated_at or datetime.min)))
-    if token == "price_high":
-        return sorted(items, key=lambda item: (int(item.price_amount_minor or 0), (item.updated_at or datetime.min)), reverse=True)
+    if token in {"price_low", "price_high"}:
+        from app.services.note_type_bundle_pricing_service import pricing_breakdown
+        amounts = {item.id: pricing_breakdown(db.session, note_type=item, user_id=user_id)["total_amount_minor"] for item in items}
+        return sorted(items, key=lambda item: (amounts[item.id], item.updated_at or datetime.min), reverse=token == "price_high")
     return marketplace_query_service.sort_note_type_items(items, token)
 
 

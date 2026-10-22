@@ -11,7 +11,7 @@ import {
   TAXONOMY_DIFFICULTIES,
   getDefaultGoalsForSubject,
   getDefaultTopicsForSubject,
-} from '../../utils/publishTaxonomyConstants'
+} from '@/features/marketplace'
 
 interface PublishNoteTypeStep2TaxonomyProps {
   taxonomyDomain: string

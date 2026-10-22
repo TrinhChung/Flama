@@ -90,7 +90,6 @@ from app.services.share.helpers import (
     _audit,
     _increment_counter,
     _is_mysql_deadlock,
-    _note_type_template_publication_error,
     _set_note_type_install_market_activity,
     _utcnow,
     can_user_rate_note_type,
@@ -331,7 +330,7 @@ def get_note_type_publish_eligibility(
             "block_code": "marketplace_install",
             "block_reason": "Note Type được cài từ Marketplace không thể chia sẻ lại.",
         }
-    template_error = _note_type_template_publication_error(note_type.id)
+    template_error = _note_type_template_reference_error(note_type)
     if template_error:
         return {"is_selectable": False, "block_code": "marketplace_template", "block_reason": template_error}
     return {
@@ -342,7 +341,7 @@ def get_note_type_publish_eligibility(
 
 
 def validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
-    template_error = _note_type_template_publication_error(note_type.id)
+    template_error = _note_type_template_reference_error(note_type)
     if template_error:
         return template_error
     if not (note_type.name or "").strip():
@@ -370,6 +369,12 @@ def validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
     if taxonomy_error:
         return taxonomy_error
     return None
+
+
+def _note_type_template_reference_error(note_type):
+    from app.services.note_type_bundle_publication_service import reference_validation_error
+    return reference_validation_error(db.session, note_type_id=note_type.id,
+        actor_user_id=note_type.user_id)
 
 
 def apply_note_type_marketplace_payload(
@@ -472,8 +477,16 @@ def apply_note_type_marketplace_payload(
         note_type.publish_status = candidate_status
         if candidate_status in visible_statuses:
             db.session.flush()
-            from app.services.template_release_service import stage_note_type_publications
-            stage_note_type_publications(db.session, note_type_id=note_type.id, actor_user_id=note_type.user_id)
+            from app.services.note_type_release_service import stage_publication, NoteTypeReleaseError
+            from app.services.note_type_bundle_publication_service import stage_template_listings
+            from app.services.template_release_service import TemplateReleaseError
+            try:
+                stage_template_listings(db.session, note_type=note_type,
+                    actor_user_id=note_type.user_id, payload=payload)
+                stage_publication(db.session, note_type=note_type, actor_user_id=note_type.user_id)
+            except (NoteTypeReleaseError, TemplateReleaseError) as exc:
+                db.session.rollback()
+                return str(exc)
 
     if str(note_type.publish_status or "").strip().lower() in visible_statuses:
         return validate_note_type_publish_requirements(note_type)
@@ -499,25 +512,10 @@ def get_shared_note_type_for_view(
 
 
 def install_shared_note_type(source_note_type: NoteType, user_id: int) -> tuple[NoteType | None, int | None]:
-    installed_copy = clone_note_type_for_user(source_note_type, user_id, copy_legacy_templates=False)
-    now = _utcnow()
-    purchase_amount_minor = int(source_note_type.price_amount_minor or 0) if source_note_type.pricing_mode == "paid" else 0
-    install_row = NoteTypeInstall(
-        source_note_type_id=source_note_type.id,
-        installed_note_type_id=installed_copy.id,
-        user_id=user_id,
-        purchase_amount_minor=purchase_amount_minor,
-        installed_at=now,
-        purchased_at=now if source_note_type.pricing_mode == "paid" else None,
-        market_active=False,
-        market_active_evaluated_at=now,
-        market_active_policy_version=MARKET_ACTIVITY_POLICY_VERSION,
-    )
-    db.session.add(install_row)
-    db.session.flush()
-    from app.services.template_release_service import stage_note_type_template_subscriptions
-    stage_note_type_template_subscriptions(db.session, note_type_install_id=install_row.id, user_id=user_id)
-    _increment_counter(NoteType, source_note_type.id, NoteType.install_count, 1)
+    from app.services.note_type_release_service import stage_receipt
+    install_row, created = stage_receipt(db.session, source_note_type=source_note_type, user_id=user_id)
+    installed_copy = db.session.get(NoteType, install_row.installed_note_type_id)
+    purchase_amount_minor = int(install_row.purchase_amount_minor or 0)
     _audit(
         user_id,
         "market.note_type.install",
@@ -526,6 +524,8 @@ def install_shared_note_type(source_note_type: NoteType, user_id: int) -> tuple[
             "installed_note_type_id": installed_copy.id,
             "price_amount_minor": purchase_amount_minor,
             "price_cents": purchase_amount_minor,
+            "restored": not created,
+            "applied_release_id": install_row.applied_release_id,
         },
     )
     db.session.commit()

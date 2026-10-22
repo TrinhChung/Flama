@@ -27,15 +27,25 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
         source_note_type = db.session.get(NoteType, order_item.product_ref_id)
         if source_note_type is None:
             raise PaymentServiceError("FIELD_NOT_FOUND", "Template da thanh toan khong con ton tai de cap quyen.", status=404)
-        install_row = flashcards_share_service.ensure_note_type_install_for_user(
-            source_note_type=source_note_type,
-            user_id=order.user_id,
-            installed_at=now,
-        )
+        from app.services.note_type_release_service import stage_receipt, NoteTypeReleaseError
+        try:
+            snapshot = getattr(order_item, "product_snapshot_json", None) or {}
+            if not snapshot.get("note_type_release_id"):
+                raise PaymentServiceError("PURCHASED_NOTE_TYPE_RELEASE_UNAVAILABLE",
+                    "This older purchase has no recorded Note Type release. Contact support to restore the purchased version; no new payment is required.",
+                    status=409)
+            install_row, _created = stage_receipt(db.session, source_note_type=source_note_type,
+                user_id=order.user_id, installed_at=now, purchased_at=now,
+                purchase_amount_minor=int(order_item.line_total_amount_minor or order_item.unit_amount_minor or 0),
+                release_id=snapshot.get("note_type_release_id"), access_granted=True)
+        except NoteTypeReleaseError as exc:
+            raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
         return {
             "source_note_type_id": source_note_type.id,
             "note_type_install_id": install_row.id,
             "installed_note_type_id": install_row.installed_note_type_id,
+            "applied_release_id": install_row.applied_release_id,
+            "legacy_installation": not bool(install_row.applied_release_id),
         }
 
     if order_item.product_type == "deck_marketplace_item":
@@ -83,7 +93,9 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
         from app.services import template_marketplace_service
 
         try:
-            return template_marketplace_service.fulfill_purchase(user_id=order.user_id, template_id=order_item.product_ref_id)
+            snapshot = order_item.product_snapshot_json or {}
+            return template_marketplace_service.fulfill_purchase(user_id=order.user_id,
+                template_id=order_item.product_ref_id, release_id=snapshot.get("release_id"))
         except template_marketplace_service.TemplateCheckoutError as exc:
             raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
 
@@ -91,8 +103,13 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
 
 
 def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: PaymentAttempt, *, now: datetime) -> None:
+    from app.services.payment.template_quotes import require_unlicensed_template_charges
+    require_unlicensed_template_charges(order)
     existing_by_item_id = {row.payment_order_item_id: row for row in order.entitlements}
-    for order_item in order.items:
+    # Template licenses must be active before a bundle receipt checks its
+    # foreign dependencies. Keep the persisted primary item first for the UI.
+    items = sorted(order.items, key=lambda item: item.product_type == "note_type")
+    for order_item in items:
         if order.user_id is None:
             if order_item.product_type == support_donation_service.DONATION_PRODUCT_TYPE:
                 continue
@@ -133,7 +150,9 @@ def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: Payme
         )
         entitlement.status = "active"
         entitlement.granted_at = now
-        entitlement.effective_from = now
+        # MySQL DATETIME without fractional precision rounds microseconds;
+        # avoid storing an immediate grant a fraction of a second in the future.
+        entitlement.effective_from = now.replace(microsecond=0)
 
         # Credit creator/author wallet for marketplace sales
         wallet_service.credit_creator_for_deck_sale(

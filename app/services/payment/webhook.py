@@ -125,7 +125,8 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
         db.session.commit()
         return {"status": "manual_review", "order": serialize_order(order)}, 202
 
-    if order.status in {"canceled", "failed", "refunded"}:
+    invalidated_quote_paid = bool(normalized_payload.get("success") and attempt.failure_code == "quote_replaced")
+    if order.status in {"canceled", "failed", "refunded"} and not invalidated_quote_paid:
         event.processing_status = "ignored"
         event.error_message = f"Đơn hàng đã đóng trước đó với trạng thái '{order.status}'."
         event.processed_at = now
@@ -181,15 +182,45 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
         provider_metadata["payment_reference_confirmed"] = normalized_payload["payment_reference"]
     attempt.provider_metadata_json = provider_metadata
 
+    if invalidated_quote_paid:
+        from app.services.payment.template_quotes import mark_duplicate_payment_for_review
+        error = PaymentServiceError("PAYMENT_QUOTE_INVALIDATED",
+            "PayOS confirmed a previously invalidated template quote. The payment needs review; no rights or creator revenue were granted.",
+            status=409, extra={"template_ids": [item.product_ref_id for item in order.items
+                if item.product_type == "template" and item.line_total_amount_minor > 0]})
+        mark_duplicate_payment_for_review(order, attempt, error, now=now, source="invalidated_quote_webhook")
+        _mark_manual_review(order=order, attempt=attempt, event=event, reason=error.message, now=now)
+        db.session.commit()
+        return {"status": "manual_review", "order": serialize_order(order)}, 202
+
     order.status = "paid"
     order.paid_at = order.paid_at or now
     order.closed_at = now
-    _ensure_entitlements_for_confirmed_order(order, attempt, now=now)
+    try:
+        _ensure_entitlements_for_confirmed_order(order, attempt, now=now)
+    except PaymentServiceError as exc:
+        from app.services.payment.template_quotes import DUPLICATE_TEMPLATE_PAYMENT, mark_duplicate_payment_for_review
+        if exc.code != DUPLICATE_TEMPLATE_PAYMENT:
+            raise
+        mark_duplicate_payment_for_review(order, attempt, exc, now=now, source="verified_webhook")
+        _mark_manual_review(order=order, attempt=attempt, event=event, reason=exc.message, now=now)
+        db.session.commit()
+        return {"status": "manual_review", "order": serialize_order(order)}, 202
 
     event.processing_status = "processed"
     event.error_message = None
     event.processed_at = now
     db.session.commit()
+    # A newly granted template also invalidates quotes for other bundles. A
+    # provider outage must not undo the successfully recorded payment; their
+    # own webhook preflight will still fence duplicate license/revenue grants.
+    from app.services.payment.checkout import reconcile_template_quotes_after_grant
+    cleanup = reconcile_template_quotes_after_grant(user_id=order.user_id) if order.user_id else {}
+    if cleanup:
+        metadata = dict(attempt.provider_metadata_json or {})
+        metadata.update(cleanup)
+        attempt.provider_metadata_json = metadata
+        db.session.commit()
     return {"status": "processed", "order": serialize_order(order)}, 200
 
 

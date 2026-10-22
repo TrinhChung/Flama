@@ -11,10 +11,12 @@ from sqlalchemy import and_, exists, func, insert, or_, select, update
 from sqlalchemy.orm.attributes import set_committed_value
 
 from models.deck_install import DeckInstall
+from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
 from models.deck_release_template_pin import DeckReleaseTemplatePin
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
+from models.payment_entitlement import PaymentEntitlement
 from models.study_application import StudyApplication
 from models.template import Template
 from models.template_publication import TemplatePublication
@@ -95,25 +97,35 @@ def subscription(session, *, user_id, source_template_id=None, local_template_id
 
 
 def source_access(session, *, user_id, source_template_id):
-    """A received/purchased deck or NoteType grants initial template receipt."""
+    """Only a license, free original listing or valid deck grants receipt.
+
+    A visible free NoteType may reference paid third-party definitions and is
+    never itself proof of a template license. Bundle receipt issues canonical
+    subscriptions/entitlements; legacy copy evidence is resolved centrally.
+    """
     app = StudyApplication.__table__
     template_row = template(session, source_template_id)
     if template_row is None:
         return False
+    from app.repositories.note_type_bundle_repository import licensed_template_ids
+    if source_template_id in licensed_template_ids(session, user_id=user_id,
+            template_ids=[source_template_id], current_read=True):
+        return True
+    now = datetime.utcnow()
+    rights = session.execute(select(PaymentEntitlement.status, PaymentEntitlement.effective_from,
+        PaymentEntitlement.expires_at).where(PaymentEntitlement.user_id == user_id,
+            PaymentEntitlement.resource_type == "template",
+            PaymentEntitlement.resource_ref_id == source_template_id).with_for_update()).all()
+    negative_right = any(status in {"revoked", "refunded", "expired"} or
+        (status == "active" and ((effective is not None and effective > now)
+            or (expires is not None and expires <= now))) for status, effective, expires in rights)
     note_types = select(app.c.note_type_id).where(app.c.template_id == source_template_id)
-    for model, column in ((DeckInstall, DeckInstall.source_note_type_id), (NoteTypeInstall, NoteTypeInstall.source_note_type_id)):
-        statement = select(model.id).where(
-            model.user_id == user_id,
-            column.in_(note_types),
-        ).limit(1)
-        if session.execute(statement).first():
-            return True
-    free_published = select(NoteType.id).where(
-        NoteType.id.in_(note_types),
-        NoteType.publish_status.in_(["published", "unlisted"]),
-        NoteType.pricing_mode == "free",
+    installed_deck = select(DeckInstall.id).join(DeckMarketplaceItem,
+        DeckMarketplaceItem.id == DeckInstall.deck_item_id).where(
+        DeckInstall.user_id == user_id, DeckInstall.source_note_type_id.in_(note_types),
+        DeckMarketplaceItem.owner_user_id == template_row["owner_user_id"],
     ).limit(1)
-    if session.execute(free_published).first():
+    if not negative_right and template_row.get("origin") == "authored" and not template_row.get("source_template_id") and session.execute(installed_deck).first():
         return True
     from app.repositories import template_marketplace_repository
     return template_marketplace_repository.marketplace_access(session, user_id=user_id, template_id=source_template_id)

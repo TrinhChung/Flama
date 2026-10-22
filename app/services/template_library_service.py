@@ -63,6 +63,12 @@ def serialize_template(template, *, include_source=True):
     result = {"id": template.id, "owner_user_id": template.owner_user_id, "name": template.name, "description": template.description or "", "primary_category": template.primary_category, "origin": template.origin, "source_template_id": template.source_template_id, "source_version_id": template.source_version_id, "current_version_id": template.current_version_id, "input_schema": effective_input_schema(template, ()), "archived_at": _iso(template.archived_at), "created_at": _iso(template.created_at), "updated_at": _iso(template.updated_at)}
     if include_source:
         result.update(front_html=template.front_html, back_html=template.back_html, shared_css=template.shared_css)
+    from app.services.legacy_template_provenance_service import legacy_reference
+    legacy = legacy_reference(db.session, template.id)
+    if legacy:
+        result.update(origin="market_copy", source_template_id=legacy.get("source_template_id"),
+            source_version_id=None, legacy_unpinned=True,
+            source_owner_user_id=legacy.get("source_owner_user_id"))
     return result
 
 
@@ -176,7 +182,9 @@ def update_template(*, user_id, template_id, payload):
 def duplicate_template(*, user_id, template_id, payload):
     body(payload, {"name"})
     source = _owned(user_id, template_id)
-    if source.origin == "market_copy" or source.source_template_id:
+    from app.services.legacy_template_provenance_service import is_received_template
+    if is_received_template(db.session, {"id": source.id, "origin": source.origin,
+            "source_template_id": source.source_template_id}):
         raise TemplateLibraryError("MARKET_TEMPLATE_REPUBLISH_FORBIDDEN", "Received marketplace templates cannot be duplicated into authored definitions.", status=403)
     data = {key: getattr(source, key) for key in CONTENT_KEYS | {"description", "primary_category"}}
     data["description"] = source.description or ""

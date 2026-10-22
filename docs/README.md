@@ -6,6 +6,9 @@ Welcome to the central documentation portal for **Flama** (Nihongo Flashcard Lea
 
 ## 🏛️ Master Architecture & Codebase Reality Audit
 
+- [Marketplace bundle completeness review](architecture/marketplace-bundle-completeness-review-2026-10-21.md): five findings fixed and verified locally, with test evidence and production limits.
+- [Marketplace local rollout rehearsal](runbooks/MARKETPLACE_BUNDLE_LOCAL_ROLLOUT_20261021.md): reviewed publication plans, local results, verification and rollback.
+
 | Master Report | Description |
 |---|---|
 | [**`DOCUMENTATION_AUDIT_REPORT.md`**](DOCUMENTATION_AUDIT_REPORT.md) | **Authoritative Codebase Reality & Documentation Audit Report**: Exhaustive analysis of legacy documentation inaccuracies, underspecified areas, factual discrepancies catalog across Frontend/Backend/Ops/Logs, technical debt matrix, and documentation governance. |

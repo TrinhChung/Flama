@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { PublishNoteTypeSelector } from '../PublishNoteTypeSelector'
+import { PublishNoteTypeSelector } from '@/features/marketplace'
 
 type SimpleNoteType = {
   id: string

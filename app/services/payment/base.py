@@ -53,7 +53,7 @@ def _clean_text(value: Any) -> str:
 
 def _product_type_label(product_type: str) -> str:
     return {
-        "note_type": "template",
+        "note_type": "Note Type",
         "deck_marketplace_item": "deck",
         "template": "giao diện thẻ",
         support_donation_service.DONATION_PRODUCT_TYPE: "ủng hộ",

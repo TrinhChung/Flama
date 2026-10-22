@@ -88,6 +88,16 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
                 shared_css="body { font-family: sans-serif; }",
                 position=0,
             )
+            # A marketplace listing receives an explicit complete publication;
+            # setting visibility alone intentionally no longer invents history.
+            template.description = "Vocabulary card presentation"
+            template.primary_category = "Từ vựng"
+            db.session.flush()
+            from app.services.template_marketplace_service import stage_listing
+            stage_listing(db.session, user_id=author.id, template_id=template.id,
+                payload={"marketplace_status": "published", "pricing_mode": "free", "price_amount_minor": 0})
+            from app.services.note_type_release_service import stage_publication
+            stage_publication(db.session, note_type=note_type, actor_user_id=author.id)
             db.session.commit()
 
             self.note_type_id = note_type.id
@@ -280,6 +290,7 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
             f"/api/marketplace/note-types/{self.note_type_id}/publish",
             json={
                 "publish_status": "unlisted",
+                "version": "2.0.0",
                 "description": "Custom vocab note type",
                 "domain": "japanese",
                 "subject": "japanese",
@@ -297,6 +308,7 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
             f"/api/marketplace/note-types/{self.note_type_id}/publish",
             json={
                 "publish_status": "published",
+                "version": "2.0.0",
                 "description": "Professional coding template",
                 "primary_category": "Custom Technology",
                 "domain": "professional_skills",

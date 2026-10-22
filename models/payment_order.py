@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import Index
+from sqlalchemy import Index, case
 
 from models import db
 from models.model_uuid import uuid_str
+from models.payment_order_item import PaymentOrderItem
 
 
 class PaymentOrder(db.Model):
@@ -59,7 +60,10 @@ class PaymentOrder(db.Model):
         "PaymentOrderItem",
         back_populates="order",
         cascade="all, delete-orphan",
-        order_by="PaymentOrderItem.created_at",
+        # MySQL DATETIME timestamps may tie within a second. The bundle must
+        # remain the primary item after a reload, including zero-price bundles.
+        order_by=(case((PaymentOrderItem.product_type == "note_type", 0), else_=1),
+            PaymentOrderItem.created_at, PaymentOrderItem.id),
     )
     attempts = db.relationship(
         "PaymentAttempt",

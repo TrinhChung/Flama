@@ -297,6 +297,8 @@ def admin_update_order_status(*, order_id: str, new_status: str, note: str = "")
     order = payment_repository.get_order_by_id(order_id)
     if order is None:
         raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng cần cập nhật.", status=404)
+    payment_repository.lock_buyer_for_payment(order.user_id)
+    order = payment_repository.get_order_by_id(order_id)
         
     valid_statuses = {"paid", "pending_payment", "under_review", "canceled", "failed", "refunded"}
     if new_status not in valid_statuses:

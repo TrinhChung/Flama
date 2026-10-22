@@ -81,8 +81,9 @@ def _owned(session, *, user_id, template_id, lock=False):
     return row
 
 
-def _authored(row, *, allow_archived=False):
-    if row.get("origin") == "market_copy" or row.get("source_template_id"):
+def _authored(row, *, allow_archived=False, session=None):
+    from app.services.legacy_template_provenance_service import is_received_template
+    if is_received_template(session if session is not None else db.session, row):
         raise TemplateReleaseError("MARKET_TEMPLATE_REPUBLISH_FORBIDDEN", "Received marketplace templates cannot be republished.", status=403)
     if row.get("archived_at") is not None and not allow_archived:
         raise TemplateReleaseError("TEMPLATE_ARCHIVED", "Archived templates cannot be published.", status=409)
@@ -158,7 +159,7 @@ class _TemplatePublishAdapter:
 
 
 def _publish_version(session, row, version, *, actor_user_id, request, allow_archived=False):
-    _authored(row, allow_archived=allow_archived)
+    _authored(row, allow_archived=allow_archived, session=session)
     adapter = _TemplatePublishAdapter(session, row, version, actor_user_id)
     return release_core.publish(adapter, request)
 
@@ -197,6 +198,12 @@ def get_release(*, user_id, template_id, release_id):
 def _read_release_source(*, user_id, template_id):
     """A recipient reads immutable upstream releases via their owned copy ID."""
     local = _owned(db.session, user_id=user_id, template_id=template_id)
+    from app.services.legacy_template_provenance_service import legacy_reference
+    legacy = legacy_reference(db.session, template_id)
+    if legacy:
+        if not legacy.get("source_template_id"):
+            raise TemplateReleaseError("TEMPLATE_LEGACY_SOURCE_UNKNOWN", "The original legacy template cannot be identified safely.", status=409)
+        return legacy["source_template_id"]
     if local.get("origin") != "market_copy":
         return template_id
     subscription, _ = _subscription(db.session, user_id=user_id, template_id=template_id)
@@ -219,7 +226,7 @@ def publish_release(*, user_id, template_id, payload, idempotency_key):
 
     def operation():
         row = _owned(db.session, user_id=user_id, template_id=template_id, lock=True)
-        _authored(row)
+        _authored(row, session=db.session)
         version = _snapshot(db.session, row, actor_user_id=user_id)
         request = release_core.PublishRequest(label.strip(), idempotency_key.strip(), payload["expected_current_release_id"], payload["expected_current_version_id"], note.strip() if note else None)
         release, replayed = _publish_version(db.session, row, version, actor_user_id=user_id, request=request)
@@ -234,7 +241,7 @@ def update_publication_settings(*, user_id, template_id, payload):
         raise TemplateReleaseError("VALIDATION_ERROR", "auto_publish_enabled must be boolean.", field="auto_publish_enabled")
     def operation():
         row = _owned(db.session, user_id=user_id, template_id=template_id, lock=True)
-        _authored(row)
+        _authored(row, session=db.session)
         repository.ensure_publication(db.session, row["id"])
         repository.update_row(db.session, TemplatePublication, [TemplatePublication.template_id == row["id"]], {"auto_publish_enabled": enabled, "updated_at": _now()})
         if enabled:
@@ -255,7 +262,10 @@ def _on_version_appended(session, template_id, version_id, actor_user_id=None, c
     publication = repository.publication(session, template_id)
     if row is None or row.get("archived_at") is not None or not publication or not publication["auto_publish_enabled"]:
         return None
-    _authored(row)
+    from app.services.legacy_template_provenance_service import is_received_template
+    if is_received_template(session, row):
+        return None
+    _authored(row, session=session)
     version = repository.version(session, version_id, template_id)
     if version is None:
         raise TemplateReleaseError("TEMPLATE_VERSION_NOT_FOUND", "Template version not found.", status=409)
@@ -274,6 +284,11 @@ def _on_version_appended(session, template_id, version_id, actor_user_id=None, c
 def _subscription(session, *, user_id, template_id, lock=False):
     local = _owned(session, user_id=user_id, template_id=template_id, lock=lock)
     subscription = repository.subscription(session, user_id=user_id, local_template_id=template_id, lock=lock)
+    if subscription is None:
+        from app.services.legacy_template_provenance_service import legacy_reference
+        if legacy_reference(session, template_id):
+            raise TemplateReleaseError("TEMPLATE_LEGACY_RELEASE_UNKNOWN",
+                "This legacy copy has no known received release. Its content is preserved; receive the original separately to manage future updates.", status=409)
     if subscription is None or local.get("origin") != "market_copy":
         raise TemplateReleaseError("TEMPLATE_SUBSCRIPTION_NOT_FOUND", "Received template not found.", status=404)
     return subscription, local
@@ -284,13 +299,15 @@ def ensure_subscription(session, *, user_id, source_template_id, release_id=None
     # Serialize first receipt across multiple deck installs for the same user.
     if repository.lock_user(session, int(user_id)) is None:
         raise TemplateReleaseError("TEMPLATE_NOT_FOUND", "User not found.", status=404)
-    existing = repository.subscription(session, user_id=user_id, source_template_id=source_template_id)
+    # A current read is required after waiting for the user lock: a previous
+    # request SELECT may already have established a REPEATABLE READ snapshot.
+    existing = repository.subscription(session, user_id=user_id, source_template_id=source_template_id, lock=True)
     if existing:
         return existing  # another install must never downgrade or overwrite this copy
     source = repository.template(session, source_template_id)
     if source is None or repository.template_owner(session, source) == user_id or not (access_granted or repository.source_access(session, user_id=user_id, source_template_id=source_template_id)):
         raise TemplateReleaseError("TEMPLATE_ACCESS_DENIED", "An installed deck or NoteType is required to receive this template.", status=403)
-    _authored(source, allow_archived=True)
+    _authored(source, allow_archived=True, session=session)
     publication = repository.publication(session, source_template_id)
     target = repository.release(session, release_id or (publication or {}).get("current_release_id"), source_template_id)
     if target is None:
@@ -329,6 +346,12 @@ def _subscription_dto(session, subscription, local):
 
 
 def get_subscription(*, user_id, template_id):
+    from app.services.legacy_template_provenance_service import legacy_subscription
+    legacy = legacy_subscription(db.session, user_id=user_id, template_id=template_id)
+    if legacy is not None:
+        legacy["current_release"] = _serialize_release(legacy["current_release"])
+        legacy["template"] = _serialize_release(legacy["template"])
+        return legacy
     subscription, local = _subscription(db.session, user_id=user_id, template_id=template_id)
     return _subscription_dto(db.session, subscription, local)
 
@@ -468,6 +491,7 @@ def _process_auto_updates(session, source_template_id, release_id):
             _apply(session, subscription, local, {"preparation_id": pending["id"]})
 
 
+
 def update_subscription_settings(*, user_id, template_id, payload):
     _body(payload, {"auto_update_enabled"})
     enabled = payload.get("auto_update_enabled")
@@ -498,7 +522,7 @@ def capture_deck_release_template_pins(session, release, *, actor_user_id=None):
         }
     for template_id, apps in sorted(grouped.items()):
         row = repository.template(session, template_id, lock=True)
-        _authored(row, allow_archived=True)
+        _authored(row, allow_archived=True, session=session)
         version = _snapshot(session, row, actor_user_id=actor_user_id)
         template_release = repository.one(session, TemplateRelease, TemplateRelease.template_id == template_id, TemplateRelease.version_id == version["id"])
         if template_release is None:
@@ -549,11 +573,19 @@ def note_type_publication_error(session, note_type_id):
 
 
 def stage_note_type_publications(session, *, note_type_id, actor_user_id, initialize_only=False):
-    """Publish on an author action; initialize older published NoteTypes once."""
+    """Pin original releases; only authored unlisted definitions may be staged.
+
+    This low-level helper never creates a marketplace listing. The NoteType
+    publish API stages those explicitly before assembling its release.
+    """
+    from app.services.note_type_bundle_publication_service import references
     releases = {}
-    for row in repository.active_templates(session, note_type_id):
-        row = repository.template(session, row["id"], lock=True)
-        _authored(row, allow_archived=True)
+    for item in references(session, note_type_id=note_type_id, actor_user_id=actor_user_id, lock=True):
+        row = item["source"]
+        if not item["requires_publication"]:
+            releases[item["attached"]["id"]] = item["release"]
+            continue
+        _authored(row, allow_archived=True, session=session)
         publication = repository.publication(session, row["id"])
         head = repository.release(session, publication["current_release_id"], row["id"]) if publication and publication["current_release_id"] else None
         if not initialize_only or head is None:
@@ -569,18 +601,21 @@ def stage_note_type_publications(session, *, note_type_id, actor_user_id, initia
                     "Published with shared NoteType.",
                 )
                 head, _ = _publish_version(session, row, version, actor_user_id=actor_user_id, request=request, allow_archived=True)
-        releases[row["id"]] = head
+        releases[item["attached"]["id"]] = head
     return releases
 
 
 def stage_marketplace_release(session, row, *, actor_user_id):
     """Listing publishes the current content so marketplace buyers get what is shown."""
-    _authored(row)
+    _authored(row, session=session)
     publication = repository.publication(session, row["id"])
     head = repository.release(session, publication["current_release_id"], row["id"]) if publication and publication["current_release_id"] else None
     version = _snapshot(session, row, actor_user_id=actor_user_id)
     existing = repository.one(session, TemplateRelease, TemplateRelease.template_id == row["id"], TemplateRelease.version_id == version["id"])
     if existing:
+        repository.ensure_publication(session, row["id"])
+        repository.update_row(session, TemplatePublication,
+            [TemplatePublication.template_id == row["id"]], {"current_release_id": existing["id"]})
         return existing
     publication = repository.ensure_publication(session, row["id"])
     request = release_core.PublishRequest(
@@ -664,6 +699,8 @@ def _attach_received_template(session, subscription, source_app, *, user_id, bas
     nt_install = repository.one(session, NoteTypeInstall, NoteTypeInstall.user_id == user_id, NoteTypeInstall.source_note_type_id == source_nt)
     if not nt_install or not nt_install["installed_note_type_id"]:
         return
+    if nt_install.get("applied_release_id"):
+        return  # A separately received Note Type owns its frozen applications.
     local_nt = nt_install["installed_note_type_id"]
     field_map = _ensure_local_field_map(session, source_nt=source_nt, local_nt=local_nt)
     bindings = _mapped_bindings(source_app, field_map)
@@ -727,6 +764,8 @@ def _retire_unpinned_received_applications(session, *, install, user_id, active_
     nt_install = repository.one(session, NoteTypeInstall, NoteTypeInstall.user_id == user_id, NoteTypeInstall.source_note_type_id == source_nt)
     if not nt_install or not nt_install.get("installed_note_type_id"):
         return
+    if nt_install.get("applied_release_id"):
+        return  # A separately received Note Type owns its frozen applications.
     local_nt = nt_install["installed_note_type_id"]
     prior_source_ids = set(base_source_ids)
     if install.get("deck_item_id"):
