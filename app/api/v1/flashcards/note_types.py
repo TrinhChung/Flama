@@ -16,10 +16,12 @@ note_types_bp = Blueprint("api_v1_note_types", __name__)
 @login_required
 def list_note_types():
     compact = request.args.get("compact") in {"1", "true"}
+    summary = request.args.get("summary") in {"1", "true"}
     return jsonify(
         flashcard_content_service.list_note_types(
             user_id=current_user.id,
             compact=compact,
+            summary=summary,
         )
     )
 

@@ -443,6 +443,8 @@ def register_audit_cli_commands(app: Flask) -> None:
 
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
+    from app.services.template_sync_cli import register_template_sync_commands
+    register_template_sync_commands(app)
     register_phase9_audit_commands(app)
     register_review_analytics_commands(app, allow_writes=True)
     register_deck_count_commands(app, allow_writes=True)

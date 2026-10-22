@@ -1,14 +1,15 @@
 """Add complete NoteType publications without inventing historical snapshots.
 
 Revision ID: 20261020_000070
-Revises: 20261019_000069
+Revises: 20261021_000072
 """
 
 from alembic import op
 import sqlalchemy as sa
 
 revision = "20261020_000070"
-down_revision = "20261019_000069"
+# The schema-drift repair (feat/native-array-field-split) landed first.
+down_revision = "20261021_000072"
 branch_labels = None
 depends_on = None
 

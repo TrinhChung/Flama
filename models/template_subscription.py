@@ -23,6 +23,7 @@ class TemplateSubscription(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
+        db.Index("ix_template_subscriptions_source_cursor", "source_template_id", "auto_update_enabled", "id"),
         db.UniqueConstraint("user_id", "source_template_id", name="uq_template_subscriptions_user_source"),
         db.UniqueConstraint("local_template_id", name="uq_template_subscriptions_local_template"),
     )

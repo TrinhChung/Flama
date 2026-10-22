@@ -1,0 +1,236 @@
+{
+  "schema_version": "flama-field-array-split.v1",
+  "label": "flama-vocab-20261021",
+  "description": "Flama Standard Vocabulary (and its empty clone note type): meaning/usage/example items split on <br>, newlines and the '$' the bound templates already render as a line break. Positions without visible text are dropped. A one-item side with inline senses 1..n is split to match its n-item pair.",
+  "fields": [
+    {
+      "id": "d5315be8-c639-4b97-a0b6-d497afb0cd5a",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "name": "meaning_jp",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "c7102da8-ba8e-4260-a061-2b95da4de579",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "name": "meaning_vi",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "ee54985b-62ac-47ad-b4b4-95d7b3d509c9",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "name": "usage_jp",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "b694faab-5492-40ee-a85a-e2e3684731e1",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "name": "usage_vi",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "70b7ab9e-59b6-457e-9e8c-0c4d01eb63c2",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "name": "example_jp",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "ee4cc949-2011-42a3-99b3-9f3cce36b1c5",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "name": "example_vi",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "886d5f51-6435-4086-817a-517b6beef988",
+      "note_type_id": "da1b42a9-7101-456a-8b78-e478037ce96a",
+      "name": "meaning_jp",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "f234fed9-ad50-4638-bc3e-13b5633112fd",
+      "note_type_id": "da1b42a9-7101-456a-8b78-e478037ce96a",
+      "name": "meaning_vi",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "bd2712c0-1a51-4a6a-a4a9-2adf3480997d",
+      "note_type_id": "da1b42a9-7101-456a-8b78-e478037ce96a",
+      "name": "usage_jp",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "4f943aab-647f-4e7a-97cd-548cce25fac7",
+      "note_type_id": "da1b42a9-7101-456a-8b78-e478037ce96a",
+      "name": "usage_vi",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "44368acf-2a72-417e-8758-5a77d52ba133",
+      "note_type_id": "da1b42a9-7101-456a-8b78-e478037ce96a",
+      "name": "example_jp",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "6d02ab7a-b621-4cf7-bbaa-b007098c2e82",
+      "note_type_id": "da1b42a9-7101-456a-8b78-e478037ce96a",
+      "name": "example_vi",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        "$"
+      ],
+      "drop_blank_items": true
+    }
+  ],
+  "templates": [
+    {
+      "id": "e0cb18b2-881d-4b46-a567-dc5db14d661f",
+      "name": "Default Flama Flashcard",
+      "owner_user_id": 1,
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "arrays": {
+        "meaning_jp": "$",
+        "meaning_vi": "$",
+        "usage_jp": "$",
+        "usage_vi": "$",
+        "example_jp": "$",
+        "example_vi": "$"
+      },
+      "allowed_before_hashes": [
+        "7763cdd0cc64fea37ee51b55a0643625b12c7cd6c79ecfb071b0fb2f7934b28f"
+      ]
+    },
+    {
+      "id": "5c460ccb-5714-48ac-830b-1f74cc611bee",
+      "name": "Gõ cách đọc",
+      "owner_user_id": 1,
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "arrays": {
+        "Explanation": "$",
+        "Usage": "$",
+        "UsageTranslation": "$",
+        "Example": "$",
+        "ExampleTranslation": "$"
+      },
+      "allowed_before_hashes": [
+        "f39face8b6a535d5942875fa7ca6c9e084d670e6b92137b2fb06d4707d88dc59"
+      ]
+    },
+    {
+      "id": "ef8757fb-f5c8-4670-83e6-3feef962beff",
+      "name": "Gõ nghĩa",
+      "owner_user_id": 1,
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "arrays": {
+        "Explanation": "$",
+        "Example": "$",
+        "DefinitionHint": "$"
+      },
+      "allowed_before_hashes": [
+        "ced9f34c176aa1049b4c0d0ebf068b1dbd552d2f663f49c84b3183fd868ad8d5"
+      ]
+    }
+  ],
+  "pairs": [
+    [
+      "example_jp",
+      "example_vi"
+    ],
+    [
+      "usage_jp",
+      "usage_vi"
+    ],
+    [
+      "meaning_jp",
+      "meaning_vi"
+    ]
+  ],
+  "split_numbered_pairs": [
+    [
+      "meaning_jp",
+      "meaning_vi"
+    ],
+    [
+      "usage_jp",
+      "usage_vi"
+    ]
+  ]
+}

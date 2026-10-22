@@ -1,0 +1,161 @@
+{
+  "schema_version": "flama-field-array-split.v1",
+  "label": "wave2-20261021",
+  "description": "En4Everyone Word Family/Example/Example_VI split on <br>, newlines and the ';' the Advanced Vocabulary template renders as a line break ('$' there is money, never split); 文法N1 meaning/structure/notes/additional_example/example_vi split on <br> and newlines. Positions without visible text are dropped. Example ';' before a lowercase word is punctuation, not a boundary.",
+  "fields": [
+    {
+      "id": "380c8b3f-4523-42c5-ac1e-50fef8993216",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Word Family",
+      "owner_user_id": 1,
+      "from_type": "text",
+      "separators": [
+        "br",
+        "newline",
+        ";"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "15c56c47-9ba2-4120-8c8f-a2594e8dfcd1",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Example",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        ";sentence"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "d9dd7d47-500a-42c4-96f8-c4ee6c1836a2",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Example_VI",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline",
+        ";sentence"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "d8da8806-72da-4ba4-9648-4a4f515ba0ba",
+      "note_type_id": "4fc2eb8e-16ba-4c6b-b323-a5f66bc41cd8",
+      "name": "meaning",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "09fcaaf9-dc7c-4bdb-8d6d-5bcb178eb5f7",
+      "note_type_id": "4fc2eb8e-16ba-4c6b-b323-a5f66bc41cd8",
+      "name": "structure",
+      "owner_user_id": 1,
+      "from_type": "text",
+      "separators": [
+        "br",
+        "newline"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "0f3329c4-9348-4e91-97d5-a2943427ba6a",
+      "note_type_id": "4fc2eb8e-16ba-4c6b-b323-a5f66bc41cd8",
+      "name": "notes",
+      "owner_user_id": 1,
+      "from_type": "text",
+      "separators": [
+        "br",
+        "newline"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "b0ab1bec-6458-47dd-9ae1-26f3a5b74d27",
+      "note_type_id": "4fc2eb8e-16ba-4c6b-b323-a5f66bc41cd8",
+      "name": "additional_example",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline"
+      ],
+      "drop_blank_items": true
+    },
+    {
+      "id": "396051ad-f322-4809-a716-7ca86631a037",
+      "note_type_id": "4fc2eb8e-16ba-4c6b-b323-a5f66bc41cd8",
+      "name": "example_vi",
+      "owner_user_id": 1,
+      "from_type": "richtext",
+      "separators": [
+        "br",
+        "newline"
+      ],
+      "drop_blank_items": true
+    }
+  ],
+  "templates": [
+    {
+      "id": "f6d63262-7ad8-4694-af0c-4bd8b0519c61",
+      "name": "Advanced Vocabulary Card",
+      "owner_user_id": 1,
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "arrays": {
+        "Word Family": ";",
+        "Example": ";",
+        "Example_VI": ";"
+      },
+      "allowed_before_hashes": [
+        "92d53eac65bd1c887621921b582ac16f9288eeb3532d2f6487e82025ea54762d"
+      ]
+    },
+    {
+      "id": "fc011484-1674-4d5a-b3d6-e1abd21b64e2",
+      "name": "Gõ chép chính tả",
+      "owner_user_id": 1,
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "arrays": {
+        "Example": ";",
+        "ExampleTranslation": ";"
+      },
+      "allowed_before_hashes": [
+        "f39ad0c40b34d4e40b9f9208f52d8203a04eb7c729b0ad8440e3b7cc2a9db6e8"
+      ]
+    },
+    {
+      "id": "0a86851a-843e-48b5-8275-66f244c595b7",
+      "name": "Grammar & Literary Quotes Card",
+      "owner_user_id": 1,
+      "note_type_id": "4fc2eb8e-16ba-4c6b-b323-a5f66bc41cd8",
+      "arrays": {
+        "meaning": null,
+        "structure": null,
+        "notes": null,
+        "additional_example": null,
+        "example_vi": null
+      },
+      "allowed_before_hashes": [
+        "768efa80fa6fde4467eba8b3636973ed26465aad7202f11b320b5c1d5b0813e8"
+      ]
+    }
+  ],
+  "pairs": [
+    [
+      "Example",
+      "Example_VI"
+    ],
+    [
+      "additional_example",
+      "example_vi"
+    ]
+  ]
+}

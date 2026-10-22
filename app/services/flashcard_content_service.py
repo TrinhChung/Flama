@@ -81,7 +81,10 @@ class ContentApiError(ValueError):
 from sqlalchemy.orm import selectinload
 
 
-def list_note_types(*, user_id: int, compact: bool = False) -> dict[str, Any]:
+def list_note_types(*, user_id: int, compact: bool = False, summary: bool = False) -> dict[str, Any]:
+    if summary:
+        from app.repositories.note_type_summary_repository import list_summaries
+        return {"items": list_summaries(user_id=user_id)}
     installed_ids = [
         r[0]
         for r in db.session.query(NoteTypeInstall.installed_note_type_id)

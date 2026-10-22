@@ -6,6 +6,7 @@ Welcome to the central documentation portal for **Flama** (Nihongo Flashcard Lea
 
 ## 🏛️ Master Architecture & Codebase Reality Audit
 
+- [Deck, Note Type and Template stability](architecture/deck-notetype-template-stability-design.md): immutable releases, pinned presentation, receipt parity, asynchronous subscriber delivery and rollout checks.
 - [Marketplace bundle completeness review](architecture/marketplace-bundle-completeness-review-2026-10-21.md): five findings fixed and verified locally, with test evidence and production limits.
 - [Marketplace local rollout rehearsal](runbooks/MARKETPLACE_BUNDLE_LOCAL_ROLLOUT_20261021.md): reviewed publication plans, local results, verification and rollback.
 

@@ -489,8 +489,27 @@ class _MustacheList(list):
         return ",".join("" if item is None else str(item) for item in self)
 
 
+class _MustacheEmptyItem(str):
+    """An empty array item that still takes its place in a section loop.
+
+    chevron skips a section body whose item is falsy; mustache.js renders it
+    for every item. Keeping the empty position makes both print it, so paired
+    columns stay aligned on the server too.
+    """
+
+    __slots__ = ()
+
+    def __bool__(self) -> bool:
+        return True
+
+
 def _mustache_list(items: list[Any]) -> _MustacheList:
-    return _MustacheList(_mustache_list(item) if isinstance(item, list) else item for item in items)
+    return _MustacheList(
+        _mustache_list(item) if isinstance(item, list)
+        else _MustacheEmptyItem() if item is None or item == ""
+        else item
+        for item in items
+    )
 
 
 def _plain_context_value(value: Any) -> Any:
