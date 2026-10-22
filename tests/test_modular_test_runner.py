@@ -576,6 +576,12 @@ class MysqlProbeRunnerTests(unittest.TestCase):
             args += ["--probe", probe]
         return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
+    def test_windows_style_probe_path_is_accepted(self):
+        result = self._run("scripts\\run_mysql_probes.py --help")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ok    scripts/run_mysql_probes.py --help", result.stdout)
+
     def test_any_failing_probe_fails_the_run_after_all_finish(self):
         # The runner invoking itself: --help exits 0, --jobs 0 exits 2.
         result = self._run(

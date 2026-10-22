@@ -74,7 +74,8 @@ def main() -> int:
         parser.error("--jobs must be positive")
     if args.timeout < 0:
         parser.error("--timeout must not be negative")
-    commands = [shlex.split(probe) for probe in args.probe]
+    # POSIX splitting treats a backslash as an escape; accept Windows paths.
+    commands = [shlex.split(probe.replace("\\", "/")) for probe in args.probe]
     for command in commands:
         if not command or not (ROOT_DIR / command[0]).is_file():
             parser.error(f"probe script not found: {command[0] if command else ''!r}")
