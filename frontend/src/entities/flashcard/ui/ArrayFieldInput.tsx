@@ -24,6 +24,19 @@ import {
 
 export type ArrayViewMode = 'preview' | 'normal' | 'code'
 
+/**
+ * Stored items keep the server's escaping of a bare `&`, `<` or `>`; show them
+ * as typed. Saving sends the text back and the server escapes it the same way.
+ * `&lt;` before a tag-like character stays escaped, so text never becomes markup.
+ */
+function itemDisplayText(item: unknown): unknown {
+  if (typeof item !== 'string') return item
+  return item
+    .replace(/&lt;(?![a-zA-Z/!?])/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, '&')
+}
+
 export interface ArrayFieldInputProps {
   fieldName: string
   value: unknown
@@ -86,7 +99,7 @@ export function ArrayFieldInput({
       : JSON.stringify(parseArrayValue(draftValue), null, 2)
     : typeof draftValue === 'string' && !isValidArrayJson(draftValue)
       ? draftValue
-      : fieldValueEditorText(parseArrayValue(draftValue))
+      : fieldValueEditorText(parseArrayValue(draftValue).map(itemDisplayText))
 
   // Items parsed from currentText for Preview and count indicators
   const items = useMemo(() => parseArrayItems(draftValue), [draftValue])
@@ -224,7 +237,7 @@ export function ArrayFieldInput({
                     <span className="text-[10px] text-muted-foreground font-mono font-semibold">
                       {idx + 1}.
                     </span>
-                    <span>{item}</span>
+                    <span>{String(itemDisplayText(item))}</span>
                   </span>
                 ))}
               </div>

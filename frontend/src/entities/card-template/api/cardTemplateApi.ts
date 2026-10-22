@@ -2,6 +2,7 @@ import { apiJson, apiRequest } from '@/shared/api/client'
 import type {
   CardTemplateItem,
   DeckCardTypesResponse,
+  InstalledDeckTemplatesResponse,
   NoteTypeTemplatesResponse,
   TemplateApplication,
   TemplateApplicationPatch,
@@ -31,6 +32,13 @@ export function fetchNoteTypeTemplates(noteTypeId: string, signal?: AbortSignal)
 export function fetchDeckCardTypes(deckId: number | string, signal?: AbortSignal) {
   return apiRequest<DeckCardTypesResponse>(
     `/api/study/scopes/deck/${enc(String(deckId))}/compositions?include_counts=1`,
+    { signal },
+  )
+}
+
+export function fetchInstallTemplates(installId: string, signal?: AbortSignal) {
+  return apiRequest<InstalledDeckTemplatesResponse>(
+    `/api/deck-installs/${enc(installId)}/templates`,
     { signal },
   )
 }

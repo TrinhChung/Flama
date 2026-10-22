@@ -9,20 +9,20 @@ import type {
   CreateDeckForm,
   MoveDeckForm,
   RenameDeckForm,
-} from '../features/dashboard/schemas'
+} from '@/features/dashboard'
 import { API_BASE_URL, resolveBackendUrl } from '../config/env'
 import type {
   DashboardOverview,
   DashboardPayload,
   DeckNode,
-} from '../features/dashboard/types'
+} from '@/features/dashboard'
 import type {
   StatisticsConfig,
   StatisticsFilters,
   TodayFutureStats,
   UserStudyTimeFilters,
   UserStudyTimeResponse,
-} from '../features/statistics/types'
+} from '@/features/statistics'
 import {
   apiJson,
   apiJsonKeepalive,

@@ -4,7 +4,7 @@ import { CheckCircle2, Eye, Layers, SlidersHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import type { NoteTypeItem } from '../../hooks/useNoteTypeManager'
+import type { NoteTypeItem } from '../../model/managerTypes'
 
 interface NoteTypeCardProps {
   item: NoteTypeItem
@@ -24,11 +24,11 @@ export function NoteTypeCard({ item, index }: NoteTypeCardProps) {
           <div className="flex items-center gap-1.5">
             <Badge variant="secondary" className="px-2 py-0.5 text-xs font-semibold rounded-md gap-1">
               <Layers className="text-primary size-3" />
-              {t('manager.card.templates_badge', { count: item.templates?.length ?? 0 })}
+              {t('manager.card.templates_badge', { count: item.template_count ?? item.templates?.length ?? 0 })}
             </Badge>
             <Badge variant="outline" className="px-2 py-0.5 text-xs font-semibold rounded-md gap-1">
               <SlidersHorizontal className="text-muted-foreground size-3" />
-              {t('manager.card.fields_badge', { count: item.field_defs?.length ?? 0 })}
+              {t('manager.card.fields_badge', { count: item.field_count ?? item.field_defs?.length ?? 0 })}
             </Badge>
           </div>
 

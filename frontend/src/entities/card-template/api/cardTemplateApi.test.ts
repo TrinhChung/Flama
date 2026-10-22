@@ -19,6 +19,7 @@ import {
   deleteNoteTypeTemplate,
   duplicateLibraryTemplate,
   fetchDeckCardTypes,
+  fetchInstallTemplates,
   fetchLibraryTemplate,
   fetchNoteTypeTemplates,
   fetchStudyTemplateInputs,
@@ -40,6 +41,14 @@ describe('cardTemplateApi and queryKeys', () => {
   beforeEach(() => {
     apiRequest.mockReset()
     apiJson.mockReset()
+  })
+
+  it('fetches installed templates using the canonical route and forwards cancellation', async () => {
+    const signal = new AbortController().signal
+    const response = { install_id: 'install/日本語', items: [], legacy_template_fallback: false }
+    apiRequest.mockResolvedValueOnce(response)
+    expect(await fetchInstallTemplates('install/日本語', signal)).toBe(response)
+    expect(apiRequest).toHaveBeenCalledWith(`/api/deck-installs/${encodeURIComponent('install/日本語')}/templates`, { signal })
   })
 
   describe('fetchNoteTypeTemplates', () => {

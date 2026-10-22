@@ -97,6 +97,24 @@
     "step5_title": "🚀 5. Nút \"Học Ngay\" (Spaced Repetition)",
     "step5_content": "Bấm nút này để bắt đầu phiên ôn tập với thuật toán Lặp lại ngắt quãng thông minh (Anki SM-2 / FSRS) giúp ghi nhớ sâu và lâu bền."
   },
+  "install_templates": {
+    "title": "Template của bộ thẻ đã cài",
+    "description": "Xem bản template bộ thẻ đang ghim và quản lý bản dùng chung trong tài khoản của bạn.",
+    "back": "Bộ thẻ đã cài",
+    "loading": "Đang tải template…",
+    "retry": "Thử lại",
+    "list_label": "Template của bộ thẻ",
+    "local_copy": "Bản dùng chung của bạn",
+    "edit_local": "Sửa bản của bạn",
+    "pinned_release": "Bản bộ thẻ đang ghim",
+    "pin_unavailable": "Chưa có bản ghim",
+    "copy_impact": "Chỉnh sửa và cập nhật ở đây áp dụng cho bản template dùng chung của bạn. Các nơi khác dùng bản này cũng có thể đổi theo. Bộ thẻ vẫn giữ release đã ghim; muốn đổi bản ghim, hãy cập nhật bộ thẻ.",
+    "legacy": "Bản phát hành cũ của bộ thẻ chưa lưu bản ghim template. Giao diện thẻ có thể thay đổi theo bản dùng chung cho đến khi bạn cập nhật bộ thẻ lên release có bản ghim.",
+    "selection_missing": "Template trong liên kết không còn thuộc bộ thẻ này. Đang hiển thị template đầu tiên.",
+    "empty_title": "Chưa có template nhận về",
+    "empty_description": "Bộ thẻ này chưa có bản template riêng để quản lý. Bạn có thể xem thư viện template hoặc quay lại danh sách bộ thẻ để kiểm tra cập nhật.",
+    "open_library": "Mở thư viện template"
+  },
   "note_types_page": {
     "title": "Cấu trúc thẻ",
     "description": "Quản lý field, template và quy cách hiển thị flashcard.",

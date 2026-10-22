@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
@@ -15,12 +15,7 @@ import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 import { ContextHelpButton } from '@/features/guide'
 import { SpotlightTour } from '@/shared/components/SpotlightTour'
-import { useNoteTypeManager } from '../hooks/useNoteTypeManager'
-import { CreateNoteTypeBar } from '../components/manager/CreateNoteTypeBar'
-import { NoteTypeCard } from '../components/manager/NoteTypeCard'
-import { getNoteTypeManagerTourSteps } from '../components/manager/noteTypeManagerTourSteps'
-
-const TOUR_STORAGE_KEY = 'flama_notetype_spotlight_tour_v1'
+import { useNoteTypeManager, CreateNoteTypeBar, NoteTypeCard, getNoteTypeManagerTourSteps } from '@/features/note-types'
 
 export function NoteTypeManagerPage() {
   const { t } = useTranslation('note_types')
@@ -31,6 +26,7 @@ export function NoteTypeManagerPage() {
     setName,
     tourOpen,
     setTourOpen,
+    closeTour,
     createMutation,
     handleCreate,
   } = useNoteTypeManager()
@@ -38,19 +34,6 @@ export function NoteTypeManagerPage() {
   const tourSteps = useMemo(() => {
     return getNoteTypeManagerTourSteps(noteTypes.length > 0, t)
   }, [noteTypes.length, t])
-
-  // Auto-launch spotlight tour for first-time visitors with no note types
-  useEffect(() => {
-    if (query.isSuccess) {
-      const completed = localStorage.getItem(TOUR_STORAGE_KEY)
-      if (!completed && noteTypes.length === 0) {
-        const timer = setTimeout(() => {
-          setTourOpen(true)
-        }, 500)
-        return () => clearTimeout(timer)
-      }
-    }
-  }, [query.isSuccess, noteTypes.length, setTourOpen])
 
   if (query.isPending) return <PageLoading label={t('manager.loading')} />
   if (query.error) return <Page><PageError error={query.error} /></Page>
@@ -140,14 +123,8 @@ export function NoteTypeManagerPage() {
       <SpotlightTour
         steps={tourSteps}
         isOpen={tourOpen}
-        onClose={() => {
-          localStorage.setItem(TOUR_STORAGE_KEY, 'true')
-          setTourOpen(false)
-        }}
-        onComplete={() => {
-          localStorage.setItem(TOUR_STORAGE_KEY, 'true')
-          setTourOpen(false)
-        }}
+        onClose={closeTour}
+        onComplete={closeTour}
       />
     </Page>
   )

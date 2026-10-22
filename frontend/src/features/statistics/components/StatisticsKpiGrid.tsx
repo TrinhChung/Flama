@@ -1,12 +1,12 @@
 import '@/shared/config/i18n'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import type { DashboardOverview } from '@/features/dashboard/types'
+import type { HeatmapOverviewData } from '@/shared/types/heatmap'
 import type { TodayFutureStats } from '../types'
 
 interface StatisticsKpiGridProps {
   stats: TodayFutureStats
-  overview?: DashboardOverview
+  overview?: HeatmapOverviewData
   isFetching?: boolean
 }
 

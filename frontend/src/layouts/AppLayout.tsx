@@ -152,7 +152,7 @@ function PublicLayout({
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 p-1 pr-1.5 pl-2.5 text-xs font-semibold transition hover:bg-muted/80 cursor-pointer"
+                        className="flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 p-1 pr-1.5 pl-2.5 text-xs font-semibold transition hover:bg-primary/10 hover:border-primary/30 data-[state=open]:border-primary/40 data-[state=open]:bg-primary/10 cursor-pointer"
                       >
                         <span className="max-w-[120px] truncate text-foreground">
                           {user.username}
@@ -178,7 +178,7 @@ function PublicLayout({
                       </div>
                       <DropdownMenuItem asChild>
                         <Link to="/dashboard" className="flex items-center gap-2">
-                          <BookOpen className="size-4" />
+                          <BookOpen className="size-4 text-primary" />
                           <span>{t('user_menu.overview')}</span>
                         </Link>
                       </DropdownMenuItem>
@@ -449,7 +449,7 @@ export function AppLayout() {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-border/60 bg-muted/40 p-1 pr-1.5 pl-2 text-xs font-semibold transition hover:bg-muted/80 cursor-pointer"
+                  className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-primary/20 bg-primary/5 p-1 pr-1.5 pl-2 text-xs font-semibold transition hover:bg-primary/10 hover:border-primary/30 data-[state=open]:border-primary/40 data-[state=open]:bg-primary/10 cursor-pointer"
                 >
                   <span className="max-w-[70px] sm:max-w-[120px] truncate text-foreground font-semibold">
                     {bootstrap.user.username}
@@ -475,13 +475,13 @@ export function AppLayout() {
                 </div>
                 <DropdownMenuItem asChild>
                   <Link to="/dashboard" className="flex items-center gap-2">
-                    <BookOpen className="size-4" />
+                    <BookOpen className="size-4 text-primary" />
                     <span>{t('user_menu.overview')}</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to="/settings/goals" className="flex items-center gap-2">
-                    <Goal className="size-4" />
+                    <Goal className="size-4 text-primary" />
                     <span>{t('user_menu.study_goals')}</span>
                   </Link>
                 </DropdownMenuItem>

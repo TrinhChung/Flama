@@ -44,7 +44,7 @@ const VerifyEmailPage = lazy(() =>
 )
 
 const loadDashboardPage = () =>
-  import('./features/dashboard/pages/DashboardPage').then((module) => ({
+  import('./features/dashboard').then((module) => ({
     default: module.DashboardPage,
   }))
 
@@ -58,7 +58,7 @@ if (
   void loadDashboardPage().catch(() => undefined)
 }
 const StatisticsPage = lazy(() =>
-  import('./features/statistics/pages/StatisticsPage').then((module) => ({
+  import('./features/statistics').then((module) => ({
     default: module.StatisticsPage,
   })),
 )
@@ -73,7 +73,7 @@ const StudyPage = lazy(() =>
   })),
 )
 const NoteTypeManagerPage = lazy(() =>
-  import('./features/note-types/pages/NoteTypeManagerPage').then((module) => ({
+  import('./pages/note-types').then((module) => ({
     default: module.NoteTypeManagerPage,
   })),
 )
@@ -99,7 +99,7 @@ const NoteTypeTemplateMappingPage = lazy(() =>
   import('./features/note-types/pages/NoteTypeTemplateMappingPage').then((module) => ({ default: module.NoteTypeTemplateMappingPage })),
 )
 const InstalledDecksPage = lazy(() =>
-  import('./features/library/pages/LibraryPages').then((module) => ({
+  import('./features/library').then((module) => ({
     default: module.InstalledDecksPage,
   })),
 )
@@ -110,7 +110,7 @@ const TemplateDetailPage = lazy(() =>
   import('./features/template-library').then((module) => ({ default: module.TemplateDetailPage })),
 )
 const InstallTemplatesPage = lazy(() =>
-  import('./features/library/pages/InstallTemplatesPage').then((module) => ({ default: module.InstallTemplatesPage })),
+  import('./pages/installed-deck-templates').then((module) => ({ default: module.InstallTemplatesPage })),
 )
 const AnkiSyncPage = lazy(() =>
   import('./features/import/pages/AnkiSyncPage').then((module) => ({

@@ -1,6 +1,5 @@
 import { AlertCircle, Layers, LoaderCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -15,11 +14,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  cardTemplateQueryKeys,
-  fetchDeckCardTypes,
   type CardTypeContextKind,
   type DeckCardType,
 } from '@/entities/card-template'
+import { useDeckCardTypes } from '../hooks/useDeckCardTypes'
 
 export type DeckCardTypesDialogProps = {
   open: boolean
@@ -58,9 +56,11 @@ function renderEditAction(item: DeckCardType, t: (key: any) => string) {
     )
   }
 
+  const applicationId = item.application_id || item.study_application_id
+  const templatesPath = `/flashcards/note-types/${encodeURIComponent(item.note_type_id)}/templates`
   return (
     <Button asChild size="sm" variant="outline" className="h-7 px-2.5 text-xs rounded-lg">
-      <Link to={`/note-types/${encodeURIComponent(item.note_type_id)}`}>
+      <Link to={applicationId ? `${templatesPath}/${encodeURIComponent(applicationId)}` : templatesPath}>
         {t('modals.card_types.btn_edit')}
       </Link>
     </Button>
@@ -75,11 +75,7 @@ export function DeckCardTypesDialog({
 }: DeckCardTypesDialogProps) {
   const { t, i18n } = useTranslation('dashboard')
   const numberLocale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
-  const { data, isLoading, error } = useQuery({
-    queryKey: cardTemplateQueryKeys.deckCardTypes(deckId),
-    queryFn: ({ signal }) => fetchDeckCardTypes(deckId, signal),
-    enabled: open,
-  })
+  const { data, isLoading, error } = useDeckCardTypes(deckId, open)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
