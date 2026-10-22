@@ -199,24 +199,20 @@ class TemplateDistributionMigrationTests(unittest.TestCase):
         metadata = frozen[0].metadata
         for model, table in zip(MODELS, frozen):
             with self.subTest(table=table.name):
-                if model.__table__.name == "template_publications":
-                    added_in_69 = {"marketplace_status", "pricing_mode", "price_amount_minor", "marketplace_published_at"}
-                    filtered_cols = [c._copy() for c in model.__table__.c if c.name not in added_in_69]
-                    filtered_constraints = [constraint._copy() for constraint in model.__table__.constraints if not any(col.name in added_in_69 for col in getattr(constraint, "columns", []))]
-                    model_table = sa.Table(
-                        model.__table__.name,
-                        sa.MetaData(),
-                        *filtered_cols,
-                        *filtered_constraints,
-                    )
-                else:
-                    model_table = model.__table__.to_metadata(sa.MetaData())
+                model_table = model.__table__.to_metadata(sa.MetaData())
                 for parent in ("users", "decks", "templates", "template_versions", "deck_releases"):
                     metadata.tables[parent].to_metadata(model_table.metadata)
                 for linked in ("template_releases",):
                     if linked != model_table.name:
                         metadata.tables[linked].to_metadata(model_table.metadata)
-                model_sql = str(CreateTable(model_table).compile(dialect=mysql.dialect()))
+                model_ddl = CreateTable(model_table)
+                if model_table.name == "template_publications":
+                    added_in_69 = {"marketplace_status", "pricing_mode", "price_amount_minor", "marketplace_published_at"}
+                    # Compare revision 55 columns while copying the table and
+                    # its foreign keys once through SQLAlchemy's public API.
+                    model_ddl.columns = [column for column in model_ddl.columns
+                                         if column.element.name not in added_in_69]
+                model_sql = str(model_ddl.compile(dialect=mysql.dialect()))
                 frozen_sql = str(CreateTable(table).compile(dialect=mysql.dialect()))
                 # Column order is identical; constraint order is a set in SA.
                 self.assertEqual(sorted(line.strip().rstrip(",") for line in model_sql.splitlines()), sorted(line.strip().rstrip(",") for line in frozen_sql.splitlines()))
