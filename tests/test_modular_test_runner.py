@@ -582,5 +582,186 @@ class MysqlProbeRunnerTests(unittest.TestCase):
         self.assertNotIn("Probe timings", result.stdout)
 
 
+class TestManifestTests(unittest.TestCase):
+    """Case-level evidence for comparing runs; subprocesses run tiny temp modules."""
+
+    SAMPLE = (
+        "import unittest\n"
+        "class Sample(unittest.TestCase):\n"
+        "    def test_ok(self):\n"
+        "        pass\n"
+        "    def test_fail(self):\n"
+        "        self.fail('no')\n"
+        "    def test_error(self):\n"
+        "        raise RuntimeError('boom')\n"
+        "    @unittest.skip('not here')\n"
+        "    def test_skip(self):\n"
+        "        pass\n"
+        "    @unittest.expectedFailure\n"
+        "    def test_expected(self):\n"
+        "        self.fail('known')\n"
+        "    @unittest.expectedFailure\n"
+        "    def test_unexpected(self):\n"
+        "        pass\n"
+        "    def test_subtests(self):\n"
+        "        for value in (1, 2):\n"
+        "            with self.subTest(value=value):\n"
+        "                self.assertEqual(value, 1)\n"
+    )
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+
+    def _run(self, module_source, *args, manifest=True):
+        import subprocess
+
+        name = "test_manifest_sample.py"
+        with open(os.path.join(self.temp.name, name), "w", encoding="utf-8") as handle:
+            handle.write(module_source)
+        env = dict(os.environ, PYTHONPATH=str(run_tests.ROOT_DIR))
+        manifest_path = os.path.join(self.temp.name, "out.tsv")
+        env.pop("FLAMA_TEST_MANIFEST_PATH", None)
+        if manifest:
+            env["FLAMA_TEST_MANIFEST_PATH"] = manifest_path
+        module = "scripts.unittest_manifest" if manifest else "unittest"
+        result = subprocess.run(
+            [sys.executable, "-m", module, *args, name],
+            cwd=self.temp.name, env=env, capture_output=True, text=True,
+        )
+        records = []
+        if manifest and os.path.exists(manifest_path):
+            with open(manifest_path, encoding="utf-8") as handle:
+                records = [tuple(line.rstrip("\n").split("\t")) for line in handle]
+        return result, records
+
+    def test_wrapper_records_every_outcome_and_keeps_unittest_exit_codes(self):
+        wrapped, records = self._run(self.SAMPLE)
+        plain, _ = self._run(self.SAMPLE, manifest=False)
+
+        self.assertEqual(wrapped.returncode, plain.returncode)
+        self.assertEqual(wrapped.returncode, 1)
+        outcomes = {(test_id.rsplit(".", 1)[-1], outcome, reason) for test_id, outcome, reason in records}
+        self.assertIn(("test_ok", "ok", ""), outcomes)
+        self.assertIn(("test_fail", "FAIL", ""), outcomes)
+        self.assertIn(("test_error", "ERROR", ""), outcomes)
+        self.assertIn(("test_skip", "skipped", "not here"), outcomes)
+        self.assertIn(("test_expected", "expected failure", ""), outcomes)
+        self.assertIn(("test_unexpected", "unexpected success", ""), outcomes)
+        self.assertTrue(any("test_subtests" in test_id and "value=2" in test_id and outcome == "FAIL"
+                            for test_id, outcome, _ in records))
+
+    def test_wrapper_exit_codes_match_for_passing_and_empty_modules(self):
+        passing = "import unittest\nclass P(unittest.TestCase):\n    def test_ok(self):\n        pass\n"
+        empty = "import unittest\n"
+        for source, expected in ((passing, 0), (empty, 5)):
+            with self.subTest(expected=expected):
+                wrapped, _ = self._run(source)
+                plain, _ = self._run(source, manifest=False)
+                self.assertEqual((wrapped.returncode, plain.returncode), (expected, expected))
+
+    def test_merged_manifest_is_sorted_keeps_duplicates_and_changes_hash(self):
+        first = os.path.join(self.temp.name, "a.manifest")
+        second = os.path.join(self.temp.name, "b.manifest")
+        with open(first, "w", encoding="utf-8") as handle:
+            handle.write("t.B.test_b\tok\t\nt.A.test_a\tskipped\twhy\n")
+        with open(second, "w", encoding="utf-8") as handle:
+            handle.write("t.C.test_c\tok\t\n")
+        out = os.path.join(self.temp.name, "merged.tsv")
+
+        lines, outcomes, digest = run_tests.write_test_manifest([first, second], out)
+        duplicate_lines, _, duplicate_digest = run_tests.write_test_manifest([first, second, second], out)
+
+        with open(out, encoding="utf-8") as handle:
+            merged = handle.read().splitlines()
+        self.assertEqual((lines, outcomes), (3, {"ok": 2, "skipped": 1}))
+        self.assertEqual(duplicate_lines, 4)
+        self.assertNotEqual(digest, duplicate_digest)
+        self.assertEqual(merged, sorted(merged))
+
+    def test_partition_seed_changes_grouping_but_never_loses_a_file(self):
+        files = [f"tests/test_seed_{index:02d}.py" for index in range(20)]
+        weights = {path: 100.0 + index for index, path in enumerate(files)}
+
+        plain = run_tests.partition_backend_tests(files, 4, weights)
+        seeded = run_tests.partition_backend_tests(files, 4, weights, seed=1)
+        again = run_tests.partition_backend_tests(files, 4, weights, seed=1)
+
+        for bins in (plain, seeded):
+            self.assertEqual(sorted(path for group in bins for path in group), sorted(files))
+        self.assertEqual(seeded, again)
+        self.assertNotEqual(sorted(map(tuple, plain)), sorted(map(tuple, seeded)))
+
+    def test_parallel_run_fails_when_a_bin_writes_no_manifest(self):
+        files = ["tests/test_fake_a.py", "tests/test_fake_b.py"]
+
+        def fake(_python_cmd, bin_files, _failfast, _verbose, _registry=None, **kwargs):
+            output = f"Ran {len(bin_files)} tests in 0.1s\n\nOK\n"
+            with open(kwargs["log_path"], "w", encoding="utf-8") as handle:
+                handle.write(output)
+            if files[0] in bin_files:
+                with open(kwargs["manifest_path"], "w", encoding="utf-8") as handle:
+                    handle.write(f"{files[0]}\tok\t\n")
+            return run_tests.BackendBinResult(
+                bin_files, 0, kwargs["log_path"], 0.1, run_tests.parse_unittest_summary(output),
+                manifest_path=kwargs["manifest_path"],
+            )
+
+        out = os.path.join(self.temp.name, "run.tsv")
+        with mock.patch("scripts.run_tests._run_backend_bin", side_effect=fake), \
+                mock.patch("builtins.print"), mock.patch("sys.stdout"):
+            passed = run_tests.run_backend_tests_parallel(
+                ["python"], files, jobs=2, weights={files[0]: 1, files[1]: 2}, manifest=out
+            )
+
+        self.assertFalse(passed)
+        with open(out, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), f"{files[0]}\tok\t\n")
+
+    def _compare(self, *args):
+        from scripts import compare_test_manifests
+
+        with mock.patch("builtins.print"):
+            return compare_test_manifests.main(list(args))
+
+    def test_compare_reports_identical_and_different_manifests(self):
+        base = os.path.join(self.temp.name, "base.tsv")
+        same = os.path.join(self.temp.name, "same.tsv")
+        changed = os.path.join(self.temp.name, "changed.tsv")
+        with open(base, "w", encoding="utf-8") as handle:
+            handle.write("t.A.test_a\tok\t\nt.A.test_b\tskipped\twhy\n")
+        with open(same, "w", encoding="utf-8") as handle:
+            handle.write("t.A.test_b\tskipped\twhy\nt.A.test_a\tok\t\n")
+        with open(changed, "w", encoding="utf-8") as handle:
+            handle.write("t.A.test_a\tok\t\nt.A.test_b\tskipped\tother reason\n")
+
+        self.assertEqual(self._compare(base, same), 0)
+        self.assertEqual(self._compare(base, changed), 1)
+        self.assertEqual(self._compare(base, changed, "--ignore-prefix", "t.A.test_b"), 0)
+
+    def test_compare_reads_verbose_logs_with_interleaved_output(self):
+        log = (
+            "test_a (t.A.test_a) ... DeprecationWarning: noisy\nok\n"
+            "test_b (t.A.test_b)\nDocstring line ... skipped 'why'\n"
+            "test_c (t.A.test_c) ... FAIL\n"
+            "======\nFAIL: test_c (t.A.test_c)\n------\nRan 3 tests in 0.1s\n\nFAILED (failures=1, skipped=1)\n"
+        )
+        before = os.path.join(self.temp.name, "before.log")
+        after = os.path.join(self.temp.name, "after.log")
+        for path, text in ((before, log), (after, log.replace("test_c (t.A.test_c) ... FAIL", "test_c (t.A.test_c) ... ok").replace("FAIL: test_c (t.A.test_c)\n", ""))):
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+
+        from scripts import compare_test_manifests
+
+        records = compare_test_manifests.read_verbose_log(before)
+        self.assertEqual(
+            sorted(records.elements()),
+            [("t.A.test_a", "ok", ""), ("t.A.test_b", "skipped", "why"), ("t.A.test_c", "FAIL", "")],
+        )
+        self.assertEqual(self._compare("--verbose-logs", before, before), 0)
+        self.assertEqual(self._compare("--verbose-logs", before, after), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

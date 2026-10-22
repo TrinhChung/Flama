@@ -87,6 +87,36 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertNotIn("--jobs auto", self.workflow)
         self.assertIn("backend_jobs:", dispatch)
         self.assertIn("default: '1'", dispatch)
+        # Dispatch inputs never appear inside the run script itself.
+        run_script = backend_block.split("- name: Run backend tests\n", 1)[1].split("        run: |\n", 1)[1]
+        self.assertNotIn("inputs.", run_script)
+
+    def test_dispatch_benchmark_records_a_manifest_and_can_skip_other_jobs(self):
+        backend_block = self.workflow.split("\n  backend:\n", 1)[1].split(
+            "\n  redis-contract:\n", 1
+        )[0]
+        dispatch = self.workflow.split("\n  workflow_dispatch:\n", 1)[1].split("\npermissions:", 1)[0]
+
+        # Only manual runs write a manifest; it stays on the runner as a hash.
+        self.assertIn(
+            "BACKEND_MANIFEST: ${{ github.event_name == 'workflow_dispatch' && 'output/backend-test-manifest.tsv' || '' }}",
+            backend_block,
+        )
+        self.assertIn('extra+=(--manifest "$BACKEND_MANIFEST")', backend_block)
+        self.assertIn("BACKEND_PARTITION_SEED: ${{ inputs.backend_partition_seed || '' }}", backend_block)
+        self.assertIn("validation_scope:", dispatch)
+        self.assertIn("default: 'all'", dispatch)
+        for job, output in (
+            ("frontend", "frontend"),
+            ("redis-contract", "redis_contract"),
+            ("mysql-contract", "mysql_contract"),
+        ):
+            block = self.workflow.split(f"\n  {job}:\n", 1)[1]
+            self.assertIn(
+                f"if: needs.changes.outputs.{output} == 'true' && inputs.validation_scope != 'backend'",
+                block.split("\n    runs-on:", 1)[0],
+            )
+        self.assertIn("    if: needs.changes.outputs.backend == 'true'\n", backend_block)
 
     def test_expensive_environment_contracts_are_explicit(self):
         frontend = self.workflow.split("\n  frontend:\n", 1)[1].split("\n  backend:\n", 1)[0]

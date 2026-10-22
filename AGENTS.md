@@ -95,7 +95,7 @@
   - Filter by layer: `python scripts/run_tests.py --module study --backend-only` or `--frontend-only`
   - List available modules & test matrices: `python scripts/run_tests.py --list-modules`
   - Run full suite only for CI/pre-release verification: `python scripts/run_tests.py --all`
-  - Add `--jobs auto` (or `--jobs N`) to run backend files in parallel `unittest` processes, each with its normal per-file setup; `auto` uses the available CPUs, capped by free memory (768 MiB per worker). The default `--jobs 1` keeps one process; keep it when tests point at one shared external database.
+  - Add `--jobs auto` (or `--jobs N`) to run backend files in parallel `unittest` processes, each with its normal per-file setup; `auto` uses the available CPUs, capped by free memory (768 MiB per worker). The default `--jobs 1` keeps one process; keep it when tests point at one shared external database. To prove two runs executed the same cases, add `--manifest PATH` to each and compare with `scripts/compare_test_manifests.py`.
 - Prefer the narrowest relevant test module first; most feature areas already have focused tests in `tests/`.
 - The suite is flat `unittest` with per-file app/database setup and no shared fixture layer. Copy the closest existing test file instead of inventing a new harness.
 - If you touch startup, config, media paths, or DB compatibility logic, verify against the real entry point (`wsgi.py` or Docker) instead of relying only on unit tests.

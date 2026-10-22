@@ -22,8 +22,10 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 import fnmatch
+import hashlib
 import json
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -961,6 +963,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/run_lighthouse_audit.*",
             "scripts/run_tests.py",
             "scripts/run_mysql_probes.py",
+            "scripts/unittest_manifest.py",
+            "scripts/compare_test_manifests.py",
             "scripts/check_*.py",
             "scripts/stress_test_cicd_quota.py",
             "scripts/setup_github_workspace.sh",
@@ -1652,24 +1656,33 @@ def partition_backend_tests(
     test_files: list[str],
     bin_count: int,
     weights: dict[str, float] | None = None,
+    seed: int | None = None,
 ) -> list[list[str]]:
     """Split files into balanced bins, heaviest bin first (LPT scheduling).
 
     Every file lands in exactly one bin. Without measured weights, file size
-    stands in for runtime; the order is deterministic for a given input.
+    stands in for runtime; the order is deterministic for a given input. A
+    seed perturbs each weight by up to 25% so a different grouping is tested
+    without changing the number of workers.
     """
-    def weight(path: str) -> float:
+    rng = random.Random(seed) if seed is not None else None
+    measured: dict[str, float] = {}
+    for path in sorted(set(test_files)):
         if weights and path in weights:
-            return float(weights[path])
-        return float((ROOT_DIR / path).stat().st_size)
+            value = float(weights[path])
+        else:
+            value = float((ROOT_DIR / path).stat().st_size)
+        if rng is not None:
+            value *= 1.0 + rng.uniform(-0.25, 0.25)
+        measured[path] = value
 
     bin_count = max(1, min(bin_count, len(test_files)))
     bins: list[list[str]] = [[] for _ in range(bin_count)]
     loads = [0.0] * bin_count
-    for path in sorted(test_files, key=lambda p: (-weight(p), p)):
+    for path in sorted(test_files, key=lambda p: (-measured[p], p)):
         target = min(range(bin_count), key=lambda i: (loads[i], i))
         bins[target].append(path)
-        loads[target] += weight(path)
+        loads[target] += measured[path]
     order = sorted(range(bin_count), key=lambda i: (-loads[i], i))
     return [sorted(bins[i]) for i in order if bins[i]]
 
@@ -1704,6 +1717,7 @@ class BackendBinResult:
     elapsed: float
     summary: UnittestSummary | None
     note: str = ""
+    manifest_path: str | None = None
 
     @property
     def started(self) -> bool:
@@ -1754,6 +1768,18 @@ def _unittest_command(
         cmd.append("-v")
     cmd.extend(test_files)
     return cmd
+
+
+def _manifest_command(
+    python_cmd: list[str],
+    test_files: list[str],
+    failfast: bool,
+    verbose: bool,
+) -> list[str]:
+    """Same unittest arguments, run through the outcome-recording wrapper."""
+    cmd = _unittest_command(python_cmd, test_files, failfast, verbose)
+    index = cmd.index("unittest")
+    return cmd[:index] + ["scripts.unittest_manifest"] + cmd[index + 1:]
 
 
 def _terminate_process_tree(proc: subprocess.Popen) -> None:
@@ -1819,15 +1845,22 @@ def _run_backend_bin(
     log_path: str,
     base_env: dict[str, str],
     timeout: float | None = None,
+    manifest_path: str | None = None,
 ) -> BackendBinResult:
     start = time.time()
     note = ""
     with tempfile.TemporaryDirectory(prefix="flama-backend-tests-") as media_root, \
             open(log_path, "wb") as log:
+        env = build_parallel_worker_environment(media_root, base_env)
+        if manifest_path:
+            command = _manifest_command(python_cmd, test_files, failfast, verbose)
+            env["FLAMA_TEST_MANIFEST_PATH"] = manifest_path
+        else:
+            command = _unittest_command(python_cmd, test_files, failfast, verbose)
         proc = subprocess.Popen(
-            _unittest_command(python_cmd, test_files, failfast, verbose),
+            command,
             cwd=str(ROOT_DIR),
-            env=build_parallel_worker_environment(media_root, base_env),
+            env=env,
             stdout=log,
             stderr=subprocess.STDOUT,
         )
@@ -1851,11 +1884,33 @@ def _run_backend_bin(
         elapsed=time.time() - start,
         summary=parse_unittest_summary(_read_tail(log_path)),
         note=note,
+        manifest_path=manifest_path,
     )
 
 
 def _format_counts(counts: dict[str, int]) -> str:
     return ", ".join(f"{name}={value}" for name, value in sorted(counts.items()) if value)
+
+
+def write_test_manifest(bin_manifests: list[str], destination: str) -> tuple[int, dict[str, int], str]:
+    """Merge per-bin manifests into one sorted file; return lines, outcomes, SHA-256.
+
+    Duplicate records are kept, so a case that ran twice or not at all changes
+    the hash. Missing bin manifests are the caller's failure to report.
+    """
+    lines: list[str] = []
+    for path in bin_manifests:
+        with open(path, encoding="utf-8") as handle:
+            lines.extend(line.rstrip("\n") for line in handle if line.strip())
+    lines.sort()
+    data = "".join(line + "\n" for line in lines).encode("utf-8")
+    Path(destination).parent.mkdir(parents=True, exist_ok=True)
+    Path(destination).write_bytes(data)
+    outcomes: dict[str, int] = {}
+    for line in lines:
+        outcome = (line.split("\t") + [""])[1]
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+    return len(lines), outcomes, hashlib.sha256(data).hexdigest()
 
 
 def run_backend_tests_parallel(
@@ -1866,6 +1921,8 @@ def run_backend_tests_parallel(
     verbose: bool = False,
     weights: dict[str, float] | None = None,
     timeout: float | None = None,
+    manifest: str | None = None,
+    seed: int | None = None,
 ) -> bool:
     """Run backend files in ``jobs`` concurrent unittest processes.
 
@@ -1877,12 +1934,16 @@ def run_backend_tests_parallel(
     """
     import signal
 
-    bins = partition_backend_tests(test_files, jobs * BACKEND_BINS_PER_JOB, weights)
+    # One job keeps one process (one bin), as without --jobs.
+    bin_count = 1 if jobs == 1 else jobs * BACKEND_BINS_PER_JOB
+    bins = partition_backend_tests(test_files, bin_count, weights, seed)
     registry = _WorkerRegistry()
     base_env = dict(os.environ)
     results: list[BackendBinResult] = []
     start_time = time.time()
-    print(f"[BACKEND] {len(test_files)} files in {len(bins)} bins across {jobs} parallel jobs")
+    seed_note = f", partition seed {seed}" if seed is not None else ""
+    print(f"[BACKEND] {len(test_files)} files in {len(bins)} bins across {jobs} parallel jobs{seed_note}")
+    sys.stdout.flush()
 
     previous_sigterm = None
     if threading.current_thread() is threading.main_thread() and hasattr(signal, "SIGTERM"):
@@ -1904,6 +1965,9 @@ def run_backend_tests_parallel(
                     log_path=os.path.join(log_dir, f"bin-{index:03d}.log"),
                     base_env=base_env,
                     timeout=timeout,
+                    manifest_path=(
+                        os.path.join(log_dir, f"bin-{index:03d}.manifest") if manifest else None
+                    ),
                 )
             except Exception as exc:  # A worker that cannot start fails the run.
                 result = BackendBinResult(files, -1, None, 0.0, None, f"[WORKER ERROR] {exc!r}")
@@ -1934,6 +1998,17 @@ def run_backend_tests_parallel(
                 except KeyboardInterrupt:
                     registry.stop_all()
                     raise
+            manifest_missing: list[BackendBinResult] = []
+            if manifest:
+                written = [r for r in results if r.manifest_path and os.path.exists(r.manifest_path)]
+                manifest_missing = [r for r in results if r.started and r not in written]
+                lines, outcomes, digest = write_test_manifest([r.manifest_path for r in written], manifest)
+                print(
+                    f"[MANIFEST] {lines} records ({_format_counts(outcomes) or 'none'}) "
+                    f"sha256={digest} -> {manifest}"
+                )
+                for r in manifest_missing:
+                    print("[MANIFEST] no records from bin: " + ", ".join(r.files))
         finally:
             if previous_sigterm is not None:
                 signal.signal(signal.SIGTERM, previous_sigterm)
@@ -1953,7 +2028,7 @@ def run_backend_tests_parallel(
     if skipped_bins:
         not_run = sum(len(r.files) for r in skipped_bins)
         print(f"[FAILFAST] {not_run} files were not started after the first failure.")
-    if not failed and not skipped_bins:
+    if not failed and not skipped_bins and not manifest_missing:
         print(
             f"\n[PASS] BACKEND PASSED ({len(test_files)} files, {total_ran} tests{detail} "
             f"in {elapsed:.2f}s with {jobs} jobs)"
@@ -1975,6 +2050,8 @@ def run_backend_tests(
     verbose: bool = False,
     jobs: int = 1,
     bin_timeout: float | None = None,
+    manifest: str | None = None,
+    partition_seed: int | None = None,
 ) -> bool:
     """Execute targeted Python backend tests using unittest."""
     if not test_files:
@@ -1993,14 +2070,16 @@ def run_backend_tests(
         print(f"  * {tf}")
     print("-" * 60)
 
-    if jobs > 1 and len(existing_tests) > 1:
+    if manifest or (jobs > 1 and len(existing_tests) > 1):
         return run_backend_tests_parallel(
             python_cmd,
             existing_tests,
-            jobs=min(jobs, len(existing_tests)),
+            jobs=max(1, min(jobs, len(existing_tests))),
             failfast=failfast,
             verbose=verbose,
             timeout=bin_timeout,
+            manifest=manifest,
+            seed=partition_seed,
         )
 
     cmd = list(python_cmd) + ["-m", "unittest"]
@@ -2148,6 +2227,19 @@ def main() -> int:
     )
 
     parser.add_argument(
+        "--manifest",
+        metavar="PATH",
+        help=(
+            "Write one sorted line per backend test outcome (id, outcome, skip reason) "
+            "to PATH and print its SHA-256; compare runs with scripts/compare_test_manifests.py."
+        ),
+    )
+    parser.add_argument(
+        "--partition-seed",
+        type=int,
+        help="With --jobs above 1, perturb file weights so a different grouping is tested.",
+    )
+    parser.add_argument(
         "--bin-timeout",
         type=float,
         default=0,
@@ -2277,6 +2369,8 @@ def main() -> int:
             verbose=args.verbose,
             jobs=resolve_backend_jobs(args.jobs, len(selected_backend_tests)),
             bin_timeout=args.bin_timeout or None,
+            manifest=args.manifest,
+            partition_seed=args.partition_seed,
         )
         if not backend_ok:
             all_passed = False
