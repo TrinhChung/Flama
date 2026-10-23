@@ -1,7 +1,9 @@
-"""Strict CardProgress compatibility mapper and availability evaluator.
+"""Canonical identity helpers and historical CardProgress evidence mapping.
 
 This is pure mapping code.  It performs no SQL, owns no transaction and is not
-wired into any production read or write path in P4-06.
+used as a shadow progress writer. Identity helpers are used by current NOTE
+authority, receipts and algorithm switching; retain them independently of the
+retired Phase 4 rollout switches.
 """
 
 from __future__ import annotations

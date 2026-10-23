@@ -79,7 +79,6 @@ def _probe_app(uri: str):
         "STUDY_ASYNC_BATCH_ENABLED": True,
         "STUDY_WIRE_V3_ENABLED": False,
         "STUDY_WIRE_V4_ENABLED": False,
-        "STUDY_PROGRESS_SHADOW_WRITE_ENABLED": False,
     })
 
 

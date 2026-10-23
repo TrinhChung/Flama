@@ -172,7 +172,6 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             self.assertEqual(moved.parent_id, target_parent_id)
 
     def test_reset_deck_only_clears_current_user_progress(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
         with self.app.app_context():
             deck = Deck(name="Deck Reset", parent_id=None, position=1)
             db.session.add(deck)
