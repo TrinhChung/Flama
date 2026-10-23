@@ -181,8 +181,7 @@ export function useWorksheetStudio({
 
     setIsGenerating(true)
     const abortController = new AbortController()
-
-    const timer = setTimeout(async () => {
+    const runPreview = async () => {
       try {
         const response = await generateWorksheetPreview({
           deck_id: currentDeckId || undefined,
@@ -215,7 +214,9 @@ export function useWorksheetStudio({
           setIsGenerating(false)
         }
       }
-    }, PREVIEW_DEBOUNCE_MS)
+    }
+
+    const timer = setTimeout(runPreview, PREVIEW_DEBOUNCE_MS)
 
     return () => {
       clearTimeout(timer)
