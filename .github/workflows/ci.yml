@@ -263,6 +263,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.mysql_contract == 'true' && inputs.validation_scope != 'backend'
     runs-on: ubuntu-latest
+    # The slowest recent run took 22 minutes; a hung probe must not bill the
+    # 6-hour default.
+    timeout-minutes: 40
 
     services:
       mysql:
@@ -272,11 +275,17 @@ jobs:
           MYSQL_ROOT_PASSWORD: ci-root-password
         ports:
           - 3306:3306
+        # Most probe time is per-test CREATE/DROP of the whole schema. A RAM
+        # datadir removes the fsync and file-creation cost without changing
+        # the engine, isolation or locking; the cap turns a runaway binlog
+        # into a clear write error instead of an out-of-memory runner.
+        # mysql:8.0 defaults to innodb_flush_method=fsync, which tmpfs supports.
         options: >-
           --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pci-root-password"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+          --tmpfs /var/lib/mysql:rw,size=2g
 
     steps:
       - name: Checkout
@@ -314,15 +323,6 @@ jobs:
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
         run: python scripts/probe_p1_02_mysql_concurrency.py
-
-      - name: Run NOTE analytics read-only contract on MySQL
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: '3306'
-          DB_USER: root
-          DB_PASSWORD: ci-root-password
-          DB_NAME: ci
-        run: python scripts/probe_p5_analytics_mysql.py
 
       - name: Setup historical and deck count MySQL anchor
         env:
@@ -370,14 +370,25 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p5_concurrency_mysql.py --learners 4 --notes 24 --rounds 2 --answers 8 --signups 6 --creates 8
 
-      - name: Run NOTE overlay and pristine materialization contract on MySQL
+      # These six probes each create, guard and drop their own generated
+      # schema and share no server state, so they run two at a time, longest
+      # first (plan 6.3.1). Concurrency probes and probes that use the ci
+      # schema keep their own sequential steps.
+      - name: Run schema-owning NOTE, field value, forecast, outbox and retention contracts on MySQL
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: '3306'
           DB_USER: root
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
-        run: python scripts/probe_p5_direct_replay_mysql.py --overlay-only
+        run: >-
+          python scripts/run_mysql_probes.py --jobs 2 --timeout 1500
+          --probe "scripts/probe_review_analytics_outbox_mysql.py --output output/review-outbox-mysql-ci.json"
+          --probe "scripts/probe_p5_direct_replay_mysql.py --overlay-only"
+          --probe "scripts/probe_forecast_snapshots_mysql.py --output output/forecast-snapshots-mysql-ci.json"
+          --probe "scripts/probe_field_value_consumers_mysql.py --output output/field-value-consumers-mysql-ci.json"
+          --probe "scripts/probe_p7_session_retention_mysql.py"
+          --probe "scripts/probe_p5_analytics_mysql.py"
 
       - name: Qualify complete retirement chain on a generated MySQL schema
         env:
@@ -406,33 +417,6 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_field_identity_cutover_mysql.py --output output/field-identity-cutover-mysql-ci.json
 
-      - name: Qualify Field value consumer contracts on MySQL
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: '3306'
-          DB_USER: root
-          DB_PASSWORD: ci-root-password
-          DB_NAME: ci
-        run: python scripts/probe_field_value_consumers_mysql.py --output output/field-value-consumers-mysql-ci.json
-
-      - name: Qualify forecast snapshot MySQL precision and schema
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: '3306'
-          DB_USER: root
-          DB_PASSWORD: ci-root-password
-          DB_NAME: ci
-        run: python scripts/probe_forecast_snapshots_mysql.py --output output/forecast-snapshots-mysql-ci.json
-
-      - name: Qualify review analytics outbox atomicity on MySQL
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: '3306'
-          DB_USER: root
-          DB_PASSWORD: ci-root-password
-          DB_NAME: ci
-        run: python scripts/probe_review_analytics_outbox_mysql.py --output output/review-outbox-mysql-ci.json
-
       - name: Verify retirement archives and contract guards with focused tests
         env:
           DB_HOST: 127.0.0.1
@@ -441,15 +425,6 @@ jobs:
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
         run: python scripts/run_tests.py --file tests/test_frozen_template_modernization.py tests/test_retirement_fresh_migration_chain.py tests/test_derived_card_retirement_migration.py tests/test_legacy_model_retirement.py tests/test_card_progress_retirement_migration.py tests/test_template_origin_retirement_migration.py --backend-only
-
-      - name: Run Phase 7 session retention contract on MySQL
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: '3306'
-          DB_USER: root
-          DB_PASSWORD: ci-root-password
-          DB_NAME: ci
-        run: python scripts/probe_p7_session_retention_mysql.py
 
 
       - name: Run migration 48 Connect authority fence probe on MySQL
@@ -461,7 +436,15 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p9_connect_fence_mysql.py --refs 2000
 
-
+      # The datadir lives in RAM (tmpfs above). Record what this run used so
+      # the size cap can be checked against real peaks.
+      - name: Report MySQL tmpfs, binlog and runner memory use
+        if: always()
+        env:
+          MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          docker exec "$MYSQL_CONTAINER" sh -c 'df -h /var/lib/mysql; du -sh /var/lib/mysql; du -ch /var/lib/mysql/binlog.0* 2>/dev/null | tail -n 1' || true
+          free -m || true
 
   deploy:
     needs: [changes, frontend, backend, redis-contract, mysql-contract]

@@ -136,6 +136,57 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertIn("flask --app wsgi.py db upgrade", self.workflow)
         self.assertIn("scripts/probe_p1_02_mysql_concurrency.py", self.workflow)
 
+    def _mysql_steps(self):
+        import yaml
+
+        job = yaml.safe_load(self.workflow)["jobs"]["mysql-contract"]
+        return job, {step["name"]: step for step in job["steps"]}
+
+    def test_mysql_service_runs_on_capped_tmpfs_with_a_job_time_limit(self):
+        job, steps = self._mysql_steps()
+
+        self.assertEqual(job["timeout-minutes"], 40)
+        self.assertIn("--tmpfs /var/lib/mysql:rw,size=2g", job["services"]["mysql"]["options"])
+        report = steps["Report MySQL tmpfs, binlog and runner memory use"]
+        self.assertEqual(report["if"], "always()")
+        self.assertEqual(report["env"]["MYSQL_CONTAINER"], "${{ job.services.mysql.id }}")
+        self.assertNotIn("${{", report["run"])
+
+    def test_only_schema_owning_probes_run_in_parallel_with_unchanged_commands(self):
+        import shlex
+
+        job, steps = self._mysql_steps()
+        parallel = [step for step in job["steps"] if "run_mysql_probes.py" in step.get("run", "")]
+        self.assertEqual(len(parallel), 1)
+        tokens = shlex.split(parallel[0]["run"])
+        self.assertEqual(tokens[:6], ["python", "scripts/run_mysql_probes.py", "--jobs", "2", "--timeout", "1500"])
+        probes = [tokens[i + 1] for i, token in enumerate(tokens) if token == "--probe"]
+        self.assertEqual(probes, [
+            "scripts/probe_review_analytics_outbox_mysql.py --output output/review-outbox-mysql-ci.json",
+            "scripts/probe_p5_direct_replay_mysql.py --overlay-only",
+            "scripts/probe_forecast_snapshots_mysql.py --output output/forecast-snapshots-mysql-ci.json",
+            "scripts/probe_field_value_consumers_mysql.py --output output/field-value-consumers-mysql-ci.json",
+            "scripts/probe_p7_session_retention_mysql.py",
+            "scripts/probe_p5_analytics_mysql.py",
+        ])
+        self.assertEqual(parallel[0]["env"]["DB_HOST"], "127.0.0.1")
+        # Concurrency probes and probes that use the ci schema stay sequential.
+        sequential = {
+            "scripts/probe_p1_02_mysql_concurrency.py",
+            "scripts/probe_p5_concurrency_mysql.py",
+            "scripts/probe_review_analytics_mysql.py",
+            "scripts/probe_deck_counts_mysql.py",
+            "scripts/bootstrap_historical_schema.py",
+        }
+        for script in sequential:
+            owners = [name for name, step in steps.items() if script in step.get("run", "")]
+            self.assertEqual(len(owners), 1, script)
+            self.assertNotIn("run_mysql_probes.py", steps[owners[0]]["run"], script)
+        # Each probe still runs exactly once in the job.
+        for probe in probes:
+            script = probe.split()[0]
+            self.assertEqual(sum(step.get("run", "").count(script) for step in job["steps"]), 1, script)
+
     def test_ci_uses_no_actions_artifact_storage(self):
         # An exhausted account artifact quota must never block validation, so
         # Flask checks the build on the frontend runner without transferring it.
