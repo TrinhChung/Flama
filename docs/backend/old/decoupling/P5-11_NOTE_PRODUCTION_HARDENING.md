@@ -1,6 +1,6 @@
 # P5-11 — Gia cố NOTE authority sau R1
 
-> Lập 2026-09-30. Trạng thái: **P5-11a + P5-11b đã deploy production** (PR #173, release `6472e42`, 30/09 ~04:30 UTC; kèm bản sửa dashboard #171). Backup trước merge `/root/backups/flama-pre-pr173-20260930T041022Z.sql.gz`. Sau deploy: audit `study-authority-read-audit` **18/18 PASS**, 0 learner LEGACY; dashboard user 1 (39k thẻ) đo trên production trong transaction READ ONLY **3,1 s** (trước: ~120 s, 504), user 4 0,86 s; journal không có `Lock wait`/deadlock. P5-11c (materialize theo lô) còn mở. Nguồn: [báo cáo tải](../../architecture/DATABASE_ARCHITECTURE_SCALABILITY_REVIEW_2026-09-29.md), [điều tra truy vấn](../../architecture/DATABASE_QUERY_PERFORMANCE_INVESTIGATION_2026-09-29.md), log production 28–30/09.
+> Lập 2026-09-30. Trạng thái: **P5-11a + P5-11b đã deploy production** (PR #173, release `6472e42`, 30/09 ~04:30 UTC; kèm bản sửa dashboard #171). Backup trước merge `/root/backups/flama-pre-pr173-20260930T041022Z.sql.gz`. Sau deploy: audit `study-authority-read-audit` **18/18 PASS**, 0 learner LEGACY; dashboard user 1 (39k thẻ) đo trên production trong transaction READ ONLY **3,1 s** (trước: ~120 s, 504), user 4 0,86 s; journal không có `Lock wait`/deadlock. P5-11c (materialize theo lô) còn mở. Nguồn: [báo cáo tải](../../../architecture/DATABASE_ARCHITECTURE_SCALABILITY_REVIEW_2026-09-29.md), [điều tra truy vấn](../../../architecture/DATABASE_QUERY_PERFORMANCE_INVESTIGATION_2026-09-29.md), log production 28–30/09.
 
 ## 1. Vì sao cần
 
@@ -15,7 +15,7 @@ R1 (29/09) đưa 18/18 learner sang NOTE. Hai lớp lỗi xuất hiện khi dùn
 
 ## 2. Nguyên nhân gốc
 
-Dưới REPEATABLE READ, `SELECT … FOR UPDATE` trên **một khóa chưa tồn tại** hoặc **một khoảng rỗng** giữ gap lock. Các dòng mới của learner khác nằm cạnh nhau ở cuối index, nên hai transaction cùng giữ một gap rồi cùng chờ insert-intention của nhau. Thiết kế P4/P5 dùng đọc khóa chỉ để có *current read* (xem [P4-07 InnoDB finding](../../architecture/phase-4-native-session-worker-mirror-verification-2026-09-13.md#innodb-isolation-finding)); tuần tự hóa thật sự đến từ khóa cha (User, subject, token, contributor). Gap lock là tác dụng phụ không cần thiết.
+Dưới REPEATABLE READ, `SELECT … FOR UPDATE` trên **một khóa chưa tồn tại** hoặc **một khoảng rỗng** giữ gap lock. Các dòng mới của learner khác nằm cạnh nhau ở cuối index, nên hai transaction cùng giữ một gap rồi cùng chờ insert-intention của nhau. Thiết kế P4/P5 dùng đọc khóa chỉ để có *current read* (xem [P4-07 InnoDB finding](../decoupling-phases/phase-4-native-session-worker-mirror-verification-2026-09-13.md#innodb-isolation-finding)); tuần tự hóa thật sự đến từ khóa cha (User, subject, token, contributor). Gap lock là tác dụng phụ không cần thiết.
 
 Bốn điểm "đọc-khóa-rồi-chèn" gặp trong probe, theo thứ tự lộ ra:
 
@@ -124,10 +124,10 @@ Chỉ đổi code. Deploy lại release trước theo workflow; không có migra
 
 ## 5. Việc còn lại
 
-1. **Deploy**: merge PR này đưa cả #171 lên production (hết 504 dashboard/overview). Sau deploy chạy lại vòng audit runbook §4.2.4.
+1. ~~**Deploy**~~: xong (#173 `6472e42`, rồi #176–#178), audit 18/18 PASS sau mỗi lần.
 2. ~~**P5-11c — materialize Note pristine theo lô**~~: xong, §3b'.
-3. **Snapshot cả phạm vi**: phiên vẫn chứa tới 5.000 thẻ (≈2 ms CPU/thẻ, JSON ≈2 KB/thẻ) và SPA mở lại mỗi 50 câu. Chỉ snapshot hàng đợi trong ngày là thay đổi hợp đồng wire, để sau.
-4. **Reader vẫn khóa** (Browse, `/api/study/next`, MCP): nay chỉ còn vài câu lệnh khóa theo lô; chuyển hẳn sang đọc không khóa như dashboard nếu đo thấy tranh chấp.
+3. **Snapshot cả phạm vi**: phiên vẫn chứa tới 5.000 thẻ (≈2 ms CPU/thẻ, JSON ≈2 KB/thẻ). Nhánh NOTE batch tiếp tục cùng lease sau mỗi lô 50 câu; chỉ transport cũ (v2/v3) mở lại snapshot ([F9-02](../decoupling-phases/phase-9-contraction-investigation-2026-09-30.md#f9-02--snapshot-lớn-còn-tồn-tại-note-rollover-đã-tái-sử-dụng-lease)). Chỉ snapshot hàng đợi trong ngày là thay đổi hợp đồng wire, để sau (P9-07).
+4. ~~**Reader vẫn khóa**~~: Browse và MCP đọc theo tập hợp (§3b''). Còn `/api/study/next` (SPA không dùng) giữ bộ đọc từng thẻ có chủ đích; learner 20k Note mất ~15 s.
 5. **Frontend gửi commit hai lần** (LEGACY v3): sau commit `auto_finish` thành công, `flushOnExit` gửi lại cùng `commit_id` với `final_states` đã cập nhật → 409 `IDEMPOTENCY_KEY_REUSED`. Dữ liệu lần đầu đã lưu; với v4 (`final_states` rỗng) lần gửi lại là replay 200. Chỉ còn ảnh hưởng phiên LEGACY cũ trong IndexedDB.
-6. Retention `study_session_cards`/`study_session_authority_pins` thuộc Phase 7.
-7. **Cổng deploy CI** chỉ xét diff của lần push; một push runtime có CI fail rồi push sau chỉ sửa test sẽ không bao giờ deploy (#171). Nên so với release deploy thành công gần nhất.
+6. ~~Retention membership phiên~~: Phase 7, đã chạy 30/09.
+7. ~~**Cổng deploy CI**~~: xong trong #173 (so với release deploy thành công gần nhất).
