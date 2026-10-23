@@ -119,8 +119,8 @@ Thành phần các merge trên master gần đây (25 commit first-parent từ 2
 | Nightly / weekly cron | **Không làm** chừng nào master còn chạy đầy đủ |
 | Matrix sharding nhiều runner | **Không làm** |
 | POC `FastTestHarness` / tái dùng schema | **Park** trên nhánh thử nghiệm riêng, không merge vào `tests/`. Chỉ xem xét lại khi đã qua các gate trong RFC (MySQL, isolation, đo khi chạy lạnh) và có một chủ sở hữu duy nhất. |
-| Datadir MySQL trên tmpfs trong `mysql-contract` (bổ sung 2026-10-23) | **Làm** sau khi FIX-01 nhả `ci.yml`; đo hai run hosted trước khi giữ (mục 6.3.1 (d)) |
-| Chạy song song sáu probe tự tạo schema (bổ sung 2026-10-23) | **Làm sau tmpfs** nếu `mysql-contract` vẫn là critical path; probe concurrency và probe dùng schema `ci` giữ tuần tự (mục 6.3.1 (b)) |
+| Datadir MySQL trên tmpfs trong `mysql-contract` (bổ sung 2026-10-23) | **Đã làm local** (commit `902c0cd5`, cùng commit với dòng dưới, theo yêu cầu người dùng); giữ lại chỉ khi hai run hosted đạt (mục 6.3.1 (d), 12.3) |
+| Chạy song song sáu probe tự tạo schema (bổ sung 2026-10-23) | **Đã làm local** (commit `902c0cd5`); probe concurrency và probe dùng schema `ci` giữ tuần tự (mục 6.3.1 (b)) |
 
 ## 6. Kế hoạch triển khai chi tiết
 
@@ -291,6 +291,14 @@ Nguyên nhân: các probe này chạy lại test fixture của suite SQLite trê
 - **(e) Park: dùng lại schema trong một probe** (tạo một lần, reset giữa các test). Lợi nhất, gần 7 s/test, nhưng đổi lifecycle fixture, nên chịu cùng gate với H1 trong RFC (reset có kiểm chứng, AUTO_INCREMENT, FK, state sau commit).
 
 Thứ tự đề xuất: (d) trước, đo hai run; sau đó (b) nếu `mysql-contract` vẫn là critical path; (a)/(c) chỉ sau khi owner ký bảng inventory.
+
+**Trạng thái 2026-10-23 (Claude Code).** Người dùng yêu cầu làm luôn, nên (d) và (b) được nối vào `ci.yml` trong cùng commit local `902c0cd5`, trên nền commit tách step `dbc5b736`:
+
+- Service có `--tmpfs /var/lib/mysql:rw,size=2g`. Job có `timeout-minutes: 40`, và một step cuối `if: always()` in `df`/`du` của datadir, tổng binlog và `free -m`.
+- Sáu probe tự tạo schema chạy trong một step, `run_mysql_probes.py --jobs 2 --timeout 1500`, dài nhất trước, giữ nguyên lệnh và tham số. P1-02, P5 write concurrency, hai probe dùng schema `ci`, hai probe field identity nhanh, retirement chain, P9 fence và các focused test vẫn là step tuần tự riêng.
+- `tests/test_ci_workflow.py` khoá các điểm trên: tmpfs có trần, job có timeout, step đo chạy cả khi job lỗi, đúng sáu probe trong step song song với lệnh không đổi, mỗi probe chạy đúng một lần, các probe phải tuần tự không nằm trong step song song. 121 test tooling/workflow pass.
+- Đã chạy đúng step song song lấy từ `ci.yml` của commit `902c0cd5` (worktree sạch, chỉ đổi interpreter và `DB_PORT`) trên mysqld 8.0.40 dùng một lần, ghim 2 core, durability mặc định. Sáu probe PASS, exit 0, wall 1.221 s; tổng thời gian sáu probe 2.433 s (outbox 817, direct replay 662, forecast 393, consumers 225, P7 179, P5 analytics 157). Sau run không còn schema probe nào sót lại. Tmpfs không kiểm được trên Windows.
+- Vì (d) và (b) vào cùng lúc, run hosted đầu tiên tách hiệu quả bằng bảng thời gian từng probe mà `run_mysql_probes.py` in ra. Ở local, thời gian từng probe gần như không đổi khi chạy song song, nên thời gian mỗi probe giảm so với run CI cũ (outbox 232 s, direct replay 189 s, forecast 117 s, consumers 65 s, P7 52 s, P5 analytics 45 s) là phần của tmpfs; khoảng cách giữa wall của step và tổng thời gian sáu probe là phần của chạy song song. Nếu run hosted lỗi vì tmpfs, revert riêng dòng `--tmpfs`; nếu lỗi vì chạy song song, đặt `--jobs 1`.
 
 Benchmark cục bộ trên mysqld 8.0.40 dùng một lần, ghim 2 core cho cả mysqld lẫn probe, durability mặc định như image CI. Windows chậm khoảng 3 lần so với CI ở các probe này, nên chỉ so tương đối giữa hai cách chạy trên cùng máy:
 
@@ -489,8 +497,7 @@ Trạng thái: cả bốn mục đã có trong commit local `61fdb9ff` trên nh�
 | PR B, mốc | Sau khi rebase lên FIX-01, một dispatch `validation_scope=backend`, `backend_jobs=1` | ≈12 | Có manifest baseline hosted của commit đã tích hợp. So với manifest tuần tự local cùng commit bằng `scripts/compare_test_manifests.py`; khác biệt chỉ được chấp nhận khi giải thích được bằng nền tảng (ví dụ lý do skip theo hệ điều hành). Hash của mốc hosted là chuẩn cho ba lượt dưới |
 | PR B, ba lượt đo | Cùng commit, ba dispatch `backend_jobs=2` với seed 1, 2, 3 | ≈27 (3 × ≈9) | Hash bằng mốc ở cả ba lượt; RAM runner không cạn; step `backend` ngắn hơn mốc. Vì step `backend` lịch sử dao động 585–914 s, so thêm với ≥2 run push master gần nhất (jobs 1, không tốn thêm phút) |
 | Sau các lượt đo | Đọc kích thước log của các run vừa chạy bằng `gh api` (không tải log về) | 0 | Ghi tổng; nếu mục 11.1 chốt log tính vào storage thì cộng vào forecast |
-| PR C (d) tmpfs | Hai run PR có thay đổi chạm `mysql-contract` trước và sau | ≈0 thêm nếu đi cùng PR đã cần chạy | Mọi step của `mysql-contract` PASS, kể cả bootstrap và `flask db upgrade`; thời gian job so với ≥2 run trước đó; peak binlog/datadir dưới trần tmpfs; số đo chờ khoá của probe concurrency không lệch bất thường |
-| PR C (b) song song | Như trên, sau (d) | ≈0 thêm | Như trên, cộng bảng thời gian từng probe |
+| PR C (d) tmpfs và (b) song song, commit `902c0cd5` | Hai run có `mysql-contract` sau khi push (PR hoặc master đã cần chạy) | ≈0 thêm | Mọi step của `mysql-contract` PASS, kể cả bootstrap và `flask db upgrade`; job ngắn hơn ≥2 run trước đó (839–1.320 s); peak datadir/binlog trong step đo dưới trần 2g; số đo chờ khoá của P1-02/P5 không lệch bất thường; tách phần tmpfs và phần song song bằng bảng thời gian từng probe (mục 6.3.1) |
 
 Tổng thêm ≈40 phút, khoảng 2% allowance (bản trước của kế hoạch tính ≈72 phút cho ba cặp xen kẽ; review Gemini chỉ ra parity theo hash chỉ cần một mốc, vì `--jobs 1` chỉ có một nhóm nên seed không đổi gì). Nếu forecast quota ở mục 11.2 đã chạm 70%, lùi các bước có phút thêm và giữ `--jobs 1`. Chỉ đổi mặc định `backend_jobs` cho push/PR sau khi cả ba lượt đạt.
 
