@@ -23,6 +23,14 @@ Bằng chứng local trên patch tích hợp: 8 file tooling (`test_modular_test
 
 S2 đã hoàn tác chuyển thư mục theo quyết định người dùng qua MSG-10: giữ đủ 22 test tại `tests/`, phục hồi import/path, không giảm gate. CI push/PR vẫn jobs=1 và có timeout; full-suite parity trên revision tích hợp, Linux lifecycle thực và hosted benchmark còn chờ, nên PR B là `LOCAL_VERIFIED` cho tooling và `HOSTED_PENDING` cho rollout. Không chạy ứng dụng, DB, migrations hoặc SQLite integration trong đợt PR B này. Wrapper yêu cầu suite có inventory cố định trước run; custom suite thêm case động trong `run()` sẽ báo lỗi qualification. Hash TSV lịch sử không so trực tiếp với schema JSON mới.
 
+### Checkpoint CI sau push (Codex, 2026-10-23)
+
+- Quyền push đã được người dùng cấp sau checkpoint local. Run `39939578562` pass backend 2.647 cases/9 skip, Redis và MySQL; frontend fail vì selector giữ đường dẫn test đã chuyển/xoá. `524e4a1c` sửa selection bằng full inventory hiện hành của đúng tầng khi diff chứa deleted test, giữ lỗi cho explicit missing file và stale catalog, không hạ coverage.
+- Run `39943093986` pass frontend 190 suites (1.540 pass/4 skip), Redis và toàn bộ MySQL gates. Backend chạy đủ 2.663 cases nhưng 2 test workflow mới lỗi vì import `yaml` chưa được khai báo trong dependencies CI; local đã có PyYAML nên không lộ lỗi. `4ae8b3fc` bổ sung `requirements-test.txt`, backend install/cache và mapping full backend cho test dependency changes; giữ nguyên assertions của PR-C. 96 tooling tests pass ở cả venv hiện có lẫn venv Python 3.12 mới cài từ manifest; 17 workflow tests cũng pass trong môi trường chỉ có PyYAML.
+- Run [`39945884728`](https://github.com/TrinhChung/Flama/actions/runs/39945884728) trên `4ae8b3fc` đã **SUCCESS**: backend full inventory 253 file/2.740 cases, 9 skip, worker 794,54s (job 13m40s); frontend 190 suites/1.540 pass/4 skip, lint/typecheck/build/SPA contract pass; MySQL/Redis pass. Test-dependency manifest kích hoạt full inventory backend, rộng hơn selection 244 file của run trước. Push/PR vẫn jobs=1; chưa nghiệm thu full-suite parity đa seed của PR B, không tự mở thêm benchmark hosted khi chưa xác minh headroom quota.
+- Hai run dùng PR-C mới đều pass mọi migration/contract step: `39943093986` job 4m54s, sáu probe song song wall 225,6s; `39945884728` job 9m05s, wall 429,8s. Giữ cả hai số đo để phản ánh biến động hosted, không chỉ dùng lượt nhanh nhất làm forecast. Tmpfs 262 MiB/2 GiB và swap 0 ở cả hai lượt là số cuối job sau cleanup, không phải peak. PR-C chưa đóng resource gate bằng số này. Run mới có 0 artifact/0 byte; repo cache snapshot 5 cache/545.360.559 byte (≈520 MiB), thuộc budget riêng. Account-level minutes/storage forecast vẫn `UNVERIFIED` theo mục 11.
+- Warning jsdom trong typing template đã xác định là callback `select` từ case trước chạy sau `window.close()`. Theo MSG-16, cần sửa cleanup/drain timer và assert không có jsdom errors ở batch frontend kế tiếp, giữ assertions hiện hành; chưa có bằng chứng đây là lỗi production/audio.
+
 ## 1. Kết luận ngắn
 
 1. Số đo lịch sử 30 ngày khoảng **1.045 phút tính phí**, thấp hơn giả định 2.940 phút của báo cáo Gemini. Điều này không chứng minh tài khoản còn đủ quota hiện tại: phải kiểm tra cả minutes và Actions storage **0,5 GB** đến cuối billing cycle theo mục 11; account billing chưa xác minh được.
@@ -472,9 +480,9 @@ Forecast theo thời gian **còn lại của billing cycle**, dùng mức burn b
 - Cảnh báo khi current **hoặc forecast** chạm 70% minutes/storage, hoặc dự báo cạn trước cuối kỳ; ở 80% chỉ mở thêm workload không thiết yếu khi đã tính lại headroom. Không chờ mốc 90–100%. Cache theo soft cap riêng. Các mốc này cần được triển khai/đo ở task BUDGET-01, chưa có monitor tự động.
 - Nghiệm thu tối ưu gồm cold/warm runs, same case/outcome manifests, total runner-minutes gồm reruns/setup, account-level storage forecast/peak/GB-hours, cache bytes/hit-rate và dự phòng hotfix. Nếu giảm minutes nhưng vượt Actions storage 0,5 GB, hoặc ngược lại, phương án không đạt.
 
-## 12. Nghiệm thu hosted khi người dùng cho push (đề xuất, chưa chạy)
+## 12. Quy trình nghiệm thu hosted (kế hoạch trước push)
 
-Chưa có run hosted nào cho PR A, B, C. Không push để đo khi người dùng chưa đồng ý.
+Các mốc và ước tính dưới đây được lập trước khi người dùng cho push. Kết quả Actions hiện hành ở checkpoint đầu tài liệu; PR B vẫn chưa chạy benchmark hosted nhiều seed theo quy trình này.
 
 ### 12.1 Chi phí tham chiếu
 
