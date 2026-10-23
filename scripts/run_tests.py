@@ -1346,7 +1346,9 @@ def get_git_modified_files() -> list[str]:
     return sorted(files)
 
 
-def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], set[str]]:
+def map_files_to_modules(
+    changed_files: list[str], *, from_git_diff: bool = False,
+) -> tuple[set[str], set[str], set[str]]:
     """
     Given a list of changed files, determine affected module names,
     backend test files, and frontend test files.
@@ -1357,8 +1359,47 @@ def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], 
     backend_tests: set[str] = set()
     frontend_tests: set[str] = set()
 
+    inventories: dict[str, list[str]] = {}
+
+    def current_tests(layer: str) -> list[str]:
+        # One inventory per layer keeps a large PR diff consistent and avoids
+        # rescanning the whole frontend for every co-located feature change.
+        if layer not in inventories:
+            inventories[layer] = (
+                discover_all_backend_tests() if layer == "backend"
+                else discover_all_frontend_tests()
+            )
+        return inventories[layer]
+
     for file_path in changed_files:
         norm_path = file_path.replace("\\", "/")
+
+        # Git diffs include removed tests. Without verified rename metadata,
+        # a matching basename cannot establish the replacement's coverage.
+        # Run the entire current layer so moves, renames and deletions retain
+        # their surviving regressions. Explicit --file still rejects typos.
+        if from_git_diff and not (ROOT_DIR / norm_path).is_file():
+            backend_test = (
+                norm_path.startswith("tests/")
+                and Path(norm_path).name.startswith("test_")
+                and norm_path.endswith(".py")
+            )
+            frontend_test = norm_path.startswith("frontend/src/") and (
+                ".test." in norm_path or ".spec." in norm_path
+            )
+            if backend_test or frontend_test:
+                selected_current_tests = (
+                    current_tests("backend") if backend_test
+                    else current_tests("frontend")
+                )
+                layer = "backend" if backend_test else "frontend"
+                if not selected_current_tests:
+                    raise ValueError(
+                        f"Cannot resolve removed {layer} test {norm_path!r}: "
+                        "no current tests were discovered; coverage cannot be verified."
+                    )
+                (backend_tests if backend_test else frontend_tests).update(selected_current_tests)
+                continue
 
         # If a changed file does not exist on disk, check if its filename
         # matches any known test in MODULES (e.g. file was renamed/relocated).
@@ -1411,7 +1452,7 @@ def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], 
             relative_prefix = f"src/features/{feature_name}/"
             co_located_tests = {
                 path
-                for path in discover_all_frontend_tests()
+                for path in current_tests("frontend")
                 if path.startswith(relative_prefix)
             }
             frontend_tests.update(co_located_tests)
@@ -1443,22 +1484,22 @@ def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], 
             fnmatch.fnmatch(norm_path, pattern)
             for pattern in FULL_BACKEND_SOURCE_PATTERNS
         ):
-            backend_tests.update(discover_all_backend_tests())
+            backend_tests.update(current_tests("backend"))
             matched = True
         if any(
             fnmatch.fnmatch(norm_path, pattern)
             for pattern in FULL_FRONTEND_SOURCE_PATTERNS
         ):
-            frontend_tests.update(discover_all_frontend_tests())
+            frontend_tests.update(current_tests("frontend"))
             matched = True
 
         if not matched:
             # Fail safe when the catalog is stale: run the affected layer in
             # full rather than silently substituting unrelated core tests.
             if norm_path.startswith("app/") or norm_path.startswith("models/"):
-                backend_tests.update(discover_all_backend_tests())
+                backend_tests.update(current_tests("backend"))
             elif is_frontend_source:
-                frontend_tests.update(discover_all_frontend_tests())
+                frontend_tests.update(current_tests("frontend"))
 
     # Never cross layers: React changes select Vitest only; Python changes
     # select unittest only.
@@ -1483,7 +1524,7 @@ def build_ci_change_plan(
     failed) must still deploy with the next green push, even a test-only one.
     """
     normalized = [path.replace("\\", "/") for path in changed_files]
-    _, backend_tests, frontend_tests = map_files_to_modules(normalized)
+    _, backend_tests, frontend_tests = map_files_to_modules(normalized, from_git_diff=True)
 
     def matches_any(patterns: tuple[str, ...], paths: list[str] | None = None) -> bool:
         return any(
@@ -2466,8 +2507,9 @@ def run_frontend_tests(
         return True
 
     fe_dir = ROOT_DIR / "frontend"
-    if not fe_dir.exists():
-        return True
+    if not fe_dir.is_dir():
+        print("[ERROR] Frontend directory is missing for selected tests.", file=sys.stderr)
+        return False
 
     # Ensure all test files actually exist on disk
     missing_tests = [f for f in test_files if not (fe_dir / f).exists()]
@@ -2634,11 +2676,15 @@ def main() -> int:
         }
         deployed_sha = str(os.environ.get("DEPLOYED_RELEASE_SHA") or "").strip()
         since_deploy = files_changed_since(deployed_sha) if deployed_sha else None
-        plan = build_ci_change_plan(
-            changed,
-            force_all_validation=force_all,
-            files_since_deploy=since_deploy,
-        )
+        try:
+            plan = build_ci_change_plan(
+                changed,
+                force_all_validation=force_all,
+                files_since_deploy=since_deploy,
+            )
+        except ValueError as exc:
+            print(f"[ERROR] {exc}", file=sys.stderr)
+            return 1
         print(json.dumps({
             "changed_files": changed,
             "deployed_release_sha": deployed_sha or None,
@@ -2710,7 +2756,11 @@ def main() -> int:
         if len(changed) > 10:
             print(f"  * ... and {len(changed) - 10} more")
 
-        mods, b_tests, f_tests = map_files_to_modules(changed)
+        try:
+            mods, b_tests, f_tests = map_files_to_modules(changed, from_git_diff=True)
+        except ValueError as exc:
+            print(f"[ERROR] {exc}", file=sys.stderr)
+            return 1
         target_modules.update(mods)
         selected_backend_tests.update(b_tests)
         selected_frontend_tests.update(f_tests)

@@ -357,6 +357,137 @@ class ModularTestRunnerTests(unittest.TestCase):
 
 
 
+class ChangedTestSelectionTests(unittest.TestCase):
+    """Git deletions broaden coverage; explicit and catalog mistakes still fail."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        for name, value in (("ROOT_DIR", self.root), ("MODULES", {})):
+            patcher = mock.patch.object(run_tests, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def files(self, *paths):
+        for path in paths:
+            target = self.root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("", encoding="utf-8")
+
+    def test_moved_uncataloged_frontend_test_runs_current_entire_frontend(self):
+        old = "frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.test.tsx"
+        new = "frontend/src/pages/marketplace-note-type-detail/ui/SharedNoteTypeDetailPage.test.tsx"
+        other = "frontend/src/entities/flashcard/ui/NoteFieldEditor.test.tsx"
+        self.files(new, other, "tests/test_other.py")
+        _, backend, frontend = run_tests.map_files_to_modules([old], from_git_diff=True)
+        self.assertEqual(frontend, {new.removeprefix("frontend/"), other.removeprefix("frontend/")})
+        self.assertEqual(backend, set())
+        self.assertNotIn(old.removeprefix("frontend/"), frontend)
+
+    def test_removed_test_covers_differently_named_replacement_and_other_current_tests(self):
+        self.files("frontend/src/entities/flashcard/ui/NoteFieldEditor.test.tsx", "frontend/src/features/browse/Browse.test.tsx")
+        _, backend, frontend = run_tests.map_files_to_modules(
+            ["frontend\\src\\shared\\ui\\CardFieldsForm.test.tsx"], from_git_diff=True,
+        )
+        self.assertEqual(frontend, set(run_tests.discover_all_frontend_tests()))
+        self.assertEqual(len(frontend), 2)
+        self.assertEqual(backend, set())
+
+    def test_removed_backend_without_replacement_runs_current_backend_only(self):
+        self.files("tests/nested/test_current.py", "tests/test_other.py", "frontend/src/Other.test.tsx")
+        _, backend, frontend = run_tests.map_files_to_modules(["tests/test_removed.py"], from_git_diff=True)
+        self.assertEqual(backend, {"tests/nested/test_current.py", "tests/test_other.py"})
+        self.assertEqual(frontend, set())
+
+    def test_colliding_basenames_do_not_guess_a_replacement_from_catalog_order(self):
+        targets = ["src/pages/one/Same.test.tsx", "src/pages/two/Same.test.tsx", "src/entities/Other.test.tsx"]
+        self.files(*(f"frontend/{path}" for path in targets))
+        for order in (targets, list(reversed(targets))):
+            with self.subTest(order=order):
+                run_tests.MODULES = {"example": {"source_patterns": [], "backend_tests": [], "frontend_tests": order[:1]}}
+                _, backend, frontend = run_tests.map_files_to_modules(["frontend/src/deleted/Same.test.tsx"], from_git_diff=True)
+                self.assertEqual(frontend, set(targets))
+                self.assertEqual(backend, set())
+
+    def test_existing_changed_test_stays_direct_only(self):
+        self.files("frontend/src/Current.test.tsx", "frontend/src/Other.test.tsx", "tests/test_current.py", "tests/test_other.py")
+        _, backend, frontend = run_tests.map_files_to_modules(["frontend/src/Current.test.tsx", "tests/test_current.py"], from_git_diff=True)
+        self.assertEqual(frontend, {"src/Current.test.tsx"})
+        self.assertEqual(backend, {"tests/test_current.py"})
+
+    def test_explicit_missing_and_mixed_frontend_files_fail_before_mapping(self):
+        current = "frontend/src/current/Current.test.tsx"
+        self.files(current)
+        for paths in (["frontend/src/deleted/Current.test.tsx"], [current, "frontend/src/Missing.test.tsx"]):
+            with self.subTest(paths=paths), mock.patch.object(sys, "argv", ["run_tests.py", "--frontend-only", "--file", *paths]), mock.patch.object(run_tests, "resolve_python_command", return_value=[sys.executable]), mock.patch.object(run_tests, "map_files_to_modules") as mapper, mock.patch("sys.stderr"):
+                self.assertEqual(run_tests.main(), 1)
+                mapper.assert_not_called()
+
+    def test_stale_frontend_catalog_entry_remains_a_failure(self):
+        source = "frontend/src/features/example/Current.tsx"
+        self.files(source, "frontend/src/features/example/Other.test.tsx")
+        run_tests.MODULES = {"example": {"source_patterns": [source], "backend_tests": [], "frontend_tests": ["src/features/example/Missing.test.tsx"]}}
+        _, _, selected = run_tests.map_files_to_modules([source], from_git_diff=True)
+        self.assertIn("src/features/example/Missing.test.tsx", selected)
+        with mock.patch.object(run_tests.subprocess, "run") as child, mock.patch("sys.stderr"):
+            self.assertFalse(run_tests.run_frontend_tests(sorted(selected)))
+            child.assert_not_called()
+
+    def test_stale_backend_catalog_entry_remains_a_failure(self):
+        source = "app/services/current.py"
+        self.files(source, "tests/test_other.py")
+        run_tests.MODULES = {"example": {"source_patterns": [source], "backend_tests": ["tests/test_missing.py"], "frontend_tests": []}}
+        _, selected, _ = run_tests.map_files_to_modules([source], from_git_diff=True)
+        self.assertIn("tests/test_missing.py", selected)
+        with mock.patch.object(run_tests, "run_backend_tests_parallel") as child, mock.patch("builtins.print"):
+            self.assertFalse(run_tests.run_backend_tests([sys.executable], sorted(selected)))
+            child.assert_not_called()
+
+    def test_deleted_only_ci_plan_activates_only_affected_layer(self):
+        self.files("tests/test_current.py", "frontend/src/Current.test.tsx")
+        for old, layer, other in (("tests/test_removed.py", "backend", "frontend"), ("frontend/src/Removed.test.tsx", "frontend", "backend")):
+            with self.subTest(layer=layer):
+                plan = run_tests.build_ci_change_plan([old])
+                self.assertTrue(plan[layer])
+                self.assertFalse(plan[other])
+                self.assertFalse(plan["deploy"])
+
+    def test_current_inventory_is_discovered_once_per_layer_in_large_diff(self):
+        with mock.patch.object(run_tests, "discover_all_frontend_tests", return_value=["src/Current.test.tsx"]) as frontend, mock.patch.object(run_tests, "discover_all_backend_tests", return_value=["tests/test_current.py"]) as backend:
+            _, selected_backend, selected_frontend = run_tests.map_files_to_modules(
+                ["frontend/src/Removed.test.tsx", "frontend/src/OtherRemoved.test.tsx", "tests/test_removed.py", "tests/test_other_removed.py"], from_git_diff=True,
+            )
+        self.assertEqual(selected_frontend, {"src/Current.test.tsx"})
+        self.assertEqual(selected_backend, {"tests/test_current.py"})
+        frontend.assert_called_once_with()
+        backend.assert_called_once_with()
+
+    def test_empty_fallback_inventory_rejects_selection_for_both_layers(self):
+        for old in ("tests/test_removed.py", "frontend/src/Removed.spec.ts"):
+            with self.subTest(old=old), self.assertRaisesRegex(ValueError, "coverage cannot be verified"):
+                run_tests.map_files_to_modules([old], from_git_diff=True)
+
+    def test_cli_changed_and_ci_plan_fail_when_inventory_is_empty(self):
+        for mode in ("--changed", "--ci-plan"):
+            output = self.root / "github-output"
+            with self.subTest(mode=mode), mock.patch.object(sys, "argv", ["run_tests.py", mode, "--frontend-only", "--github-output", str(output)]), mock.patch.object(run_tests, "get_git_modified_files", return_value=["frontend/src/Removed.test.tsx"]), mock.patch.object(run_tests, "resolve_python_command", return_value=[sys.executable]), mock.patch("sys.stderr"):
+                self.assertEqual(run_tests.main(), 1)
+                self.assertFalse(output.exists())
+
+    def test_cli_changed_runs_current_frontend_after_deletion(self):
+        current = "frontend/src/entities/flashcard/ui/NoteFieldEditor.test.tsx"
+        self.files(current)
+        with mock.patch.object(sys, "argv", ["run_tests.py", "--changed", "--frontend-only"]), mock.patch.object(run_tests, "get_git_modified_files", return_value=["frontend/src/shared/ui/CardFieldsForm.test.tsx"]), mock.patch.object(run_tests, "resolve_python_command", return_value=[sys.executable]), mock.patch.object(run_tests, "run_frontend_tests", return_value=True) as child, mock.patch("builtins.print"):
+            self.assertEqual(run_tests.main(), 0)
+            self.assertEqual(child.call_args.kwargs["test_files"], [current.removeprefix("frontend/")])
+
+    def test_missing_frontend_directory_for_selected_tests_fails(self):
+        with mock.patch.object(run_tests.subprocess, "run") as child, mock.patch("sys.stderr"):
+            self.assertFalse(run_tests.run_frontend_tests(["src/Current.test.tsx"]))
+            child.assert_not_called()
+
+
 class ParallelBackendRunnerTests(unittest.TestCase):
     """Process lifecycle of ``--jobs``; workers here are tiny Python commands."""
 
