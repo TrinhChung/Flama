@@ -3,8 +3,19 @@
 Status: CI P0 committed on `fix/deploy-disconnect-cloudflare` (shared SPA build,
 no separate SPA job); hosted Actions execution is not yet verified. The harness
 prototype is parked on the local branch `experiment/test-harness-poc` and is not
-on the CI branch. Reviewed: 2026-10-23 (Asia/Tokyo). Follow-up plan:
+included in the committed CI branch content. Reviewed: 2026-10-23 (Asia/Tokyo). Follow-up plan:
 `docs/plans/TEST_CICD_UPGRADE_IMPLEMENTATION_PLAN_2026-10-23.md`.
+
+Coordination review, 2026-10-23: the working tree now contains untracked prototype
+files and in-progress archive/Worksheet changes from other sessions. Their
+presence does not activate or qualify the parked harness. The implementation
+plan's section 10 records the coverage findings and current acceptance gates;
+[the task queue](../plans/MULTI_AGENT_TASK_QUEUE.md) records proposed ownership.
+H1/H2/H3 remain parked. PR B was merged from Claude and hardened in commit
+`11422541`; 156 focused tooling cases (one POSIX skip) matched across sequential
+and seeded parallel runs, including a clean checkout. Full-suite/Linux hosted
+acceptance is pending, and push/PR jobs stay at one worker. S2 keeps all 22 tests
+at their original paths. This review did not execute MySQL integration/probes.
 
 ## Scope and repository policy
 
@@ -111,7 +122,9 @@ test enabled with `FLAMA_REQUIRE_REAL_SPA_ARTIFACT=1` so absence is a failure.
 A worktree without `.env` also needs the CI values `DB_USER=ci`, `DB_NAME=ci`
 and `SECRET_KEY=ci-secret`; the test never connects to that database.
 
-The prototype's opt-in commands exist only on `experiment/test-harness-poc`.
+The prototype's committed opt-in commands are on `experiment/test-harness-poc`.
+Untracked copies have reappeared in the current checkout; they remain unqualified
+and are not approved for activation or inclusion in the CI rollout.
 
 Local evidence for the CI commit, in a clean detached worktree (2026-10-23):
 
@@ -138,7 +151,9 @@ Before moving any tests to nightly, inventory exact test IDs, active source
 dependencies and trigger coverage. Migration changes must retain immediate
 MySQL replay, and release checks must run against the exact candidate revision.
 
-Future rollout requires:
+Future shared-harness/schema-reuse rollout requires the gates below. PR B instead
+uses subprocess isolation under implementation-plan section 6.2; it does not
+require introducing shared database fixtures merely to schedule workers.
 
 - Separate pure unit logic from integration setup without losing assertions.
 - Design and measure an owned disposable MySQL schema/session lifecycle.
@@ -146,6 +161,18 @@ Future rollout requires:
   including reference mutations, multiple apps and environment changes.
 - Compare executed case IDs and outcomes across baseline, repeated and shuffled
   runs; test all global/extension reset contracts for each enrolled module.
+- Validate selection as well as discovery: explicit missing test files must fail,
+  nested test edits must select their cases, and rename consumers/relative fixture
+  paths must remain valid. Preserve ID multisets and outcomes after an explicit
+  old-to-new rename map; equal counts alone do not establish coverage parity.
 - Measure uninstrumented cold runs and CI costs before accepting latency targets.
 - Consider fake timers and frontend setup changes separately, with relevant
-  React/FSD guidance and focused tests. No frontend source is changed in P0.
+  React/FSD guidance and focused tests of the actual production debounce,
+  cancellation and stale-response paths. Do not bypass them with test-only
+  application branches. No frontend source is changed in P0.
+
+The user also requires preserving both runner-minute headroom and the account's
+0.5 GB Actions storage allowance. Implementation-plan section 11 separates
+shared artifact/Packages storage from cache, records the limits of available
+billing evidence, and sets joint forecast/reserve gates. No build-artifact
+transfer is introduced to buy a minute saving at the expense of storage.

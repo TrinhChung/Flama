@@ -1,6 +1,16 @@
 # BÁO CÁO CHIẾN LƯỢC KIẾN TRÚC KIỂM THỬ VÀ TỐI ƯU HÓA CI/CD PIPELINE
 ## (Test Architecture & CI/CD Optimization Strategy Report)
 
+> Historical proposal, reviewed again on 2026-10-23. Execution decisions are in
+> [the current implementation plan](TEST_CICD_UPGRADE_IMPLEMENTATION_PLAN_2026-10-23.md)
+> and [RFC](../architecture/TEST_ARCHITECTURE_RFC.md). Section 10 of the current implementation plan covers plan
+> correctness, coverage, test fidelity, architecture and in-progress agent work.
+> Quota assumptions, speed targets and blanket nightly/gate-removal proposals
+> below are not current acceptance evidence. Keep full master/MySQL/Redis gates;
+> H1/H2/H3 are parked and archive/Worksheet changes require correction/review.
+> Section 11 also requires balancing runner minutes with the user's 0.5 GB
+> Actions storage allowance, separate cache accounting and end-of-cycle reserves.
+
 - **Dự án**: Flama (Nền tảng Học tiếng Nhật & Flashcard Spaced Repetition)
 - **Tài liệu**: `docs/plans/TEST_ARCHITECTURE_AND_CICD_OPTIMIZATION_REPORT.md`
 - **Phiên bản**: 1.1 (Bản Hoàn chỉnh Hiệu chỉnh sau Phản biện Đối kháng & Thẩm định Độc lập)

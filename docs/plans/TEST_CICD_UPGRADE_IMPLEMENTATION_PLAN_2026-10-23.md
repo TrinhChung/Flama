@@ -1,11 +1,15 @@
 # Review kế hoạch nâng cấp CI/CD test và kế hoạch triển khai
 
 - Ngày: 2026-10-23 (Asia/Tokyo)
+- Cập nhật quyền thực hiện: người dùng đã yêu cầu commit các phần cần kiểm chứng và **push lên** trong phiên 2026-10-23. Các yêu cầu "không push" bên dưới là lịch sử trước chỉ dẫn này. Rollout CI song song vẫn cần nghiệm thu, mặc định jobs=1 không đổi.
+- Review điều phối bổ sung: Codex, cùng hai reviewer read-only trong phiên được người dùng giao điều phối; xem mục 10. Review trên HEAD `57738edd` cộng diff đang có, không phải nghiệm thu thay các agent triển khai.
+- Kế hoạch này và [RFC](../architecture/TEST_ARCHITECTURE_RFC.md) quyết định kiến trúc/nghiệm thu; [tracker](MULTI_AGENT_TASK_QUEUE.md) ghi ownership/trạng thái; [H1/H2/H3](TEST_MODERNIZATION_HARD_TASKS_FOR_CLAUDE_CODEX.md) đã được sửa thành `PARKED`. Báo cáo 13/10 và các số đo ở mục 2–4 là lịch sử; evidence mới ở mục 10–11. Mục 11 bổ sung yêu cầu người dùng cân bằng minutes với **Actions storage 0,5 GB**, không đổi một quota lấy việc cạn quota khác.
 - Phạm vi review:
   - Gemini, báo cáo 2026-10-13: `docs/plans/TEST_ARCHITECTURE_AND_CICD_OPTIMIZATION_REPORT.md` (Tiered CI, D2, nightly, gate MySQL).
   - Gemini Teamwork 2026-10-22: POC `FastTestHarness` (`tests/test_harness_poc.py`) và bản nháp RFC.
-  - Codex P0 (chưa commit, đang nằm trên nhánh `fix/deploy-disconnect-cloudflare` của PR TrinhChung/Flama#239): `.github/workflows/ci.yml`, `tests/test_ci_workflow.py`, `tests/test_spa_artifact_contract.py`, `scripts/run_tests.py`, `docs/architecture/TEST_ARCHITECTURE_RFC.md`, các file POC.
-- Trạng thái (2026-10-23): mục 6.0 và 6.1 đã làm và commit ở local, chưa push, chưa chạy trên GitHub Actions. Các mục còn lại vẫn là kế hoạch.
+  - Codex P0 ở snapshot review ban đầu (khi đó chưa commit, nhánh `fix/deploy-disconnect-cloudflare` của PR TrinhChung/Flama#239): `.github/workflows/ci.yml`, `tests/test_ci_workflow.py`, `tests/test_spa_artifact_contract.py`, `scripts/run_tests.py`, `docs/architecture/TEST_ARCHITECTURE_RFC.md`, các file POC.
+- Trạng thái khi ghi nhận P0: mục 6.0 và 6.1 đã làm và commit local, khi đó chưa push/chưa chạy Actions. Đợt review điều phối này chưa xác minh push/hosted workflow runs; chỉ đọc API artifact/cache cho mục 11. Diff S2/S3 cần sửa trước nghiệm thu.
+- Cập nhật 2026-10-23 sau review (Claude Code): PR B có hai bản chưa tích hợp; trạng thái từng gate và bằng chứng ở mục 6.2.1. PR C có số đo từng probe, inventory và phương án mới ở mục 6.3.1. Thứ tự tích hợp ở mục 8, điểm mở ở mục 9, quy trình nghiệm thu hosted có ngân sách ở mục 12, review của Gemini và cách xử lý ở mục 12.4. Code tương ứng là các commit local `987f6ead`, `6569ebc9`, `61fdb9ff`, `a1f08cda`, `72ce0f5c` trên nhánh `wip/test-speed`. Gemini đã review hai lượt (mục 12.4); lượt 2 kết luận đủ để triển khai. Người dùng yêu cầu chỉ commit local, không push.
   - 6.0: POC được park ở nhánh local `experiment/test-harness-poc` (bước 2, lựa chọn (a)). Theo yêu cầu của người dùng, P0 được commit thẳng lên nhánh `fix/deploy-disconnect-cloudflare` thay cho bước 3–4.
   - 6.1: đã xoá job `spa-contract`. Bằng chứng local nằm trong `docs/architecture/TEST_ARCHITECTURE_RFC.md`; phần nghiệm thu trên GitHub (bước 6) vẫn chờ.
 
@@ -21,11 +25,13 @@ S2 đã hoàn tác chuyển thư mục theo quyết định người dùng qua M
 
 ## 1. Kết luận ngắn
 
-1. Không có khủng hoảng quota. Số đo thực tế trong 30 ngày là khoảng **1.045 phút tính phí**, không phải 2.940 phút như báo cáo Gemini giả định. Trần của gói Free cho repo private là 2.000 phút.
+1. Số đo lịch sử 30 ngày khoảng **1.045 phút tính phí**, thấp hơn giả định 2.940 phút của báo cáo Gemini. Điều này không chứng minh tài khoản còn đủ quota hiện tại: phải kiểm tra cả minutes và Actions storage **0,5 GB** đến cuối billing cycle theo mục 11; account billing chưa xác minh được.
 2. Hai job `backend` và `mysql-contract` chiếm khoảng **72%** số phút. Đòn bẩy chính là làm hai job này nhanh hơn, không phải chuyển sang chạy chọn lọc trên master.
 3. Kiến trúc phân tầng (ứng viên B: chạy chọn lọc trên master cộng nightly) **không đáng làm lúc này**. 20/22 lượt merge gần đây đều chạm backend, nên chạy chọn lọc tiết kiệm rất ít. Trong khi đó nightly ngày thường sẽ *tăng thêm* khoảng 660–800 phút mỗi tháng.
 4. Phần CI của Codex P0 đúng và đã pass test. Nhưng nếu giữ job shim `spa-contract` thì gần như **không tiết kiệm được phút tính phí**, vì job nào cũng bị làm tròn lên 1 phút. Repo không có branch protection, nên nên xoá hẳn job này.
 5. Phần harness của Codex P0 **không còn trong checkout**. Phiên Antigravity/Gemini `d8ea6482` đã ghi đè lúc 00:32–00:34 bằng bản nháp cũ, và phiên này vẫn đang chạy. Vì vậy RFC hiện mô tả một bản code không còn tồn tại. Đề xuất đóng băng (park) POC và để nó ngoài mọi PR CI.
+6. *(Bổ sung 2026-10-23.)* Khoảng **700/839 s của `mysql-contract` là dựng và xoá schema 115 bảng cho từng test** trong sáu probe nặng, không phải phần kiểm contract (mục 6.3.1). Đây là job dài nhất, nên chỉ PR C rút ngắn được thời gian push; hướng đầu tiên là datadir trên tmpfs, không bỏ probe hay case nào.
+7. *(Bổ sung 2026-10-23.)* PR B chạy song song trong cùng runner đã khớp từng test với bản tuần tự ở local: cùng 2.638 ID test, cùng 7 skip, 1,6–2,6 lần nhanh hơn tuỳ số worker (mục 6.2.1). Runner hosted chỉ có 2 vCPU nên kỳ vọng trên CI là tối đa khoảng 1,6 lần ở step `backend`, chưa đo. Mặc định CI vẫn một tiến trình cho tới khi đạt các run hosted ở mục 12.
 
 ## 2. Số đo thực tế (30 ngày đến 2026-10-23)
 
@@ -113,6 +119,8 @@ Thành phần các merge trên master gần đây (25 commit first-parent từ 2
 | Nightly / weekly cron | **Không làm** chừng nào master còn chạy đầy đủ |
 | Matrix sharding nhiều runner | **Không làm** |
 | POC `FastTestHarness` / tái dùng schema | **Park** trên nhánh thử nghiệm riêng, không merge vào `tests/`. Chỉ xem xét lại khi đã qua các gate trong RFC (MySQL, isolation, đo khi chạy lạnh) và có một chủ sở hữu duy nhất. |
+| Datadir MySQL trên tmpfs trong `mysql-contract` (bổ sung 2026-10-23) | **Làm** sau khi FIX-01 nhả `ci.yml`; đo hai run hosted trước khi giữ (mục 6.3.1 (d)) |
+| Chạy song song sáu probe tự tạo schema (bổ sung 2026-10-23) | **Làm sau tmpfs** nếu `mysql-contract` vẫn là critical path; probe concurrency và probe dùng schema `ci` giữ tuần tự (mục 6.3.1 (b)) |
 
 ## 6. Kế hoạch triển khai chi tiết
 
@@ -161,27 +169,65 @@ D:\Project\nihongo\.venv\Scripts\python.exe scripts/run_tests.py --file tests/te
 
 ### 6.2 PR B: chạy backend song song trong cùng runner (≈1–2 ngày, đo trước)
 
-Mục tiêu: nhóm 420 phút/tháng. Kỳ vọng giảm 30–45% thời gian job `backend` *nếu* runner có 2 vCPU. Con số này cần đo thật.
+Mục tiêu là giảm thời gian mà giữ nguyên khả năng phát hiện lỗi. Giảm 30–45% chỉ là giả thuyết; ước lượng 1–2 ngày không bao gồm sửa FIX-01 hoặc suite không an toàn khi song song. Khi viết các bước dưới đây runner chưa có `--jobs`; trạng thái triển khai hiện tại ở mục 6.2.1.
 
-1. Đo trước: thêm `nproc` và `free -m` vào job `backend` (hoặc chạy một lần qua `workflow_dispatch`). Ở local, chạy `--all --backend-only` với jobs=1 để lấy baseline.
-2. `scripts/run_tests.py`:
-   - Thêm `--jobs N|auto` (mặc định `1`, khi đó lệnh giữ nguyên như hiện nay).
-   - Chia file theo LPT, dùng kích thước file làm trọng số; có thể thêm `--partition-seed` để xáo trộn.
-   - Mỗi nhóm chạy một tiến trình `python -m unittest` riêng, với `TemporaryDirectory` media riêng và `build_backend_test_environment` riêng.
-   - Đệm output và in theo từng nhóm; exit code bằng OR của các nhóm; giữ `-f` trong từng nhóm.
-3. Test mới trong `tests/test_modular_test_runner.py`:
-   - Phân hoạch xác định và đầy đủ (mỗi file đúng một lần).
-   - Gộp exit code đúng.
-   - `--jobs 1` sinh đúng lệnh hiện tại.
-4. Tìm các file có thể đụng nhau: grep đường dẫn cố định (`output/`, `instance/`, sqlite file), port cố định, tên temp cố định. Sửa trong test, không né.
-5. Kiểm chứng: chạy `--all --backend-only --jobs auto` 3 lần với 3 seed khác nhau. Tổng số "Ran N" phải bằng baseline và không có lỗi nào.
-6. Bật trong CI: job `backend` dùng `--jobs auto`. Nghiệm thu: thời gian job `backend` giảm ≥30% trên 3 run liên tiếp và số test bằng nhau.
+1. **Tiên quyết:** đóng FIX-01 ở tracker. Chốt revision/diff và manifest, tách POC/rename khỏi tối ưu. Đo backend step, whole job, critical path, CPU/RAM và môi trường; baseline tuần tự trước. Không so máy/commit hoặc case set khác nhau.
+2. **Tương thích:** thêm `--jobs N|auto`, mặc định `1`; valid-input command/environment/result như hiện nay. Explicit file thiếu phải fail là sửa correctness riêng, không giữ lỗi cũ vì mục tiêu tương thích. Thay đổi docs hợp lệ chọn rỗng vẫn là no-op; import error, file bị mất hoặc suite được yêu cầu nhưng load rỗng ngoài ý muốn phải fail.
+3. **Scheduling:** thử jobs 1 và 2 trước; `auto` có trần theo effective CPU, số file và RAM đo được, không tự lấy toàn logical CPUs. LPT theo file size chỉ là heuristic ban đầu, thay bằng timing khi đủ dữ liệu. Mỗi file đúng một nhóm; seed phải thực sự đổi grouping/order và được ghi lại.
+4. **Cô lập:** mỗi nhóm là subprocess unittest riêng, media/temp/env riêng từ cùng parent snapshot; không mutate parent env. Giữ email/quota safeguards; đặt `UPDATE_SNAPSHOT=0`, `UPDATE_ROUTE_SNAPSHOT=0` trong correctness run, không chỉ xoá biến rồi để `.env` nạp lại. Supply study-default flags nhất quán theo skill local-dev; không vô hiệu hoá cấu hình mà test chủ đích cần. Audit fixed files, snapshots, ports, Redis, DB/schema và subprocess descendants trước dispatch. Không tạo SQLite integration mới; MySQL tests/probes cần target disposable riêng đã xác minh.
+5. **Kết quả:** ghi selected-file manifest, loaded/executed test-ID **multisets**, outcomes, skip reasons, expected failures, unexpected successes, import/setup/cleanup errors và exit codes. Giữ semantics `load_tests`, inherited tests và duplicate cases hiện có. Sau rename, dùng bảng old-ID → new-ID; cùng tổng `Ran N` không đủ.
+6. **Failure lifecycle:** bất kỳ worker lỗi/spawn lỗi/timeout/crash/interrupt đều làm parent fail. Chốt global failfast: ngừng dispatch, dừng/reap cây subprocess còn chạy, rồi cleanup temp; không chỉ giữ `-f` trong từng worker. Output có giới hạn hoặc spool riêng, giữ diagnostics và log từng nhóm, tránh deadlock/mất lỗi vì buffer lớn.
+7. **Runner regression tests:** invalid jobs; partition đầy đủ/xác định; jobs=1 compatibility; nested selection; missing/mixed paths; media/env isolation; worker fail/crash/import/empty suite; timeout/interrupt/failfast cleanup; large output; ID/outcome parity. Dùng mock/temporary pure-unit fixtures cho tooling, không dựng DB integration SQLite mới.
+8. **Nghiệm thu:** module hẹp và runner tests trước; sau đó ba paired full-suite runs trên cùng frozen revision/máy/env, jobs=1 đối chiếu bản song song với ba partition seeds. Giữ exact case/outcome parity, không tăng skip/nới assertion. Có bằng chứng Windows và Linux CI. Đây là full-suite regression gate; integration/DDL/dialect phải kiểm chứng MySQL riêng, không lấy legacy SQLite fixtures làm qualification. Không chạy full suite liên tục cho mỗi sửa nhỏ; lập ngân sách benchmark theo mục 11 trước khi chạy hosted.
+9. **Bật CI sau correctness gates:** giữ full/changed selection hiện hành; chỉ tăng worker count. Nếu ba paired CI runs không chứng minh lợi ích hoặc vượt RAM, giữ jobs=1 và ghi số đo. Mức giảm ≥30% là mục tiêu performance, không phải lý do bỏ test. Rollback về jobs=1; báo riêng backend-step/job/deploy gains.
+
+#### 6.2.1 Trạng thái và bằng chứng (cập nhật 2026-10-23, Claude Code)
+
+Có hai bản `--jobs`, chưa bản nào được tích hợp. Coordinator chọn một bản trước khi rebase (tracker, MSG-03). Không ghi đè bản còn lại khi chưa có đồng ý của owner.
+
+| Tiêu chí | Bản A: nhánh local `wip/test-speed`, commit `987f6ead` đến `a1f08cda` | Bản B: checkout chính, chưa commit (`worker_o17_prb_parallel`) |
+| --- | --- | --- |
+| Một nhóm file được tính pass khi | exit 0 **và** summary `OK` với `Ran > 0` | exit 0 (`scripts/run_tests.py:1873` ở checkout chính, đọc lúc 05:55) |
+| `auto` | CPU khả dụng; trần theo RAM trống (768 MiB/worker); 2 khi không đọc được RAM | `min(cpu, 4, số file)` (dòng 1647) |
+| Output | spool ra file, in lại theo khối 64 KiB | `proc.communicate()` không timeout, giữ trong RAM (dòng 1744) |
+| Dừng worker | failfast ngừng dispatch và kill worker đang chạy (`taskkill /T` trên Windows, fallback kill); `--bin-timeout`; Ctrl+C/SIGTERM | failfast kill sibling; Ctrl+C |
+| CI | push/PR giữ 1; `workflow_dispatch` có `backend_jobs`, `backend_partition_seed`, `validation_scope` và in hash manifest; job `backend` có `timeout-minutes: 30` | không đổi CI |
+| Evidence full suite | bảng dưới | worker ghi 44/44 unit test; chưa có so sánh ID full suite |
+
+Gate cho bản A, đánh số theo các bước ở trên:
+
+| Bước | Trạng thái | Bằng chứng hoặc phần còn thiếu |
+| --- | --- | --- |
+| 1 Tiên quyết | Chưa đạt | FIX-01 còn hai candidate (checkout chính và worktree `nihongo-coordinator-fix01`). Bản A sẽ rebase sau khi chốt. Baseline tuần tự đã đo trên `57738edd`. |
+| 2 Tương thích | Đạt local cho phần của PR B | `--jobs 1` sinh đúng lệnh cũ (`test_single_job_keeps_one_unittest_process_for_all_files`). Cho tới khi rebase lên FIX-01, nhánh này vẫn giữ hành vi cũ là lọc bỏ file thiếu rồi báo xanh; sửa đó thuộc FIX-01, và gate 2 chỉ đạt đủ sau khi rebase. |
+| 3 Scheduling | Đạt local | Đã chạy jobs 1, 2 và 3. LPT theo kích thước file, ba nhóm mỗi worker (mỗi tiến trình mất 4–8 s import app). `--partition-seed N` (commit `61fdb9ff`) đổi trọng số tối đa 25% để thử cách chia khác với cùng số worker; seed được in trong log. |
+| 4 Cô lập | Một phần | Mỗi nhóm có media/temp riêng, env lấy từ một snapshot, `UPDATE_SNAPSHOT=0`/`UPDATE_ROUTE_SNAPSHOT=0`. Đã rà: file SQLite chỉ nằm trong thư mục tạm của từng test; port chỉ có trong chuỗi URL, không bind; snapshot route chỉ ghi khi thiếu và nằm trong một file test; test Redis thật duy nhất skip khi thiếu `REDIS_URL`, các app test khác đặt `REDIS_URL=''`; máy local và job `backend` không có Redis. Giới hạn đã biết: trên Linux, timeout/failfast chỉ kill worker trực tiếp; tiến trình cháu (nếu một test tự spawn) có thể sống tới khi job kết thúc. Đây là đánh đổi có chủ ý: worker dùng chung process group với tiến trình cha để tín hiệu từ CI và Ctrl+C tới thẳng worker. Trên Windows dùng `taskkill /T`. |
+| 5 Kết quả | Đạt local | `--manifest PATH` (commit `61fdb9ff`) ghi mỗi outcome một dòng `id, outcome, lý do skip` qua `scripts/unittest_manifest.py`. Wrapper này giữ nguyên tham số, output và exit code của `python -m unittest`, kể cả 5 khi không có test. Subtest lỗi, expected failure, unexpected success, lỗi import và lỗi fixture class/module đều có dòng riêng. File gộp được sắp xếp, giữ trùng lặp, in số dòng và SHA-256; nhóm không ghi manifest làm run fail. `scripts/compare_test_manifests.py` so manifest, hoặc log `-v`, theo multiset. |
+| 6 Failure lifecycle | Đạt local | Test dùng subprocess thật: worker treo bị timeout dừng; failfast kill worker anh em đang sleep; worker không khởi động được làm run fail. |
+| 7 Runner tests | Đạt local | 88 test tooling/workflow pass ở `a1f08cda` (runner, manifest wrapper và so sánh, probe runner có timeout, CI workflow, mapping coverage, deploy workflow). Job `backend` có `timeout-minutes: 30` và `--bin-timeout 1200`. |
+| 8 Nghiệm thu | Windows đạt; Linux chưa | Ba run manifest trên cùng commit `61fdb9ff` (tuần tự, jobs 2 seed 1, jobs 3 seed 2) có cùng SHA-256 (bảng dưới). Linux cần run hosted (mục 12). Sau khi rebase lên FIX-01 phải lập lại baseline manifest tuần tự, vì S2 đổi ID test. |
+| 9 Bật CI | Chưa | Push/PR vẫn `--jobs 1`. |
+
+Bằng chứng full suite (Windows, 16 logical CPU, 15,4 GB RAM, có ứng dụng khác chạy song song; thời gian chỉ dùng để so sánh tương đối):
+
+| Run | Revision | Jobs / số nhóm | Kết quả | Wall |
+| --- | --- | --- | --- | ---: |
+| Baseline tuần tự | `57738edd` | 1 | 251 file, 2.638 test, `OK (skipped=7)` | 1.561 s |
+| Song song | candidate ngay trước `987f6ead` (chưa có các sửa lifecycle) | 2 / 6 | Cùng multiset 2.638 ID và 7 skip như baseline, thêm 16 test runner mới, 0 lỗi | 975 s |
+| Song song | `6569ebc9` (gồm `987f6ead`) | auto = 3 (bị trần RAM) / 9 | Cùng multiset 2.638 ID và 7 skip như baseline, thêm 20 test runner mới, 0 lỗi | 590 s |
+| Manifest, tuần tự | `61fdb9ff` | 1 / 1 | 2.666 dòng (2.659 ok, 7 skipped), SHA-256 `11faa70acd23…463` | 1.036 s |
+| Manifest, song song | `61fdb9ff` | 2, seed 1 / 6 | Cùng SHA-256 | 532 s |
+| Manifest, song song | `61fdb9ff` | 3, seed 2 / 9 | Cùng SHA-256 | 500 s |
+
+Ba run manifest có cùng hash, nghĩa là cùng multiset (ID, outcome, lý do skip) trên ba cách chia nhóm. So log `-v` bằng `scripts/compare_test_manifests.py --verbose-logs` cũng cho kết quả giống hệt nhau cho hai run song song đầu so với baseline tuần tự (2.638 bản ghi).
+
+Đỉnh working set một worker đo được trên full suite: 653 MB (các worker khác 438–566 MB). Máy local thường chỉ còn 1–2,5 GB RAM trống, nên `auto` trên máy này ra 1–3 worker, không phải 16.
 
 ### 6.3 PR C: rà soát và chia tầng `mysql-contract` (≈2–3 ngày, dùng `$mysql` + `$flama-database-architecture`)
 
 Mục tiêu: nhóm 337 phút/tháng, đồng thời là critical path 14 phút.
 
-1. Không đổi hành vi: tách các step nhiều probe (field identity: 5 probe; historical/deck count: 2 probe) thành mỗi step một probe để lấy thời gian của từng probe. Cập nhật `test_ci_workflow.py` nếu nó kiểm tra tên step.
+1. Không đổi hành vi: tách các step nhiều probe (field identity: 5 probe; historical/deck count: 2 probe) thành mỗi step một probe để lấy thời gian. Giữ thứ tự, env và artifact/env-file chuẩn bị dùng chung; tách setup của historical/deck count khỏi hai command mà không làm mất anchor user hoặc env file. Cập nhật workflow contract và command-path checks.
 2. Lập bảng rà soát và đưa vào RFC. Mỗi probe có các cột:
    - Probe và tham số
    - Migration hoặc phase mà nó bảo vệ
@@ -189,6 +235,8 @@ Mục tiêu: nhóm 337 phút/tháng, đồng thời là critical path 14 phút.
    - Lần cuối code được bảo vệ thay đổi
    - Đây là qualification của một cutover đã hoàn tất, hay contract cần chạy với mọi thay đổi
    - Chủ sở hữu ký duyệt
+    - DB target/helper, mutation/reset/cleanup, dùng chung state hoặc dependency vào probe trước
+    - Invariant/test cases thay thế, trigger PR/master/migration và candidate revision được bảo vệ
 3. Các phương án, mỗi phương án cần dữ liệu từ bước 2:
    - (a) Gate riêng các probe qualification của cutover đã xong (ví dụ field identity cutover, xác nhận production ngày 2026-10-11) theo pattern nguồn của chính chúng cộng `migrations/**`.
    - (b) Chạy song song các probe độc lập trên các database riêng (`ci_probe_<n>`) trong cùng service MySQL; đo mức tranh chấp CPU trên 2 vCPU.
@@ -197,6 +245,66 @@ Mục tiêu: nhóm 337 phút/tháng, đồng thời là critical path 14 phút.
    - `bootstrap_historical_schema.py` + `flask db upgrade` luôn chạy khi `mysql-contract` chạy.
    - Thay đổi `migrations/**` hoặc `models/**` luôn chạy đủ tầng MySQL.
    - Không bỏ probe nào chỉ dựa trên tên file.
+    - Không chạy probe song song trước khi chứng minh không chia sẻ/reset schema hoặc state. Đọc từng probe/helper; tên `probe_*_mysql.py` không chứng minh an toàn.
+    - Không hạ tải hoặc đẩy nightly để đạt mục tiêu thời gian khi chưa chứng minh invariant/coverage tương đương. Ưu tiên tối ưu setup/query/đo timing mà giữ gate; benchmark tổng job gồm setup và contention.
+
+#### 6.3.1 Số đo từng probe, inventory và phương án (cập nhật 2026-10-23, Claude Code)
+
+Bước 1 (mỗi step một probe) đã có trong diff FIX-01 ở checkout chính, chưa commit. Số đo dưới đây lấy từ log job `mysql-contract` của run `39775470111` (trước khi tách step), cùng benchmark cục bộ.
+
+**Finding chính.** Sáu probe nặng tốn gần như đúng 7,2 s cho mỗi test, bất kể test kiểm gì:
+
+| Probe (tham số CI) | Test | Giây CI | Giây/test |
+| --- | ---: | ---: | ---: |
+| `probe_review_analytics_outbox_mysql.py` | 33 | 232 | 7,0 |
+| `probe_p5_direct_replay_mysql.py --overlay-only` | 26 | 189 | 7,3 |
+| `probe_forecast_snapshots_mysql.py` | 16 | 117 | 7,3 |
+| `probe_field_value_consumers_mysql.py` | 9 | 65 | 7,2 |
+| `probe_p7_session_retention_mysql.py` | 7 | 52 | 7,4 |
+| `probe_p5_analytics_mysql.py` | 6 | 45 | 7,6 |
+
+Nguyên nhân: các probe này chạy lại test fixture của suite SQLite trên một schema MySQL riêng. Mỗi test `create_all` rồi `drop_all` 115 bảng. Trên MySQL, mỗi `CREATE TABLE` là DDL atomic, ghi data dictionary, fsync và tạo file `.ibd`. Đo cục bộ trên mysqld 8.0.40 Windows: một `create_all` mất 17–19 s, một `drop_all` 4–5 s. Như vậy khoảng 700 trên 839 s của job là dựng và xoá schema, không phải phần kiểm contract. Ba run gần nhất có `mysql-contract` 839 s (`39775470111`, push master), 1.064 s (`39247544956`, push master) và 1.320 s (`39779317426`, PR), nên mọi so sánh cần ít nhất hai run mỗi bên.
+
+**Inventory** (cột chủ sở hữu ký duyệt và "qualification hay contract" để domain owner điền):
+
+| Probe | Schema đích và dọn dẹp | State dùng chung | Chạy song song |
+| --- | --- | --- | --- |
+| outbox, direct replay (chỉ với `--overlay-only` như lệnh CI hiện tại; chế độ đầy đủ chưa được rà để chạy song song), forecast, consumers, P5 analytics | Schema sinh ngẫu nhiên `flama_*_probe_<pid>_<hex>`; guard loopback, từ chối trùng `DB_NAME`; `DROP DATABASE` rồi kiểm lại | Không; mỗi probe ghi report riêng | Được (đã đọc code) |
+| P7 retention | Như trên | `GET_LOCK` với key băm theo `DATABASE()`, nên mỗi schema có khoá riêng | Được |
+| field identity, cutover | Schema sinh ngẫu nhiên | Không | Không cần (0,3 và 2,5 s) |
+| retirement fresh chain, P9 connect fence | Schema sinh ngẫu nhiên | Chưa rà hết | Chưa đề xuất |
+| P1-02 locking | Tạo bảng `p102_concurrency_probe_*` **trong schema `ci`** | Schema `ci` | Không |
+| P5 write concurrency | Schema sinh ngẫu nhiên | Đo tranh chấp khoá; chia CPU với probe khác làm sai mục đích đo | Không, chạy riêng |
+| historical review analytics, deck counts | Schema `ci` qua `output/analytics-counts-ci.env`, anchor user id 1 | Schema `ci` | Không |
+
+**Phương án bổ sung cho bước 3**, đều giữ mọi probe và mọi test:
+
+- **(d) Datadir MySQL trên tmpfs**: thêm `--tmpfs /var/lib/mysql` vào `options` của service. Engine, phiên bản, isolation, locking, JSON và DDL không đổi; chỉ bỏ chi phí fsync và tạo file, vốn là phần lớn của 7,2 s/test. Dữ liệu mất khi container dừng, điều này vô hại với CI. Chưa đo trên Linux; Windows không mô phỏng được tmpfs. Rủi ro cần xử lý trước hoặc đo ở run đầu:
+  - *RAM*: binlog vẫn bật trên service (không truyền được cờ mysqld qua `services`) và lớn dần theo DDL của 97 test; cộng redo 100 MB và datadir ban đầu ≈200 MB, tất cả nằm trong RAM. Đặt trần `--tmpfs /var/lib/mysql:rw,size=2g`, để khi đầy thì mysqld báo lỗi ghi rõ ràng thay vì runner bị OOM; thêm một step cuối job in `SHOW BINARY LOGS` và dung lượng datadir để đo peak.
+  - *`innodb_flush_method`*: image `mysql:8.0` mặc định `fsync` trên Linux nên tmpfs dùng được. Nếu đổi image sang 8.4 thì kiểm lại, vì tmpfs không hỗ trợ `O_DIRECT`.
+  - *Cửa sổ thời gian khoá*: commit nhanh hơn có thể làm hẹp cửa sổ tranh chấp trong probe concurrency (P1-02, P5). Các probe này ép thứ tự bằng barrier chứ không bằng thời gian, nhưng vẫn so số đo chờ khoá (`snapshot_wait_ms` và tương tự) trong report trước và sau khi bật tmpfs.
+  - *Gate*: mọi step của `mysql-contract` phải PASS, kể cả `bootstrap_historical_schema.py` và `flask db upgrade`, không chỉ các probe.
+  - Thêm `timeout-minutes` cho job `mysql-contract` (run chậm nhất gần đây 22 phút) cùng lúc với thay đổi này.
+
+  Thay đổi nhỏ, rollback bằng revert.
+- **(b) như trên, có công cụ**: `scripts/run_mysql_probes.py` (commit `6569ebc9`, chưa nối vào `ci.yml`) chạy sáu probe được phép song song, 2 cùng lúc, giữ nguyên lệnh và env của từng probe, in bảng thời gian từng probe. Probe concurrency và probe dùng schema `ci` giữ step tuần tự riêng. Chạy cục bộ 2 probe cùng lúc: sáu probe PASS, wall giảm từ 2.191 s xuống 1.118 s (bảng dưới).
+- **(e) Park: dùng lại schema trong một probe** (tạo một lần, reset giữa các test). Lợi nhất, gần 7 s/test, nhưng đổi lifecycle fixture, nên chịu cùng gate với H1 trong RFC (reset có kiểm chứng, AUTO_INCREMENT, FK, state sau commit).
+
+Thứ tự đề xuất: (d) trước, đo hai run; sau đó (b) nếu `mysql-contract` vẫn là critical path; (a)/(c) chỉ sau khi owner ký bảng inventory.
+
+Benchmark cục bộ trên mysqld 8.0.40 dùng một lần, ghim 2 core cho cả mysqld lẫn probe, durability mặc định như image CI. Windows chậm khoảng 3 lần so với CI ở các probe này, nên chỉ so tương đối giữa hai cách chạy trên cùng máy:
+
+| Probe | Tuần tự (s) | 2 probe một lúc (s) |
+| --- | ---: | ---: |
+| outbox | 759 | 766 |
+| direct replay | 526 | 630 |
+| forecast | 424 | 342 |
+| consumers | 203 | 194 |
+| P7 retention | 164 | 158 |
+| P5 analytics | 115 | 141 |
+| **Wall của sáu probe** | **2.191** | **1.118** |
+
+Cả hai cách chạy, sáu probe đều PASS. Thời gian từng probe gần như không đổi khi chạy song song, tức probe bị giới hạn bởi DDL/I/O chứ không phải CPU; hai làn rút wall còn 51%. Suy ra cho CI (chưa đo): sáu probe tổng ≈700 s, chạy hai làn thì wall bị chặn dưới bởi probe dài nhất (outbox 232 s) và một nửa tổng (≈350 s), nên khoảng 350–400 s thay vì ≈700 s.
 
 ### 6.4 (Park) Validation theo tầng trên master
 
@@ -232,15 +340,189 @@ Các con số dưới đây là ước tính và phải đo lại sau mỗi PR.
 | `mysql-contract` (PR C) | 337 | −0…−130 | Tuỳ kết quả rà soát và chủ sở hữu duyệt |
 | Tổng | ≈1.045 | ≈700–870 | Thời gian push giảm theo critical path `mysql-contract` |
 
+Cập nhật theo số đo 2026-10-23 (mục 6.2.1, 6.3.1); các dòng "chưa đo" không được dùng làm cam kết:
+
+| Hạng mục | Đã đo | Chưa đo |
+| --- | --- | --- |
+| `backend` | Windows cùng revision: jobs 2 nhanh hơn 1,6 lần so với tuần tự (975 s so với 1.561 s), cùng multiset ID | Runner Linux 2 vCPU; step `backend` lịch sử 585–914 s, chênh lớn giữa các run |
+| `mysql-contract` | ≈700/839 s là dựng/xoá schema theo từng test; sáu probe nặng độc lập về schema; chạy hai làn trên 2 core local giảm wall của sáu probe 1,96 lần, cả sáu PASS | Mức giảm của tmpfs (d) và song song (b) trên Linux (ước tính (b): còn 350–400 s cho sáu probe); RAM peak khi dùng tmpfs |
+| Critical path push | Hiện là `mysql-contract` (839–1.320 s ở ba run gần nhất), dài hơn `backend` (585–914 s) | PR B giảm phút tính phí nhưng không rút ngắn thời gian push; chỉ PR C làm được việc đó |
+
 ## 8. Quyền sở hữu và thứ tự
 
-- Thứ tự: 6.0 → PR A → PR B, có thể chạy song song với bước 1–2 của PR C. Phần (a)/(b) của PR C chỉ làm sau khi bảng rà soát được duyệt.
-- Mỗi file chỉ có một agent ghi. PR A sở hữu `ci.yml` và `tests/test_ci_workflow.py`, nên PR C không được sửa `ci.yml` cho tới khi PR A merge. PR B sở hữu `scripts/run_tests.py` và `tests/test_modular_test_runner.py`.
-- Các file POC (`scripts/poc_*.py`, `scripts/test_repeatability_benchmark.py`, `scripts/stress_test_poc_adversarial.py`, `tests/test_harness_poc.py`, `tests/test_adversarial_poc_harness.py`, `tests/test_poc_test_runner.py`) bị đóng băng cho tới khi có quyết định ở 6.0.
+- Thứ tự hiện hành: review/FIX-01 → manifest baseline → PR B; nghiệm thu hosted PR A khi có run. PR C inventory read-only có thể làm độc lập; sửa workflow chờ owner release file. Phần (a)/(b) PR C chỉ sau review bảng probe theo domain.
+- Mỗi file chỉ có một agent ghi. Chủ sở hữu hiện tại xác nhận release `ci.yml`/`tests/test_ci_workflow.py` trước khi giao độc quyền cho FIX-01 hoặc PR C; trạng thái merge ghi riêng. PR B nhận runner/runner tests sau khi owner FIX-01/S2 bàn giao, không tự ghi đè diff đang có.
+- POC vẫn `PARKED` dù file đã xuất hiện lại dạng untracked; không tự kích hoạt hoặc đưa mapping POC vào commit S2/PR B. Không xoá/reset file của phiên khác. Người nhận task xác nhận ownership/HEAD/diff; tracker không tự dispatch agent.
+- Cập nhật 2026-10-23 (Claude Code). Hiện có hai candidate cho FIX-01 (diff chưa commit ở checkout chính của `worker_o17_fix01`, và worktree `nihongo-coordinator-fix01` của Codex) và hai candidate cho PR B (mục 6.2.1). Thứ tự tích hợp đề xuất, mỗi bước chỉ một người ghi file liên quan:
+  1. Codex chọn hoặc gộp một bản FIX-01. Owner bản được chọn commit local; bản còn lại không được copy đè.
+  2. Quyết định S2: giữ (khi đó phải theo FIX-01 về caller/mapping/path) hoặc hoàn tác. Hiện chưa có lợi ích thời gian nào từ S2, vì discovery vẫn quét đệ quy.
+  3. Codex chọn một bản PR B. Bản được chọn rebase lên FIX-01; bản còn lại bỏ phần `--jobs` khỏi checkout chính sau khi owner của nó đồng ý. FIX-01 và PR B cùng sửa `.github/workflows/ci.yml`, `scripts/run_tests.py` và `tests/test_modular_test_runner.py`. Khi rebase phải giữ cả hai phía: từ FIX-01 là path retirement, step probe đã tách, kiểm tra file thiếu và nested selection; từ PR B là input dispatch, `validation_scope`, giới hạn thời gian, `--jobs`/`--manifest`. Sau đó chạy lại `tests/test_ci_workflow.py`, `tests/test_modular_test_runner.py`, `tests/test_test_mapping_coverage.py`, rồi lập baseline manifest tuần tự mới (gate 8).
+  4. PR C bước 1 (tách step) đi cùng FIX-01 vì cùng sửa `ci.yml`. Phương án (d)/(b) của mục 6.3.1 vào sau, khi `ci.yml` không còn ai giữ.
+  5. Nghiệm thu hosted theo mục 12, chỉ sau khi người dùng đồng ý push.
 
-## 9. Quyết định cần người dùng chốt trước khi bắt đầu
+## 9. Quyết định đã ghi nhận và điểm mở
 
-1. Dừng phiên Gemini `d8ea6482` và chọn số phận POC (park / khôi phục bản Codex / xoá).
-2. Đồng ý xoá job `spa-contract`.
-3. Đồng ý park ứng viên B (chạy chọn lọc trên master + nightly).
-4. Agent nào thực hiện PR A/B/C.
+POC đã park và job `spa-contract` đã xoá trong P0; không yêu cầu chốt lại những việc đã ghi nhận. Người dùng đã giao Codex điều phối review và sửa kế hoạch. Đợt này không sửa app, runner hoặc CI của agent khác.
+
+Owner triển khai FIX-01/PR B/PR C/S3 cần xác nhận file ownership và cung cấp evidence trước khi coordinator nghiệm thu. Không suy diễn việc agent đang hoạt động từ tên trong tracker hoặc danh sách process. Việc chuyển test/probe khỏi gate vẫn cần domain review với replacement cụ thể; chưa được phê duyệt từ một con số benchmark.
+
+Điểm mở tại 2026-10-23 (bổ sung bởi Claude Code), theo thứ tự cần chốt:
+
+| # | Quyết định | Ai chốt | Trạng thái |
+| --- | --- | --- | --- |
+| 1 | Chọn hoặc gộp bản FIX-01 (checkout chính hoặc `nihongo-coordinator-fix01`) và xử lý các review còn mở | Codex | Mở |
+| 2 | Giữ hay hoàn tác S2; nếu giữ, mapping/caller/path phải theo FIX-01 | Người dùng | **Đã chốt 2026-10-23: giữ cả 22 file, không xoá; hoàn tác việc chuyển vào `tests/archive/`, đưa về đường dẫn cũ trong `tests/`.** Lý do: 22 file (202 test) chỉ chạy 51 s trên 1.561 s của suite; `test_note_stats_retirement.py` là fixture cho 2 test và 2 probe MySQL, `test_legacy_progress_retirement_audit.py` là fixture cho 1 test; 5 file chạy trong step CI của `mysql-contract`; khoảng 7 file bảo vệ hành vi đang chạy. Khi hoàn tác, bỏ cả các sửa của FIX-01 chỉ phục vụ đường dẫn archive (path CI, mapping, `parents[3]`, import trong test và probe), giữ các sửa chung (file thiếu thì fail, nested selection). Trước đó: Antigravity (MSG-08) đề nghị giữ ở archive, với lý do S2 ngăn discovery chạy lại test migration cũ. Kiểm tra ngày 2026-10-23 không thấy điều đó: `tests/archive/` và `tests/archive/legacy_migrations/` đều có `__init__.py`, nên `unittest discover -s tests` vẫn nạp 202 ID test trong archive (2.701 tổng), và `run_tests.py --all` (CI dùng) vẫn chọn đủ 22 file. Muốn S2 giảm workload thì phải loại archive khỏi selection một cách có chủ ý, mà theo mục 10.3 cần domain review và replacement cho các runtime regression trong đó |
+| 3 | Chọn bản PR B (mục 6.2.1) | Codex | Mở |
+| 4 | Cho push để chạy nghiệm thu hosted theo mục 12 (≈40 phút thêm) | Người dùng | Mở; hiện chỉ commit local |
+| 5 | Giữ tmpfs và/hoặc probe song song sau khi đo hosted | Codex, domain owner ký bảng 6.3.1 | Chờ số đo |
+
+## 10. Review điều phối: correctness, độ phủ, kiến trúc và triển khai
+
+### 10.1 Phạm vi và bằng chứng
+
+Snapshot review: HEAD `57738edd` cộng staged/unstaged/untracked changes trong checkout dùng chung. Code có thể tiếp tục đổi sau snapshot; các finding cần recheck khi owner bàn giao. Không gán lỗi cho một agent cụ thể chỉ từ tracker chưa xác nhận.
+
+| Kiểm tra trong phiên review | Kết quả / giới hạn |
+| --- | --- |
+| CI/deploy/runner/mapping: `run_tests.py --file tests/test_ci_workflow.py tests/test_deploy_workflow.py tests/test_modular_test_runner.py tests/test_test_mapping_coverage.py --backend-only` qua venv | 57 tests pass; không chứng minh các gate đã chạy đủ case |
+| Mock runner với explicit path đã mất | Trả `True`, không gọi subprocess; false-green path tái hiện không cần DB |
+| Map một edit `tests/archive/legacy_migrations/test_retirement_fresh_migration_chain.py` | Cả modules/backend/frontend rỗng; thiếu targeted coverage tái hiện |
+| AST so HEAD với 22 file rename | 202 declared test methods, thân method không đổi; không phải executed-case parity hoặc chứng minh fixtures đúng |
+| `npm test -- --run src/features/worksheets/DeckWorksheetModal.test.tsx` | 22 pass; test phase 6,03s, tổng 13,76s một lượt; chưa có paired baseline |
+| MySQL migration/probe/integration và hosted Actions | Không chạy trong review này; MySQL service tồn tại không đồng nghĩa đã nghiệm thu |
+| UI/browser/visual parity | Chưa kiểm chứng; focused DOM tests không thay được visual review |
+
+### 10.2 Findings và xử lý
+
+| Mức | Finding có bằng chứng | Hệ quả / sửa cần thiết |
+| --- | --- | --- |
+| P1 | [CI](../../.github/workflows/ci.yml) retirement step còn 5 path cũ; [runner](../../scripts/run_tests.py) `run_backend_tests` lọc file không tồn tại | Step có thể xanh chỉ chạy frozen-template trong 6 suite yêu cầu. FIX-01 phải update mọi caller và fail với explicit file thiếu |
+| P1 | `map_files_to_modules` chỉ nhận direct backend test bắt đầu `tests/test_` | Edit/nêu explicit nested archive path chọn rỗng. Sửa nested recognition, regression CLI + planner và CI command-path validity |
+| P1 | [migration-chain test đã chuyển](../../tests/archive/legacy_migrations/test_retirement_fresh_migration_chain.py) còn `parents[1] / 'migrations'` | Nay trỏ `tests/archive/migrations` không tồn tại. Audit relative paths/imports/snapshots mọi rename; kiểm chứng chain trên MySQL |
+| P1 | H1/H2 cũ yêu cầu áp SQLite/shared harness toàn suite dù RFC park; H3 dời toàn probe khỏi predeploy | Sai policy/thiếu isolation và replacement coverage. Sửa contracts/tracker, giữ gates hiện hành |
+| P2 | Recursive discovery vẫn chạy archive; module lists cũng giữ 22 file | S2 chưa giảm workload. Không tự loại archive để tạo speedup; phân loại từng case theo runtime invariant |
+| P2 | [Worksheet hook](../../frontend/src/features/worksheets/hooks/useWorksheetStudio.ts) dùng debounce 0 trong test, immediate branch thay timer 300 ms | 22 case xanh không kiểm tra production timing/cancel path. Dùng fake timers, giữ hook production, thêm race/cancel/error tests |
+| P2 | Worksheet test gán global `IS_REACT_ACT_ENVIRONMENT` không khôi phục; `waitTick(0)` vẫn phụ thuộc scheduling | Restore globals/timers/mocks; flush/advance có kiểm soát thay real sleep |
+| P2 | Runner diff trộn mapping POC tới file untracked với S2; PR B chưa có `--jobs` | Tách dependency/commit scopes; không ghi hoàn thành hoặc merge catalog thiếu file |
+| P2 | Tổng `Ran N`, số assertion hoặc speed target được dùng thay chứng minh hành vi | Dùng manifest/outcome/invariant gates dưới đây; không có số coverage % đáng tin trong audit này |
+
+### 10.3 Độ phủ và độ chính xác phải giữ
+
+Ba lớp cần cùng đạt: **selection coverage** (case đúng được chọn), **behavior coverage** (assertion bảo vệ invariant đúng), **fidelity/isolation** (đúng engine/config/timing và không nhiễm state). Dời file giữ nguyên assertion chỉ chứng minh một phần cấu trúc; branch/line coverage cũng không thay thế các lớp này.
+
+Manifest trước/sau phải ghi old full case ID → retained/re-homed ID, source symbols/invariant, fixture/engine/config, owner, trigger PR/domain/master/MySQL, outcome/skip reason và timing. Case bị đổi module chỉ chuẩn hoá bằng rename map cụ thể; giữ multisets để không che duplicate/lost cases. Không sửa expected values/nới assertion/tăng skip để hợp harness. Subtests và load/import/setup/cleanup failures phải hiện trong evidence.
+
+| Nhóm | Invariants cần mapping và gap audit | Gate |
+| --- | --- | --- |
+| Runner/CI | Missing/mixed paths, nested edits, rename/deletion, unmapped source fallback, empty/load/import failure, worker failure/timeout/interrupt, exact IDs/outcomes, deploy gating | Pure tooling tests; PR selection scenarios và hosted workflow trên đúng revision |
+| Study/Decks | Owner + installed clone/source immutability, overlay/authority/revision, answer/undo/idempotency, bounded query, due/order/timezone/day boundary | Module tests và MySQL cho JSON/locking/concurrency |
+| Templates/fields/media | Atomic create/publish/auth/remap, field identity, nested/legacy arrays, CSP/proxy/sanitization | Retain runtime assertions kể cả đang ở archive; domain tests + MySQL khi cần dialect |
+| Migration/schema | Historical bootstrap → Alembic head, data/constraints/FKs, archive/restore/fences, fresh chain | Đủ MySQL gate khi models/migrations đổi; SQLite DDL không phải qualification |
+| Analytics/forecast | Clone dedup, timezone buckets, freshness/authority, SQL bounds | Retain current runtime suites; tách shared fixtures trước khi loại archive |
+| Worksheet | 300 ms boundary/coalescing/latest payload, abort/unmount/leave studio, stale success/error/loading, API error và UI/payload assertions | Focused fake-timer tests + typecheck; visual review khi đổi UI/behavior |
+
+Không tuyên bố mọi invariant trên đã có coverage. Đây là checklist để owner lập case-ID mapping, đánh dấu existing/missing và bổ sung test cụ thể trước khi thay gate. Ưu tiên failure/negative/boundary cases có thể phát hiện bug thực; không thêm test đếm dòng hoặc chỉ lặp implementation.
+
+Các file chuyển archive chứa runtime regressions rõ ràng: derived-card scope (17 declared methods), note query (16), note stats (14), template origin (12), provenance (6), telemetry (3). Mixed suite attachment/distribution còn runtime contracts. Fixture archive đang được analytics/forecast import. Không phân loại chúng là obsolete chỉ vì tên migration/retirement.
+
+### 10.4 Kết luận kiến trúc và mức tối ưu
+
+PR A dùng chung build hợp lý và có local evidence; hosted savings chưa được đo ở phiên này. PR B process-level parallelism tách khỏi shared app/schema là hướng ít thay lifecycle hơn, nhưng chưa tối ưu được chứng minh trước isolation/parity/resource benchmarks. PR C timing/inventory trước gate changes đúng thứ tự; probe có reset/shared state không được chạy song song cùng DB.
+
+H1/H2 và nightly thay immediate validation chưa có cơ sở rollout. Loại runtime regressions khỏi gate, chuyển file làm mất selection/caller, hoặc bypass timing production làm suy yếu chất lượng dù case count không đổi; rename đúng caller/selection/parity tự nó không giảm độ phủ. Kế hoạch sửa ưu tiên correctness/coverage trước performance, rồi tối ưu setup, worker count và probe cost bằng số đo. S2/S3 hiện `REVIEW_REQUIRED`; PR B `PLANNED`; không kết luận các agent đã triển khai đạt chỉ từ status cũ.
+
+Cuối review còn thấy `frontend/vitest.config.ts` và `frontend/src/test/setup.ts` untracked từ phiên khác. Thay đổi test setup toàn frontend cần ownership, FSD placement phù hợp và kiểm chứng riêng; kết quả một file Worksheet ở trên không nghiệm thu mọi thay đổi config/setup mới.
+
+## 11. Cân bằng minutes và Actions storage 0,5 GB
+
+### 11.1 Hạn mức, nguồn và snapshot
+
+Người dùng xác nhận trần cần bảo vệ là **Actions storage 0,5 GB**. Dùng đúng allowance/đơn vị trong Billing cho tài khoản, không suy ra headroom từ một repo. [GitHub billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions) liệt kê Free có 2.000 minutes, 500 MB artifact storage chia sẻ với Packages; cache riêng 10 GB/repo. Storage tính theo GB-hours: xoá object giảm sử dụng về sau, không xoá phần đã tích luỹ. Đây là các hạn mức khác nhau, không cộng cache vào 0,5 GB hoặc coi cache hết là toàn CI chắc chắn dừng.
+
+Snapshot API read-only 2026-10-23 của `TrinhChung/Flama`: artifacts endpoint trả **0 artifacts / 0 bytes**, cache usage trả **4 caches / 508.722.223 bytes** (≈485 MiB). Đây chỉ là current repo usage, không gồm artifact/Packages repo khác hoặc accrued account storage. Billing usage API trả 404, CLI báo thiếu scope `user`; chưa xác minh remaining minutes, GB-hours, Packages hoặc account budgets. Không refresh quyền hay thay settings trong phiên này. Connector GitHub không có endpoint tổng billing/cache phù hợp nên dùng CLI read-only cho snapshot này; không download hoặc xoá dữ liệu.
+
+[Billing docs](https://docs.github.com/en/billing/concepts/product-billing/github-actions) nói workflow logs/job summaries không tính vào artifact allowance, nhưng [changelog 27/08](https://github.blog/changelog/2026-08-27-actions-retention-will-cover-checks-workflow-runs-and-statuses/) nói logs billable. Không dùng giả định log miễn phí để cân bằng quota: ghi nhận điểm chưa nhất quán, đối chiếu SKU/report thực tế. [Thông báo 01/10](https://github.blog/changelog/2026-10-01-actions-retention-now-covers-checks-runs-and-statuses/) xác nhận retention còn ảnh hưởng checks/runs/statuses; giảm retention có thể mất bằng chứng review, không chỉ tiết kiệm bytes.
+
+### 11.2 Ngân sách vận hành đề xuất
+
+Các ngưỡng dưới đây là policy bảo vệ đề xuất cho kế hoạch, không phải cấu hình GitHub đã được đổi. Mỗi PR tối ưu phải đạt **đồng thời** coverage/fidelity, minutes và storage; không lấy trung bình để quota này che quota kia.
+
+| Tài nguyên | Mục tiêu dự báo / phần dự phòng | Cách kiểm tra |
+| --- | --- | --- |
+| Standard runner minutes toàn account | Routine forecast ≤75% allowance (1.500/2.000 nếu Free); ≥25% dành rerun/hotfix/migration/release | Current billing cycle, mọi repo, mọi attempt/cancelled run, loại runner; số 1.045 phút/30 ngày lịch sử không phải remaining allowance |
+| Actions shared storage 0,5 GB | Current peak và forecast GB-hours ≤70% allowance tương ứng, chừa ≥30%; mức danh nghĩa current target khoảng 0,35 GB theo UI | Artifacts + Packages toàn account, object lifetime/retention, accrued storage và remaining hours; không chỉ kích thước zip/build |
+| Cache riêng | Khởi điểm soft budget 1 GiB/repo, dưới included limit; chỉ tăng nếu đo được lợi ích và vẫn có headroom | Byte count, hit/miss, key cardinality, branch copies, cold fallback và restore/upload cost |
+
+Forecast theo thời gian **còn lại của billing cycle**, dùng mức burn bảo thủ từ 7/30 ngày, số PR/merge dự kiến và các run benchmark/migration đã lên lịch; cộng retry/burst scenario trước so ngưỡng. Với storage, theo dõi cả current/peak và `accrued_GB_hours + integral(projected_live_GB * remaining_hours)`, so với allowance cùng đơn vị do Billing cung cấp. Object còn lưu qua tháng vẫn tiếp tục chiếm storage; tháng mới reset minutes/accrual, không tự xoá object. Thiếu billing telemetry thì ghi `UNVERIFIED`, không kết luận chắc chắn đủ đến cuối tháng.
+
+### 11.3 Thay đổi tối ưu được chấp nhận
+
+- Giữ **không Actions build-artifact transfer**: PR A dùng build tại cùng job; không upload Vite/dist/node_modules, DB dumps, screenshots/video hoặc full manifests mỗi run để đổi lấy vài phút. Báo cáo gọn có thể ở bounded job output; storage accounting của log vẫn cần xác minh như trên. Retention diagnostic nếu mở sau này phải có byte cap, số bản tối đa và expiry được review.
+- Cache chỉ dependency store cần thiết (pip/npm) với OS/runtime/lockfile key; không thêm key theo SHA/run/time làm sinh bản mỗi commit, không cache secrets/env/DB/test-result làm test bỏ chạy. Cache miss/eviction phải vẫn chạy đủ test/build đúng revision; đo thêm cold-run minutes, không phụ thuộc cache để bảo toàn correctness.
+- [GitHub cache policy](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching) có eviction; churn có thể làm minutes tăng lại. Không nâng paid cache limit, xoá hàng loạt artifact/cache, đổi billing/retention tự động chỉ từ review này. Inventory object/owner/lifetime trước cleanup; không xoá evidence release đang cần.
+- Trước ba paired hosted benchmark runs của PR B, ước tính tổng phút (baseline + optimized + retry) và storage phát sinh; dùng local paired runs trước, gộp xác nhận trong run vốn cần thiết khi hợp lệ. Nếu vượt phần routine budget, lùi benchmark/cron/duplicate work; giữ các correctness/release gates và jobs=1. Không skip test cần thiết hoặc deploy revision chưa được validate để tiết kiệm quota.
+- Cảnh báo khi current **hoặc forecast** chạm 70% minutes/storage, hoặc dự báo cạn trước cuối kỳ; ở 80% chỉ mở thêm workload không thiết yếu khi đã tính lại headroom. Không chờ mốc 90–100%. Cache theo soft cap riêng. Các mốc này cần được triển khai/đo ở task BUDGET-01, chưa có monitor tự động.
+- Nghiệm thu tối ưu gồm cold/warm runs, same case/outcome manifests, total runner-minutes gồm reruns/setup, account-level storage forecast/peak/GB-hours, cache bytes/hit-rate và dự phòng hotfix. Nếu giảm minutes nhưng vượt Actions storage 0,5 GB, hoặc ngược lại, phương án không đạt.
+
+## 12. Nghiệm thu hosted khi người dùng cho push (đề xuất, chưa chạy)
+
+Chưa có run hosted nào cho PR A, B, C. Không push để đo khi người dùng chưa đồng ý.
+
+### 12.1 Chi phí tham chiếu
+
+Run push master `39775470111`, làm tròn lên từng job: `changes` 1, `frontend` 7, `backend` 11, `mysql-contract` 14, `redis-contract` 1, `spa-contract` 1, `deploy` 2, tổng ≈37 phút tính phí. Một `workflow_dispatch` hiện chạy mọi validation job (planner coi mọi event không phải PR là `force_all`), không deploy: ≈35 phút. Ba cặp dispatch jobs 1/2 như vậy tốn ≈210 phút, khoảng 10% allowance 2.000 phút. Quá đắt so với mục 11.2.
+
+### 12.2 Bổ sung cần có trước khi đo (thuộc PR B)
+
+Trạng thái: cả bốn mục đã có trong commit local `61fdb9ff` trên nhánh `wip/test-speed`, với test tooling và workflow (85 test pass). Chưa chạy trên hosted.
+
+1. **Manifest gọn trong log.** Job CI chạy backend không có `-v`, nên log hosted không có ID test để so. In toàn bộ `-v` vào log làm log lớn, mà mục 11.1 chưa chốt log có tính vào storage hay không. Đề xuất: runner nhận `--manifest PATH`, mỗi worker vẫn chạy `-v` nhưng output chỉ nằm trong spool; runner ghi file manifest (`ID<TAB>outcome<TAB>skip reason`, sắp xếp, giữ trùng lặp) và chỉ in ra log số dòng, số theo từng outcome và SHA-256 của manifest. Hai run khớp khi hash bằng nhau. Không upload artifact. Khi có `--manifest`, `--jobs 1` cũng chạy qua đường spool với một worker.
+2. **`--partition-seed N`** để đổi cách chia nhóm khi giữ nguyên số worker (bước 3 và 8 của mục 6.2).
+3. **Input `validation_scope` cho `workflow_dispatch`** (mặc định `all`): khi là `backend`, chỉ chạy `changes` và `backend`. Một dispatch đo khi đó tốn ≈12 phút thay vì ≈35. Push và PR không bị ảnh hưởng.
+4. **Script so sánh manifest** commit vào `scripts/`, có test tooling, để mọi reviewer chạy lại được.
+
+### 12.3 Trình tự và ngân sách
+
+| Bước | Run | Ước tính phút | Gate |
+| --- | --- | ---: | --- |
+| PR A | Run PR thường đầu tiên sau push | 0 thêm | Mục 6.1 bước 6 |
+| PR B, mốc | Sau khi rebase lên FIX-01, một dispatch `validation_scope=backend`, `backend_jobs=1` | ≈12 | Có manifest baseline hosted của commit đã tích hợp. So với manifest tuần tự local cùng commit bằng `scripts/compare_test_manifests.py`; khác biệt chỉ được chấp nhận khi giải thích được bằng nền tảng (ví dụ lý do skip theo hệ điều hành). Hash của mốc hosted là chuẩn cho ba lượt dưới |
+| PR B, ba lượt đo | Cùng commit, ba dispatch `backend_jobs=2` với seed 1, 2, 3 | ≈27 (3 × ≈9) | Hash bằng mốc ở cả ba lượt; RAM runner không cạn; step `backend` ngắn hơn mốc. Vì step `backend` lịch sử dao động 585–914 s, so thêm với ≥2 run push master gần nhất (jobs 1, không tốn thêm phút) |
+| Sau các lượt đo | Đọc kích thước log của các run vừa chạy bằng `gh api` (không tải log về) | 0 | Ghi tổng; nếu mục 11.1 chốt log tính vào storage thì cộng vào forecast |
+| PR C (d) tmpfs | Hai run PR có thay đổi chạm `mysql-contract` trước và sau | ≈0 thêm nếu đi cùng PR đã cần chạy | Mọi step của `mysql-contract` PASS, kể cả bootstrap và `flask db upgrade`; thời gian job so với ≥2 run trước đó; peak binlog/datadir dưới trần tmpfs; số đo chờ khoá của probe concurrency không lệch bất thường |
+| PR C (b) song song | Như trên, sau (d) | ≈0 thêm | Như trên, cộng bảng thời gian từng probe |
+
+Tổng thêm ≈40 phút, khoảng 2% allowance (bản trước của kế hoạch tính ≈72 phút cho ba cặp xen kẽ; review Gemini chỉ ra parity theo hash chỉ cần một mốc, vì `--jobs 1` chỉ có một nhóm nên seed không đổi gì). Nếu forecast quota ở mục 11.2 đã chạm 70%, lùi các bước có phút thêm và giữ `--jobs 1`. Chỉ đổi mặc định `backend_jobs` cho push/PR sau khi cả ba lượt đạt.
+
+### 12.4 Review của Gemini và cách xử lý (2026-10-23)
+
+Gemini (`gemini-3.8-flash-high` qua `agy` CLI, chế độ `plan`, sandbox, chỉ đọc file) review các phần mới của kế hoạch và code nhánh `wip/test-speed` ở `61fdb9ff`. Phiên Antigravity IDE không trả lời ASK-01/ASK-02 trong tracker. Kết luận của reviewer: "Cần bổ sung". Mỗi finding được xử lý như sau:
+
+| Finding | Xử lý |
+| --- | --- |
+| P1: `run_mysql_probes.py` không có timeout | Sửa: `--timeout`, probe quá hạn bị kill và fail (`a1f08cda`, có test) |
+| P1: job `backend` không có `timeout-minutes`, worker treo có thể tốn tới 360 phút | Sửa: `timeout-minutes: 30` và `--bin-timeout 1200` (`a1f08cda`, có test workflow) |
+| P1: binlog trên tmpfs có thể làm cạn RAM | Bổ sung vào 6.3.1 (d): trần `size=2g` và đo peak; không tắt được binlog qua `services` |
+| P1: tmpfs không hỗ trợ `O_DIRECT` | Ghi rủi ro ở 6.3.1 (d): `mysql:8.0` mặc định `fsync` nên áp dụng được; kiểm lại nếu đổi sang 8.4 |
+| P1: runner nhánh này vẫn lọc bỏ file thiếu | Làm rõ gate 2 ở 6.2.1: đây là phần của FIX-01 theo thiết kế, gate 2 chỉ đạt đủ sau khi rebase |
+| P1: thiếu baseline manifest lại sau khi rebase lên FIX-01 | Bổ sung vào gate 8 và bước "PR B, mốc" ở 12.3 |
+| P2: ngoại suy tốc độ Windows cho CI 2 vCPU | Sửa mục 1 điểm 7: kỳ vọng trên CI tối đa khoảng 1,6 lần, chưa đo |
+| P2: hai run lịch sử thiếu run ID | Bổ sung `39247544956` và `39779317426` vào 6.3.1 |
+| P2: `load_dotenv` trong P7/P5 analytics thiếu `override=False` | Không sửa: `python-dotenv` mặc định `override=False`, và CI truyền `DB_*` qua env nên giá trị env thắng |
+| P2: direct replay chỉ an toàn với `--overlay-only` | Ghi rõ điều kiện trong inventory 6.3.1 |
+| P2: tmpfs làm hẹp cửa sổ tranh chấp khoá | Ghi rủi ro và thêm so sánh số đo chờ khoá vào gate tmpfs ở 12.3 |
+| P2: ngân sách 72 phút có thể giảm | Đổi 12.3: một mốc cộng ba lượt seed, ≈40 phút |
+| P2: thiếu kiểm tra kích thước log sau benchmark | Thêm dòng kiểm tra log vào 12.3 |
+| P2: Linux không kill tiến trình cháu | Ghi giới hạn ở gate 4: đánh đổi có chủ ý để tín hiệu CI và Ctrl+C tới thẳng worker; Windows dùng `taskkill /T` |
+| P2: `--jobs` số cụ thể bỏ qua trần RAM | Giữ thiết kế (số cụ thể là quyết định của người gọi), thêm cảnh báo khi vượt ước tính RAM (`a1f08cda`, có test) |
+| P2: gate tmpfs thiếu kiểm tra migration | Gate tmpfs ở 12.3 yêu cầu mọi step PASS, kể cả bootstrap và `flask db upgrade` |
+| P3: cột bản B dựa trên `task.md` | Đã đối chiếu code ở checkout chính và ghi số dòng trong bảng 6.2.1 |
+| P3: seed `0` có thể bị hiểu sai trong bash | Không sửa: `[ -n "$BACKEND_PARTITION_SEED" ]` coi `0` là giá trị hợp lệ, và runner nhận mọi số nguyên |
+
+Lượt 2 (cùng model và chế độ, trên commit `a1f08cda`): reviewer xác nhận cả 18 dòng trên đã được xử lý đúng như ghi, và kết luận **"Đủ để triển khai"** theo thứ tự mục 8 khi các quyết định ở mục 9 được chốt. Ba điểm mới, đều đã xử lý:
+
+| Finding lượt 2 | Xử lý |
+| --- | --- |
+| P2: FIX-01 và PR B cùng sửa `ci.yml`, rebase dễ mất cấu hình của một bên | Bổ sung chỉ dẫn hợp nhất và các test phải chạy lại vào mục 8 bước 3 |
+| P3: `shlex.split` kiểu POSIX nuốt `\` trong đường dẫn Windows của `--probe` | Sửa: chuẩn hoá `\` thành `/` trước khi tách (`72ce0f5c`, có test) |
+| P3: hash mốc hosted có thể khác hash local vì khác nền tảng | Sửa gate "PR B, mốc" ở 12.3: so bằng script, hash hosted là chuẩn cho các lượt hosted |
