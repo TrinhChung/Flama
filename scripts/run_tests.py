@@ -1075,6 +1075,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
 # entire runtime layer. Keep this list short and covered by an audit test.
 FULL_BACKEND_SOURCE_PATTERNS = (
     "requirements.txt",
+    "requirements-test.txt",
     "pyproject.toml",
     "setup.cfg",
 )

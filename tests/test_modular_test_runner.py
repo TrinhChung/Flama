@@ -176,6 +176,18 @@ class ModularTestRunnerTests(unittest.TestCase):
         self.assertEqual(backend_tests, set(run_tests.discover_all_backend_tests()))
         self.assertEqual(frontend_tests, set())
 
+    def test_test_dependencies_run_full_backend_without_external_contracts(self):
+        _, backend_tests, frontend_tests = run_tests.map_files_to_modules(
+            ["requirements-test.txt"]
+        )
+        self.assertEqual(backend_tests, set(run_tests.discover_all_backend_tests()))
+        self.assertEqual(frontend_tests, set())
+
+        plan = run_tests.build_ci_change_plan(["requirements-test.txt"])
+        self.assertTrue(plan["backend"])
+        for job in ("frontend", "spa_contract", "redis_contract", "mysql_contract", "deploy"):
+            self.assertFalse(plan[job], job)
+
     def test_ci_plan_skips_unrelated_layer_and_external_contracts(self):
         plan = run_tests.build_ci_change_plan(
             ["app/services/worksheets/worksheet_service.py"]

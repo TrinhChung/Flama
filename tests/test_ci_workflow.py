@@ -126,6 +126,21 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertIn("    timeout-minutes: 30\n", backend_block)
         self.assertIn("extra=(--bin-timeout 1200)", backend_block)
 
+    def test_backend_installs_and_caches_yaml_test_dependencies(self):
+        import yaml
+
+        job = yaml.safe_load(self.workflow)["jobs"]["backend"]
+        setup = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/setup-python@"))
+        self.assertEqual(
+            setup["with"]["cache-dependency-path"].splitlines(),
+            ["requirements.txt", "requirements-test.txt"],
+        )
+        install = next(step for step in job["steps"] if step.get("name") == "Install dependencies")
+        self.assertIn("pip install -r requirements-test.txt", install["run"])
+        requirements = (ROOT / "requirements-test.txt").read_text(encoding="utf-8").splitlines()
+        self.assertIn("-r requirements.txt", requirements)
+        self.assertIn("PyYAML>=6.0.2,<7.0", requirements)
+
     def test_expensive_environment_contracts_are_explicit(self):
         frontend = self.workflow.split("\n  frontend:\n", 1)[1].split("\n  backend:\n", 1)[0]
         self.assertIn("FLAMA_REQUIRE_REAL_SPA_ARTIFACT: '1'", frontend)
