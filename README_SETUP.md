@@ -283,6 +283,17 @@ copy .env_example .env
 scripts\reseed_db.bat
 ```
 
+## Backend tests
+
+Sau khi kich hoat virtualenv, cai them dependency kiem thu (bao gom runtime dependencies va PyYAML cho workflow contracts):
+
+```bash
+python -m pip install -r requirements-test.txt
+python scripts/run_tests.py --changed --backend-only
+```
+
+Integration tests va migrations can MySQL local theo `AGENTS.md`; khong doi ung dung dev sang SQLite de chay test.
+
 ## Payment Setup (payOS only)
 
 Payment direction hien tai cua FLAMA la payOS-first. Neu can bat thanh toan marketplace, dung cac bien sau trong `.env`:
