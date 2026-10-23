@@ -959,6 +959,11 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/shared/ui/LanguageSwitcher.test.tsx",
         ],
     },
+    "test_coordination": {
+        "source_patterns": ["scripts/watch_test_coordination.py"],
+        "backend_tests": ["tests/test_watch_test_coordination.py"],
+        "frontend_tests": [],
+    },
     "tooling": {
         "source_patterns": [
             ".github/workflows/**",
