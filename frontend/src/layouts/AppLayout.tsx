@@ -6,7 +6,6 @@ import {
   Heart,
   HelpCircle,
   Languages,
-  LoaderCircle,
   LogIn,
   LogOut,
   Menu,
@@ -22,6 +21,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteMascot } from '@/components/site-mascot'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,6 +59,7 @@ const pageTitleKeyMap: Record<string, string> = {
   '/marketplace/decks/publish': 'page_titles.marketplace_decks_publish',
   '/marketplace/note-types': 'page_titles.marketplace_note_types',
   '/marketplace/note-types/publish': 'page_titles.marketplace_note_types_publish',
+  '/marketplace/templates': 'page_titles.marketplace_templates',
   '/orders': 'page_titles.orders',
   '/profile': 'page_titles.profile',
   '/settings/goals': 'page_titles.settings_goals',
@@ -151,7 +152,7 @@ function PublicLayout({
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 p-1 pr-1.5 pl-2.5 text-xs font-semibold transition hover:bg-muted/80 cursor-pointer"
+                        className="flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 p-1 pr-1.5 pl-2.5 text-xs font-semibold transition hover:bg-primary/10 hover:border-primary/30 data-[state=open]:border-primary/40 data-[state=open]:bg-primary/10 cursor-pointer"
                       >
                         <span className="max-w-[120px] truncate text-foreground">
                           {user.username}
@@ -177,7 +178,7 @@ function PublicLayout({
                       </div>
                       <DropdownMenuItem asChild>
                         <Link to="/dashboard" className="flex items-center gap-2">
-                          <BookOpen className="size-4" />
+                          <BookOpen className="size-4 text-primary" />
                           <span>{t('user_menu.overview')}</span>
                         </Link>
                       </DropdownMenuItem>
@@ -377,8 +378,7 @@ export function AppLayout() {
   if (bootstrapQuery.isPending) {
     return (
       <div className="flex min-h-svh items-center justify-center">
-        <LoaderCircle className="size-7 animate-spin text-primary" />
-        <span className="sr-only">{t('status.connecting_server')}</span>
+        <Spinner size="lg" aria-label={t('status.connecting_server')} />
       </div>
     )
   }
@@ -449,7 +449,7 @@ export function AppLayout() {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-border/60 bg-muted/40 p-1 pr-1.5 pl-2 text-xs font-semibold transition hover:bg-muted/80 cursor-pointer"
+                  className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-primary/20 bg-primary/5 p-1 pr-1.5 pl-2 text-xs font-semibold transition hover:bg-primary/10 hover:border-primary/30 data-[state=open]:border-primary/40 data-[state=open]:bg-primary/10 cursor-pointer"
                 >
                   <span className="max-w-[70px] sm:max-w-[120px] truncate text-foreground font-semibold">
                     {bootstrap.user.username}
@@ -475,13 +475,13 @@ export function AppLayout() {
                 </div>
                 <DropdownMenuItem asChild>
                   <Link to="/dashboard" className="flex items-center gap-2">
-                    <BookOpen className="size-4" />
+                    <BookOpen className="size-4 text-primary" />
                     <span>{t('user_menu.overview')}</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to="/settings/goals" className="flex items-center gap-2">
-                    <Goal className="size-4" />
+                    <Goal className="size-4 text-primary" />
                     <span>{t('user_menu.study_goals')}</span>
                   </Link>
                 </DropdownMenuItem>

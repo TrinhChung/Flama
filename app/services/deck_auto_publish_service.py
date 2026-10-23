@@ -113,6 +113,26 @@ def update_auto_publish_setting(
     return get_auto_publish_status(deck_item_id=item.id, user_id=user_id)
 
 
+def update_auto_publish_setting_and_commit(
+    *,
+    deck_item_id: str,
+    user_id: int,
+    auto_publish_enabled: bool,
+) -> dict[str, Any]:
+    """Enable or disable auto-publish for a shared deck and commit transaction."""
+    try:
+        payload = update_auto_publish_setting(
+            deck_item_id=deck_item_id,
+            user_id=user_id,
+            auto_publish_enabled=auto_publish_enabled,
+        )
+        db.session.commit()
+        return payload
+    except Exception:
+        db.session.rollback()
+        raise
+
+
 def trigger_auto_publish_for_deck_item(
     *,
     deck_item_id: str,

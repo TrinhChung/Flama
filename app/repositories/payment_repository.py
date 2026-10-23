@@ -11,6 +11,23 @@ from models.payment_entitlement import PaymentEntitlement
 from models.payment_order import PaymentOrder
 from models.payment_order_item import PaymentOrderItem
 from models.payment_webhook_event import PaymentWebhookEvent
+from models.user import User
+
+
+def lock_buyer_for_payment(user_id: int | None) -> None:
+    """All receipt/quote writers serialize on buyer before locking orders."""
+    if user_id is not None:
+        User.query.filter_by(id=user_id).with_for_update().populate_existing().first()
+
+
+def list_pending_template_orders(*, user_id: int) -> list[PaymentOrder]:
+    return (PaymentOrder.query.filter(
+        PaymentOrder.user_id == user_id,
+        PaymentOrder.status.in_(["pending_payment", "under_review"]),
+        PaymentOrder.items.any(
+            (PaymentOrderItem.product_type == "template") &
+            (PaymentOrderItem.line_total_amount_minor > 0)),
+    ).order_by(PaymentOrder.id).with_for_update().populate_existing().all())
 
 
 def get_order_for_user(order_id: str, user_id: int) -> PaymentOrder | None:
@@ -79,14 +96,19 @@ def get_deck_install(*, user_id: int, deck_item_id: str) -> DeckInstall | None:
 
 
 def get_order_and_latest_attempt_for_update(*, order_id: str, attempt_id: str) -> tuple[PaymentOrder | None, PaymentAttempt | None]:
+    owner = PaymentOrder.query.with_entities(PaymentOrder.user_id).filter_by(id=order_id).first()
+    if owner is not None:
+        lock_buyer_for_payment(owner[0])
     order = (
         PaymentOrder.query.filter_by(id=order_id)
         .with_for_update()
+        .populate_existing()
         .first()
     )
     attempt = (
         PaymentAttempt.query.filter_by(id=attempt_id)
         .with_for_update()
+        .populate_existing()
         .first()
     )
     return order, attempt

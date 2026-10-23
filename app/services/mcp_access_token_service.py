@@ -711,3 +711,48 @@ def authenticate_bearer_token(
     db.session.refresh(row)
 
     return AuthenticatedMcpToken(user=user, token_row=row, scopes=scopes)
+
+
+def update_user_mcp_permission_and_commit(
+    *,
+    user: Any,
+    actor_user_id: int,
+    can_manage_mcp_tokens: bool,
+) -> tuple[bool, bool]:
+    old_val = bool(getattr(user, "can_manage_mcp_tokens", False) or getattr(user, "can_use_mcp", False))
+    user.can_manage_mcp_tokens = can_manage_mcp_tokens
+    user.can_use_mcp = can_manage_mcp_tokens
+    db.session.add(user)
+
+    from models.user_permission_audit_log import UserPermissionAuditLog
+    db.session.add(
+        UserPermissionAuditLog(
+            actor_user_id=actor_user_id,
+            target_user_id=user.id,
+            action="update_mcp_token_management_permission",
+            from_role_id=user.role_id,
+            to_role_id=user.role_id,
+            from_is_admin=bool(user.is_admin),
+            to_is_admin=bool(user.is_admin),
+            from_is_disabled=bool(user.is_disabled),
+            to_is_disabled=bool(user.is_disabled),
+            message=f"{'Cấp' if can_manage_mcp_tokens else 'Thu hồi'} quyền Quản lý Token MCP (trước: {old_val}, sau: {can_manage_mcp_tokens})",
+        )
+    )
+    db.session.commit()
+    return old_val, can_manage_mcp_tokens
+
+
+def cleanup_system_tokens_and_commit() -> int:
+    from sqlalchemy import or_
+    now = datetime.utcnow()
+    query = McpAccessToken.query.filter(
+        or_(
+            McpAccessToken.revoked.is_(True),
+            McpAccessToken.expires_at <= now,
+        )
+    )
+    count = query.delete(synchronize_session=False)
+    db.session.commit()
+    return count
+

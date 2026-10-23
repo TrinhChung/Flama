@@ -138,12 +138,6 @@
       "btn_edit_disabled_title": "Sắp có: tạo bản riêng cho thẻ gốc của bộ đã cài.",
       "btn_close": "Đóng",
       "btn_study": "Học deck này"
-    },
-    "worksheet_loader": {
-      "title": "Mẫu giấy luyện viết & In ấn (A4)",
-      "loading": "Đang tải công cụ tạo bài tập…",
-      "failed": "Không thể tải công cụ tạo bài tập. Hãy tải lại trang để thử lại.",
-      "sr_loading": "Đang tải…"
     }
   },
   "heatmap": {

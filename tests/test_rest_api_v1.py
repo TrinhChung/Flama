@@ -522,7 +522,8 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertEqual(decks_response.status_code, 200)
         decks_data = decks_response.get_json()
         self.assertIn("decks", decks_data)
-        self.assertIn("tree", decks_data)
+        # The nested form is served only by /decks/tree.
+        self.assertNotIn("tree", decks_data)
 
         tree_response = self.client.get("/api/browse/decks/tree")
         self.assertEqual(tree_response.status_code, 200)
@@ -536,6 +537,7 @@ class RestApiV1Tests(unittest.TestCase):
 
     def test_browse_voicevox_precheck_matches_transition_adapter(self):
         self._login_admin()
+        self.app.config["LEGACY_HTTP_ADAPTERS_ENABLED"] = False
         payload = {
             "card_ids": [],
             "destination_field": "Audio",
@@ -550,9 +552,18 @@ class RestApiV1Tests(unittest.TestCase):
             json=payload,
         )
 
-        self.assertEqual(legacy_response.status_code, 200)
+        self.assertIn(legacy_response.status_code, (404, 410))
         self.assertEqual(v1_response.status_code, 200)
-        self.assertEqual(v1_response.get_json(), legacy_response.get_json())
+        self.assertEqual(
+            v1_response.get_json(),
+            {
+                "warning": False,
+                "count": 0,
+                "items": [],
+                "mixed_note_types": False,
+                "note_type_count": 0,
+            },
+        )
 
     def test_deck_and_note_type_purge(self):
         self._login_admin()

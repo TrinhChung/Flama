@@ -27,8 +27,16 @@ describe('parseAnswerLines', () => {
     expect(parseAnswerLines('  ăn  \n\n  dùng   bữa \nĂN')).toEqual(['ăn', 'dùng bữa'])
   })
 
+  it('supports native array field values with markup or plain text', () => {
+    expect(parseAnswerLines(['ăn', 'dùng bữa'])).toEqual(['ăn', 'dùng bữa'])
+    expect(parseAnswerLines(['<b>ăn</b>', 'dùng bữa[sound:test.mp3]'])).toEqual(['ăn', 'dùng bữa'])
+    expect(parseAnswerLines([['ăn'], 'dùng bữa'])).toEqual(['ăn', 'dùng bữa'])
+  })
+
   it('returns nothing for empty or non-string values', () => {
     expect(parseAnswerLines('')).toEqual([])
+    expect(parseAnswerLines([])).toEqual([])
+    expect(parseAnswerLines(['', ' '])).toEqual([])
     expect(parseAnswerLines(undefined)).toEqual([])
     expect(parseAnswerLines('<br>')).toEqual([])
   })

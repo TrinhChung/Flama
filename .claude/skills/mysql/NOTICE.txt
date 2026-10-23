@@ -1,0 +1,3 @@
+Source: existing PlanetScale MySQL skill exported from .claude/skills/mysql on 2026-10-20.
+License: MIT; see LICENSE. Upstream revision was not recorded in the original bundle.
+Flama modification: repository-specific integration and precedence note; references retained unchanged.

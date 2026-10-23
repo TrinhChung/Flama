@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { formatVND, parseCurrency } from '@/shared/lib/currency'
 
 interface SupportDonationFormProps {
   amount: number
@@ -83,11 +84,9 @@ export function SupportDonationForm({
               type="text"
               inputMode="numeric"
               placeholder="0"
-              value={amount ? amount.toLocaleString('vi-VN') : ''}
+              value={amount ? formatVND(amount, '').trim() : ''}
               onChange={(e) => {
-                const raw = e.target.value.replace(/\D/g, '')
-                const val = raw ? parseInt(raw, 10) : 0
-                setAmount(val)
+                setAmount(parseCurrency(e.target.value))
               }}
               className="h-11 sm:h-12 text-base sm:text-lg font-bold pr-14 sm:pr-16 border-primary/30 focus-visible:ring-primary"
             />
@@ -97,8 +96,8 @@ export function SupportDonationForm({
           </div>
           <p className="text-[11px] sm:text-xs text-muted-foreground">
             {t('donation.online_card.limit_hint', {
-              min: minAmount.toLocaleString('vi-VN'),
-              max: maxAmount.toLocaleString('vi-VN'),
+              min: formatVND(minAmount, '').trim(),
+              max: formatVND(maxAmount, '').trim(),
             })}
           </p>
         </div>
@@ -122,7 +121,7 @@ export function SupportDonationForm({
                 }`}
                 onClick={() => setAmount(preset)}
               >
-                <span className="truncate">{preset.toLocaleString('vi-VN')} VND</span>
+                <span className="truncate">{formatVND(preset, 'VND')}</span>
               </Button>
             ))}
           </div>

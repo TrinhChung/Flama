@@ -134,6 +134,8 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from models.template_version import TemplateVersion  # noqa: F401
     from models.template_publication import TemplatePublication  # noqa: F401
     from models.template_release import TemplateRelease  # noqa: F401
+    from models.note_type_release import NoteTypeRelease  # noqa: F401
+    from models.template_sync_job import TemplateSyncJob  # noqa: F401
     from models.template_subscription import TemplateSubscription  # noqa: F401
     from models.study_template_preset import StudyTemplatePreset  # noqa: F401
     from models.deck_release_template_pin import DeckReleaseTemplatePin  # noqa: F401
@@ -243,6 +245,20 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
         _rollback_failed_session()
         return jsonify({"error": "CONTENT_REVISION_CONFLICT",
                         "message": "Nội dung đã thay đổi. Tải lại dữ liệu trước khi lưu."}), 409
+
+    from app.validators import RequestValidationError
+    from app.api.common.responses import error_response
+
+    @app.errorhandler(RequestValidationError)
+    def handle_request_validation_error(error: RequestValidationError):
+        _rollback_failed_session()
+        return error_response(
+            code=error.code or "VALIDATION_ERROR",
+            message=str(error),
+            status=error.status or 400,
+            field=error.field,
+            details=getattr(error, "details", None),
+        )
 
     @app.errorhandler(404)
     def page_not_found(error):

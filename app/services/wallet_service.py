@@ -73,8 +73,15 @@ def credit_creator_for_deck_sale(
     elif order_item.product_type == "note_type":
         source_note_type = db.session.get(NoteType, order_item.product_ref_id)
         if source_note_type is not None:
-            owner_user_id = getattr(source_note_type, "owner_user_id", None)
+            owner_user_id = source_note_type.user_id
+    elif order_item.product_type == "template":
+        from app.services import template_marketplace_service
 
+        owner_user_id = template_marketplace_service.seller_user_id(order_item.product_ref_id)
+
+    snapshot = order_item.product_snapshot_json or {}
+    # The purchased seller is frozen alongside the purchased price/release.
+    owner_user_id = snapshot.get("owner_user_id", owner_user_id)
     if owner_user_id is None or owner_user_id == order.user_id:
         return None
 

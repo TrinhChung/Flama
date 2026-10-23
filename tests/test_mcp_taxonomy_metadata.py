@@ -252,6 +252,12 @@ class McpTaxonomyMetadataTests(unittest.TestCase):
             self.assertIsInstance(nt.taxonomy_metadata, dict)
             self.assertEqual(nt.taxonomy_metadata.get("best_used_for"), "vocabulary")
 
+        # Template listings must exist before MCP publishes the complete Note Type.
+        from tests.note_type_publication_fixtures import stage_template_listings_for_note_type
+        with self.app.app_context():
+            stage_template_listings_for_note_type(db.session, db.session.get(NoteType, nt_id))
+            db.session.commit()
+
         # Update Note Type with complete taxonomy for publication
         update_resp = self._rpc_call("tools/call", {
             "name": "update_note_type",

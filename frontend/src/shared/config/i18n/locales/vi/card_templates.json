@@ -70,7 +70,10 @@
       "description": "Người học gõ đáp án, Flama so với từng dòng của field được gắn. Đúng thì lật sang mặt sau, sai thì báo để gõ lại.",
       "show_length": "Hiện số ký tự cần gõ",
       "hints": "Cho mở gợi ý từng ký tự"
-    }
+    },
+    "publish_market": "Đăng lên chợ",
+    "publish_market_blocked": "Bản tải từ chợ — không thể đăng bán",
+    "publish_market_save_first": "Lưu thay đổi trước khi đăng lên chợ"
   },
   "library": {
     "title": "Giao diện thẻ",
@@ -324,6 +327,15 @@
       "unknown": "Chưa xác định"
     },
     "original_release": "Bản gốc",
+    "legacy_unpinned": {
+      "status": "Chưa rõ phiên bản gốc",
+      "title": "Bản nhận cũ chưa xác định phiên bản gốc",
+      "description": "Chưa có thông tin phiên bản gốc của bản nhận cũ này. Các thao tác cập nhật từ nguồn hiện không khả dụng.",
+      "version_unknown": "Chưa xác định phiên bản đã nhận",
+      "preserved": "Nội dung cá nhân của bạn được giữ nguyên. Tự động cập nhật, cập nhật và khôi phục từ nguồn được tắt vì bản nhận này chưa có thông tin phiên bản gốc.",
+      "receive_separately": "Mở bản gốc trên chợ để nhận bản hiện tại như một giao diện riêng. Bản đang dùng sẽ không bị thay đổi.",
+      "view_original": "Xem bản gốc trên chợ"
+    },
     "not_available": "Không có",
     "conflicts": {
       "badge": "Xung đột",

@@ -45,6 +45,18 @@ describe('ArrayFieldInput', () => {
     expect(textarea?.value).toBe('apple\nbanana')
   })
 
+  it('shows server-escaped characters as typed in lines and preview, but keeps code as stored', async () => {
+    const value = ['R&amp;D', '1 &lt; 2 -&gt; 3', '&lt;b&gt; literal', 'a&amp;nbsp;b']
+    const { container: view } = await renderComponent({ value })
+    expect(view.querySelector('textarea')?.value).toBe('R&D\n1 < 2 -> 3\n&lt;b> literal\na&amp;nbsp;b')
+    act(() => root?.unmount())
+    const preview = await renderComponent({ value, mode: 'preview' })
+    expect(preview.container.textContent).toContain('R&D')
+    act(() => root?.unmount())
+    const code = await renderComponent({ value, mode: 'code' })
+    expect(code.container.querySelector('textarea')?.value).toContain('"R&amp;D"')
+  })
+
   it('renders formatted JSON array code when mode is code without syntax error', async () => {
     const { container: view } = await renderComponent({ value: 'apple\nbanana', mode: 'code' })
     const textarea = view.querySelector('textarea')

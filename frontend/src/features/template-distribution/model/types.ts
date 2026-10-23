@@ -59,17 +59,19 @@ export interface PendingUpdateDto {
 }
 
 export interface TemplateSubscriptionDto {
-  id: string
+  id: string | null
   user_id: number
-  source_template_id: string
+  source_template_id: string | null
   local_template_id: string
   template_id: string
   current_version_id: string
-  applied_release_id: string
+  applied_release_id: string | null
   applied_release: TemplateReleaseDto | null
   current_release: TemplateReleaseDto | null
   update_available: boolean
   auto_update_enabled: boolean
+  legacy_unpinned?: boolean
+  requires_new_canonical_receipt?: boolean
   pending_update_json: PendingUpdateDto | null
   last_sync_status: 'synced' | 'conflict' | 'ready' | string
   last_synced_at: string | null

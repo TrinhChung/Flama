@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Folder, FolderOpen, RotateCcw, Search, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react'
-import type { useBrowseState, BrowseDeck } from '../hooks/useBrowseState'
+import type { useBrowseState } from '../hooks/useBrowseState'
+import type { BrowseDeck } from '../types'
 
 export interface BrowseDeckSidebarProps {
   browse: ReturnType<typeof useBrowseState>

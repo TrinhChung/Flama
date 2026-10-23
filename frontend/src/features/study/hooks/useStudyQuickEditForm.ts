@@ -7,8 +7,9 @@ import { appApi } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
 import { fieldValueEditorText, serializeArrayFieldValues } from '@/lib/arrayField'
 import { noteWritePreconditions } from '@/lib/noteWritePreconditions'
+import { NOTE_TAG_MAX_COUNT, NOTE_TAG_MAX_LENGTH, tagDedupeKey } from '@/entities/flashcard'
 import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
-import type { CardDetailResponse } from '@/features/browse/hooks/useBrowseState'
+import type { CardDetailResponse } from '@/features/browse/types'
 
 export type UpdateCardResponse = {
   success: boolean
@@ -109,8 +110,6 @@ export function useStudyQuickEditForm({
   const [tags, setTags] = useState<string[]>([])
   const [initialTags, setInitialTags] = useState<string[]>([])
   const [newTagInput, setNewTagInput] = useState('')
-  const [deckId, setDeckId] = useState<number | null>(null)
-  const [initialDeckId, setInitialDeckId] = useState<number | null>(null)
 
   const isFormInitializedRef = useRef(false)
   const initialWritePreconditionsRef = useRef<ReturnType<typeof noteWritePreconditions>>({})
@@ -144,8 +143,6 @@ export function useStudyQuickEditForm({
       setInitialFieldValues({})
       setTags([])
       setInitialTags([])
-      setDeckId(null)
-      setInitialDeckId(null)
       setNewTagInput('')
       setInvalidArrayFields({})
       initialWritePreconditionsRef.current = {}
@@ -167,13 +164,12 @@ export function useStudyQuickEditForm({
       const detail = cardDetailQuery.data
       if (hydratedDetailRef.current === detail) return
       const hasDraft = JSON.stringify(fieldValues) !== JSON.stringify(initialFieldValues)
-        || JSON.stringify(tags) !== JSON.stringify(initialTags) || deckId !== initialDeckId
+        || JSON.stringify(tags) !== JSON.stringify(initialTags)
       if (hydratedDetailRef.current && hasDraft) return
       hydratedDetailRef.current = detail
       initialWritePreconditionsRef.current = noteWritePreconditions(detail.note)
       const detailValues = detail.note.field_values || {}
       const detailTags = detail.note.tags || []
-      const detailDeckId = detail.note.deck_id || null
       const pendingFields = Object.fromEntries(Object.entries(fieldValues).filter(([name, value]) =>
         JSON.stringify(value) !== JSON.stringify(initialFieldValues[name])))
       if (Object.entries(pendingFields).some(([name, value]) =>
@@ -196,22 +192,29 @@ export function useStudyQuickEditForm({
         }
       })
       setInitialFieldValues(detailValues)
-      setTags((current) => [...new Set([
-        ...detailTags.filter((tag) => !initialTags.includes(tag) || current.includes(tag)),
-        ...current.filter((tag) => !initialTags.includes(tag)),
-      ])])
+      setTags((current) => {
+        // A clone's tags are read-only, so tags typed before detail arrived are dropped.
+        if (detail.note.deck_install_id) return detailTags
+        const kept = [...new Set(detailTags.filter((tag) => !initialTags.includes(tag) || current.includes(tag)))]
+        const keptKeys = new Set(kept.map(tagDedupeKey))
+        return [...kept, ...current.filter((tag) => !initialTags.includes(tag) && !keptKeys.has(tagDedupeKey(tag)))]
+      })
       setInitialTags(detailTags)
-      setDeckId((current) => current !== initialDeckId ? current : detailDeckId)
-      setInitialDeckId(detailDeckId)
     }
-  }, [cardDetailQuery.data, open, initialFieldValues, fieldValues, tags, initialTags, deckId, initialDeckId])
+  }, [cardDetailQuery.data, open, initialFieldValues, fieldValues, tags, initialTags])
 
   const handleAddTag = useCallback(() => {
-    const trimmed = newTagInput.trim()
-    if (!trimmed || tags.includes(trimmed)) return
-    setTags((prev) => [...prev, trimmed])
+    const tag = newTagInput.trim().slice(0, NOTE_TAG_MAX_LENGTH)
+    if (!tag) return
+    const key = tagDedupeKey(tag)
+    if (tags.some((existing) => tagDedupeKey(existing) === key)) return
+    if (tags.length >= NOTE_TAG_MAX_COUNT) {
+      toast.error(t('quick_edit.tag_limit', { count: NOTE_TAG_MAX_COUNT }))
+      return
+    }
+    setTags((prev) => [...prev, tag])
     setNewTagInput('')
-  }, [newTagInput, tags])
+  }, [newTagInput, tags, t])
 
   const handleRemoveTag = useCallback((tagToRemove: string) => {
     setTags((prev) => prev.filter((t) => t !== tagToRemove))
@@ -221,13 +224,11 @@ export function useStudyQuickEditForm({
     initialDetailConflictRef.current = false
     setFieldValues(initialFieldValues)
     setTags(initialTags)
-    setDeckId(initialDeckId)
     setNewTagInput('')
-  }, [initialFieldValues, initialTags, initialDeckId])
+  }, [initialFieldValues, initialTags])
 
   const isDirty = useMemo(() => {
     if (!open || !cardId) return false
-    if (deckId !== initialDeckId) return true
     if (JSON.stringify(tags) !== JSON.stringify(initialTags)) return true
     const currentKeys = Object.keys(fieldValues)
     const initialKeys = Object.keys(initialFieldValues)
@@ -236,7 +237,7 @@ export function useStudyQuickEditForm({
       if (JSON.stringify(fieldValues[key] ?? '') !== JSON.stringify(initialFieldValues[key] ?? '')) return true
     }
     return false
-  }, [cardId, deckId, fieldValues, initialDeckId, initialFieldValues, initialTags, open, tags])
+  }, [cardId, fieldValues, initialFieldValues, initialTags, open, tags])
 
   // Media resolver map: maps filename or relative reference to fully resolved proxy URL
   const mediaMap = useMemo(() => {
@@ -269,7 +270,6 @@ export function useStudyQuickEditForm({
   const updateMutation = useMutation({
     mutationFn: (payload: {
       field_values: Record<string, unknown>
-      deck_id?: number
       tags?: string[]
     }) => {
       if (initialDetailConflictRef.current) {
@@ -286,7 +286,6 @@ export function useStudyQuickEditForm({
       setInitialFieldValues(committedFieldValues)
       setFieldValues(committedFieldValues)
       setInitialTags(tags)
-      setInitialDeckId(deckId)
 
       if (cardId) {
         const mediaAssets: StudyMediaArtifact[] = (data?.detail?.media_assets || []).map((asset) => ({
@@ -349,19 +348,20 @@ export function useStudyQuickEditForm({
   }, [open, cardDetailQuery.data?.fields, template?.binding_projection, template?.field_defs, fieldValues, initialFieldValues])
 
   const isDetailReady = Boolean(cardId && cardDetailQuery.data?.card.card_id === cardId)
+  // Logical-overlay clones: the backend rejects deck moves and tag edits.
+  const isCloneCard = Boolean(cardDetailQuery.data?.note.deck_install_id)
 
   const handleSubmit = useCallback(() => {
     if (!isDetailReady || hydratedDetailRef.current?.card.card_id !== cardId
       || !isDirty || updateMutation.isPending || !cardId || fieldDefs.some((field) => invalidArrayFields[field.name])) return
     const values = serializeArrayFieldValues(fieldValues, fieldDefs)
-    updateMutation.mutate({
-      field_values: values,
-      deck_id: deckId || undefined,
-      tags,
-    })
-  }, [isDetailReady, isDirty, updateMutation, cardId, fieldValues, fieldDefs, deckId, tags, invalidArrayFields])
+    // Quick edit never moves the card to another deck. A clone keeps its tags; sending them back only risks a 400.
+    updateMutation.mutate(isCloneCard ? { field_values: values } : { field_values: values, tags })
+  }, [isDetailReady, isDirty, updateMutation, cardId, fieldValues, fieldDefs, tags, invalidArrayFields, isCloneCard])
 
-  const deckList = cardDetailQuery.data?.decks || []
+  // Available on the first open render, before the init effects above run, so
+  // each field editor picks Input or Textarea from the stored value.
+  const editorSeedValues = cardDetailQuery.data?.note.field_values ?? content?.field_values ?? initialFieldValues
 
   return {
     fieldValues,
@@ -369,10 +369,9 @@ export function useStudyQuickEditForm({
     tags,
     newTagInput,
     setNewTagInput,
-    deckId,
-    setDeckId,
     handleAddTag,
     handleRemoveTag,
+    isCloneCard,
     handleRevert,
     handleApplyStrokes,
     isDirty,
@@ -383,6 +382,6 @@ export function useStudyQuickEditForm({
     handleSubmit,
     isSubmitting: updateMutation.isPending,
     fieldDefs,
-    deckList,
+    editorSeedValues,
   }
 }

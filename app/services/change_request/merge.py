@@ -33,6 +33,7 @@ from app.services.change_request.helpers import (
     _utcnow,
 )
 from app.services.change_request.lifecycle import sync_request
+from app.validators.flashcard_input import clean_array_fields
 from models import db
 from models.deck_change_request import DeckChangeRequest
 from models.deck_change_request_conflict import DeckChangeRequestConflict
@@ -397,7 +398,10 @@ def approve_and_merge_request(
             values.pop(field_name, None)
         else:
             values[field_name] = desired_value
-        source_note.field_values = values
+        source_note.field_values = clean_array_fields(
+            values,
+            source_note.note_type.field_defs if source_note.note_type else (),
+        )
 
     for item in request_obj.items:
         if _item_is_dropped_from_request(item):

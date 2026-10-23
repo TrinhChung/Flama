@@ -41,7 +41,7 @@ def marketplace_payment_result_page():
 @payments_bp.route("/api/payments/orders", methods=["POST"])
 @login_required
 def create_payment_order():
-    from app.services import payment_service
+    from app.services import payment
 
     payload = request.get_json(silent=True) or {}
     normalized_payload, message, field = normalize_order_create_payload(payload)
@@ -49,14 +49,14 @@ def create_payment_order():
         return _api_error("VALIDATION_ERROR", message or "Invalid payload.", field=field)
 
     try:
-        result = payment_service.prepare_checkout_for_product(
+        result = payment.prepare_checkout_for_product(
             user_id=current_user.id,
             product_type=normalized_payload["product_type"],
             product_ref_id=normalized_payload["product_ref_id"],
             return_url=normalized_payload.get("return_url") or request.referrer or request.host_url,
             cancel_url=normalized_payload.get("cancel_url") or request.referrer or request.host_url,
         )
-    except payment_service.PaymentServiceError as exc:
+    except payment.PaymentServiceError as exc:
         return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
 
     if result.get("payment_required"):
@@ -68,14 +68,14 @@ def create_payment_order():
 @payments_bp.route("/api/payments/orders/<order_id>", methods=["GET"])
 @login_required
 def get_payment_order(order_id: str):
-    from app.services import payment_service
+    from app.services import payment
 
     try:
-        result = payment_service.get_order_detail_for_user(
+        result = payment.get_order_detail_for_user(
             order_id=order_id,
             user_id=current_user.id,
         )
-    except payment_service.PaymentServiceError as exc:
+    except payment.PaymentServiceError as exc:
         return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
     return jsonify(result)
 
@@ -83,25 +83,25 @@ def get_payment_order(order_id: str):
 @payments_bp.route("/api/payments/orders/<order_id>/cancel", methods=["POST"])
 @login_required
 def cancel_payment_order(order_id: str):
-    from app.services import payment_service
+    from app.services import payment
 
     try:
-        result = payment_service.cancel_order_for_user(
+        result = payment.cancel_order_for_user(
             order_id=order_id,
             user_id=current_user.id,
         )
-    except payment_service.PaymentServiceError as exc:
+    except payment.PaymentServiceError as exc:
         return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
     return jsonify(result)
 
 
 @payments_bp.route("/api/payments/providers/payos/webhook", methods=["POST"])
 def payos_webhook():
-    from app.services import payment_service
+    from app.services import payment
 
     raw_payload = request.get_data(cache=True)
     try:
-        result, status = payment_service.process_payos_webhook_request(raw_payload)
-    except payment_service.PaymentServiceError as exc:
+        result, status = payment.process_payos_webhook_request(raw_payload)
+    except payment.PaymentServiceError as exc:
         return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
     return jsonify(result), status

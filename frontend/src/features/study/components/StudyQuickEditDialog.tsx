@@ -51,10 +51,9 @@ export function StudyQuickEditDialog({
     tags,
     newTagInput,
     setNewTagInput,
-    deckId,
-    setDeckId,
     handleAddTag,
     handleRemoveTag,
+    isCloneCard,
     handleRevert,
     handleApplyStrokes,
     isDirty,
@@ -65,7 +64,7 @@ export function StudyQuickEditDialog({
     handleSubmit,
     isSubmitting,
     fieldDefs,
-    deckList,
+    editorSeedValues,
   } = useStudyQuickEditForm({
     open,
     cardId,
@@ -137,11 +136,9 @@ export function StudyQuickEditDialog({
           {/* Scrollable Form Body */}
           <div className="flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-3.5 sm:space-y-4 min-h-0 pb-6 sm:pb-8">
             <StudyQuickEditFields
-              deckList={deckList}
-              deckId={deckId}
-              onDeckChange={setDeckId}
               fieldDefs={fieldDefs}
               fieldValues={fieldValues}
+              initialFieldValues={editorSeedValues}
               onFieldValueChange={handleFieldValueChange}
               onFieldValidityChange={handleFieldValidityChange}
               resolveMediaUrl={mediaResolver}
@@ -153,6 +150,8 @@ export function StudyQuickEditDialog({
               onNewTagInputChange={setNewTagInput}
               onAddTag={handleAddTag}
               onRemoveTag={handleRemoveTag}
+              disabled={isCloneCard}
+              disabledReason={t('quick_edit.clone_locked_hint')}
             />
           </div>
 

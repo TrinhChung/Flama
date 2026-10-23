@@ -25,7 +25,6 @@ from app.services import (
     flashcards_share_service,
     marketplace_query_service,
     marketplace_taxonomy_service,
-    payment_service,
 )
 from app.services.payment import presenters as payment_presenters
 from models import db
@@ -180,8 +179,8 @@ def build_note_type_marketplace_hub(
         if row["is_owned_candidate"] and row["product_ref_id"] not in install_map
     }
 
-    filtered_items = _filter_note_types(visible_items, filters=filters)
-    sorted_items = _sort_note_types(filtered_items, sort_key=filters.get("sort") or "popular")
+    filtered_items = _filter_note_types(visible_items, filters=filters, user_id=user_id)
+    sorted_items = _sort_note_types(filtered_items, sort_key=filters.get("sort") or "popular", user_id=user_id)
     marketplace_items = [
         _serialize_note_type_card(
             item,
@@ -482,6 +481,8 @@ def get_saved_item_ids(*, user_id: int, product_type: str) -> set[str]:
 
 
 def build_note_type_detail_extras(*, note_type: NoteType, user_id: int) -> dict[str, Any]:
+    from app.services.note_type_bundle_pricing_service import pricing_breakdown
+    quote = pricing_breakdown(db.session, note_type=note_type, user_id=user_id)
     saved_ids = get_saved_item_ids(user_id=user_id, product_type="note_type")
     install_map = {
         row.source_note_type_id: row
@@ -511,7 +512,7 @@ def build_note_type_detail_extras(*, note_type: NoteType, user_id: int) -> dict[
         "is_saved": note_type.id in saved_ids,
         "ownership_status": ownership_status,
         "badges": _build_badges(
-            pricing_mode=str(note_type.pricing_mode or "free"),
+            pricing_mode="paid" if quote["payment_required"] else "free",
             is_official=bool(note_type.is_official),
             ownership_status=ownership_status,
             is_saved=note_type.id in saved_ids,

@@ -53,6 +53,9 @@ def list_security_alerts():
     })
 
 
+from app.utils.db import transaction
+
+
 @admin_security_alerts_bp.patch("/<alert_id>")
 @admin_required
 def resolve_security_alert(alert_id: str):
@@ -67,13 +70,13 @@ def resolve_security_alert(alert_id: str):
     payload = request.get_json(silent=True) or {}
     is_resolved = payload.get("is_resolved", True)
 
-    alert.is_resolved = bool(is_resolved)
-    if alert.is_resolved:
-        alert.resolved_by_user_id = current_user.id
-        alert.resolved_at = datetime.utcnow()
-    else:
-        alert.resolved_by_user_id = None
-        alert.resolved_at = None
+    with transaction():
+        alert.is_resolved = bool(is_resolved)
+        if alert.is_resolved:
+            alert.resolved_by_user_id = current_user.id
+            alert.resolved_at = datetime.utcnow()
+        else:
+            alert.resolved_by_user_id = None
+            alert.resolved_at = None
 
-    db.session.commit()
     return jsonify({"item": alert.to_dict()})

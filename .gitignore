@@ -59,19 +59,29 @@ run_*_log.txt
 
 # Agent, Tooling & Plugin metadata
 .agent/
-.agents/
+.agents/*
+!.agents/skills/
+!/.claude/skills/
 .stitch/
 .impeccable/
 .claude/worktrees/
 plugins/
 
-# External agent skills in skills/ (preserve repo-local skills: docs-architect, nihongo-agent-architect, flama-database-architecture)
+# Only reviewed, shared skills are tracked; other local imports stay private.
 skills/*
 !skills/docs-architect/
 !skills/nihongo-agent-architect/
 !skills/flama-database-architecture/
 !skills/antigravity-cli/
 !skills/antigravity-manager-api/
+!skills/flama-frontend-architecture/
+!skills/flama-backend-architecture/
+!skills/flama-agent-orchestrator/
+!skills/codex-cli/
+!skills/nihongo-engineer/
+!skills/playwright/
+!skills/mysql/
+!skills/flama-local-dev/
 
 
 # OS / Editor files

@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
-from app.services import flashcard_content_service, template_version_service, template_library_service, template_release_service
+from app.services import flashcard_content_service, template_version_service, template_library_service, template_marketplace_service, template_release_service
 from app.validators.template_library import TemplateLibraryError
 from .common import content_error
 
@@ -140,6 +140,18 @@ def publication(template_id):
 @login_required
 def publication_settings(template_id):
     return _respond(template_release_service.update_publication_settings, template_id=template_id, payload=_body())
+
+
+@card_templates_bp.get("/card-templates/<template_id>/marketplace")
+@login_required
+def marketplace_listing(template_id):
+    return _respond(template_marketplace_service.get_listing, template_id=template_id)
+
+
+@card_templates_bp.put("/card-templates/<template_id>/marketplace")
+@login_required
+def update_marketplace_listing(template_id):
+    return _respond(template_marketplace_service.update_listing, template_id=template_id, payload=_body())
 
 
 @card_templates_bp.get("/card-templates/<template_id>/releases")

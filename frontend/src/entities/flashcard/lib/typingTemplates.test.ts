@@ -54,7 +54,7 @@ describe.each(['typing-reading', 'typing-meaning', 'typing-image', 'typing-answe
   it('accepts each item independently, with punctuation kept inside its answer', () => {
     const dom = render(slug, { Prompt: 'Question', PromptText: 'Question', Answer: ['first, literal', 'second; literal'] }, 'front')
     const doc = dom.window.document
-    const input = doc.querySelector<HTMLInputElement>('.ft-input, #cz-input')!
+    const input = doc.querySelector<HTMLInputElement>('.ft-input, .ft-inline-input, #cz-input')!
     const button = doc.querySelector<HTMLElement>('.ft-check, #cz-check')
     const status = doc.querySelector<HTMLElement>('.ft-status, #cz-result')!
     for (const answer of ['first, literal', 'second; literal']) {
@@ -71,6 +71,68 @@ describe.each(['typing-reading', 'typing-meaning', 'typing-image', 'typing-answe
     if (button) button.click()
     else input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     expect(status.className).toMatch(/is-incorrect|cz-bad/)
+    dom.window.close()
+  })
+})
+
+describe('typing-dictation inline words', () => {
+  function front(answer: string[]) {
+    const dom = render('typing-dictation', { Answer: answer }, 'front')
+    const doc = dom.window.document
+    const input = doc.querySelector<HTMLInputElement>('.ft-inline-input')!
+    const words = () => [...doc.querySelectorAll<HTMLElement>('.ft-dict-passage .ft-dict-word')]
+    const type = (text: string) => {
+      input.value = text
+      input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+    }
+    return { dom, doc, input, words, type }
+  }
+
+  it('keeps the active word as dashes with a caret, filling them as the learner types', () => {
+    const { dom, input, words, type } = front(['I learn fast.'])
+    expect(words()[0].contains(input)).toBe(true)
+    expect(words()[0].textContent).toBe('-')
+    expect(words()[0].querySelector('.ft-caret')).not.toBeNull()
+    words()[1].click()
+    type('le')
+    expect(words()[1].textContent).toBe('le---')
+    expect(words()[1].querySelector('.ft-blank')!.textContent).toBe('---')
+    dom.window.close()
+  })
+
+  it('reveals the whole active word, then lets the learner retype it', () => {
+    const { dom, doc, input, words, type } = front(['I learn fast.'])
+    expect(doc.querySelector('.ft-dict-passage')!.textContent).not.toContain('Hiện')
+    doc.querySelector<HTMLElement>('.ft-word-reveal')!.click()
+    expect(words()[0].className).toContain('is-revealed')
+    expect(words()[0].textContent).toBe('I')
+    expect(words()[1].contains(input)).toBe(true)
+    words()[0].click()
+    type('x')
+    expect(words()[0].className).toContain('is-wrong')
+    expect(words()[0].contains(input)).toBe(true)
+    type('I')
+    expect(words()[0].className).toContain('is-correct')
+    dom.window.close()
+  })
+
+  it('reopens a word after the passage is complete', () => {
+    const { dom, doc, input, words, type } = front(['I learn fast.'])
+    type('I learn fast.')
+    input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    expect(doc.querySelector('.ft-status')!.className).toContain('is-correct')
+    expect(doc.querySelector<HTMLElement>('.ft-word-reveal')!.hidden).toBe(true)
+    words()[1].click()
+    expect(words()[1].contains(input)).toBe(true)
+    expect(input.value).toBe('learn')
+    dom.window.close()
+  })
+
+  it('sizes Japanese placeholders in full-width characters', () => {
+    const { dom, words } = front(['私は学生です。'])
+    const pending = words().slice(1).map(word => word.textContent)
+    expect(pending.length).toBeGreaterThan(0)
+    pending.forEach(text => expect(text).toMatch(/^－+。?$/))
     dom.window.close()
   })
 })

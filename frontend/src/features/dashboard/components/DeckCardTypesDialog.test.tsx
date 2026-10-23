@@ -258,7 +258,7 @@ describe('DeckCardTypesDialog', () => {
     const items = Array.from(document.body.querySelectorAll('li'))
     const t1Link = items[0].querySelector('a')
     expect(t1Link).not.toBeNull()
-    expect(t1Link?.getAttribute('href')).toBe('/note-types/nt-vocab')
+    expect(t1Link?.getAttribute('href')).toBe('/flashcards/note-types/nt-vocab/templates')
     expect(t1Link?.textContent).toContain('Sửa giao diện')
 
     const t3Link = items[2].querySelector('a')
@@ -275,6 +275,19 @@ describe('DeckCardTypesDialog', () => {
     const row = document.body.querySelectorAll('li')[2]
     expect(row.querySelector('a')).toBeNull()
     expect(row.querySelector('button')?.disabled).toBe(true)
+  })
+
+  it('opens the selected application mapping for owned and installed local templates', async () => {
+    const data = structuredClone(fixtureData)
+    data.groups[0].compositions[0].application_id = 'app/recognition 日本語'
+    data.groups[0].compositions[0].study_application_id = 'older-app'
+    data.groups[1].compositions[1].study_application_id = 'local/listening'
+    vi.mocked(fetchDeckCardTypes).mockResolvedValue(data)
+    await renderWithClient(<DeckCardTypesDialog open onOpenChange={vi.fn()} deckId={42} deckName="JLPT N2" />)
+    await flushAsync()
+    const items = document.body.querySelectorAll('li')
+    expect(items[0].querySelector('a')?.getAttribute('href')).toBe(`/flashcards/note-types/nt-vocab/templates/${encodeURIComponent('app/recognition 日本語')}`)
+    expect(items[3].querySelector('a')?.getAttribute('href')).toBe('/flashcards/note-types/nt-installed/templates/local%2Flistening')
   })
 
   it('nút học: link "Học deck này" có href="/study?deck_id=42"', async () => {
@@ -502,7 +515,7 @@ describe('DeckCardTypesDialog', () => {
     expect(item?.textContent).toContain('Thẻ trong bộ của bạn')
     const editLink = item?.querySelector('a')
     expect(editLink).not.toBeNull()
-    expect(editLink?.getAttribute('href')).toBe('/note-types/nt-undef')
+    expect(editLink?.getAttribute('href')).toBe('/flashcards/note-types/nt-undef/templates')
     expect(item?.textContent).toContain('7 note')
   })
 
@@ -545,7 +558,7 @@ describe('DeckCardTypesDialog', () => {
 
     const editLink = document.body.querySelector('li a')
     expect(editLink?.getAttribute('href')).toBe(
-      `/note-types/${encodeURIComponent('nt/special 日本語 & test')}`,
+      `/flashcards/note-types/${encodeURIComponent('nt/special 日本語 & test')}/templates`,
     )
   })
 

@@ -27,6 +27,11 @@ ACTIVE_REBASE_STATUSES = {"prepared", "has_conflict", "ready"}
 RESOLUTION_MODES = {"keep_mine", "keep_upstream", "manual"}
 DEFAULT_CONFLICT_PAGE_LIMIT = 100
 MAX_CONFLICT_PAGE_LIMIT = 200
+PERSISTED_REBASE_ERRORS = {
+    "REBASE_CONFLICTS_UNRESOLVED",
+    "APPLIED_RELEASE_STALE",
+    "OVERLAY_REVISION_STALE",
+}
 
 
 class DeckInstallUpdateError(Exception):
@@ -1186,3 +1191,196 @@ def process_subscriber_auto_updates(
             db.session.flush()
             results.append({"install_id": install.id, "status": "error", "message": str(exc)})
     return results
+ 
+ 
+# ---------------------------------------------------------------------------
+# Committed Transaction Wrappers (for REST/HTTP adapters)
+# ---------------------------------------------------------------------------
+ 
+def prepare_update_and_commit(
+    *,
+    install_id: str,
+    release_id: str,
+    user_id: int,
+    expected_applied_release_id: str | None = None,
+    expected_overlay_revision: int | None = None,
+    idempotency_key: str | None = None,
+    mode: str = "manual",
+) -> DeckInstallRebase:
+    """Prepare a rebase for an installed deck and commit the transaction."""
+    try:
+        rebase = prepare_update(
+            install_id=install_id,
+            release_id=release_id,
+            user_id=user_id,
+            expected_applied_release_id=expected_applied_release_id,
+            expected_overlay_revision=expected_overlay_revision,
+            idempotency_key=idempotency_key,
+            mode=mode,
+        )
+        db.session.commit()
+        return rebase
+    except Exception:
+        db.session.rollback()
+        raise
+ 
+ 
+def prepare_and_apply_update_and_commit(
+    *,
+    install_id: str,
+    release_id: str,
+    user_id: int,
+    expected_applied_release_id: str | None = None,
+    expected_overlay_revision: int | None = None,
+    idempotency_key: str | None = None,
+) -> DeckInstallRebase:
+    """Prepare and apply a rebase, committing durable conflicts or success."""
+    try:
+        rebase = prepare_and_apply_update(
+            install_id=install_id,
+            release_id=release_id,
+            user_id=user_id,
+            expected_applied_release_id=expected_applied_release_id,
+            expected_overlay_revision=expected_overlay_revision,
+            idempotency_key=idempotency_key,
+        )
+        db.session.commit()
+        return rebase
+    except DeckInstallUpdateError as exc:
+        if exc.error in PERSISTED_REBASE_ERRORS:
+            db.session.commit()
+        else:
+            db.session.rollback()
+        raise
+    except Exception:
+        db.session.rollback()
+        raise
+ 
+ 
+def mark_update_seen_and_commit(
+    *,
+    install_id: str,
+    release_id: str,
+    user_id: int,
+) -> dict[str, Any]:
+    """Mark an update as seen and commit the transaction."""
+    try:
+        payload = mark_update_seen(
+            install_id=install_id,
+            release_id=release_id,
+            user_id=user_id,
+        )
+        db.session.commit()
+        return payload
+    except Exception:
+        db.session.rollback()
+        raise
+ 
+ 
+def resolve_conflict_and_commit(
+    *,
+    rebase_id: str,
+    conflict_id: int,
+    user_id: int,
+    resolution_mode: str | None,
+    resolved_value: Any = None,
+    has_resolved_value: bool = False,
+) -> DeckInstallRebase:
+    """Resolve a single conflict and commit the transaction."""
+    try:
+        rebase = resolve_conflict(
+            rebase_id=rebase_id,
+            conflict_id=conflict_id,
+            user_id=user_id,
+            resolution_mode=resolution_mode,
+            resolved_value=resolved_value,
+            has_resolved_value=has_resolved_value,
+        )
+        db.session.commit()
+        return rebase
+    except Exception:
+        db.session.rollback()
+        raise
+ 
+ 
+def apply_prepared_update_and_commit(
+    *,
+    rebase_id: str,
+    user_id: int,
+) -> DeckInstallRebase:
+    """Apply a prepared update, committing durable conflicts or success."""
+    try:
+        rebase = apply_prepared_update(
+            rebase_id=rebase_id,
+            user_id=user_id,
+        )
+        db.session.commit()
+        return rebase
+    except DeckInstallUpdateError as exc:
+        if exc.error in PERSISTED_REBASE_ERRORS:
+            db.session.commit()
+        else:
+            db.session.rollback()
+        raise
+    except Exception:
+        db.session.rollback()
+        raise
+ 
+ 
+def update_install_settings_and_commit(
+    *,
+    install_id: str,
+    user_id: int,
+    auto_update_enabled: bool,
+) -> dict[str, Any]:
+    """Update install settings and commit the transaction."""
+    try:
+        payload = update_install_settings(
+            install_id=install_id,
+            user_id=user_id,
+            auto_update_enabled=auto_update_enabled,
+        )
+        db.session.commit()
+        return payload
+    except Exception:
+        db.session.rollback()
+        raise
+ 
+ 
+def detach_installed_deck_and_commit(
+    *,
+    install_id: str,
+    user_id: int,
+) -> dict[str, Any]:
+    """Detach an installed deck and commit the transaction."""
+    try:
+        payload = detach_installed_deck(
+            install_id=install_id,
+            user_id=user_id,
+        )
+        db.session.commit()
+        return payload
+    except Exception:
+        db.session.rollback()
+        raise
+ 
+ 
+def resolve_all_conflicts_and_commit(
+    *,
+    rebase_id: str,
+    user_id: int,
+    resolution_mode: str,
+) -> DeckInstallRebase:
+    """Batch resolve all conflicts and commit the transaction."""
+    try:
+        rebase = resolve_all_conflicts(
+            rebase_id=rebase_id,
+            user_id=user_id,
+            resolution_mode=resolution_mode,
+        )
+        db.session.commit()
+        return rebase
+    except Exception:
+        db.session.rollback()
+        raise
+

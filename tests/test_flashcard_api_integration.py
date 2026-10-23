@@ -36,6 +36,7 @@ from models.field_def import FieldDef
 from models.template import Template
 from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
 from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from tests.note_type_publication_fixtures import stage_note_type_release
 from uuid import uuid4
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
@@ -1678,7 +1679,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(data.get("user", {}).get("email"), "admin@example.com")
 
 
-    def test_share_note_type_page_updates_taxonomy_and_redirects_to_detail(self):
+    def test_publish_note_type_api_updates_taxonomy_and_publishes_release(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
 
@@ -1688,8 +1689,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn('<div id="root"></div>', page_html)
 
         share_resp = self.client.post(
-            f"/flashcards/note-types/{note_type_id}/share",
-            data={
+            f"/api/marketplace/note-types/{note_type_id}/publish",
+            json={
                 "title": "Shared Note Type",
                 "description": "Template description",
                 "preview_text": "Template preview",
@@ -1703,16 +1704,21 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 "primary_topics": ["meaning_recall"],
                 "format_features": ["preview_available"],
                 "taxonomy_best_used_for": "vocabulary",
+                "template_listings": [{"template_id": template["id"],
+                    "description": "Vocabulary card", "primary_category": "General",
+                    "pricing_mode": "free", "price_amount_minor": 0}
+                    for template in note_type["templates"]],
             },
             follow_redirects=False,
         )
-        self.assertEqual(share_resp.status_code, 302)
-        self.assertIn(f"/flashcards/shared-note-types/{note_type_id}", share_resp.headers.get("Location", ""))
+        self.assertEqual(share_resp.status_code, 200, share_resp.get_json())
+        self.assertEqual(share_resp.get_json()["publish_status"], "published")
 
         with self.app.app_context():
             saved = NoteType.query.get(note_type_id)
             self.assertIsNotNone(saved)
             self.assertEqual(saved.publish_status, "published")
+            self.assertIsNotNone(saved.current_release_id)
             self.assertEqual((saved.taxonomy_metadata or {}).get("subject"), "japanese")
             self.assertEqual((saved.taxonomy_metadata or {}).get("best_used_for"), "vocabulary")
 
@@ -1770,6 +1776,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual((hub_payload.get("discovery") or {}).get("recommended"), [])
         self.assertEqual((hub_payload.get("seller") or {}).get("drafts"), [])
 
+        # Detailed definitions require an explicit release; the compact legacy
+        # catalog above intentionally does not load fields or template content.
+        with self.app.app_context():
+            stage_note_type_release(db.session, db.session.get(NoteType, note_type["id"]))
+            db.session.commit()
         detail_response = self.client.get(f"/api/shared/note-types/{note_type['id']}")
         self.assertEqual(detail_response.status_code, 200)
         detail_payload = detail_response.get_json() or {}
@@ -1858,6 +1869,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 publish_status="published",
             )
             db.session.add(note_type)
+            db.session.flush()
+            stage_note_type_release(db.session, note_type)
             db.session.commit()
             note_type_id = note_type.id
 
@@ -2274,7 +2287,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(cloned_child_map)
             cloned_child_local_id = int(cloned_child_map.local_deck_id)
 
-        tree_resp = learner_client.get("/vocabulary/api/browse/decks/tree")
+        tree_resp = learner_client.get("/api/browse/decks/tree")
         self.assertEqual(tree_resp.status_code, 200)
         tree_payload = tree_resp.get_json() or {}
         tree_nodes = tree_payload.get("tree") or []
@@ -2293,7 +2306,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn(installed_root_id, visible_deck_ids)
 
         cards_resp = learner_client.get(
-            f"/vocabulary/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
+            f"/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
         )
         self.assertEqual(cards_resp.status_code, 200)
         cards_payload = cards_resp.get_json() or {}
@@ -2306,7 +2319,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         card_id = row.get("card_id")
         self.assertIsNotNone(card_id)
-        detail_resp = learner_client.get(f"/vocabulary/api/browse/cards/{card_id}")
+        detail_resp = learner_client.get(f"/api/browse/cards/{card_id}")
         self.assertEqual(detail_resp.status_code, 200)
         detail_payload = detail_resp.get_json() or {}
         self.assertIn("\u72ac", ((detail_payload.get("card") or {}).get("word") or ""))
@@ -2320,7 +2333,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         )
 
         save_resp = learner_client.patch(
-            f"/vocabulary/api/browse/cards/{card_id}",
+            f"/api/browse/cards/{card_id}",
             json={
                 "deck_id": cloned_child_local_id,
                 "tags": row.get("tags") or [],
@@ -2339,7 +2352,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             "\u72ac*",
         )
 
-        reload_detail_resp = learner_client.get(f"/vocabulary/api/browse/cards/{card_id}")
+        reload_detail_resp = learner_client.get(f"/api/browse/cards/{card_id}")
         self.assertEqual(reload_detail_resp.status_code, 200)
         reload_detail_payload = reload_detail_resp.get_json() or {}
         self.assertEqual(
@@ -2348,7 +2361,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         )
 
         reload_cards_resp = learner_client.get(
-            f"/vocabulary/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
+            f"/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
         )
         self.assertEqual(reload_cards_resp.status_code, 200)
         reload_items = (reload_cards_resp.get_json() or {}).get("items") or []
@@ -3909,7 +3922,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIsNone(next_payload.get("card_id"))
         self.assertEqual(next_payload.get("session_state"), "complete")
 
-        browse_resp = self.client.get(f"/vocabulary/api/browse/cards?deck_id={self.deck_id}")
+        browse_resp = self.client.get(f"/api/browse/cards?deck_id={self.deck_id}")
         self.assertEqual(browse_resp.status_code, 200)
         browse_payload = browse_resp.get_json()
         self.assertEqual(browse_payload["total"], 0)
@@ -3961,11 +3974,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(next_resp.status_code, 200)
         self.assertIsNone(next_resp.get_json().get("card_id"))
 
-        due_resp = self.client.get(f"/vocabulary/api/browse/cards?deck_id={self.deck_id}&status=due")
+        due_resp = self.client.get(f"/api/browse/cards?deck_id={self.deck_id}&status=due")
         self.assertEqual(due_resp.status_code, 200)
         self.assertEqual(due_resp.get_json()["total"], 0)
 
-        all_resp = self.client.get(f"/vocabulary/api/browse/cards?deck_id={self.deck_id}")
+        all_resp = self.client.get(f"/api/browse/cards?deck_id={self.deck_id}")
         self.assertEqual(all_resp.status_code, 200)
         all_payload = all_resp.get_json()
         self.assertEqual(all_payload["total"], 1)
@@ -4372,7 +4385,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             card_id = card.id  # type: ignore[union-attr]
 
         patch_resp = self.client.patch(
-            f"/vocabulary/api/browse/cards/{card_id}",
+            f"/api/browse/cards/{card_id}",
             json={
                 "field_values": {
                     "Word": "\u72ac-browse-updated",
@@ -4537,7 +4550,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             card_id = card.id  # type: ignore[union-attr]
 
         patch_resp = self.client.patch(
-            f"/vocabulary/api/browse/cards/{card_id}",
+            f"/api/browse/cards/{card_id}",
             json={"deck_id": target_deck_id},
         )
         self.assertEqual(patch_resp.status_code, 200)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from app.services.payment.orders import serialize_order
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.note_type import NoteType
 from models.payment_attempt import PaymentAttempt
@@ -40,16 +41,15 @@ WEBHOOK_STATUS_LABELS = {
 }
 
 PRODUCT_TYPE_LABELS = {
-    "note_type": "Template",
+    "note_type": "Note Type",
     "deck_marketplace_item": "Deck",
+    "template": "Giao diện thẻ",
     "support_donation": "Ủng hộ",
 }
 
 
 def build_order_row(order: PaymentOrder) -> dict[str, Any]:
-    from app.services import payment_service
-
-    payload = payment_service.serialize_order(order)
+    payload = serialize_order(order)
     status_display = payload.get("status_display") or {}
     active_attempt = payload.get("active_attempt") or {}
     attempt_status_display = (active_attempt.get("status_display") or {}) if active_attempt else {}
@@ -78,9 +78,7 @@ def build_order_row(order: PaymentOrder) -> dict[str, Any]:
 
 
 def build_order_detail_payload(order: PaymentOrder) -> dict[str, Any]:
-    from app.services import payment_service
-
-    payload = payment_service.serialize_order(order)
+    payload = serialize_order(order)
     status_display = payload.get("status_display") or {}
     return {
         "id": order.id,
@@ -252,6 +250,12 @@ def _resolve_item_seller_label(item: PaymentOrderItem) -> str:
         note_type = NoteType.query.get(item.product_ref_id)
         if note_type is not None and note_type.owner is not None:
             return note_type.owner.username or note_type.owner.email or ""
+    if item.product_type == "template":
+        from app.services import template_marketplace_service
+
+        label = template_marketplace_service.seller_label(item.product_ref_id)
+        if label:
+            return label
     if item.product_type == "deck_marketplace_item":
         deck_item = DeckMarketplaceItem.query.get(item.product_ref_id)
         if deck_item is not None and deck_item.owner is not None:

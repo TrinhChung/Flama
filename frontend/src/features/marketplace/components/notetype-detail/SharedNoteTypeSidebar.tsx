@@ -18,6 +18,7 @@ interface SharedNoteTypeSidebarProps {
   authorName: string
   onInstall: () => void
   isInstallPending: boolean
+  isInstallUnavailable?: boolean
   onSave: () => void
   isSavePending: boolean
   onCopyLink: () => void
@@ -37,6 +38,7 @@ export function SharedNoteTypeSidebar({
   authorName,
   onInstall,
   isInstallPending,
+  isInstallUnavailable,
   onSave,
   isSavePending,
   onCopyLink,
@@ -157,7 +159,7 @@ export function SharedNoteTypeSidebar({
               className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all"
               size="lg"
               onClick={onInstall}
-              disabled={isInstallPending}
+              disabled={isInstallPending || isInstallUnavailable}
             >
               {isInstallPending ? (
                 <>

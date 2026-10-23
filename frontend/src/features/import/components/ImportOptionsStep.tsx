@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
-import { DeckSelectionTreeView } from '../components/DeckSelectionTreeView'
+import { DeckSelectionTreeView } from '@/entities/deck'
 import { Check, Layers } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { useFileImportWizard } from '../hooks/useFileImportWizard'

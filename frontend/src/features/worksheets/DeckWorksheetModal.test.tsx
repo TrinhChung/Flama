@@ -10,6 +10,12 @@ import * as clientApi from '@/shared/api/client'
 import { saveWorksheetPreset } from './utils/worksheetStorage'
 import type { DeckWorksheetMeta } from './types'
 
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const waitTick = async (ms = 300) => {
+  await vi.advanceTimersByTimeAsync(ms)
+}
+
 describe('DeckWorksheetModal Live Studio', () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
@@ -168,6 +174,7 @@ describe('DeckWorksheetModal Live Studio', () => {
   }
 
   beforeEach(() => {
+    vi.useFakeTimers()
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -185,6 +192,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     container = null
     root = null
     vi.restoreAllMocks()
+    vi.useRealTimers()
   })
 
   it('renders live studio with header, templates list, and automatic demo preview', async () => {
@@ -202,7 +210,7 @@ describe('DeckWorksheetModal Live Studio', () => {
 
     // Wait for async meta fetch and auto debounced preview
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     expect(document.body.textContent).toContain('Xuất bài tập in ấn / PDF (A4)')
@@ -230,7 +238,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Click Tab 2: Dữ liệu & Trường
@@ -288,7 +296,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     expect(document.body.textContent).toContain('Trang trước')
@@ -350,7 +358,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Click template card for deck_table
@@ -363,7 +371,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // By default no columns are selected -> shows helpful empty state
@@ -379,7 +387,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 100))
+      await waitTick()
     })
 
     const selectAllBtn = Array.from(document.querySelectorAll('button')).find((b) =>
@@ -391,7 +399,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     expect(document.body.textContent).toContain('日本語')
@@ -412,7 +420,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Click Layout Tab
@@ -425,7 +433,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 100))
+      await waitTick()
     })
 
     expect(document.body.textContent).toContain('Tự tính số dòng Full trang A4')
@@ -448,7 +456,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Find and click Genkouyoushi template card
@@ -462,7 +470,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 100))
+      await waitTick()
     })
 
     // Click Tab 3: Bố cục & Ô chữ
@@ -474,7 +482,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 100))
+      await waitTick()
     })
 
     expect(document.body.textContent).toContain('Tuỳ biến Lưới bài văn Genkō Yōshi')
@@ -496,7 +504,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     expect(document.body.textContent).toContain('Mẫu giấy luyện viết & In ấn (A4)')
@@ -512,7 +520,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 100))
+      await waitTick()
     })
 
     expect(document.body.textContent).toContain('Mẫu giấy in độc lập')
@@ -538,7 +546,7 @@ describe('DeckWorksheetModal Live Studio', () => {
       })
 
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 300))
+        await waitTick()
       })
 
       // Check Mobile Header switcher
@@ -561,7 +569,7 @@ describe('DeckWorksheetModal Live Studio', () => {
       })
 
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 100))
+        await waitTick()
       })
 
       // In controls mode, the bottom quick preview button should exist
@@ -592,7 +600,7 @@ describe('DeckWorksheetModal Live Studio', () => {
       })
 
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 300))
+        await waitTick()
       })
 
       const dialogContent = document.querySelector('[data-slot="dialog-content"]')
@@ -630,7 +638,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Switch to Layout tab (Tab 3: Bố cục & Ô chữ)
@@ -643,7 +651,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 100))
+      await waitTick()
     })
 
     // Verify auto-detected badge
@@ -665,7 +673,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
@@ -691,7 +699,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Switch to Layout tab
@@ -703,7 +711,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 100))
+      await waitTick()
     })
 
     // Find stroke numbers toggle checkbox
@@ -721,7 +729,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
@@ -747,7 +755,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Find the Chinese button in the prominent top switcher
@@ -762,7 +770,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
@@ -784,7 +792,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
@@ -810,7 +818,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 200))
+      await waitTick()
     })
 
     // Switch to layout tab
@@ -824,7 +832,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 100))
+      await waitTick()
     })
 
     // Verify Quick Presets section is visible
@@ -842,7 +850,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
@@ -876,7 +884,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 200))
+      await waitTick()
     })
 
     // Switch to layout tab again
@@ -885,7 +893,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 100))
+      await waitTick()
     })
 
     // Verify vocab writing controls are rendered
@@ -910,7 +918,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Verify kanji_compact retained its 28px box_size and 8 practice boxes from earlier
@@ -939,7 +947,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Click Tab 3: Bố cục & Ô chữ
@@ -975,7 +983,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Now meaning should be visible in preview
@@ -988,7 +996,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 400))
+      await waitTick()
     })
 
     // Click on Layout tab
@@ -1002,7 +1010,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 200))
+      await waitTick()
     })
 
     // Find and click "Tiết kiệm giấy" button in Page Fill Mode
@@ -1016,7 +1024,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Verify generateWorksheetPreview was called with page_fill_mode: 'max_density'
@@ -1030,7 +1038,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 400))
+      await waitTick()
     })
 
     // Click on Layout tab
@@ -1044,7 +1052,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 200))
+      await waitTick()
     })
 
     // Find the quick preset "⚡ Tiết kiệm giấy" in "Bố cục mẫu 1-chạm"
@@ -1059,7 +1067,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Verify button has active primary styling (border-primary and bg-primary/10)
@@ -1152,6 +1160,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
   }
 
   beforeEach(() => {
+    vi.useFakeTimers()
     localStorage.clear()
     queryClient = new QueryClient({
       defaultOptions: {
@@ -1184,6 +1193,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
       container.remove()
     }
     vi.restoreAllMocks()
+    vi.useRealTimers()
     localStorage.clear()
   })
 
@@ -1197,7 +1207,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 200))
+      await waitTick()
     })
 
     // Should display step 1 deck tree selection
@@ -1215,7 +1225,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 200))
+      await waitTick()
     })
 
     // Now should be on Step 3: Chọn bài tập (standalone templates)
@@ -1233,7 +1243,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Step 2 should be active
@@ -1264,7 +1274,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Expect warning alert and multiple note types block
@@ -1289,7 +1299,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Step 2 -> Step 3
@@ -1303,7 +1313,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 200))
+      await waitTick()
     })
 
     // Step 3 is rendered
@@ -1321,7 +1331,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Step 4 Studio is rendered
@@ -1344,7 +1354,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Verify preset notification badge
@@ -1378,7 +1388,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300))
+      await waitTick()
     })
 
     // Mapping step should render safely without throwing "r.endsWith is not a function"

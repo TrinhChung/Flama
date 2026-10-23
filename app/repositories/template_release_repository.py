@@ -5,16 +5,19 @@ history finalization, where adding dirty ORM rows would recursively flush.
 """
 
 from datetime import datetime
+from copy import deepcopy
 from types import SimpleNamespace
 
 from sqlalchemy import and_, exists, func, insert, or_, select, update
 from sqlalchemy.orm.attributes import set_committed_value
 
 from models.deck_install import DeckInstall
+from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
 from models.deck_release_template_pin import DeckReleaseTemplatePin
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
+from models.payment_entitlement import PaymentEntitlement
 from models.study_application import StudyApplication
 from models.template import Template
 from models.template_publication import TemplatePublication
@@ -95,34 +98,38 @@ def subscription(session, *, user_id, source_template_id=None, local_template_id
 
 
 def source_access(session, *, user_id, source_template_id):
-    """A received/purchased deck or NoteType grants initial template receipt."""
+    """Only a license, free original listing or valid deck grants receipt.
+
+    A visible free NoteType may reference paid third-party definitions and is
+    never itself proof of a template license. Bundle receipt issues canonical
+    subscriptions/entitlements; legacy copy evidence is resolved centrally.
+    """
     app = StudyApplication.__table__
     template_row = template(session, source_template_id)
     if template_row is None:
         return False
-    note_types = select(app.c.note_type_id).where(app.c.template_id == source_template_id)
-    for model, column in ((DeckInstall, DeckInstall.source_note_type_id), (NoteTypeInstall, NoteTypeInstall.source_note_type_id)):
-        statement = select(model.id).where(
-            model.user_id == user_id,
-            column.in_(note_types),
-        ).limit(1)
-        if session.execute(statement).first():
-            return True
-    free_published = select(NoteType.id).where(
-        NoteType.id.in_(note_types),
-        NoteType.publish_status.in_(["published", "unlisted"]),
-        NoteType.pricing_mode == "free",
-    ).limit(1)
-    if session.execute(free_published).first():
+    from app.repositories.note_type_bundle_repository import licensed_template_ids
+    if source_template_id in licensed_template_ids(session, user_id=user_id,
+            template_ids=[source_template_id], current_read=True):
         return True
-    return False
-
-
-def subscriptions_for_source(session, source_template_id, *, automatic_only=False):
-    statement = select(TemplateSubscription.__table__).where(TemplateSubscription.source_template_id == source_template_id)
-    if automatic_only:
-        statement = statement.where(TemplateSubscription.auto_update_enabled.is_(True))
-    return [dict(row) for row in session.execute(statement.order_by(TemplateSubscription.local_template_id)).mappings()]
+    now = datetime.utcnow()
+    rights = session.execute(select(PaymentEntitlement.status, PaymentEntitlement.effective_from,
+        PaymentEntitlement.expires_at).where(PaymentEntitlement.user_id == user_id,
+            PaymentEntitlement.resource_type == "template",
+            PaymentEntitlement.resource_ref_id == source_template_id).with_for_update()).all()
+    negative_right = any(status in {"revoked", "refunded", "expired"} or
+        (status == "active" and ((effective is not None and effective > now)
+            or (expires is not None and expires <= now))) for status, effective, expires in rights)
+    note_types = select(app.c.note_type_id).where(app.c.template_id == source_template_id)
+    installed_deck = select(DeckInstall.id).join(DeckMarketplaceItem,
+        DeckMarketplaceItem.id == DeckInstall.deck_item_id).where(
+        DeckInstall.user_id == user_id, DeckInstall.source_note_type_id.in_(note_types),
+        DeckMarketplaceItem.owner_user_id == template_row["owner_user_id"],
+    ).limit(1)
+    if not negative_right and template_row.get("origin") == "authored" and not template_row.get("source_template_id") and session.execute(installed_deck).first():
+        return True
+    from app.repositories import template_marketplace_repository
+    return template_marketplace_repository.marketplace_access(session, user_id=user_id, template_id=source_template_id)
 
 
 def lock_user(session, user_id):
@@ -159,7 +166,12 @@ def deck_pins(session, deck_release_id):
 
 
 def load_effective_template_overrides(session, *, user_id, source_template_ids, release_pins=None):
-    """Batch source-ID-keyed effective templates, preserving artifact identity."""
+    """Resolve deck pins plus personal edits, never another deck's upstream update.
+
+    A canonical user copy is shared across installs. Its clean upstream content
+    must not override a different deck's pin. Only changes relative to that
+    copy's applied release are personal overrides of the deck's frozen content.
+    """
     ids = sorted(set(str(value) for value in source_template_ids))
     pins = release_pins or {}
     rows = []
@@ -176,39 +188,66 @@ def load_effective_template_overrides(session, *, user_id, source_template_ids, 
             TemplateSubscription.user_id == int(user_id),
             TemplateSubscription.source_template_id.in_(ids[offset:offset + 500]),
         )).mappings().all())
-    result = {}
-    for row in rows:
-        source_id = row["source_template_id"]
-        pin = pins.get(source_id)
-        apps = pin.get("applications_json", {}) if isinstance(pin, dict) else getattr(pin, "applications_json", {})
-        result[source_id] = SimpleNamespace(
-            id=source_id, market_template_id=row["local_template_id"],
-            front_html=row["effective_front_html"], back_html=row["effective_back_html"],
-            shared_css=row["effective_shared_css"], input_schema=row["effective_input_schema"] or [],
-            effective_version_id=row["effective_version_id"], current_version_id=row["effective_version_id"],
-            updated_at=row["effective_updated_at"], application_bindings=apps or {},
-        )
-    missing = [value for value in ids if value not in result and value in pins]
+    subscriptions = {row["source_template_id"]: row for row in rows}
     release_ids = {
         pins[value].get("template_release_id") if isinstance(pins[value], dict) else pins[value].template_release_id
-        for value in missing
+        for value in ids if value in pins
     }
+    release_ids.update(row["applied_release_id"] for row in rows if row["source_template_id"] in pins)
     releases_by_id = {}
-    if release_ids:
-        releases_by_id = {row["id"]: dict(row) for row in session.execute(select(
+    release_ids = sorted(value for value in release_ids if value)
+    for offset in range(0, len(release_ids), 500):
+        releases_by_id.update({row["id"]: dict(row) for row in session.execute(select(
             TemplateRelease.__table__, TemplateVersion.front_html, TemplateVersion.back_html,
             TemplateVersion.shared_css, TemplateVersion.input_schema,
-        ).join(TemplateVersion.__table__, TemplateVersion.id == TemplateRelease.version_id).where(TemplateRelease.id.in_(release_ids))).mappings()}
-    for source_id in missing:
-        pin = pins[source_id]
-        release_id = pin.get("template_release_id") if isinstance(pin, dict) else pin.template_release_id
-        row = releases_by_id.get(release_id)
-        if row is None or row["template_id"] != source_id:
-            raise ValueError("Invalid immutable deck template release pin.")
-        apps = pin.get("applications_json", {}) if isinstance(pin, dict) else pin.applications_json
+        ).join(TemplateVersion.__table__, TemplateVersion.id == TemplateRelease.version_id).where(
+            TemplateRelease.id.in_(release_ids[offset:offset + 500]))).mappings()})
+    result = {}
+    for source_id in ids:
+        pin = pins.get(source_id)
+        local = subscriptions.get(source_id)
+        pinned = None
+        apps = {}
+        if pin is not None:
+            release_id = pin.get("template_release_id") if isinstance(pin, dict) else pin.template_release_id
+            pinned = releases_by_id.get(release_id)
+            if pinned is None or pinned["template_id"] != source_id:
+                raise ValueError("Invalid immutable deck template release pin.")
+            apps = pin.get("applications_json", {}) if isinstance(pin, dict) else pin.applications_json
+        if local is None and pinned is None:
+            continue
+        if local is None:
+            content, customized = {key: deepcopy(pinned[key]) for key in _CONTENT_KEYS}, False
+        elif pinned is None:
+            content, customized = {key: deepcopy(local[f"effective_{key}"]) for key in _CONTENT_KEYS}, True
+        else:
+            base = releases_by_id.get(local["applied_release_id"])
+            if base is None or base["template_id"] != source_id:
+                raise ValueError("Invalid received template release.")
+            content, customized = resolve_pinned_content(pinned, base, {
+                key: local[f"effective_{key}"] for key in _CONTENT_KEYS
+            })
+        version_id = local["effective_version_id"] if local and (pinned is None or customized) else pinned["version_id"]
         result[source_id] = SimpleNamespace(
-            id=source_id, market_template_id=None, front_html=row["front_html"], back_html=row["back_html"],
-            shared_css=row["shared_css"], input_schema=row["input_schema"], effective_version_id=row["version_id"],
-            current_version_id=row["version_id"], updated_at=row["published_at"], application_bindings=apps or {},
+            id=source_id, market_template_id=local["local_template_id"] if local else None,
+            **content, effective_version_id=version_id, current_version_id=version_id,
+            updated_at=local["effective_updated_at"] if local and customized else pinned["published_at"],
+            application_bindings=apps or {}, has_local_changes=customized,
         )
     return result
+
+
+_CONTENT_KEYS = ("front_html", "back_html", "shared_css", "input_schema")
+
+
+def resolve_pinned_content(pinned, applied, local):
+    """Project explicit personal edits onto one deck's immutable presentation."""
+    result = {}
+    customized = False
+    for key in _CONTENT_KEYS:
+        mine = local.get(key) or ([] if key == "input_schema" else "")
+        base = applied.get(key) or ([] if key == "input_schema" else "")
+        changed = mine != base
+        customized = customized or changed
+        result[key] = deepcopy(mine if changed else pinned.get(key) or ([] if key == "input_schema" else ""))
+    return result, customized

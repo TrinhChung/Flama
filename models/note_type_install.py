@@ -24,6 +24,10 @@ class NoteTypeInstall(db.Model):
         index=True,
     )
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    applied_release_id = db.Column(
+        db.String(36), db.ForeignKey("note_type_releases.id", ondelete="SET NULL",
+            name="fk_note_type_installs_applied_release"), nullable=True, index=True,
+    )
     purchase_amount_minor = db.Column(db.Integer, nullable=False, default=0)
     purchase_price_cents = synonym("purchase_amount_minor")
     installed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

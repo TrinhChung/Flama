@@ -18,7 +18,9 @@ from app.services.media_field_codec import (
     MediaFieldValueError,
     normalize_media_field_for_write,
 )
+from app.validators.flashcard_input import _clean_array_field_value, clean_array_fields
 from models import db
+from models.field_types import ARRAY_FIELD_TYPE, field_value_text
 from models.flashcard import Note
 
 IMPORT_MAX_FILE_BYTES = 50 * 1024 * 1024
@@ -446,7 +448,7 @@ def _normalize_name(value: str | None) -> str:
 def _normalize_compare_value(value: Any) -> str:
     if value is None:
         return ""
-    text = str(value).replace("\r\n", "\n").replace("\r", "\n").strip()
+    text = field_value_text(value).replace("\r\n", "\n").replace("\r", "\n").strip()
     return text
 
 
@@ -938,7 +940,7 @@ def run_import(
                     action = "update" if existing_bucket else "insert"
 
                 if action == "insert":
-                    field_values = {field_def.name: "" for field_def in field_defs}
+                    field_values = {field_def.name: [] if field_def.field_type == ARRAY_FIELD_TYPE else "" for field_def in field_defs}
                     for field_def in field_defs:
                         field_name = field_def.name
                         config = mapping.get(field_name, {"source_type": "ignore"})
@@ -949,6 +951,7 @@ def run_import(
                             continue
                         field_values[field_name] = incoming
 
+                    field_values = clean_array_fields(field_values, field_defs)
                     summary["inserted"] += 1
                     pending_writes += 1
                     if apply_changes:
@@ -969,9 +972,13 @@ def run_import(
                         incoming = mapped_values.get(field_name, "")
                         if dont_overwrite_empty and is_field_empty(incoming):
                             continue
-                        if _normalize_compare_value(current_values.get(field_name, "")) == _normalize_compare_value(incoming):
+                        if field_def.field_type == ARRAY_FIELD_TYPE:
+                            clean_incoming = _clean_array_field_value(incoming, field_name=field_name)
+                        else:
+                            clean_incoming = incoming
+                        if _normalize_compare_value(current_values.get(field_name, "")) == _normalize_compare_value(clean_incoming):
                             continue
-                        merged_values[field_name] = incoming
+                        merged_values[field_name] = clean_incoming
                         changed = True
                         changed_names.add(field_name)
 

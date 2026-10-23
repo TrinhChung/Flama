@@ -14,23 +14,18 @@
       <div class="ft-audio-status" role="status" aria-live="polite"></div>
     </div>
     {{/Audio}}
-    <p class="ft-instruction">Nghe đoạn văn rồi gõ. Đúng sẽ tự chuyển sang từ tiếp theo.</p>
+    <p class="ft-instruction">Nghe đoạn văn rồi gõ trực tiếp vào từng từ. Đúng sẽ tự chuyển sang từ tiếp theo.</p>
   </div>
   <div class="ft-guide ft-dict-guide">
     <div class="ft-guide-heading"><span class="ft-guide-label">Đoạn nghe</span><span class="ft-dict-progress"></span></div>
     <div class="ft-dict-passage" role="group" aria-label="Đoạn chép chính tả. Bấm vào một từ để gõ lại."></div>
-    <p class="ft-dict-help">Bấm vào một từ để sửa. Dấu câu đã có sẵn.</p>
-  </div>
-  <div class="ft-entry ft-dict-entry">
-    <label class="ft-label" for="ft-input">Từ đang gõ <span class="ft-dict-position"></span></label>
-    <div class="ft-dict-input-row">
-      <div class="ft-input-wrap"><input class="ft-input" id="ft-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
-    </div>
-    <span class="ft-entry-help" id="ft-entry-help">Đúng tự chuyển từ · Enter để bỏ qua từ chưa biết.</span>
-    <div class="ft-actions">
-      <button class="ft-button ft-hint" type="button"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"></path></svg><span>Mở ký tự</span></button>
-      <button class="ft-button ft-dict-remove" type="button" hidden>Xóa từ thừa</button>
-      <button class="ft-button ft-dict-reset" type="button">Làm lại</button>
+    <button class="ft-word-reveal" type="button" title="Hiện cả từ" hidden><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Hiện</span></button>
+    <div class="ft-dict-bottom">
+      <p class="ft-dict-help"><span class="ft-dict-help-pointer">Bấm vào từ để gõ · Rê chuột lên từ (hoặc nhấn Tab) để hiện cả từ · Dấu câu có sẵn.</span><span class="ft-dict-help-touch">Chạm vào từ để gõ · Chạm “Hiện” để xem cả từ · Dấu câu có sẵn.</span></p>
+      <div class="ft-actions">
+        <button class="ft-button ft-dict-remove" type="button" hidden>Xóa từ thừa</button>
+        <button class="ft-button ft-dict-reset" type="button">Làm lại</button>
+      </div>
     </div>
     <div class="ft-status" id="ft-status" role="status" aria-live="polite"></div>
   </div>
@@ -78,25 +73,39 @@
   var root = document.querySelector('.ft-card');
   if (!root) return;
   var find = function (selector) { return root.querySelector(selector); };
-  var input = find('.ft-input');
-  var form = find('.ft-entry');
   var guide = find('.ft-guide');
   var passage = find('.ft-dict-passage');
   var progress = find('.ft-dict-progress');
-  var position = find('.ft-dict-position');
   var status = find('.ft-status');
-  var hint = find('.ft-hint');
+  var revealButton = find('.ft-word-reveal');
   var removeButton = find('.ft-dict-remove');
   var resetButton = find('.ft-dict-reset');
+  // One transparent editor moves into the active word, even for a transcript with
+  // hundreds of words. The word keeps its dashes; the view below draws typed text
+  // over them with a caret at the next dash.
+  var editorView = document.createElement('span');
+  editorView.className = 'ft-editor-view';
+  editorView.setAttribute('aria-hidden', 'true');
+  var input = document.createElement('input');
+  input.className = 'ft-inline-input';
+  input.type = 'text';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.setAttribute('autocapitalize', 'off');
+  input.setAttribute('aria-describedby', 'ft-status');
+  input.setAttribute('aria-keyshortcuts', 'Space Enter Backspace ArrowLeft ArrowRight');
   var composing = false;
   var active = 0;
   var selected = 0;
   var records = [];
   var wordNodes = [];
   var renderedSeparator = null;
+  var hoverIndex = -1;
+  var hoverTimer = null;
+  var revealIndex = -1;
 
   function normalize(text) {
-    return String(text || '').normalize('NFC').replace(/[\s\u3000]+/g, ' ').trim();
+    return String(text || '').normalize('NFC').replace(/[\s　]+/g, ' ').trim();
   }
   function comparable(text) { return normalize(text).toLowerCase(); }
   // Answer items already arrive separated by <br>; do not re-parse migrated delimiters.
@@ -116,6 +125,8 @@
     return segmenter ? Array.from(segmenter.segment(text), function (part) { return part.segment; })
       : Array.from(text.normalize('NFC'));
   }
+  // Full-width scripts take about 1em per character; Latin monospace takes 1ch.
+  function isWide(text) { return /[぀-ヿ㐀-鿿＀-￯]/.test(text); }
   function makeWord(text) {
     var match = /^([^\p{L}\p{N}\p{M}]*)(.*?)([^\p{L}\p{N}\p{M}]*)$/u.exec(text);
     var core = match ? match[2] : text;
@@ -129,7 +140,7 @@
     var spaced = /\s/.test(text);
     var parts = text.match(/\S+/g) || [];
     // No-space Japanese/Chinese text can still be practiced in word-sized units.
-    if (!spaced && /[\u3040-\u30ff\u3400-\u9fff]/.test(text) && typeof Intl !== 'undefined' && Intl.Segmenter) {
+    if (!spaced && /[぀-ヿ㐀-鿿]/.test(text) && typeof Intl !== 'undefined' && Intl.Segmenter) {
       parts = Array.from(new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text), function (part) { return part.segment; });
     }
     parts.forEach(function (part) {
@@ -149,11 +160,13 @@
   var transcripts = answers.map(transcript).filter(function (item) { return item.words.length; });
   function target() { return transcripts[selected] || { words: [], separator: ' ' }; }
   function record(index) {
-    if (!records[index]) records[index] = { typed: '', key: '', submitted: false, revealed: 0 };
+    if (!records[index]) records[index] = { typed: '', key: '', submitted: false, revealed: false };
     return records[index];
   }
   function setRecord(index, text, submitted) {
     var item = record(index);
+    // Editing a shown word makes it the learner's own attempt again.
+    if (item.revealed && text !== item.typed) item.revealed = false;
     item.typed = text;
     item.key = makeWord(normalize(text)).key;
     item.submitted = submitted;
@@ -203,7 +216,7 @@
   function state(index) {
     var item = records[index];
     if (composing && index === active) return 'pending';
-    if (matches(index, target().words)) return 'correct';
+    if (matches(index, target().words)) return item.revealed ? 'revealed' : 'correct';
     if (!item) return 'pending';
     return item.submitted || (item.key && !possiblePrefix(index, item.key)) ? 'wrong' : 'pending';
   }
@@ -218,13 +231,58 @@
     });
   }
   function shake(index) {
-    [wordNodes[index], find('.ft-input-wrap')].forEach(function (element) {
-    if (Array.isArray(element.__flamaArrayItems)) return;
-      if (!element) return;
-      element.classList.remove('is-shaking');
-      void element.offsetWidth;
-      element.classList.add('is-shaking');
-    });
+    var node = wordNodes[index];
+    if (!node) return;
+    node.classList.remove('is-shaking');
+    void node.offsetWidth;
+    node.classList.add('is-shaking');
+  }
+  // Typed text replaces the dashes from the left, so the word keeps its width.
+  function paintEditor() {
+    if (active < 0) return;
+    var word = target().words[active] || makeWord(input.value);
+    var value = input.value;
+    var start = input.selectionStart === null ? value.length : input.selectionStart;
+    var end = input.selectionEnd === null ? value.length : input.selectionEnd;
+    var parts = [];
+    function piece(className, text) {
+      var part = document.createElement('span');
+      part.className = className;
+      part.textContent = text;
+      parts.push(part);
+    }
+    piece('ft-typed', value.slice(0, start));
+    if (start === end) piece('ft-caret', '');
+    else piece('ft-typed is-selected', value.slice(start, end));
+    piece('ft-typed', value.slice(end));
+    var rest = Math.max(word.chars.length - characters(value).length, 0);
+    piece('ft-blank', (isWide(word.core + value) ? '－' : '-').repeat(rest));
+    editorView.classList.toggle('is-composing', composing);
+    editorView.replaceChildren.apply(editorView, parts);
+  }
+  function revealable(index) {
+    if (index < 0 || index >= target().words.length) return false;
+    var kind = state(index);
+    return kind === 'pending' || kind === 'wrong';
+  }
+  // The reveal button lives outside the scrolling passage, so it is never clipped
+  // and never widens the passage; it follows the hovered word, else the active one.
+  function placeReveal() {
+    var hovered = revealable(hoverIndex);
+    revealIndex = hovered ? hoverIndex : revealable(active) ? active : -1;
+    var node = wordNodes[revealIndex];
+    revealButton.hidden = !node;
+    if (!node) return;
+    revealButton.classList.toggle('is-hover', hovered);
+    revealButton.setAttribute('aria-label', 'Hiện cả từ ' + (revealIndex + 1));
+    var box = guide.getBoundingClientRect();
+    var view = passage.getBoundingClientRect();
+    var bounds = node.getBoundingClientRect();
+    revealButton.classList.toggle('is-offscreen', bounds.bottom <= view.top || bounds.top >= view.bottom);
+    var width = revealButton.offsetWidth;
+    var left = bounds.left - box.left + (bounds.width - width) / 2;
+    revealButton.style.left = Math.max(0, Math.min(left, box.width - width)) + 'px';
+    revealButton.style.top = (bounds.top - box.top - revealButton.offsetHeight - 4) + 'px';
   }
   function render() {
     chooseTranscript();
@@ -235,60 +293,73 @@
       wordNodes = [];
       for (var i = 0; i < count; i++) {
         if (i) fragment.append(document.createTextNode(target().separator));
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.setAttribute('data-index', i);
-        wordNodes.push(button);
-        fragment.append(button);
+        var span = document.createElement('span');
+        span.setAttribute('data-index', i);
+        ['ft-word-prefix', 'ft-word-body', 'ft-word-suffix'].forEach(function (name) {
+          var part = document.createElement('span');
+          part.className = name;
+          span.append(part);
+        });
+        wordNodes.push(span);
+        fragment.append(span);
       }
       passage.replaceChildren(fragment);
       renderedSeparator = target().separator;
     }
     var right = 0;
     var wrong = 0;
-    wordNodes.forEach(function (button, index) {
-      var item = records[index] || { typed: '', revealed: 0 };
+    wordNodes.forEach(function (span, index) {
+      var item = records[index] || { typed: '' };
       var word = words[index] || makeWord(item.typed);
       var kind = state(index);
-      if (kind === 'correct') right += 1;
+      var done = kind === 'correct' || kind === 'revealed';
+      if (done) right += 1;
       if (kind === 'wrong') wrong += 1;
-      var revealed = Math.min(item.revealed || 0, word.chars.length);
-      var text = kind === 'correct' ? word.core : word.chars.slice(0, revealed).join('') +
-        (kind === 'wrong' ? 'x' : '-').repeat(Math.max(word.chars.length - revealed, 0));
-      var label = 'Từ ' + (index + 1) + (kind === 'correct' ? ', đúng: ' + word.core :
-        kind === 'wrong' ? ', chưa đúng. Bấm để gõ lại.' : ', chưa gõ.');
-      if (index >= words.length) label = 'Từ thừa ' + (index + 1) + '. Bấm để xóa.';
-      var className = 'ft-dict-word is-' + kind + (index === active ? ' is-active' : '') +
-        (kind === 'wrong' && button.classList.contains('is-shaking') ? ' is-shaking' : '');
-      if (button.className !== className) button.className = className;
-      var display = word.prefix + text + word.suffix;
-      if (button.textContent !== display) button.textContent = display;
-      button.setAttribute('aria-label', label);
-      button.setAttribute('aria-pressed', String(index === active));
+      var prefix = span.children[0];
+      var body = span.children[1];
+      var suffix = span.children[2];
+      if (prefix.textContent !== word.prefix) prefix.textContent = word.prefix;
+      if (suffix.textContent !== word.suffix) suffix.textContent = word.suffix;
+      var current = index === active;
+      var className = 'ft-dict-word is-' + kind + (current ? ' is-active' : '') +
+        (kind === 'wrong' && span.classList.contains('is-shaking') ? ' is-shaking' : '');
+      if (span.className !== className) span.className = className;
+      if (current) {
+        // The input carries the label; a button role would hide it from assistive tech.
+        span.removeAttribute('role');
+        span.removeAttribute('aria-label');
+        // Moving a focused input drops focus and IME composition; only move it on activation.
+        if (input.parentNode !== body) body.replaceChildren(editorView, input);
+        input.setAttribute('aria-label', index >= words.length ? 'Từ thừa ' + (index + 1)
+          : 'Từ ' + (index + 1) + '/' + words.length);
+        paintEditor();
+        return;
+      }
+      span.setAttribute('role', 'button');
+      span.setAttribute('aria-label', index >= words.length ? 'Từ thừa ' + (index + 1) + '. Bấm để xóa.'
+        : 'Từ ' + (index + 1) + (kind === 'correct' ? ', đúng: ' + word.core : kind === 'revealed' ? ', đã hiện: ' + word.core :
+          kind === 'wrong' ? ', chưa đúng. Bấm để gõ lại.' : ', chưa gõ.'));
+      var wide = isWide(word.core);
+      var text = done ? word.core : (kind === 'wrong' ? (wide ? 'ｘ' : 'x') : (wide ? '－' : '-')).repeat(word.chars.length);
+      if (body.firstElementChild || body.textContent !== text) body.textContent = text;
     });
+    if (active < 0 && input.parentNode) input.remove();
     var complete = transcripts.length && score(target())[0] === 1;
     progress.textContent = right + '/' + words.length + ' từ đúng';
-    position.textContent = active < 0 ? '· hoàn thành' : active >= words.length
-      ? '· từ thừa' : '· ' + (active + 1) + '/' + words.length;
-    input.disabled = active < 0;
-    input.placeholder = active < 0 ? 'Bấm vào một từ để gõ lại' : 'Gõ từ bạn nghe được…';
-    hint.disabled = composing || active < 0 || !words[active] || state(active) === 'correct' ||
-      record(active).revealed >= words[active].chars.length;
     removeButton.hidden = active < words.length;
     resetButton.disabled = !records.some(function (item) { return item && (item.typed || item.revealed); });
-    form.classList.toggle('is-correct', !!complete);
-    form.classList.toggle('is-incorrect', !complete && active >= 0 && state(active) === 'wrong');
-    input.setAttribute('aria-invalid', !complete && active >= 0 && state(active) === 'wrong' ? 'true' : 'false');
-    if (active < 0 || state(active) !== 'wrong') find('.ft-input-wrap').classList.remove('is-shaking');
+    guide.classList.toggle('is-correct', !!complete);
+    guide.classList.toggle('is-incorrect', !complete && active >= 0 && state(active) === 'wrong');
     status.className = 'ft-status' + (complete ? ' is-correct' : wrong ? ' is-incorrect' : '');
     status.textContent = complete ? 'Đã chép đúng cả đoạn. Lật thẻ để xem bản dịch và ghi chú.' :
       wrong ? 'Còn ' + wrong + ' từ chưa đúng. Bấm vào từ màu đỏ để sửa.' : '';
+    placeReveal();
   }
   function showActive() {
-    var button = wordNodes[active];
-    if (!button) return;
+    var node = wordNodes[active];
+    if (!node) return;
     var box = passage.getBoundingClientRect();
-    var bounds = button.getBoundingClientRect();
+    var bounds = node.getBoundingClientRect();
     if (bounds.top < box.top + 12) passage.scrollTop -= box.top + 12 - bounds.top;
     else if (bounds.bottom > box.bottom - 12) passage.scrollTop += bounds.bottom - box.bottom + 12;
   }
@@ -301,6 +372,14 @@
       input.focus();
       if (selectText) input.select();
     }
+  }
+  function revealWord(index) {
+    var word = target().words[index];
+    if (!word) return;
+    setRecord(index, word.core, true);
+    record(index).revealed = true;
+    chooseTranscript();
+    activate(nextUnfinished(index), true);
   }
   function nextUnfinished(after) {
     var count = visibleCount();
@@ -318,7 +397,7 @@
       else { input.value = ''; render(); }
       return;
     }
-    var all = finalize || /[\s\u3000]$/.test(text);
+    var all = finalize || /[\s　]$/.test(text);
     var committed = all ? pieces.length : pieces.length - 1;
     var start = active;
     for (var i = 0; i < committed; i++) setRecord(start + i, pieces[i], true);
@@ -334,7 +413,7 @@
   }
   function edited() {
     if (active < 0) return;
-    if (!composing && (/[\s\u3000]/.test(input.value) ||
+    if (!composing && (/[\s　]/.test(input.value) ||
         (target().separator === '' && transcript(input.value).words.length > 1))) {
       consume(input.value, false);
       return;
@@ -348,22 +427,31 @@
       activate(nextUnfinished(active), false);
     } else if (!wasWrong && state(active) === 'wrong') shake(active);
   }
-  // Keep one small editor, even for a transcript with hundreds of words.
-  if (!input) {
-    input = document.createElement('input');
-    input.className = 'ft-input';
-    input.id = 'ft-input';
-    input.type = 'text';
-    find('.ft-input-wrap').prepend(input);
+  function caretAt(position) {
+    return input.selectionStart === position && input.selectionEnd === position;
   }
-  input.autocomplete = 'off';
-  input.spellcheck = false;
-  input.setAttribute('autocapitalize', 'off');
-  input.setAttribute('aria-describedby', 'ft-status ft-entry-help');
-  input.setAttribute('aria-keyshortcuts', 'Space Enter');
+  function keepHover() {
+    if (hoverTimer !== null) window.clearTimeout(hoverTimer);
+    hoverTimer = null;
+  }
+  // A short delay lets the pointer cross from a word to its reveal button.
+  function dropHover() {
+    keepHover();
+    hoverTimer = window.setTimeout(function () {
+      hoverTimer = null;
+      hoverIndex = -1;
+      placeReveal();
+    }, 200);
+  }
+
   input.addEventListener('compositionstart', function () { composing = true; render(); });
   input.addEventListener('compositionend', function () { composing = false; edited(); });
   input.addEventListener('input', edited);
+  // Arrow keys, clicks and selection move the drawn caret with the real one.
+  ['keyup', 'select', 'click'].forEach(function (type) { input.addEventListener(type, paintEditor); });
+  document.addEventListener('selectionchange', function () {
+    if (document.activeElement === input) paintEditor();
+  });
   input.addEventListener('keydown', function (event) {
     if (event.isComposing || composing || event.keyCode === 229 || active < 0) return;
     if (event.key === ' ' || event.key === 'Enter') {
@@ -373,21 +461,49 @@
     } else if (event.key === 'Backspace' && !input.value && active > 0) {
       event.preventDefault();
       activate(active - 1, true);
+    } else if (event.key === 'ArrowLeft' && active > 0 && caretAt(0)) {
+      event.preventDefault();
+      activate(active - 1, true);
+    } else if (event.key === 'ArrowRight' && active < visibleCount() - 1 && caretAt(input.value.length)) {
+      event.preventDefault();
+      activate(active + 1, true);
     }
   });
   root.addEventListener('animationend', function (event) {
     if (event.animationName === 'ft-dict-shake') event.target.classList.remove('is-shaking');
   });
   passage.addEventListener('click', function (event) {
-    var button = event.target.closest('.ft-dict-word');
-    if (button && passage.contains(button)) activate(Number(button.getAttribute('data-index')), true);
+    var node = event.target.closest('.ft-dict-word');
+    if (!node || !passage.contains(node)) return;
+    var index = Number(node.getAttribute('data-index'));
+    if (index !== active) activate(index, true);
+    else input.focus();
   });
-  hint.addEventListener('click', function () {
-    if (active < 0 || !target().words[active] || composing) return;
-    var item = record(active);
-    item.revealed = Math.min(target().words[active].chars.length, item.revealed + 1);
-    render();
-    input.focus();
+  passage.addEventListener('pointerover', function (event) {
+    if (event.pointerType === 'touch') return;
+    var node = event.target.closest('.ft-dict-word');
+    if (!node || !passage.contains(node)) { dropHover(); return; }
+    keepHover();
+    hoverIndex = Number(node.getAttribute('data-index'));
+    placeReveal();
+  });
+  passage.addEventListener('pointerleave', function (event) {
+    if (event.pointerType !== 'touch') dropHover();
+  });
+  passage.addEventListener('scroll', placeReveal);
+  window.addEventListener('resize', placeReveal);
+  // Touch has no hover, so keep the button visible above the active word.
+  guide.addEventListener('pointerdown', function (event) {
+    guide.classList.toggle('is-touch', event.pointerType === 'touch');
+  });
+  revealButton.addEventListener('pointerenter', keepHover);
+  revealButton.addEventListener('pointerleave', function (event) {
+    if (event.pointerType !== 'touch') dropHover();
+  });
+  // Keep focus (and the phone keyboard) in the editor while tapping the button.
+  revealButton.addEventListener('mousedown', function (event) { event.preventDefault(); });
+  revealButton.addEventListener('click', function () {
+    if (revealIndex >= 0) revealWord(revealIndex);
   });
   removeButton.addEventListener('click', function () {
     if (active < target().words.length) return;
@@ -399,8 +515,10 @@
   resetButton.addEventListener('click', function () {
     records = [];
     selected = 0;
+    hoverIndex = -1;
     activate(0, false);
   });
+
   // Audio only starts on a learner click. Multiple clips play in order.
   var audioPanel = find('.ft-audio');
   if (audioPanel) {
@@ -464,7 +582,6 @@
     if (!tracks.length) audioPanel.hidden = true;
   }
   if (!transcripts.length) {
-    form.hidden = true;
     guide.hidden = true;
     find('.ft-empty').hidden = false;
   } else {

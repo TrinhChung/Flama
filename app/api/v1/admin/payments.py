@@ -73,11 +73,11 @@ def get_order(order_id: str):
 @admin_payments_bp.post("/orders/<order_id>/sync")
 @admin_required
 def sync_order(order_id: str):
-    from app.services import payment_service
+    from app.services import payment
 
     try:
-        payment_service.sync_and_get_order(order_id=order_id)
-    except payment_service.PaymentServiceError as exc:
+        payment.sync_and_get_order(order_id=order_id)
+    except payment.PaymentServiceError as exc:
         return error_response(exc.error, exc.message, status=exc.status, field=exc.field)
     payload = order_query_service.get_admin_order_detail(order_id)
     if payload is None:

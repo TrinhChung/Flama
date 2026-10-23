@@ -54,6 +54,16 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertEqual(set(context), {"Meaning", "Pairs"})
         self.assertEqual(context["Meaning"], ["ăn", "<b>dùng</b>"])
 
+    def test_array_empty_items_keep_their_position_like_mustache_js(self):
+        # chevron skips a falsy section item; mustache.js renders it, so paired
+        # columns would shift on the server only.
+        template = self._template("{{#Left}}<i>{{.}}</i>{{/Left}}|{{Left}}|{{#Right}}<b>{{{.}}}</b>{{/Right}}")
+        fields = [self._field("Left", "array"), self._field("Right", "array")]
+        values = {"Left": ["", "a", "", "b", ""], "Right": [""]}
+        rendered = render_template_pair(template=template, field_defs=fields, field_values=values, media_assets=[])
+        self.assertIn("<i></i><i>a</i><i></i><i>b</i><i></i>|,a,,b,|<b></b>", rendered["front_html"])
+        self.assertEqual(build_render_context(fields, values, [])["Left"], ["", "a", "", "b", ""])
+
     def test_array_text_renders_as_before(self):
         # Values written before lists keep the text path: one section, line breaks.
         template = self._template("{{#Meaning}}<div>{{Meaning}}</div>{{/Meaning}}{{^Empty}}-{{/Empty}}")

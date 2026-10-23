@@ -2,7 +2,9 @@
 
 > Version: 1.0.0 | System Architecture Document | Project: Flama / Nihongo
 
-This document defines the multi-agent collaboration architecture for Flama. It provides standard operational guidelines for coordinating specialized AI agents across Database, Backend, Frontend, and Documentation layers.
+This document defines collaboration guidelines for Flama. The DB -> BE -> FE diagram is an example for schema-dependent work; skip unaffected layers and parallelize independent work only when delegation is authorized. A skill is a workflow, not an automatically available subagent. Use the current host's supported agent API and record file ownership before dispatch.
+
+Canonical skills live in `skills/`. `python scripts/sync_claude_skills.py` generates repository mirrors in `.claude/skills/` and `.agents/skills/`; `--check` checks both. Do not bulk-sync user-global skill folders. Track source presence, Git inclusion, mirror equality, runtime discovery and tool availability separately. See [the dated audit, review and export queue](MULTI_AGENT_SKILLS_AUDIT_AND_UNIFICATION.md). Each reviewer records only its own result; an unavailable login is not a sign-off.
 
 ---
 
@@ -54,7 +56,7 @@ To ensure seamless coordination between subagents working on separate layers, ev
 - **Migration Guarantee**: Every schema update must include an Alembic migration script in `migrations/versions/`.
 
 ### B. Backend -> Frontend Contract (REST DTO)
-- **JSON Payload Format**: Standardize request parameters and response JSON shapes.
+- **JSON Payload Format**: Record the actual endpoint's request and response shape. Preserve existing envelopes; the example below is illustrative, not a mandatory response wrapper.
 ```json
 {
   "success": true,
@@ -65,7 +67,7 @@ To ensure seamless coordination between subagents working on separate layers, ev
 - **HTTP Status Codes**: `200 OK`, `201 Created`, `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `409 Conflict`, `422 Unprocessable Entity`.
 
 ### C. Frontend Interface Spec
-- **TypeScript Types**: Declare interfaces matching Backend JSON payloads under `frontend/src/features/<feature>/types.ts` or `frontend/src/shared/types/`.
+- **TypeScript Types**: Match backend JSON payloads in the owning feature/entity. Business-independent infrastructure types may live in `shared`; do not collect domain DTOs in `shared/types` by default.
 - **State Hooks**: Encapsulate API calls inside custom hooks (e.g., `useStudySession`, `useDeckMarketplace`).
 
 ---
@@ -85,7 +87,7 @@ To ensure seamless coordination between subagents working on separate layers, ev
 
 3. **Step 3: Frontend Execution**:
    - FE Agent defines TypeScript types and API fetchers.
-   - FE Agent extracts state management into custom hooks in `frontend/src/hooks/`.
+   - FE Agent extracts complex state management into custom hooks in the owning slice's `hooks/`; only business-independent hooks belong in `shared/hooks/`.
    - FE Agent builds/updates React components in `frontend/src/` adhering to FSD layout and Zero Visual Regression.
    - Verification: Verify UI visual rendering and DevTools console clean state.
 

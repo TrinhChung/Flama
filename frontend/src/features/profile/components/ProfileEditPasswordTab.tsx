@@ -1,11 +1,17 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, KeyRound, LoaderCircle } from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/button'
 import { DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { type PasswordFieldErrors, validateChangePasswordForm } from '../schemas'
+import {
+  type ChangePasswordFormValues,
+  type PasswordFieldErrors,
+  getChangePasswordSchema,
+} from '../schemas'
 
 export interface ProfileEditPasswordTabProps {
   isPending: boolean
@@ -28,45 +34,41 @@ export function ProfileEditPasswordTab({
 }: ProfileEditPasswordTabProps) {
   const { t } = useTranslation('profile')
 
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [showCurrentPw, setShowCurrentPw] = useState(false)
   const [showNewPw, setShowNewPw] = useState(false)
   const [showConfirmPw, setShowConfirmPw] = useState(false)
-  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
 
-  const isPasswordFormValid = validateChangePasswordForm({
-    current_password: currentPassword,
-    new_password: newPassword,
-    confirm_password: confirmPassword,
-  }, t).success
+  const schema = getChangePasswordSchema(t)
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setHasAttemptedSubmit(true)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors: formErrors, isSubmitted, isValid },
+  } = useForm<ChangePasswordFormValues>({
+    resolver: zodResolver(schema),
+    mode: 'onChange',
+    defaultValues: {
+      current_password: '',
+      new_password: '',
+      confirm_password: '',
+    },
+  })
 
-    const validation = validateChangePasswordForm({
-      current_password: currentPassword,
-      new_password: newPassword,
-      confirm_password: confirmPassword,
-    }, t)
-
-    if (!validation.success) {
-      setFieldErrors(validation.errors)
-      return
-    }
-
+  const onSubmit = (data: ChangePasswordFormValues) => {
     setFieldErrors({})
-    onSave({
-      current_password: currentPassword,
-      new_password: newPassword,
-      confirm_password: confirmPassword,
-    })
+    onSave(data)
   }
 
+  const { onChange: onCurrentPwChange, ...currentPwReg } = register('current_password')
+  const { onChange: onNewPwChange, ...newPwReg } = register('new_password')
+  const { onChange: onConfirmPwChange, ...confirmPwReg } = register('confirm_password')
+
+  const currentPwError = fieldErrors.current_password || formErrors.current_password?.message
+  const newPwError = fieldErrors.new_password || formErrors.new_password?.message
+  const confirmPwError = fieldErrors.confirm_password || formErrors.confirm_password?.message
+
   return (
-    <form noValidate onSubmit={handleSubmit} className="space-y-4 pt-2">
+    <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
       <div className="space-y-1.5">
         <Label htmlFor="profile-cur-pw" className="text-xs">
           {t('edit.password.current_label')}
@@ -75,15 +77,15 @@ export function ProfileEditPasswordTab({
           <Input
             id="profile-cur-pw"
             type={showCurrentPw ? 'text' : 'password'}
-            value={currentPassword}
+            {...currentPwReg}
             onChange={(e) => {
-              setCurrentPassword(e.target.value)
+              void onCurrentPwChange(e)
               if (fieldErrors.current_password) {
                 setFieldErrors((prev) => ({ ...prev, current_password: undefined }))
               }
             }}
             placeholder={t('edit.password.current_placeholder')}
-            aria-invalid={Boolean(fieldErrors.current_password)}
+            aria-invalid={Boolean(currentPwError)}
             className="pr-10"
             required
           />
@@ -97,9 +99,9 @@ export function ProfileEditPasswordTab({
             {showCurrentPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
-        {fieldErrors.current_password ? (
+        {currentPwError ? (
           <p className="text-[11px] font-medium text-destructive">
-            {fieldErrors.current_password}
+            {currentPwError}
           </p>
         ) : null}
       </div>
@@ -112,15 +114,15 @@ export function ProfileEditPasswordTab({
           <Input
             id="profile-new-pw"
             type={showNewPw ? 'text' : 'password'}
-            value={newPassword}
+            {...newPwReg}
             onChange={(e) => {
-              setNewPassword(e.target.value)
+              void onNewPwChange(e)
               if (fieldErrors.new_password) {
                 setFieldErrors((prev) => ({ ...prev, new_password: undefined }))
               }
             }}
             placeholder={t('edit.password.new_placeholder')}
-            aria-invalid={Boolean(fieldErrors.new_password)}
+            aria-invalid={Boolean(newPwError)}
             className="pr-10"
             required
           />
@@ -134,9 +136,9 @@ export function ProfileEditPasswordTab({
             {showNewPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
-        {fieldErrors.new_password ? (
+        {newPwError ? (
           <p className="text-[11px] font-medium text-destructive">
-            {fieldErrors.new_password}
+            {newPwError}
           </p>
         ) : null}
       </div>
@@ -149,15 +151,15 @@ export function ProfileEditPasswordTab({
           <Input
             id="profile-conf-pw"
             type={showConfirmPw ? 'text' : 'password'}
-            value={confirmPassword}
+            {...confirmPwReg}
             onChange={(e) => {
-              setConfirmPassword(e.target.value)
+              void onConfirmPwChange(e)
               if (fieldErrors.confirm_password) {
                 setFieldErrors((prev) => ({ ...prev, confirm_password: undefined }))
               }
             }}
             placeholder={t('edit.password.confirm_placeholder')}
-            aria-invalid={Boolean(fieldErrors.confirm_password)}
+            aria-invalid={Boolean(confirmPwError)}
             className="pr-10"
             required
           />
@@ -171,9 +173,9 @@ export function ProfileEditPasswordTab({
             {showConfirmPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
-        {fieldErrors.confirm_password ? (
+        {confirmPwError ? (
           <p className="text-[11px] font-medium text-destructive">
-            {fieldErrors.confirm_password}
+            {confirmPwError}
           </p>
         ) : null}
       </div>
@@ -191,7 +193,7 @@ export function ProfileEditPasswordTab({
         <Button
           type="submit"
           disabled={
-            isPending || (hasAttemptedSubmit && !isPasswordFormValid)
+            isPending || (isSubmitted && !isValid)
           }
           className="w-full sm:w-auto bg-gradient-to-r from-primary to-orange-500 font-semibold text-primary-foreground hover:opacity-95"
         >

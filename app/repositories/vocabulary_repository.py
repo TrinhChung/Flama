@@ -28,7 +28,7 @@ from app.repositories.study_repository import (
     normalize_progress_queue as _normalize_progress_queue,
 )
 from models import db
-from models.field_types import field_value_text
+from models.field_types import ARRAY_FIELD_TYPE, field_value_text
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note, NoteType
 
@@ -233,13 +233,24 @@ def browse_first_non_empty(field_values: dict | None) -> str:
     return ""
 
 
-def note_field_values_as_strings(note_obj: Note | None) -> dict[str, Any]:
-    """Stored values with text trimmed; an ``array`` list stays a list for editors."""
-    if not note_obj or not isinstance(note_obj.field_values, dict):
+def note_field_values_as_strings(
+    note_obj: Note | None,
+    *,
+    raw_values: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Stored values with text trimmed; an ``array`` list stays a list for editors.
+
+    ``raw_values`` is the Note's already-decoded ``field_values``; each read of
+    that property decodes the stored JSON again.
+    """
+    if not note_obj:
+        return {}
+    values = note_obj.field_values if raw_values is None else raw_values
+    if not isinstance(values, dict):
         return {}
 
     normalized: dict[str, Any] = {}
-    for key, value in note_obj.field_values.items():
+    for key, value in values.items():
         key_name = str(key).strip()
         if not key_name:
             continue
@@ -247,7 +258,13 @@ def note_field_values_as_strings(note_obj: Note | None) -> dict[str, Any]:
     return normalized
 
 
-def note_ordered_field_names(note_obj: Note | None, *, text_only: bool = False) -> list[str]:
+def note_ordered_field_names(
+    note_obj: Note | None,
+    *,
+    text_only: bool = False,
+    field_values: Mapping[str, Any] | None = None,
+) -> list[str]:
+    """``field_values`` is the result of ``note_field_values_as_strings`` when known."""
     ordered_names: list[str] = []
     if not note_obj:
         return ordered_names
@@ -259,13 +276,14 @@ def note_ordered_field_names(note_obj: Note | None, *, text_only: bool = False) 
             key=lambda item: ((item.position or 0), item.name.lower()),
         )
         for field_def in sorted_defs:
-            if text_only and field_def.field_type not in {"text", "richtext", "markdown"}:
+            if text_only and field_def.field_type not in {"text", "richtext", "markdown", ARRAY_FIELD_TYPE}:
                 continue
             field_name = (field_def.name or "").strip()
             if field_name and field_name not in ordered_names:
                 ordered_names.append(field_name)
 
-    field_values = note_field_values_as_strings(note_obj)
+    if field_values is None:
+        field_values = note_field_values_as_strings(note_obj)
     extra_names = sorted(key for key in field_values.keys() if key not in ordered_names)
     ordered_names.extend(extra_names)
     return ordered_names
@@ -379,12 +397,16 @@ def format_display_summary(
     return text
 
 
-def note_display_triplet(note_obj: Note | None) -> dict[str, str]:
-    field_values = note_field_values_as_strings(note_obj)
+def note_display_triplet(
+    note_obj: Note | None,
+    *,
+    raw_values: Mapping[str, Any] | None = None,
+) -> dict[str, str]:
+    field_values = note_field_values_as_strings(note_obj, raw_values=raw_values)
     if not field_values:
         return {"word": "", "reading": "", "meaning": ""}
 
-    ordered_text_names = note_ordered_field_names(note_obj, text_only=True)
+    ordered_text_names = note_ordered_field_names(note_obj, text_only=True, field_values=field_values)
     non_empty_values: list[str] = []
     for field_name in ordered_text_names:
         text = field_value_text(field_values.get(field_name)).strip()
@@ -454,9 +476,14 @@ def build_browse_row(
     now: datetime,
     progress_obj: Any | None = None,
     timezone_name: str = "UTC",
+    *,
+    raw_values: Mapping[str, Any] | None = None,
+    display_triplet: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
+    """``display_triplet`` replaces the Note's own (a clone overlay supplies its values)."""
     note_obj = card_obj.note
-    display_triplet = note_display_triplet(note_obj)
+    if display_triplet is None:
+        display_triplet = note_display_triplet(note_obj, raw_values=raw_values)
     word = display_triplet["word"]
     reading = display_triplet["reading"]
     meaning = display_triplet["meaning"]
@@ -502,7 +529,8 @@ def build_browse_card_detail(
 ) -> dict[str, Any]:
     note_obj = card_obj.note
     note_type_obj = note_obj.note_type if note_obj else None
-    field_values = note_obj.field_values if note_obj and isinstance(note_obj.field_values, dict) else {}
+    raw_values = note_obj.field_values if note_obj else None
+    field_values = raw_values if isinstance(raw_values, dict) else {}
     field_defs = (
         sorted(note_type_obj.field_defs, key=lambda fd: int(fd.position or 0))
         if note_type_obj
@@ -555,6 +583,7 @@ def build_browse_card_detail(
             now,
             progress_obj=progress_obj,
             timezone_name=timezone_name,
+            raw_values=field_values,
         ),
         "note": {
             "id": note_obj.id if note_obj else None,
@@ -576,20 +605,39 @@ def build_browse_card_detail(
     }
 
 
-def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
-    try:
-        from flask import g, has_request_context
+_DECK_SCOPE_CHUNK = 500
 
-        if has_request_context():
-            cache = getattr(g, "_accessible_browse_decks_cache", None)
-            if cache is None:
-                cache = {}
-                setattr(g, "_accessible_browse_decks_cache", cache)
-            cache_key = (user_id, admin_mode)
-            if cache_key in cache:
-                return cache[cache_key]
-    except (ImportError, RuntimeError):
-        has_request_context = None
+
+def _id_chunks(ids: set[int]):
+    ordered = sorted(ids)
+    for offset in range(0, len(ordered), _DECK_SCOPE_CHUNK):
+        yield ordered[offset : offset + _DECK_SCOPE_CHUNK]
+
+
+def _browse_deck_request_cache() -> dict | None:
+    from flask import g, has_request_context
+
+    if not has_request_context():
+        return None
+    cache = getattr(g, "_accessible_browse_decks_cache", None)
+    if cache is None:
+        cache = {}
+        g._accessible_browse_decks_cache = cache
+    return cache
+
+
+def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
+    """Live decks Browse may show, in tree order (roots first, then position).
+
+    Admin mode sees its own and unowned decks. A learner sees owned decks,
+    decks holding their Notes and install-root subtrees, plus every live
+    ancestor. Unlike ``deck_tree_query.collect_accessible_decks`` (Dashboard),
+    Note-holding decks are included and only install roots are expanded.
+    """
+    cache = _browse_deck_request_cache()
+    cache_key = (user_id, admin_mode)
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
 
     if admin_mode:
         result = (
@@ -608,99 +656,91 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
             )
             .all()
         )
-        try:
-            from flask import g, has_request_context
+    else:
+        result = _collect_learner_browse_decks(user_id=user_id)
+    if cache is not None:
+        cache[cache_key] = result
+    return result
 
-            if has_request_context():
-                cache = getattr(g, "_accessible_browse_decks_cache", None)
-                if cache is not None:
-                    cache[(user_id, admin_mode)] = result
-        except (ImportError, RuntimeError):
-            pass
-        return result
 
-    all_decks = (
-        Deck.query.filter(Deck.deleted_at.is_(None))
-        .order_by(
-            Deck.parent_id.isnot(None),
-            Deck.position,
-            Deck.created_at,
-            Deck.id,
-        )
-        .all()
-    )
+def _collect_learner_browse_decks(*, user_id: int) -> list[Deck]:
+    """Read only the learner's slice of ``decks``, one level per query.
 
-    deck_map = {deck.id: deck for deck in all_decks}
-    children_by_parent_all: dict[int, list[int]] = {}
-    for deck in all_decks:
-        if deck.parent_id is not None:
-            children_by_parent_all.setdefault(deck.parent_id, []).append(deck.id)
-
-    visible_ids: set[int] = set()
-
-    owned_deck_rows = (
-        db.session.query(Deck.id)
-        .filter(
+    A deleted deck is never returned and stops the ancestor walk, but the
+    live children of a deleted install root stay visible. The subtree walk
+    does not descend through a deck that is already visible as owned or
+    Note-holding unless that deck is itself an install root.
+    """
+    decks_by_id: dict[int, Deck] = {
+        int(deck_obj.id): deck_obj
+        for deck_obj in Deck.query.filter(
             Deck.owner_user_id == user_id,
             Deck.deleted_at.is_(None),
         )
-        .all()
-    )
-    visible_ids.update(int(row[0]) for row in owned_deck_rows if row and row[0] is not None)
-
-    deck_rows = (
-        db.session.query(Note.deck_id)
+    }
+    visible_ids = set(decks_by_id)
+    visible_ids.update(
+        int(deck_id)
+        for (deck_id,) in db.session.query(Note.deck_id)
         .filter(Note.user_id == user_id, Note.deck_id.isnot(None))
         .distinct()
-        .all()
+        if deck_id is not None
     )
-    visible_ids.update(int(row[0]) for row in deck_rows if row and row[0] is not None)
-
-    install_root_rows = (
-        db.session.query(DeckInstall.local_deck_id)
+    install_root_ids = {
+        int(deck_id)
+        for (deck_id,) in db.session.query(DeckInstall.local_deck_id)
         .filter(
             DeckInstall.user_id == user_id,
             DeckInstall.local_deck_id.isnot(None),
         )
         .distinct()
-        .all()
+        if deck_id is not None
+    }
+
+    already_visible = set(visible_ids)
+    visible_ids |= install_root_ids
+    expanded: set[int] = set()
+    frontier = set(install_root_ids)
+    while frontier:
+        expanded |= frontier
+        child_ids: set[int] = set()
+        for chunk in _id_chunks(frontier):
+            for deck_obj in Deck.query.filter(Deck.parent_id.in_(chunk), Deck.deleted_at.is_(None)):
+                decks_by_id[int(deck_obj.id)] = deck_obj
+                child_ids.add(int(deck_obj.id))
+        visible_ids |= child_ids
+        frontier = child_ids - already_visible - expanded
+
+    # Load the visible rows not read yet (deleted ones stay absent), then
+    # add each live deck's missing parent until no new ancestor appears.
+    unloaded = visible_ids - set(decks_by_id)
+    parent_checked: set[int] = set()
+    while True:
+        for chunk in _id_chunks(unloaded):
+            for deck_obj in Deck.query.filter(Deck.id.in_(chunk), Deck.deleted_at.is_(None)):
+                decks_by_id[int(deck_obj.id)] = deck_obj
+        new_parent_ids = {
+            int(deck_obj.parent_id)
+            for deck_id, deck_obj in decks_by_id.items()
+            if deck_id not in parent_checked and deck_obj.parent_id is not None
+        } - visible_ids
+        parent_checked.update(decks_by_id)
+        if not new_parent_ids:
+            break
+        visible_ids |= new_parent_ids
+        unloaded = new_parent_ids
+
+    # Same order as ORDER BY parent_id IS NOT NULL, position, created_at, id
+    # (all three sort columns are NOT NULL).
+    return sorted(
+        decks_by_id.values(),
+        key=lambda deck_obj: (
+            deck_obj.parent_id is not None,
+            deck_obj.position,
+            deck_obj.created_at,
+            deck_obj.id,
+        ),
     )
-    install_root_ids = {int(row[0]) for row in install_root_rows if row and row[0] is not None}
-    if install_root_ids:
-        frontier = list(install_root_ids)
-        while frontier:
-            current_id = frontier.pop()
-            if current_id not in visible_ids:
-                visible_ids.add(current_id)
-            for child_id in children_by_parent_all.get(current_id, []):
-                if child_id not in visible_ids:
-                    frontier.append(child_id)
-
-    if not visible_ids:
-        return []
-
-    stack = list(visible_ids)
-    while stack:
-        current_id = stack.pop()
-        deck_obj = deck_map.get(current_id)
-        if not deck_obj or deck_obj.parent_id is None:
-            continue
-        if deck_obj.parent_id in visible_ids:
-            continue
-        visible_ids.add(deck_obj.parent_id)
-        stack.append(deck_obj.parent_id)
-
-    result = [deck for deck in all_decks if deck.id in visible_ids]
-    try:
-        from flask import g, has_request_context
-
-        if has_request_context():
-            cache = getattr(g, "_accessible_browse_decks_cache", None)
-            if cache is not None:
-                cache[(user_id, admin_mode)] = result
-    except (ImportError, RuntimeError):
-        pass
-    return result
 
 
 def deck_children_map(deck_list: list[Deck]) -> dict[int | None, list[Deck]]:
@@ -811,8 +851,8 @@ def build_browse_deck_tree_payload(
 
     nt_name_lookup: dict[str, str] = {}
     if all_nt_ids:
-        for nt in NoteType.query.filter(NoteType.id.in_(all_nt_ids)).all():
-            nt_name_lookup[str(nt.id)] = str(nt.name)
+        for nt_id, nt_name in db.session.query(NoteType.id, NoteType.name).filter(NoteType.id.in_(all_nt_ids)):
+            nt_name_lookup[str(nt_id)] = str(nt_name)
 
     def _build_node(deck_obj: Deck, prefix: str = "") -> dict[str, Any]:
         path = f"{prefix} :: {deck_obj.name}" if prefix else deck_obj.name

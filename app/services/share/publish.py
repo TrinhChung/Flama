@@ -85,9 +85,11 @@ logger = logging.getLogger(__name__)
 
 from app.services.share.helpers import (
     ShareControllerError,
+    _active_note_type_templates,
     _audit,
     _stage_initial_release_if_visible,
     _utcnow,
+    bind_deck_item_source_note_type,
     can_user_rate_deck,
     can_user_rate_deck_item,
     ensure_visible_deck_item_initial_release,
@@ -399,7 +401,7 @@ def create_shared_deck_item(
     initial_payload = dict(payload)
     initial_payload["title"] = title
     initial_payload.pop("publish_status", None)
-    validation_error = flashcards_share.apply_deck_marketplace_payload(
+    validation_error = apply_deck_marketplace_payload(
         deck_item,
         initial_payload,
         allow_set_official=is_admin,
@@ -413,7 +415,7 @@ def create_shared_deck_item(
         db.session.rollback()
         return None, "source_deck_id not found.", "source_deck_id"
         
-    bind_error = flashcards_share.bind_deck_item_source_note_type(
+    bind_error = bind_deck_item_source_note_type(
         deck_item, 
         require_source_note_type=require_source_note_type
     )
@@ -422,7 +424,7 @@ def create_shared_deck_item(
         return None, bind_error, "source_note_type_id"
 
     if deferred_status is not None:
-        validation_error = flashcards_share.apply_deck_marketplace_payload(
+        validation_error = apply_deck_marketplace_payload(
             deck_item,
             {"publish_status": deferred_status},
             allow_set_official=is_admin,
@@ -432,11 +434,11 @@ def create_shared_deck_item(
             db.session.rollback()
             return None, validation_error, None
         
-    flashcards_share.recompute_deck_item_market_stats(
+    recompute_deck_item_market_stats(
         deck_item,
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
-    initial_release_error = flashcards_share._stage_initial_release_if_visible(deck_item)
+    initial_release_error = _stage_initial_release_if_visible(deck_item)
     if initial_release_error:
         db.session.rollback()
         return None, initial_release_error, "publish_status"
@@ -490,7 +492,7 @@ def update_shared_deck_item(
         if requested_note_type_id != current_note_type_id:
             return False, "source_note_type_id cannot be changed after listing creation.", "source_note_type_id"
 
-    validation_error = flashcards_share.apply_deck_marketplace_payload(
+    validation_error = apply_deck_marketplace_payload(
         deck_item,
         payload,
         allow_set_official=is_admin,
@@ -504,7 +506,7 @@ def update_shared_deck_item(
         db.session.rollback()
         return False, "source_deck_id not found.", "source_deck_id"
         
-    bind_error = flashcards_share.bind_deck_item_source_note_type(
+    bind_error = bind_deck_item_source_note_type(
         deck_item, 
         require_source_note_type=require_source_note_type
     )
@@ -512,11 +514,11 @@ def update_shared_deck_item(
         db.session.rollback()
         return False, bind_error, "source_note_type_id"
         
-    flashcards_share.recompute_deck_item_market_stats(
+    recompute_deck_item_market_stats(
         deck_item,
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
-    initial_release_error = flashcards_share._stage_initial_release_if_visible(deck_item)
+    initial_release_error = _stage_initial_release_if_visible(deck_item)
     if initial_release_error:
         db.session.rollback()
         return False, initial_release_error, "publish_status"
@@ -553,7 +555,7 @@ def validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | 
     )
     if provenance_error:
         return provenance_error
-    if not template_library_repository.attached_templates(db.session, source_note_type.id):
+    if not _active_note_type_templates(source_note_type.id):
         return "source_note_type_id must reference a note type that has at least one template."
     mismatch_error = validate_marketplace_note_type_for_deck(
         deck_id=deck_item.source_deck_id,
@@ -657,31 +659,52 @@ def apply_deck_marketplace_payload(
     if "changelog" in payload:
         deck_item.changelog = (payload.get("changelog") or "").strip() or None
 
-    pricing_mode, price_amount_minor, pricing_error = marketplace_query_service.normalize_pricing(
-        payload,
-        current_mode=str(deck_item.pricing_mode or "free"),
-        current_price_amount_minor=int(deck_item.price_amount_minor or 0),
-    )
-    if pricing_error:
-        return pricing_error
-    deck_item.pricing_mode = pricing_mode
-    deck_item.price_amount_minor = price_amount_minor
+    if "distribution_mode" in payload:
+        dist_mode = str(payload.get("distribution_mode") or "").strip().lower()
+        if dist_mode not in {"free", "paid", "course_key"}:
+            return "distribution_mode must be 'free', 'paid', or 'course_key'."
+        deck_item.distribution_mode = dist_mode
 
-    from app.services.marketplace_pricing_service import validate_student_offer
+    if "course_title" in payload:
+        deck_item.course_title = (payload.get("course_title") or "").strip() or None
+    if "course_description" in payload:
+        deck_item.course_description = (payload.get("course_description") or "").strip() or None
+    if "course_url" in payload:
+        deck_item.course_url = (payload.get("course_url") or "").strip() or None
+    if "course_instructions" in payload:
+        deck_item.course_instructions = (payload.get("course_instructions") or "").strip() or None
 
-    student_offer_mode_raw = payload.get("student_offer_mode", deck_item.student_offer_mode)
-    student_discount_percent_raw = payload.get(
-        "student_discount_percent", deck_item.student_discount_percent
-    )
-    st_mode, st_percent, st_err = validate_student_offer(
-        pricing_mode=deck_item.pricing_mode,
-        student_offer_mode=student_offer_mode_raw,
-        student_discount_percent=student_discount_percent_raw,
-    )
-    if st_err:
-        return st_err
-    deck_item.student_offer_mode = st_mode
-    deck_item.student_discount_percent = st_percent
+    if getattr(deck_item, "distribution_mode", "free") == "course_key":
+        deck_item.pricing_mode = "free"
+        deck_item.price_amount_minor = 0
+        deck_item.student_offer_mode = "none"
+        deck_item.student_discount_percent = None
+    else:
+        pricing_mode, price_amount_minor, pricing_error = marketplace_query_service.normalize_pricing(
+            payload,
+            current_mode=str(deck_item.pricing_mode or "free"),
+            current_price_amount_minor=int(deck_item.price_amount_minor or 0),
+        )
+        if pricing_error:
+            return pricing_error
+        deck_item.pricing_mode = pricing_mode
+        deck_item.price_amount_minor = price_amount_minor
+
+        from app.services.marketplace_pricing_service import validate_student_offer
+
+        student_offer_mode_raw = payload.get("student_offer_mode", deck_item.student_offer_mode)
+        student_discount_percent_raw = payload.get(
+            "student_discount_percent", deck_item.student_discount_percent
+        )
+        st_mode, st_percent, st_err = validate_student_offer(
+            pricing_mode=deck_item.pricing_mode,
+            student_offer_mode=student_offer_mode_raw,
+            student_discount_percent=student_discount_percent_raw,
+        )
+        if st_err:
+            return st_err
+        deck_item.student_offer_mode = st_mode
+        deck_item.student_discount_percent = st_percent
 
     if "is_official" in payload:
         if not allow_set_official:
@@ -778,10 +801,7 @@ def build_shared_deck_item_payload(
     if source_note_type_id:
         source_note_type = db.session.get(NoteType, source_note_type_id)
         if source_note_type:
-            ordered_templates = sorted(
-                template_library_repository.attached_templates(db.session, source_note_type.id),
-                key=lambda item: (int(item.position or 0), str(item.name or "").lower()),
-            )
+            ordered_templates = marketplace_query_service.serialize_note_type_templates(source_note_type)
             source_note_type_payload = {
                 "id": source_note_type.id,
                 "name": source_note_type.name,
@@ -789,10 +809,10 @@ def build_shared_deck_item_payload(
                 "publish_status": source_note_type.publish_status,
                 "templates": [
                     {
-                        "id": template.id,
-                        "name": template.name,
-                        "position": int(template.position or 0),
-                        "is_default": bool(template.is_default),
+                        "id": template["id"],
+                        "name": template["name"],
+                        "position": int(template["position"] or 0),
+                        "is_default": bool(template["is_default"]),
                     }
                     for template in ordered_templates
                 ],
@@ -840,7 +860,7 @@ def rate_shared_deck_item(deck_item: DeckMarketplaceItem, user_id: int, rating: 
         review.rating = rating
         review.comment = comment
 
-    flashcards_share.recompute_deck_item_market_stats(
+    recompute_deck_item_market_stats(
         deck_item,
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )

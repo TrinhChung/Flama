@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flama Agent Orchestrator"
+  short_description: "Coordinate scoped cross-layer agent work"
+  default_prompt: "Use $flama-agent-orchestrator to coordinate this authorized multi-agent change with explicit contracts."

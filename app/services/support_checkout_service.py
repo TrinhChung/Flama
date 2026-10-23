@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services import payment_service, support_donation_service
+from app.services import payment, support_donation_service
 from app.services.payment.provider import payos_provider
 from app.validators.support_donation import normalize_support_donation_checkout_payload
 
@@ -40,7 +40,7 @@ def prepare_support_checkout(
             field=field,
         )
 
-    if not payment_service.payments_enabled():
+    if not payment.payments_enabled():
         raise SupportCheckoutError(
             "PAYMENT_UNAVAILABLE",
             "Payment is temporarily unavailable. Please try again later.",
@@ -52,13 +52,13 @@ def prepare_support_checkout(
     effective_user_id = user_id if (authenticated and not normalized.anonymous) else None
 
     try:
-        result = payment_service.prepare_support_donation_checkout(
+        result = payment.prepare_support_donation_checkout(
             user_id=effective_user_id,
             amount_minor=normalized.amount_minor,
             return_url=return_url,
             cancel_url=cancel_url,
         )
-    except payment_service.PaymentServiceError as exc:
+    except payment.PaymentServiceError as exc:
         raise SupportCheckoutError(
             exc.error,
             exc.message,

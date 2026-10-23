@@ -15,6 +15,7 @@ from app.services.study_worker_readiness_service import (
     withdraw_study_worker_heartbeat,
 )
 from app.services.study_worker_service import drain_study_queue, recover_admitted_study_batches
+from app.services.template_subscription_sync_service import drain_template_sync_jobs
 from models import db
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_authority_enrollment import StudyAuthorityEnrollment
@@ -99,7 +100,13 @@ class StudyBatchConsumer:
             self.ready = ready
             self.next_heartbeat = self.clock() + self.options.heartbeat_interval
         counts = drain_study_queue(max_jobs=self.options.jobs_per_pass, recover_when_idle=False)
-        return {"recovery": recovery, "ready": self.ready, **counts}
+        try:
+            template_sync = drain_template_sync_jobs(max_jobs=min(3, self.options.jobs_per_pass))
+        except Exception as exc:
+            # A template queue outage must not withdraw study-worker readiness.
+            logger.error("Template sync pass failed (%s); durable jobs will retry.", type(exc).__name__)
+            template_sync = None
+        return {"recovery": recovery, "ready": self.ready, "template_sync": template_sync, **counts}
 
     def withdraw(self):
         self.ready = False

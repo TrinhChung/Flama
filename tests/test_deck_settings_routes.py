@@ -83,12 +83,11 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             deck_a_id = deck_a.id
 
         self._login_admin()
-        response = self.client.post(
-            f"/vocabulary/decks/{deck_a_id}/rename",
-            data={"name": "Deck B", "next": "/dashboard"},
-            follow_redirects=True,
+        response = self.client.patch(
+            f"/api/decks/{deck_a_id}",
+            json={"name": "Deck B"},
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 409)
 
         with self.app.app_context():
             deck_a = Deck.query.get(deck_a_id)
@@ -111,12 +110,11 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             target_parent_id = parent_b.id
 
         self._login_admin()
-        response = self.client.post(
-            f"/vocabulary/decks/{moving_id}/move",
-            data={"parent_id": str(target_parent_id), "next": "/dashboard"},
-            follow_redirects=True,
+        response = self.client.patch(
+            f"/api/decks/{moving_id}",
+            json={"parent_id": target_parent_id},
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 409)
 
         with self.app.app_context():
             moved = Deck.query.get(moving_id)
@@ -135,12 +133,11 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             child_id = child.id
 
         self._login_admin()
-        response = self.client.post(
-            f"/vocabulary/decks/{parent_id}/move",
-            data={"parent_id": str(child_id), "next": "/dashboard"},
-            follow_redirects=True,
+        response = self.client.patch(
+            f"/api/decks/{parent_id}",
+            json={"parent_id": child_id},
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
 
         with self.app.app_context():
             moved_parent = Deck.query.get(parent_id)
@@ -163,14 +160,9 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             target_parent_token = create_deck_move_token(target_parent_id, self.admin_id)
 
         self._login_admin()
-        response = self.client.post(
-            "/vocabulary/decks/move",
-            data={
-                "deck_token": moving_token,
-                "parent_token": target_parent_token,
-                "next": "/dashboard",
-            },
-            follow_redirects=True,
+        response = self.client.patch(
+            f"/api/decks/{moving_id}",
+            json={"parent_token": target_parent_token},
         )
         self.assertEqual(response.status_code, 200)
 
@@ -280,9 +272,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
 
         self._login_admin()
         response = self.client.post(
-            f"/vocabulary/decks/{deck_id}/reset",
-            data={"next": "/dashboard"},
-            follow_redirects=True,
+            f"/api/decks/{deck_id}/progress-reset",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -356,9 +346,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
 
         self._login_other()
         response = self.client.post(
-            f"/vocabulary/decks/{owned_deck_id}/reset",
-            data={"next": "/dashboard"},
-            follow_redirects=True,
+            f"/api/decks/{owned_deck_id}/progress-reset",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -480,9 +468,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
 
         self._login_other()
         response = self.client.post(
-            f"/vocabulary/decks/{cloned_root_id}/reset",
-            data={"next": "/dashboard"},
-            follow_redirects=True,
+            f"/api/decks/{cloned_root_id}/progress-reset",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -512,12 +498,10 @@ class DeckSettingsRoutesTests(unittest.TestCase):
     def test_non_admin_can_create_deck(self):
         self._login_other()
         response = self.client.post(
-            "/vocabulary/decks/create",
-            data={"name": "My Regular Deck", "next": "/dashboard"},
-            follow_redirects=True,
+            "/api/decks",
+            json={"name": "My Regular Deck"},
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b'<div id="root"></div>', response.data)
+        self.assertEqual(response.status_code, 201)
 
         with self.app.app_context():
             deck = Deck.query.filter_by(name="My Regular Deck").first()
@@ -567,17 +551,13 @@ class DeckSettingsRoutesTests(unittest.TestCase):
 
         self._login_other()
         response = self.client.post(
-            "/vocabulary/decks/create",
-            data={
-                "parent_id": str(local_root_id),
+            "/api/decks",
+            json={
+                "parent_id": local_root_id,
                 "name": "Installed Child",
-                "deck_path": "Shared Root::Installed Child",
-                "next": "/dashboard",
             },
-            follow_redirects=True,
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b'<div id="root"></div>', response.data)
+        self.assertEqual(response.status_code, 201)
 
         with self.app.app_context():
             created = (
@@ -635,10 +615,8 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             install_row_id = install_row.id
 
         self._login_other()
-        response = self.client.post(
-            f"/vocabulary/decks/{cloned_root_id}/delete",
-            data={"next": "/dashboard"},
-            follow_redirects=True,
+        response = self.client.delete(
+            f"/api/decks/{cloned_root_id}",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -728,10 +706,8 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             clone_map_id = clone_map.id
 
         self._login_admin()
-        response = self.client.post(
-            f"/vocabulary/decks/{source_root_id}/delete",
-            data={"next": "/dashboard"},
-            follow_redirects=True,
+        response = self.client.delete(
+            f"/api/decks/{source_root_id}",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -764,7 +740,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
         installed_detail = self.client.get(f"/api/shared/decks/{shared_item_id}")
         self.assertEqual(installed_detail.status_code, 200)
         installed_cards = self.client.get(
-            f"/vocabulary/api/browse/cards?deck_id={local_root_id}&include_subdecks=1"
+            f"/api/browse/cards?deck_id={local_root_id}&include_subdecks=1"
         )
         installed_cards_payload = installed_cards.get_json() or {}
         self.assertEqual(installed_cards.status_code, 200)
@@ -784,10 +760,8 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             owned_deck_id = owned_deck.id
 
         self._login_other()
-        response = self.client.post(
-            f"/vocabulary/decks/{owned_deck_id}/delete",
-            data={"next": "/dashboard"},
-            follow_redirects=True,
+        response = self.client.delete(
+            f"/api/decks/{owned_deck_id}",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -840,10 +814,8 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             install_row_id = install_row.id
 
         self._login_other()
-        response = self.client.post(
-            f"/vocabulary/decks/{cloned_child_id}/delete",
-            data={"next": "/dashboard"},
-            follow_redirects=True,
+        response = self.client.delete(
+            f"/api/decks/{cloned_child_id}",
         )
         self.assertEqual(response.status_code, 200)
 

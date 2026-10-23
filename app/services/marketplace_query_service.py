@@ -6,6 +6,7 @@ import json
 import random
 import re
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any
 
 from flask import current_app, has_app_context
@@ -95,7 +96,12 @@ def serialize_note_type(
     published_template_content: bool = False,
 ) -> dict[str, Any]:
     price_amount_minor = int(note_type.price_amount_minor or 0)
-    taxonomy_metadata = marketplace_taxonomy_service.get_item_taxonomy(note_type, content_type="note_type")
+    definition = None
+    if published_template_content:
+        from app.services.note_type_release_service import released_definition
+        definition = released_definition(db.session, note_type, include_definition=include_definition)
+    taxonomy_item = SimpleNamespace(**definition) if definition and definition["release_available"] else note_type
+    taxonomy_metadata = marketplace_taxonomy_service.get_item_taxonomy(taxonomy_item, content_type="note_type")
     taxonomy_display = marketplace_taxonomy_service.build_taxonomy_display(taxonomy_metadata, content_type="note_type")
     payload = {
         "id": note_type.id,
@@ -106,7 +112,7 @@ def serialize_note_type(
         "primary_category": note_type.primary_category,
         "tags": note_type.tags or [],
         "display_tags": marketplace_taxonomy_service.merge_detail_tags(
-            free_tags=note_type.tags or [],
+            free_tags=taxonomy_item.tags or [],
             metadata=taxonomy_metadata,
             content_type="note_type",
         ),
@@ -131,12 +137,18 @@ def serialize_note_type(
         "updated_at": note_type.updated_at.isoformat() if note_type.updated_at else None,
         **taxonomy_display,
     }
-    if include_definition:
+    if include_definition and not published_template_content:
         payload["field_defs"] = [
             serialize_field(field)
             for field in sorted(note_type.field_defs, key=lambda item: item.position)
         ]
         payload["templates"] = serialize_note_type_templates(note_type, published=published_template_content)
+    if definition is not None:
+        if not include_definition:
+            definition.pop("field_defs", None)
+            definition.pop("templates", None)
+        payload.update(definition)
+        payload["taxonomy_metadata"] = taxonomy_metadata
     return payload
 
 
@@ -247,16 +259,27 @@ def serialize_note_type_marketplace_card(
     note_type: NoteType,
     *,
     include_definition: bool = True,
+    user_id: int = 0,
 ) -> dict[str, Any]:
     payload = serialize_note_type(
         note_type,
         include_definition=include_definition,
         published_template_content=True,
     )
-    payload["price_display"] = _format_marketplace_price_display(
-        str(note_type.pricing_mode or "free"),
-        int(note_type.price_amount_minor or 0),
-    )
+    from app.services.note_type_bundle_pricing_service import pricing_breakdown
+    breakdown = pricing_breakdown(db.session, note_type=note_type, user_id=user_id)
+    payload["bundle_pricing_mode"] = str(note_type.pricing_mode or "free")
+    payload["bundle_price_amount_minor"] = breakdown["bundle_amount_minor"]
+    payload["pricing_breakdown"] = breakdown
+    payload["pricing_mode"] = "paid" if breakdown["payment_required"] else "free"
+    payload["price_amount_minor"] = payload["price_cents"] = breakdown["total_amount_minor"]
+    payload["price_display"] = _format_marketplace_price_display(payload["pricing_mode"], breakdown["total_amount_minor"])
+    template_prices = {item["template_id"]: item for item in breakdown["templates"]}
+    for template in payload.get("templates", []):
+        price = template_prices.get(template["id"])
+        if price:
+            template.update({key: price[key] for key in ("source_template_id", "author", "pricing_mode",
+                "price_amount_minor", "already_entitled", "is_owned_by_author")})
     return payload
 
 
@@ -1244,6 +1267,7 @@ def top_items_by_category_note_types(
     limit_per_category: int = 5,
     max_categories: int = 3,
     include_definition: bool = True,
+    user_id: int = 0,
 ) -> dict[str, list[dict[str, Any]]]:
     buckets: dict[str, list[NoteType]] = {}
     for item in items:
@@ -1269,6 +1293,7 @@ def top_items_by_category_note_types(
             serialize_note_type_marketplace_card(
                 item,
                 include_definition=include_definition,
+                user_id=user_id,
             )
             for item in sorted_bucket
         ]
@@ -1363,7 +1388,7 @@ def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -
         scored.append((score, item))
 
     recommended = [
-        serialize_note_type_marketplace_card(item)
+        serialize_note_type_marketplace_card(item, user_id=user_id)
         for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
     ]
 
@@ -1390,9 +1415,9 @@ def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -
 
     return {
         "recommended_for_you": recommended,
-        "top_by_category": top_items_by_category_note_types(visible_items),
-        "trending": [serialize_note_type_marketplace_card(item) for item in trending],
-        "new_and_updated": [serialize_note_type_marketplace_card(item) for item in new_and_updated],
+        "top_by_category": top_items_by_category_note_types(visible_items, user_id=user_id),
+        "trending": [serialize_note_type_marketplace_card(item, user_id=user_id) for item in trending],
+        "new_and_updated": [serialize_note_type_marketplace_card(item, user_id=user_id) for item in new_and_updated],
     }
 
 def get_deck_recommendations(user_id: int, visible_items: list[DeckMarketplaceItem]) -> dict[str, Any]:

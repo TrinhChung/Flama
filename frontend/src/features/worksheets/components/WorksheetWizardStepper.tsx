@@ -1,47 +1,17 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, FolderTree, Database, LayoutGrid, Printer } from 'lucide-react'
+import { Check } from 'lucide-react'
+import { WIZARD_STEPS, type WizardStepConfig, type WizardStepId } from '../config/wizardSteps'
 
-export type WizardStepId = 'deck' | 'mapping' | 'template' | 'studio'
+export type { WizardStepId }
 
 export interface WizardStep {
   id: WizardStepId
   number: number
   label: string
   shortLabel: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: WizardStepConfig['icon']
 }
-
-export const WIZARD_STEPS: WizardStep[] = [
-  {
-    id: 'deck',
-    number: 1,
-    label: 'Chọn bộ thẻ',
-    shortLabel: 'Bộ thẻ',
-    icon: FolderTree,
-  },
-  {
-    id: 'mapping',
-    number: 2,
-    label: 'Ánh xạ dữ liệu',
-    shortLabel: 'Ánh xạ',
-    icon: Database,
-  },
-  {
-    id: 'template',
-    number: 3,
-    label: 'Chọn mẫu bài tập',
-    shortLabel: 'Mẫu bài',
-    icon: LayoutGrid,
-  },
-  {
-    id: 'studio',
-    number: 4,
-    label: 'Cấu hình & In ấn',
-    shortLabel: 'In ấn',
-    icon: Printer,
-  },
-]
 
 export interface WorksheetWizardStepperProps {
   currentStep: WizardStepId
@@ -58,50 +28,20 @@ export const WorksheetWizardStepper: React.FC<WorksheetWizardStepperProps> = ({
 }) => {
   const { t } = useTranslation('worksheets')
 
-  const wizardSteps = React.useMemo<WizardStep[]>(
-    () => [
-      {
-        id: 'deck',
-        number: 1,
-        label: t('stepper.step_deck', 'Chọn bộ thẻ'),
-        shortLabel: t('stepper.step_deck_short', 'Bộ thẻ'),
-        icon: FolderTree,
-      },
-      {
-        id: 'mapping',
-        number: 2,
-        label: t('stepper.step_mapping', 'Ánh xạ dữ liệu'),
-        shortLabel: t('stepper.step_mapping_short', 'Ánh xạ'),
-        icon: Database,
-      },
-      {
-        id: 'template',
-        number: 3,
-        label: t('stepper.step_template', 'Chọn mẫu bài tập'),
-        shortLabel: t('stepper.step_template_short', 'Mẫu bài'),
-        icon: LayoutGrid,
-      },
-      {
-        id: 'studio',
-        number: 4,
-        label: t('stepper.step_studio', 'Cấu hình & In ấn'),
-        shortLabel: t('stepper.step_studio_short', 'In ấn'),
-        icon: Printer,
-      },
-    ],
-    [t]
-  )
-
   // If standalone (no deck required), step 2 (mapping) is skipped
-  const visibleSteps = React.useMemo(() => {
-    if (isStandalone) {
-      return wizardSteps.filter((s) => s.id !== 'mapping').map((s, idx) => ({
-        ...s,
-        number: idx + 1,
-      }))
-    }
-    return wizardSteps
-  }, [isStandalone, wizardSteps])
+  const visibleSteps = React.useMemo<WizardStep[]>(
+    () =>
+      WIZARD_STEPS
+        .filter((step) => !isStandalone || step.id !== 'mapping')
+        .map((step, idx) => ({
+          id: step.id,
+          number: isStandalone ? idx + 1 : step.number,
+          label: t(step.labelKey, step.label),
+          shortLabel: t(step.shortLabelKey, step.shortLabel),
+          icon: step.icon,
+        })),
+    [isStandalone, t],
+  )
 
   const currentIndex = visibleSteps.findIndex((s) => s.id === currentStep)
   const currentStepObj = visibleSteps[currentIndex] || visibleSteps[0]

@@ -1,6 +1,6 @@
 ---
 name: nihongo-agent-architect
-description: Create, update, and refine repo-local agent guidance for the Nihongo Flask codebase. Use when the task involves `AGENTS.md`, repo-local `SKILL.md` files, `agents/openai.yaml`, repository-specific invocation prompts, or subagent workflows that should teach future agents how to work safely with this repository's startup side effects, clone overlay model, route/service/repository boundaries, and Jinja plus vanilla JS frontend.
+description: Create, update, and refine repo-local agent guidance for the Nihongo Flask codebase. Use when the task involves `AGENTS.md`, repo-local `SKILL.md` files, `agents/openai.yaml`, repository-specific invocation prompts, or subagent workflows that should teach future agents how to work safely with this repository's startup side effects, clone overlay model, route/service/repository boundaries, and React SPA frontend.
 ---
 
 # Nihongo Agent Architect
@@ -19,14 +19,14 @@ Read only what the task needs, but start with these files:
 - `app/__init__.py`
 - `app/api/__init__.py`
 - `wsgi.py`
-- `docs/architecture/SYSTEM_ARCHITECTURE.md`
+- `docs/README.md`, `docs/backend/ARCHITECTURE.md`, `docs/frontend/ARCHITECTURE.md`
 
 Then load task-specific context:
 
-- Flashcards, clone overlay, share, study: `docs/runbooks/FLASHCARD_V2_RUNBOOK.md`, `docs/plans/completed/CLONE_CUTOVER_REPORT.md`, `app/api/flashcards/`, `app/services/flashcards_share_service.py`
-- Vocabulary browse and study: `app/api/learning/browse.py`, `app/api/learning/study.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
-- Admin, TTS, stats, dashboard: `app/api/admin/`, `app/api/analytics/`, related service and test files
-- UI and component work: `frontend/docs/COMPONENT_ARCHITECTURE.md`, `frontend/src/`
+- Flashcards, clone overlay, share, study: `docs/runbooks/FLASHCARD_V2_RUNBOOK.md`, `docs/backend/old/completed-plans/CLONE_CUTOVER_REPORT.md`, `app/api/v1/flashcards/`, `app/services/flashcards_share_service.py`
+- Vocabulary browse and study: `app/api/v1/learning/browse.py`, `app/api/v1/learning/study.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
+- Admin, TTS, stats, dashboard: `app/api/v1/admin/`, `app/api/v1/analytics/`, related service and test files
+- UI and component work: `docs/frontend/ARCHITECTURE.md`, `frontend/src/`
 
 ## Workflow
 
@@ -44,13 +44,13 @@ Then load task-specific context:
 ## Repo Facts That Must Stay Accurate
 
 - The app boots through `wsgi.py -> create_app()`.
-- `create_app()` is side-effect heavy: schema compatibility helpers, role and TTS seeding, and clone cutover run during startup.
-- Config is env-driven directly in `app/__init__.py`; there is no `config.py` or config-class layer.
+- `create_app()` loads env configuration through `app/settings.py`. Production startup is passive by default; maintenance, schema helpers, seeds and cutover run through `app/startup.py` only when enabled.
+- Config is env-driven in `app/settings.py`, loaded by `app/__init__.py`; there is no config-class layer.
 - The route, service, and repository split is useful but imperfect. Some services import route helpers, and some repositories perform presenter-like shaping.
-- `app/routes/vocabulary.py`, `app/routes/flashcards/__init__.py`, and `app/services/flashcards_share_service.py` are hotspot files. Future agents need warnings to change them surgically.
+- Overlay implementation lives in `app/services/share/`, with `flashcards_share_service.py` as a facade. Preserve retired HTTP 410 wrappers in `app/routes/vocabulary.py`; verify current file size before calling a file a monolith.
 - Shared deck installs are overlay-only. Clone edit flows must not mutate source notes or reintroduce legacy full-copy behavior.
 - Legacy Level/Topic/Lesson vocabulary routes intentionally return `410`.
-- The primary frontend is the React SPA (`frontend/src/`). Default all UI/UX work to `frontend/src/` unless legacy Jinja templates (`templates/`) are explicitly requested by the user.
+- The frontend is the React SPA (`frontend/src/`); user-facing Jinja templates have been removed.
 
 ## What Good Guidance Looks Like Here
 
@@ -72,3 +72,7 @@ Then load task-specific context:
 - Ensure `interface.default_prompt` explicitly names the skill as `$skill-name`.
 - Prefer a quick validation pass with the skill validator when available.
 - For substantial skill changes, forward-test with a fresh subagent using only the skill and repo context needed for the task.
+
+## Shared skill governance
+
+`skills/` is canonical; edit it rather than generated `.claude/skills/` or `.agents/skills/`. Run `python scripts/sync_claude_skills.py` and its `--check` mode after changes, then the `agent_skills` test module. Preserve vendor licenses, notices and relative dependencies when exporting. Separate observed source/Git/mirror/runtime/tool availability. Missing platform-specific capabilities belong in the export queue, not fabricated portable skills. Only an actual reviewer may record its own sign-off. See `docs/architecture/MULTI_AGENT_SKILLS_AUDIT_AND_UNIFICATION.md` for the dated audit and handoffs.

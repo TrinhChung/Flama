@@ -97,6 +97,24 @@
     "step5_title": "🚀 5. \"Study Now\" Button (Spaced Repetition)",
     "step5_content": "Click this button to start a review session powered by smart spaced repetition (Anki SM-2 / FSRS) for deep memory retention."
   },
+  "install_templates": {
+    "title": "Installed deck templates",
+    "description": "See the template release pinned by this deck and manage your shared copy.",
+    "back": "Installed decks",
+    "loading": "Loading templates…",
+    "retry": "Try again",
+    "list_label": "Deck templates",
+    "local_copy": "Your shared copy",
+    "edit_local": "Edit your copy",
+    "pinned_release": "Release pinned by this deck",
+    "pin_unavailable": "No pinned release",
+    "copy_impact": "Edits and updates here apply to your shared template copy. Other places using this copy may also change. This deck keeps its pinned release; update the deck to change that pin.",
+    "legacy": "This older deck release did not record template pins. Card appearance may follow your shared copy until you update the deck to a release with template pins.",
+    "selection_missing": "The linked template no longer belongs to this deck. Showing the first template.",
+    "empty_title": "No received templates yet",
+    "empty_description": "This deck has no separate template copies to manage yet. Open your template library or return to installed decks to check for updates.",
+    "open_library": "Open template library"
+  },
   "note_types_page": {
     "title": "Note Types",
     "description": "Manage fields, templates, and flashcard rendering specifications.",

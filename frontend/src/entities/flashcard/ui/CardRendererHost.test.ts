@@ -117,6 +117,93 @@ describe('card renderer host viewport modes', () => {
     controller.destroy()
   })
 
+  it('hands keyboard focus back to the page only while the frame holds it', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    iframe.tabIndex = 0
+    document.body.appendChild(iframe)
+    const outside = document.createElement('button')
+    document.body.appendChild(outside)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(iframe)
+    controller.render({ html: '<div>Card</div>' })
+    const instanceId = iframe.srcdoc.match(/"instanceId":"([^"]+)"/)?.[1]
+    const releaseFocus = () => window.dispatchEvent(new MessageEvent('message', {
+      source: iframe.contentWindow,
+      data: {
+        channel: 'flama-card-renderer',
+        direction: 'renderer_to_host',
+        instanceId,
+        action: 'release_focus',
+        payload: {},
+      },
+    }))
+
+    iframe.focus()
+    expect(document.activeElement).toBe(iframe)
+    releaseFocus()
+    expect(document.activeElement).toBe(document.body)
+
+    outside.focus()
+    releaseFocus()
+    expect(document.activeElement).toBe(outside)
+    controller.destroy()
+  })
+
+  describe('sandbox focus release after pointer clicks', () => {
+    async function pointerUpIn(html: string, prepare: (doc: Document) => void) {
+      const source = readFileSync(
+        resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+        'utf8',
+      )
+      window.eval(source)
+      const iframe = document.createElement('iframe')
+      document.body.appendChild(iframe)
+      const controller = window.FlamaCardRendererHost!.createRendererFrameController(iframe)
+      controller.render({ html })
+      const sandbox = new JSDOM(iframe.srcdoc, { runScripts: 'dangerously' })
+      const actions: string[] = []
+      sandbox.window.addEventListener('message', (event: MessageEvent) => {
+        actions.push(String(event.data?.action || ''))
+      })
+      prepare(sandbox.window.document)
+      sandbox.window.document.body.dispatchEvent(
+        new sandbox.window.Event('pointerup', { bubbles: true }),
+      )
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      controller.destroy()
+      sandbox.window.close()
+      return actions.filter((action) => action === 'release_focus')
+    }
+
+    it('asks to release focus after a click on card content or a template button', async () => {
+      expect(await pointerUpIn('<p>水</p>', () => {})).toEqual(['release_focus'])
+      expect(await pointerUpIn('<button id="hint">Hint</button>', (doc) => {
+        doc.getElementById('hint')!.focus()
+      })).toEqual(['release_focus'])
+    })
+
+    it('keeps focus in a template text field or an active text selection', async () => {
+      expect(await pointerUpIn('<input id="answer">', (doc) => {
+        doc.getElementById('answer')!.focus()
+      })).toEqual([])
+      expect(await pointerUpIn('<textarea id="note"></textarea>', (doc) => {
+        doc.getElementById('note')!.focus()
+      })).toEqual([])
+      expect(await pointerUpIn('<p id="word">日本語</p>', (doc) => {
+        const range = doc.createRange()
+        range.selectNodeContents(doc.getElementById('word')!)
+        const selection = doc.getSelection()!
+        selection.removeAllRanges()
+        selection.addRange(range)
+      })).toEqual([])
+    })
+  })
+
   it('rejects postMessage payloads from unrelated windows, channels, or forged instanceIds', async () => {
     const source = readFileSync(
       resolve(process.cwd(), '../static/js/card_renderer_host.js'),

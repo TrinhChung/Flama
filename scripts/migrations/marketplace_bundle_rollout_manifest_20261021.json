@@ -1,0 +1,29 @@
+{
+  "4fc2eb8e-16ba-4c6b-b323-a5f66bc41cd8": {
+    "primary_category": "Tiếng Nhật"
+  },
+  "6b2a8fec-0276-401d-b361-c3affec1aa80": {
+    "primary_category": "Tiếng Anh",
+    "domain": "language_learning",
+    "subject": "english"
+  },
+  "94e51bc4-b482-4fcd-803d-6e45cb86451e": {
+    "primary_category": "Ôn tập tổng hợp",
+    "domain": "other",
+    "subject": "other",
+    "difficulty_band": "beginner",
+    "learning_goals": ["drill"],
+    "primary_topics": ["meaning_recall"],
+    "format_features": ["exam_style", "quick_drill"],
+    "best_used_for": "concept_recall"
+  },
+  "e2f310a8-ecb3-4446-8a93-4c258e52b132": {
+    "domain": "language_learning",
+    "subject": "japanese",
+    "difficulty_band": "beginner",
+    "learning_goals": ["vocabulary"],
+    "primary_topics": ["meaning_recall", "reading_recall"],
+    "format_features": ["audio", "example_sentences"],
+    "best_used_for": "vocabulary"
+  }
+}

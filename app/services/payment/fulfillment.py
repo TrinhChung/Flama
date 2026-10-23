@@ -2,68 +2,50 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-import json
-import logging
-import re
-from secrets import randbelow
-import time
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from uuid import uuid4
-
-from flask import current_app
-from sqlalchemy import and_, asc, desc, func, or_
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import joinedload
+from datetime import datetime
+from typing import Any
 
 from app.repositories import payment_repository
 from app.services import flashcards_share_service, support_donation_service, wallet_service
-from app.services.payment import config as payment_config
-from app.services.payment.provider import payos_provider
+from app.services.share.constants import DEFAULT_VISIBLE_PUBLISH_STATUSES
 from models import db
-from models.audit_log import AuditLog
-from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.note_type import NoteType
-from models.note_type_install import NoteTypeInstall
 from models.payment_attempt import PaymentAttempt
 from models.payment_entitlement import PaymentEntitlement
 from models.payment_order import PaymentOrder
 from models.payment_order_item import PaymentOrderItem
 from models.payment_webhook_event import PaymentWebhookEvent
-from models.user import User
-
-logger = logging.getLogger(__name__)
-UTC = timezone.utc
-
-PAYMENT_PROVIDER_CODE = "payos"
-PAYMENT_METHOD_CODE = "payos_checkout"
-PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
-
 
 from app.services.payment.base import (
     PaymentServiceError,
     _iso,
-    _utcnow,
 )
-from app.services.payment.orders import serialize_order
 
 def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, attempt: PaymentAttempt, now: datetime) -> dict[str, Any]:
     if order_item.product_type == "note_type":
         source_note_type = db.session.get(NoteType, order_item.product_ref_id)
         if source_note_type is None:
             raise PaymentServiceError("FIELD_NOT_FOUND", "Template da thanh toan khong con ton tai de cap quyen.", status=404)
-        install_row = flashcards_share_service.ensure_note_type_install_for_user(
-            source_note_type=source_note_type,
-            user_id=order.user_id,
-            installed_at=now,
-        )
+        from app.services.note_type_release_service import stage_receipt, NoteTypeReleaseError
+        try:
+            snapshot = getattr(order_item, "product_snapshot_json", None) or {}
+            if not snapshot.get("note_type_release_id"):
+                raise PaymentServiceError("PURCHASED_NOTE_TYPE_RELEASE_UNAVAILABLE",
+                    "This older purchase has no recorded Note Type release. Contact support to restore the purchased version; no new payment is required.",
+                    status=409)
+            install_row, _created = stage_receipt(db.session, source_note_type=source_note_type,
+                user_id=order.user_id, installed_at=now, purchased_at=now,
+                purchase_amount_minor=int(order_item.line_total_amount_minor or order_item.unit_amount_minor or 0),
+                release_id=snapshot.get("note_type_release_id"), access_granted=True)
+        except NoteTypeReleaseError as exc:
+            raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
         return {
             "source_note_type_id": source_note_type.id,
             "note_type_install_id": install_row.id,
             "installed_note_type_id": install_row.installed_note_type_id,
+            "applied_release_id": install_row.applied_release_id,
+            "legacy_installation": not bool(install_row.applied_release_id),
         }
 
     if order_item.product_type == "deck_marketplace_item":
@@ -107,12 +89,27 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
             "seller_name": support_donation_service.DONATION_SELLER_NAME,
         }
 
+    if order_item.product_type == "template":
+        from app.services import template_marketplace_service
+
+        try:
+            snapshot = order_item.product_snapshot_json or {}
+            return template_marketplace_service.fulfill_purchase(user_id=order.user_id,
+                template_id=order_item.product_ref_id, release_id=snapshot.get("release_id"))
+        except template_marketplace_service.TemplateCheckoutError as exc:
+            raise PaymentServiceError(exc.code, exc.message, status=exc.status) from exc
+
     raise PaymentServiceError("VALIDATION_ERROR", "Don hang chua loai san pham khong duoc ho tro.", status=400)
 
 
 def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: PaymentAttempt, *, now: datetime) -> None:
+    from app.services.payment.template_quotes import require_unlicensed_template_charges
+    require_unlicensed_template_charges(order)
     existing_by_item_id = {row.payment_order_item_id: row for row in order.entitlements}
-    for order_item in order.items:
+    # Template licenses must be active before a bundle receipt checks its
+    # foreign dependencies. Keep the persisted primary item first for the UI.
+    items = sorted(order.items, key=lambda item: item.product_type == "note_type")
+    for order_item in items:
         if order.user_id is None:
             if order_item.product_type == support_donation_service.DONATION_PRODUCT_TYPE:
                 continue
@@ -122,6 +119,8 @@ def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: Payme
             entitlement_type = "shared_note_type_install"
             if order_item.product_type == "deck_marketplace_item":
                 entitlement_type = "shared_deck_install"
+            elif order_item.product_type == "template":
+                entitlement_type = "shared_template_install"
             elif order_item.product_type == support_donation_service.DONATION_PRODUCT_TYPE:
                 entitlement_type = "support_donation_record"
             entitlement = PaymentEntitlement(
@@ -151,7 +150,9 @@ def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: Payme
         )
         entitlement.status = "active"
         entitlement.granted_at = now
-        entitlement.effective_from = now
+        # MySQL DATETIME without fractional precision rounds microseconds;
+        # avoid storing an immediate grant a fraction of a second in the future.
+        entitlement.effective_from = now.replace(microsecond=0)
 
         # Credit creator/author wallet for marketplace sales
         wallet_service.credit_creator_for_deck_sale(
@@ -200,6 +201,5 @@ def _mark_failed_attempt(
     event.processing_status = "processed"
     event.error_message = reason
     event.processed_at = now
-
 
 

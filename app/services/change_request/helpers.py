@@ -34,6 +34,7 @@ from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
 from models.field_def import FieldDef
+from models.field_types import field_value_text
 from models.note import Note
 
 REQUEST_STATUS_NEEDS_SYNC = "needs_sync"
@@ -340,11 +341,11 @@ def _note_label(note: Note | None) -> str:
         return "Unknown note"
     values = dict(note.field_values or {})
     for key_name in ("Word", "word", "Front", "front", "Expression", "expression"):
-        candidate = str(values.get(key_name) or "").strip()
+        candidate = field_value_text(values.get(key_name)).strip()
         if candidate:
             return candidate
     for raw_value in values.values():
-        candidate = str(raw_value or "").strip()
+        candidate = field_value_text(raw_value).strip()
         if candidate:
             return candidate[:80]
     return f"Note {note.id}"

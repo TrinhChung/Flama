@@ -29,6 +29,7 @@ from models.template import Template
 from models.user import User
 
 from tests.study_note_fixtures import attach_template, create_note_user
+from tests.note_type_publication_fixtures import stage_note_type_release
 
 class PaymentOrderFlowTests(unittest.TestCase):
     def setUp(self):
@@ -114,6 +115,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
                     is_default=True,
                 )
             )
+            stage_note_type_release(db.session, note_type)
             db.session.commit()
             return note_type.id
 
@@ -380,7 +382,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(db.session.get(StudyAuthorityEnrollment, self.buyer_id).mode_code, "NOTE")
             item = db.session.get(DeckMarketplaceItem, deck_item_id)
-            # Both checkout validators take the learner fence but accept NOTE.
+            # The compatibility and canonical checkout paths both accept NOTE.
             for validate in (
                 payment_service._validate_deck_item_for_checkout,
                 payment_checkout._validate_deck_item_for_checkout,
@@ -603,6 +605,66 @@ class PaymentOrderFlowTests(unittest.TestCase):
         self.assertFalse(second_payload.get("payment_required"))
         self.assertTrue(second_payload.get("already_installed"))
         self.assertEqual(second_payload.get("source_note_type_id"), note_type_id)
+
+    def test_deck_checkout_uses_student_price_through_fulfillment(self):
+        deck_item_id = self._create_deck_item(pricing_mode="paid", price_amount_minor=75000)
+        with self.app.app_context():
+            buyer = db.session.get(User, self.buyer_id)
+            buyer.email = "buyer@campus.edu.vn"
+            buyer.email_verified_at = datetime(2026, 10, 19)
+            item = db.session.get(DeckMarketplaceItem, deck_item_id)
+            item.student_offer_mode = "percent_discount"
+            item.student_discount_percent = 25
+            db.session.commit()
+
+        with patch(
+            "app.services.payment.provider.payos_provider.create_checkout_session",
+            side_effect=self._fake_checkout_session,
+        ) as provider:
+            response = self.client.post(f"/api/shared/decks/{deck_item_id}/install")
+        self.assertEqual(response.status_code, 202, response.get_json())
+        order = response.get_json()["order"]
+        self.assertEqual(order["subtotal_amount_minor"], 75000)
+        self.assertEqual(order["discount_amount_minor"], 18750)
+        self.assertEqual(order["total_amount_minor"], 56250)
+        self.assertEqual(order["active_attempt"]["amount_minor"], 56250)
+        self.assertEqual(provider.call_args.kwargs["amount_minor"], 56250)
+
+        webhook = self._build_success_webhook_payload(order["id"], event_id="evt-student-price")
+        with patch(
+            "app.services.payment.provider.payos_provider.verify_webhook_payload",
+            return_value=webhook,
+        ):
+            confirmed = self.client.post(
+                "/api/payments/providers/payos/webhook", data=b"{}", content_type="application/json"
+            )
+        self.assertEqual(confirmed.status_code, 200, confirmed.get_json())
+        self.assertEqual(confirmed.get_json()["status"], "processed")
+        with self.app.app_context():
+            paid_order = db.session.get(PaymentOrder, order["id"])
+            self.assertEqual(paid_order.status, "paid")
+            self.assertEqual(paid_order.grant_status, "completed")
+            self.assertEqual(paid_order.total_amount_minor, 56250)
+            self.assertEqual(DeckInstall.query.filter_by(
+                deck_item_id=deck_item_id, user_id=self.buyer_id
+            ).count(), 1)
+
+    def test_checkout_schema_error_retains_field_and_http_status(self):
+        deck_item_id = self._create_deck_item(pricing_mode="paid", price_amount_minor=75000)
+        with self.app.app_context():
+            item = db.session.get(DeckMarketplaceItem, deck_item_id)
+            item.source_note_type_id = None
+            db.session.commit()
+        with patch("app.services.payment.provider.payos_provider.create_checkout_session") as provider:
+            response = self.client.post("/api/payments/orders", json={
+                "product_type": "deck_marketplace_item", "product_ref_id": deck_item_id,
+                "return_url": "https://flama.vn/payments/marketplace-result",
+                "cancel_url": "https://flama.vn/payments/marketplace-result",
+            })
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "VALIDATION_ERROR")
+        self.assertEqual(response.get_json()["field"], "source_note_type_id")
+        provider.assert_not_called()
 
     def test_marketplace_payment_result_page_renders(self):
         note_type_id = self._create_note_type(pricing_mode="paid", price_amount_minor=33000)

@@ -122,8 +122,11 @@ class NormalizedNoteTypePlan:
 
 
 
+from models.field_types import field_value_text
+
+
 def _normalized_identity(value: object) -> str:
-    text = unicodedata.normalize("NFKC", str(value or ""))
+    text = unicodedata.normalize("NFKC", field_value_text(value))
     return " ".join(text.replace("\r\n", "\n").replace("\r", "\n").split()).strip()
 
 

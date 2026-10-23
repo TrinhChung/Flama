@@ -78,6 +78,8 @@ from models.taxonomy import (
 from models.template import Template
 from models.user import User
 
+import sys
+
 logger = logging.getLogger(__name__)
 
 
@@ -100,6 +102,24 @@ from app.services.share.overlay import (
     get_user_deck_install_for_item,
     upsert_shared_deck_clone_overlay,
 )
+
+def _get_install_shared_deck_item_for_user():
+    mod = sys.modules.get("app.services.flashcards_share_service")
+    if mod is not None and hasattr(mod, "install_shared_deck_item_for_user"):
+        return mod.install_shared_deck_item_for_user
+    return install_shared_deck_item_for_user
+
+def _get_sleep():
+    mod = sys.modules.get("app.services.flashcards_share_service")
+    if mod is not None and hasattr(mod, "time") and hasattr(mod.time, "sleep"):
+        return mod.time.sleep
+    return time.sleep
+
+def _get_is_mysql_deadlock():
+    mod = sys.modules.get("app.services.flashcards_share_service")
+    if mod is not None and hasattr(mod, "_is_mysql_deadlock"):
+        return mod._is_mysql_deadlock
+    return _is_mysql_deadlock
 
 def _installed_local_deck_ids(*, user_id: int) -> set[int]:
     installs = DeckInstall.query.filter_by(user_id=user_id).all()
@@ -146,7 +166,7 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
             )
 
         try:
-            install_result = install_shared_deck_item_for_user(
+            install_result = _get_install_shared_deck_item_for_user()(
                 deck_item,
                 user_id=user_id,
                 publish_statuses_visible=publish_statuses_visible,
@@ -180,7 +200,7 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
             raise
         except OperationalError as exc:
             db.session.rollback()
-            if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+            if _get_is_mysql_deadlock()(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
                 logger.warning(
                     "Deadlock while installing shared deck "
                     "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
@@ -189,9 +209,9 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
                     attempt,
                     SHARED_DECK_INSTALL_MAX_RETRIES,
                 )
-                time.sleep(0.05 * attempt)
+                _get_sleep()(0.05 * attempt)
                 continue
-            if _is_mysql_deadlock(exc):
+            if _get_is_mysql_deadlock()(exc):
                 return None, SHARED_DECK_INSTALL_DEADLOCK_MESSAGE, None, 409
             raise
 
@@ -228,7 +248,7 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
             raise
         except OperationalError as exc:
             db.session.rollback()
-            if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+            if _get_is_mysql_deadlock()(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
                 logger.warning(
                     "Deadlock while committing shared deck install "
                     "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
@@ -237,9 +257,9 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
                     attempt,
                     SHARED_DECK_INSTALL_MAX_RETRIES,
                 )
-                time.sleep(0.05 * attempt)
+                _get_sleep()(0.05 * attempt)
                 continue
-            if _is_mysql_deadlock(exc):
+            if _get_is_mysql_deadlock()(exc):
                 return None, SHARED_DECK_INSTALL_DEADLOCK_MESSAGE, None, 409
             raise
 
@@ -362,7 +382,12 @@ def install_shared_deck_item_for_user(
         note_type_id_map[source_note_type_id] = installed_note_type_id
     note_type_ms = _elapsed_ms(note_type_started)
 
-    purchase_amount_minor = int(deck_item.price_amount_minor or 0) if deck_item.pricing_mode == "paid" else 0
+    from app.services.marketplace_pricing_service import calculate_pricing_breakdown
+    from models.user import User
+
+    user_obj = db.session.get(User, user_id)
+    pricing_breakdown = calculate_pricing_breakdown(deck_item, user_obj)
+    purchase_amount_minor = pricing_breakdown.effective_price_minor
     install = DeckInstall(
         deck_item_id=deck_item.id,
         user_id=user_id,

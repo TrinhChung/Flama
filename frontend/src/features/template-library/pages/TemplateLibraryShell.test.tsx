@@ -36,11 +36,11 @@ vi.mock('../pages/TemplateDetailPage', async () => {
   const { useParams } = await import('react-router-dom')
   return { TemplateDetailPage: () => <h1>Template detail {useParams().id}</h1> }
 })
-vi.mock('@/features/library/pages/InstallTemplatesPage', async () => {
+vi.mock('@/pages/installed-deck-templates', async () => {
   const { useParams } = await import('react-router-dom')
   return { InstallTemplatesPage: () => <h1>Install templates {useParams().installId}</h1> }
 })
-vi.mock('@/features/note-types/pages/NoteTypeManagerPage', () => ({ NoteTypeManagerPage: () => <h1>Note types route</h1> }))
+vi.mock('@/pages/note-types', () => ({ NoteTypeManagerPage: () => <h1>Note types route</h1> }))
 vi.mock('@/features/note-types/pages/NoteTypeDetailPage', async () => {
   const { useParams } = await import('react-router-dom')
   return { NoteTypeDetailPage: () => <h1>Note type detail {useParams().id}</h1> }

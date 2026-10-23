@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flama Backend Architecture"
+  short_description: "Flask API, services and repository contracts"
+  default_prompt: "Use $flama-backend-architecture to trace and update this Flask API with focused validation."

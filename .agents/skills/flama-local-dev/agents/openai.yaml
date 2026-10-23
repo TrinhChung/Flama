@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flama Local Dev"
+  short_description: "Run, test and verify Flama locally without tripping known traps"
+  default_prompt: "Use $flama-local-dev to run the relevant Flama tests or dev servers locally and verify this change."

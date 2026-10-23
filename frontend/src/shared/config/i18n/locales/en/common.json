@@ -39,5 +39,19 @@
     "label": "Language",
     "switch_to_en": "Switch to English",
     "switch_to_vi": "Switch to Vietnamese"
+  },
+  "deck_tree": {
+    "search_placeholder": "Search target decks...",
+    "expand_all": "Expand all",
+    "collapse_all": "Collapse all",
+    "expand_deck_aria": "Expand deck {{name}}",
+    "collapse_deck_aria": "Collapse deck {{name}}",
+    "empty_no_decks": "No matching decks found."
+  },
+  "worksheet_loader": {
+    "title": "Handwriting Worksheet & Print Studio (A4)",
+    "loading": "Loading worksheet studio…",
+    "failed": "Unable to load worksheet studio. Please refresh the page.",
+    "sr_loading": "Loading…"
   }
 }

@@ -44,13 +44,15 @@ _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 _DANGEROUS_SVG_ELEMENTS = {"script", "iframe", "object", "embed", "foreignobject", "link", "meta"}
 _SQLI_PROBE_RE = re.compile(
     r"(?i)(?:"
-    r"--|/\*|\*/|"
+    r"(?:'|\"|`)\s*or\s+['\"]?\d+['\"]?\s*=\s*['\"]?\d+|"
     r"\bunion\s+select\b|"
-    r"\bor\s+1\s*=\s*1\b|"
     r"\bdrop\s+table\b|"
     r"\binsert\s+into\b|"
     r"\bdelete\s+from\b|"
-    r"\bupdate\s+\w+\s+set\b"
+    r"\bupdate\s+\w+\s+set\b|"
+    r";\s*--(?:$|\s)|"
+    r"/\*.*?\*/|"
+    r"(?:'|\"|`)\s*--(?:$|\s)"
     r")"
 )
 

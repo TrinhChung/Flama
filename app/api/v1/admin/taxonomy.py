@@ -49,16 +49,13 @@ def create_domain():
         return error_response("VALIDATION_ERROR", "id and label are required.", status=400)
 
     try:
-        domain = marketplace_taxonomy_repository.create_domain(
+        domain = marketplace_taxonomy_service.create_domain(
             domain_id=domain_id,
             label=label,
             sort_order=int(data.get("sort_order", 0)),
             is_active=bool(data.get("is_active", True)),
         )
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
     except Exception as exc:
-        db.session.rollback()
         return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return (
@@ -80,21 +77,17 @@ def create_domain():
 @admin_required
 def update_domain(domain_id: str):
     data = _payload()
-    domain = marketplace_taxonomy_repository.update_domain(
-        domain_id=domain_id,
-        label=data.get("label"),
-        sort_order=int(data["sort_order"]) if "sort_order" in data else None,
-        is_active=bool(data["is_active"]) if "is_active" in data else None,
-    )
+    try:
+        domain = marketplace_taxonomy_service.update_domain(
+            domain_id=domain_id,
+            label=data.get("label"),
+            sort_order=int(data["sort_order"]) if "sort_order" in data else None,
+            is_active=bool(data["is_active"]) if "is_active" in data else None,
+        )
+    except Exception as exc:
+        return error_response("DATABASE_ERROR", str(exc), status=400)
     if not domain:
         return error_response("NOT_FOUND", "Domain not found.", status=404)
-
-    try:
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
-    except Exception as exc:
-        db.session.rollback()
-        return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return jsonify(
         {
@@ -111,11 +104,9 @@ def update_domain(domain_id: str):
 @admin_taxonomy_bp.delete("/domains/<domain_id>")
 @admin_required
 def delete_domain(domain_id: str):
-    success = marketplace_taxonomy_repository.delete_domain(domain_id)
+    success = marketplace_taxonomy_service.delete_domain(domain_id)
     if not success:
         return error_response("NOT_FOUND", "Domain not found.", status=404)
-    db.session.commit()
-    marketplace_taxonomy_service.invalidate_taxonomy_cache()
     return jsonify({"success": True})
 
 
@@ -155,17 +146,14 @@ def create_subject():
         return error_response("VALIDATION_ERROR", "id, domain_id, and label are required.", status=400)
 
     try:
-        subject = marketplace_taxonomy_repository.create_subject(
+        subject = marketplace_taxonomy_service.create_subject(
             subject_id=subject_id,
             domain_id=domain_id,
             label=label,
             sort_order=int(data.get("sort_order", 0)),
             is_active=bool(data.get("is_active", True)),
         )
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
     except Exception as exc:
-        db.session.rollback()
         return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return (
@@ -188,22 +176,18 @@ def create_subject():
 @admin_required
 def update_subject(subject_id: str):
     data = _payload()
-    subject = marketplace_taxonomy_repository.update_subject(
-        subject_id=subject_id,
-        domain_id=data.get("domain_id"),
-        label=data.get("label"),
-        sort_order=int(data["sort_order"]) if "sort_order" in data else None,
-        is_active=bool(data["is_active"]) if "is_active" in data else None,
-    )
+    try:
+        subject = marketplace_taxonomy_service.update_subject(
+            subject_id=subject_id,
+            domain_id=data.get("domain_id"),
+            label=data.get("label"),
+            sort_order=int(data["sort_order"]) if "sort_order" in data else None,
+            is_active=bool(data["is_active"]) if "is_active" in data else None,
+        )
+    except Exception as exc:
+        return error_response("DATABASE_ERROR", str(exc), status=400)
     if not subject:
         return error_response("NOT_FOUND", "Subject not found.", status=404)
-
-    try:
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
-    except Exception as exc:
-        db.session.rollback()
-        return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return jsonify(
         {
@@ -221,11 +205,9 @@ def update_subject(subject_id: str):
 @admin_taxonomy_bp.delete("/subjects/<subject_id>")
 @admin_required
 def delete_subject(subject_id: str):
-    success = marketplace_taxonomy_repository.delete_subject(subject_id)
+    success = marketplace_taxonomy_service.delete_subject(subject_id)
     if not success:
         return error_response("NOT_FOUND", "Subject not found.", status=404)
-    db.session.commit()
-    marketplace_taxonomy_service.invalidate_taxonomy_cache()
     return jsonify({"success": True})
 
 
@@ -265,17 +247,14 @@ def create_framework():
         return error_response("VALIDATION_ERROR", "id, subject_id, and label are required.", status=400)
 
     try:
-        framework = marketplace_taxonomy_repository.create_framework(
+        framework = marketplace_taxonomy_service.create_framework(
             framework_id=framework_id,
             subject_id=subject_id,
             label=label,
             sort_order=int(data.get("sort_order", 0)),
             is_active=bool(data.get("is_active", True)),
         )
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
     except Exception as exc:
-        db.session.rollback()
         return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return (
@@ -298,22 +277,18 @@ def create_framework():
 @admin_required
 def update_framework(framework_id: str):
     data = _payload()
-    framework = marketplace_taxonomy_repository.update_framework(
-        framework_id=framework_id,
-        subject_id=data.get("subject_id"),
-        label=data.get("label"),
-        sort_order=int(data["sort_order"]) if "sort_order" in data else None,
-        is_active=bool(data["is_active"]) if "is_active" in data else None,
-    )
+    try:
+        framework = marketplace_taxonomy_service.update_framework(
+            framework_id=framework_id,
+            subject_id=data.get("subject_id"),
+            label=data.get("label"),
+            sort_order=int(data["sort_order"]) if "sort_order" in data else None,
+            is_active=bool(data["is_active"]) if "is_active" in data else None,
+        )
+    except Exception as exc:
+        return error_response("DATABASE_ERROR", str(exc), status=400)
     if not framework:
         return error_response("NOT_FOUND", "Framework not found.", status=404)
-
-    try:
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
-    except Exception as exc:
-        db.session.rollback()
-        return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return jsonify(
         {
@@ -331,11 +306,9 @@ def update_framework(framework_id: str):
 @admin_taxonomy_bp.delete("/frameworks/<framework_id>")
 @admin_required
 def delete_framework(framework_id: str):
-    success = marketplace_taxonomy_repository.delete_framework(framework_id)
+    success = marketplace_taxonomy_service.delete_framework(framework_id)
     if not success:
         return error_response("NOT_FOUND", "Framework not found.", status=404)
-    db.session.commit()
-    marketplace_taxonomy_service.invalidate_taxonomy_cache()
     return jsonify({"success": True})
 
 
@@ -378,7 +351,7 @@ def create_framework_level():
         return error_response("VALIDATION_ERROR", "id, framework_id, subject_id, label required.", status=400)
 
     try:
-        level = marketplace_taxonomy_repository.create_framework_level(
+        level = marketplace_taxonomy_service.create_framework_level(
             level_id=level_id,
             framework_id=framework_id,
             subject_id=subject_id,
@@ -387,10 +360,7 @@ def create_framework_level():
             sort_order=int(data.get("sort_order", 0)),
             is_active=bool(data.get("is_active", True)),
         )
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
     except Exception as exc:
-        db.session.rollback()
         return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return (
@@ -415,22 +385,18 @@ def create_framework_level():
 @admin_required
 def update_framework_level(level_id: str):
     data = _payload()
-    level = marketplace_taxonomy_repository.update_framework_level(
-        level_id=level_id,
-        label=data.get("label"),
-        difficulty_band=data.get("difficulty_band"),
-        sort_order=int(data["sort_order"]) if "sort_order" in data else None,
-        is_active=bool(data["is_active"]) if "is_active" in data else None,
-    )
+    try:
+        level = marketplace_taxonomy_service.update_framework_level(
+            level_id=level_id,
+            label=data.get("label"),
+            difficulty_band=data.get("difficulty_band"),
+            sort_order=int(data["sort_order"]) if "sort_order" in data else None,
+            is_active=bool(data["is_active"]) if "is_active" in data else None,
+        )
+    except Exception as exc:
+        return error_response("DATABASE_ERROR", str(exc), status=400)
     if not level:
         return error_response("NOT_FOUND", "Framework level not found.", status=404)
-
-    try:
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
-    except Exception as exc:
-        db.session.rollback()
-        return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return jsonify(
         {
@@ -450,11 +416,9 @@ def update_framework_level(level_id: str):
 @admin_taxonomy_bp.delete("/framework-levels/<level_id>")
 @admin_required
 def delete_framework_level(level_id: str):
-    success = marketplace_taxonomy_repository.delete_framework_level(level_id)
+    success = marketplace_taxonomy_service.delete_framework_level(level_id)
     if not success:
         return error_response("NOT_FOUND", "Framework level not found.", status=404)
-    db.session.commit()
-    marketplace_taxonomy_service.invalidate_taxonomy_cache()
     return jsonify({"success": True})
 
 
@@ -495,7 +459,7 @@ def create_option():
         return error_response("VALIDATION_ERROR", "id, option_type, and label required.", status=400)
 
     try:
-        opt = marketplace_taxonomy_repository.create_option(
+        opt = marketplace_taxonomy_service.create_option(
             option_id=option_id,
             option_type=option_type,
             label=label,
@@ -503,10 +467,7 @@ def create_option():
             sort_order=int(data.get("sort_order", 0)),
             is_active=bool(data.get("is_active", True)),
         )
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
     except Exception as exc:
-        db.session.rollback()
         return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return (
@@ -531,23 +492,19 @@ def create_option():
 def update_option(option_id: str):
     data = _payload()
     option_type = data.get("option_type")
-    opt = marketplace_taxonomy_repository.update_option(
-        option_id=option_id,
-        option_type=option_type,
-        label=data.get("label"),
-        sub_label=data.get("sub_label"),
-        sort_order=int(data["sort_order"]) if "sort_order" in data else None,
-        is_active=bool(data["is_active"]) if "is_active" in data else None,
-    )
+    try:
+        opt = marketplace_taxonomy_service.update_option(
+            option_id=option_id,
+            option_type=option_type,
+            label=data.get("label"),
+            sub_label=data.get("sub_label"),
+            sort_order=int(data["sort_order"]) if "sort_order" in data else None,
+            is_active=bool(data["is_active"]) if "is_active" in data else None,
+        )
+    except Exception as exc:
+        return error_response("DATABASE_ERROR", str(exc), status=400)
     if not opt:
         return error_response("NOT_FOUND", "Option not found.", status=404)
-
-    try:
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
-    except Exception as exc:
-        db.session.rollback()
-        return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return jsonify(
         {
@@ -567,11 +524,9 @@ def update_option(option_id: str):
 @admin_required
 def delete_option(option_id: str):
     option_type = request.args.get("option_type")
-    success = marketplace_taxonomy_repository.delete_option(option_id, option_type=option_type)
+    success = marketplace_taxonomy_service.delete_option(option_id, option_type=option_type)
     if not success:
         return error_response("NOT_FOUND", "Option not found.", status=404)
-    db.session.commit()
-    marketplace_taxonomy_service.invalidate_taxonomy_cache()
     return jsonify({"success": True})
 
 
@@ -608,15 +563,12 @@ def set_subject_mappings():
         return error_response("VALIDATION_ERROR", "subject_id, option_type, option_ids required.", status=400)
 
     try:
-        marketplace_taxonomy_repository.set_subject_option_maps(
+        marketplace_taxonomy_service.set_subject_option_maps(
             subject_id=subject_id,
             option_type=option_type,
             option_ids=[str(i).strip() for i in option_ids],
         )
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
     except Exception as exc:
-        db.session.rollback()
         return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return jsonify({"success": True})
@@ -626,12 +578,10 @@ def set_subject_mappings():
 @admin_required
 def reseed_defaults():
     try:
-        marketplace_taxonomy_service.ensure_default_taxonomy_data(db.session)
-        db.session.commit()
-        marketplace_taxonomy_service.invalidate_taxonomy_cache()
+        marketplace_taxonomy_service.reseed_default_taxonomy_data()
     except Exception as exc:
-        db.session.rollback()
         return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return jsonify({"success": True, "message": "Default taxonomy data verified and seeded."})
+
 

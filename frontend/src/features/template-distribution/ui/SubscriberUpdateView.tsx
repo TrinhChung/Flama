@@ -1,15 +1,13 @@
-import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { AlertCircle, CheckCircle2, Download, GitPullRequest, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ConfirmDialog } from '@/shared/ui'
-import { useTemplateSubscription } from '../hooks/useTemplateSubscription'
+import { useSubscriberUpdateView } from '../hooks/useSubscriberUpdateView'
 import { ConflictResolutionDialog } from './ConflictResolutionDialog'
-import type { ConflictResolution, PendingUpdateDto } from '../model/types'
 
 export interface SubscriberUpdateViewProps {
   templateId: string
@@ -34,81 +32,13 @@ export function SubscriberUpdateView({
   onSourceChanged,
 }: SubscriberUpdateViewProps) {
   const { t, i18n } = useTranslation('card_templates')
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
-  const [activePendingUpdate, setActivePendingUpdate] = useState<PendingUpdateDto | null>(null)
-  const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
-
   const {
-    subscription,
-    isLoading,
-    isError,
-    error,
-    refetch,
-    updateSettings,
-    isUpdatingSettings,
-    prepareUpdate,
-    isPreparingUpdate,
-    applyUpdate,
-    isApplyingUpdate,
-    resetToUpstream,
-    isResettingToUpstream,
-  } = useTemplateSubscription(templateId)
-
-  const handleToggleAutoUpdate = async (checked: boolean) => {
-    try {
-      await updateSettings({ auto_update_enabled: checked })
-      toast.success(t('setup.saved'))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('distribution.update_error'))
-    }
-  }
-
-  const handleStartUpdate = async () => {
-    if (!subscription?.current_release?.id) return
-    try {
-      const pending = await prepareUpdate({
-        release_id: subscription.current_release.id,
-        expected_applied_release_id: subscription.applied_release_id || undefined,
-        expected_current_version_id: currentVersionId || subscription.current_version_id || undefined,
-      })
-
-      if (pending.status === 'has_conflict' && Object.keys(pending.conflicts || {}).length > 0) {
-        setActivePendingUpdate(pending)
-        setConflictDialogOpen(true)
-      } else {
-        // Ready without conflict, apply directly
-        await applyUpdate({
-          preparation_id: pending.id,
-        })
-        toast.success(t('distribution.update_success'))
-        onSourceChanged?.()
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('distribution.update_error'))
-    }
-  }
-
-  const handleApplyResolvedUpdate = async (resolutions: Record<string, ConflictResolution>) => {
-    if (!activePendingUpdate) return
-    await applyUpdate({
-      preparation_id: activePendingUpdate.id,
-      resolutions,
-    })
-    toast.success(t('distribution.update_success'))
-    setActivePendingUpdate(null)
-    onSourceChanged?.()
-  }
-
-  const handleResetToUpstream = async () => {
-    try {
-      await resetToUpstream()
-      toast.success(t('distribution.reset_upstream_success'))
-      setResetConfirmOpen(false)
-      onSourceChanged?.()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('distribution.reset_upstream_error'))
-    }
-  }
+    subscription, isLoading, isError, error, refetch, isUpdatingSettings, isPreparingUpdate,
+    isApplyingUpdate, isResettingToUpstream, isLegacyUnpinned, appliedRelease, latestRelease,
+    updateAvailable, originalListingUrl, activePendingUpdate, resetConfirmOpen, conflictDialogOpen,
+    handleResetOpenChange, handleConflictOpenChange, handleToggleAutoUpdate,
+    handleStartUpdate, handleApplyResolvedUpdate, handleResetToUpstream,
+  } = useSubscriberUpdateView({ templateId, currentVersionId, onSourceChanged })
 
   if (isLoading) {
     return (
@@ -131,11 +61,8 @@ export function SubscriberUpdateView({
     )
   }
 
-  const appliedRelease = subscription?.applied_release
-  const latestRelease = subscription?.current_release
-  const updateAvailable = Boolean(subscription?.update_available)
-
   const getSyncStatusBadge = () => {
+    if (isLegacyUnpinned) return <Badge variant="outline">{t('distribution.legacy_unpinned.status')}</Badge>
     const status = subscription?.last_sync_status
     if (status === 'synced') {
       return (
@@ -178,17 +105,39 @@ export function SubscriberUpdateView({
             {getSyncStatusBadge()}
           </div>
           <CardDescription className="text-xs">
-            {t('distribution.subscriber_description')}
+            {t(isLegacyUnpinned ? 'distribution.legacy_unpinned.description' : 'distribution.subscriber_description')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
+          {isLegacyUnpinned && (
+            <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3.5 space-y-2">
+              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium text-xs">
+                <AlertCircle className="size-4" />
+                {t('distribution.legacy_unpinned.title')}
+              </div>
+              <p className="text-xs text-muted-foreground">{t('distribution.legacy_unpinned.preserved')}</p>
+              {originalListingUrl && (
+                <>
+                  <p className="text-xs text-muted-foreground">{t('distribution.legacy_unpinned.receive_separately')}</p>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to={originalListingUrl}>{t('distribution.legacy_unpinned.view_original')}</Link>
+                  </Button>
+                </>
+              )}
+              <Button className="w-full gap-2 mt-1" disabled onClick={handleStartUpdate}>
+                <Download className="size-4" />
+                {t('distribution.btn_update')}
+              </Button>
+            </div>
+          )}
+
           {/* Release Comparison */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
               <span className="text-muted-foreground block">{t('distribution.applied_release')}</span>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-foreground text-sm">
-                  {appliedRelease?.version_label || t('distribution.original_release')}
+                  {isLegacyUnpinned ? t('distribution.legacy_unpinned.version_unknown') : appliedRelease?.version_label || t('distribution.original_release')}
                 </span>
                 {appliedRelease && (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
@@ -246,7 +195,7 @@ export function SubscriberUpdateView({
               <Button
                 className="w-full gap-2 mt-1"
                 onClick={handleStartUpdate}
-                disabled={isPreparingUpdate || isApplyingUpdate}
+                disabled={isLegacyUnpinned || isPreparingUpdate || isApplyingUpdate}
               >
                 <Download className="size-4" />
                 {isPreparingUpdate ? t('distribution.btn_preparing') : t('distribution.btn_update')}
@@ -266,9 +215,9 @@ export function SubscriberUpdateView({
             </div>
             <Switch
               id="auto-update-switch"
-              checked={Boolean(subscription?.auto_update_enabled)}
+              checked={!isLegacyUnpinned && Boolean(subscription?.auto_update_enabled)}
               onCheckedChange={handleToggleAutoUpdate}
-              disabled={isUpdatingSettings}
+              disabled={isLegacyUnpinned || isUpdatingSettings}
               aria-label={t('distribution.auto_update_label')}
             />
           </div>
@@ -279,8 +228,8 @@ export function SubscriberUpdateView({
               variant="outline"
               size="sm"
               className="w-full text-destructive hover:text-destructive gap-2 border-destructive/30 hover:bg-destructive/10"
-              onClick={() => setResetConfirmOpen(true)}
-              disabled={isResettingToUpstream}
+              onClick={() => handleResetOpenChange(true)}
+              disabled={isLegacyUnpinned || isResettingToUpstream}
             >
               <RotateCcw className="size-3.5" />
               {t('distribution.btn_reset_upstream')}
@@ -292,7 +241,7 @@ export function SubscriberUpdateView({
       {/* Reset Confirmation Dialog */}
       <ConfirmDialog
         open={resetConfirmOpen}
-        onOpenChange={setResetConfirmOpen}
+        onOpenChange={handleResetOpenChange}
         title={t('distribution.reset_upstream_confirm_title')}
         description={t('distribution.reset_upstream_confirm_desc')}
         confirmText={t('distribution.reset_upstream_confirm_btn')}
@@ -303,13 +252,10 @@ export function SubscriberUpdateView({
       />
 
       {/* Conflict Resolution Dialog */}
-      {activePendingUpdate && (
+      {activePendingUpdate && !isLegacyUnpinned && (
         <ConflictResolutionDialog
           open={conflictDialogOpen}
-          onOpenChange={(open) => {
-            setConflictDialogOpen(open)
-            if (!open) setActivePendingUpdate(null)
-          }}
+          onOpenChange={handleConflictOpenChange}
           pendingUpdate={activePendingUpdate}
           onApply={handleApplyResolvedUpdate}
           isApplying={isApplyingUpdate}

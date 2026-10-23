@@ -13,6 +13,7 @@ from models.payment_order_item import PaymentOrderItem
 from models.payment_webhook_event import PaymentWebhookEvent
 from models.user import User
 from models.user_role import UserRole
+from tests.note_type_publication_fixtures import stage_note_type_release
 
 
 class PaymentManagementViewTests(unittest.TestCase):
@@ -79,6 +80,7 @@ class PaymentManagementViewTests(unittest.TestCase):
             )
             db.session.add(product)
             db.session.flush()
+            release = stage_note_type_release(db.session, product)
 
             now = datetime.utcnow()
             paid_order = PaymentOrder(
@@ -128,7 +130,7 @@ class PaymentManagementViewTests(unittest.TestCase):
                 unit_amount_minor=50000,
                 line_total_amount_minor=50000,
                 title_snapshot="Kana Pack",
-                product_snapshot_json={"seller_name": "creator-one"},
+                product_snapshot_json={"seller_name": "creator-one", "note_type_release_id": release.id},
             )
             pending_item = PaymentOrderItem(
                 order_id=pending_order.id,
@@ -138,7 +140,7 @@ class PaymentManagementViewTests(unittest.TestCase):
                 unit_amount_minor=75000,
                 line_total_amount_minor=75000,
                 title_snapshot="Kana Pack Premium",
-                product_snapshot_json={"seller_name": "creator-one"},
+                product_snapshot_json={"seller_name": "creator-one", "note_type_release_id": release.id},
             )
             failed_item = PaymentOrderItem(
                 order_id=failed_order.id,
@@ -148,7 +150,7 @@ class PaymentManagementViewTests(unittest.TestCase):
                 unit_amount_minor=65000,
                 line_total_amount_minor=65000,
                 title_snapshot="Kana Pack Failed",
-                product_snapshot_json={"seller_name": "creator-one"},
+                product_snapshot_json={"seller_name": "creator-one", "note_type_release_id": release.id},
             )
             db.session.add_all([paid_item, pending_item, failed_item])
             db.session.flush()
@@ -361,6 +363,42 @@ class PaymentManagementViewTests(unittest.TestCase):
         payload = response.get_json() or {}
         order = payload.get("order") or {}
         self.assertEqual(order.get("status"), "canceled")
+
+    def test_admin_update_order_status_to_failed_persists_attempt_failure(self):
+        self._login(self.admin_email)
+        response = self.client.patch(
+            f"/api/admin/payments/orders/{self.buyer_pending_order_id}/status",
+            json={"status": "failed", "note": "Payment rejected after review"},
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["order"]["status"], "failed")
+        with self.app.app_context():
+            order = db.session.get(PaymentOrder, self.buyer_pending_order_id)
+            self.assertEqual(order.status, "failed")
+            self.assertIsNotNone(order.closed_at)
+            self.assertIsNone(order.paid_at)
+            attempt = order.attempts[0]
+            self.assertEqual(attempt.status, "failed")
+            self.assertIsNotNone(attempt.failed_at)
+            self.assertEqual(attempt.failure_code, "admin_failed")
+            self.assertEqual(attempt.failure_message, "Payment rejected after review")
+            self.assertEqual(
+                PaymentEntitlement.query.filter_by(payment_order_id=order.id).count(), 0
+            )
+
+    def test_admin_update_order_status_errors_keep_the_api_contract(self):
+        self._login(self.admin_email)
+        invalid = self.client.patch(
+            f"/api/admin/payments/orders/{self.buyer_pending_order_id}/status",
+            json={"status": "unsupported"},
+        )
+        self.assertEqual(invalid.status_code, 400, invalid.get_json())
+        self.assertEqual(invalid.get_json()["error"], "VALIDATION_ERROR")
+        missing = self.client.patch(
+            "/api/admin/payments/orders/missing-order/status", json={"status": "paid"}
+        )
+        self.assertEqual(missing.status_code, 404, missing.get_json())
+        self.assertEqual(missing.get_json()["error"], "FIELD_NOT_FOUND")
 
     def test_admin_sync_order_success(self):
         self._login(self.admin_email)

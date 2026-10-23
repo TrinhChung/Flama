@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from flask import current_app
-from sqlalchemy import and_, case, func, or_
+from sqlalchemy import and_, case, exists, false, func, or_
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import joinedload
 
@@ -81,6 +81,8 @@ from models.user import User
 logger = logging.getLogger(__name__)
 
 
+import sys
+
 from app.services.share.helpers import (
     ShareControllerError,
     _audit,
@@ -91,6 +93,13 @@ from app.services.share.helpers import (
 )
 from app.services.share.note_types import ensure_note_type_install_for_user
 
+def _get_release_note_membership_filter():
+    mod = sys.modules.get("app.services.flashcards_share_service")
+    if mod is not None and hasattr(mod, "release_note_membership_filter"):
+        return mod.release_note_membership_filter
+    return release_note_membership_filter
+
+@dataclass
 class CloneDeckScope:
     install: DeckInstall
     local_scope_deck_id: int
@@ -101,7 +110,6 @@ class CloneDeckScope:
     base_snapshot_at: datetime | None
 
 @dataclass
-
 class CloneSchemaView:
     field_defs: list[SimpleNamespace]
     removed_field_names: set[str]
@@ -332,7 +340,8 @@ def release_note_membership_filter(install: DeckInstall, note_id_column):
 
 
 def _note_is_member_of_applied_release(*, install: DeckInstall, note_id: str) -> bool:
-    predicate = release_note_membership_filter(install, str(note_id))
+    filter_fn = _get_release_note_membership_filter()
+    predicate = filter_fn(install, str(note_id))
     if predicate is None:
         return True
     return db.session.query(predicate).scalar() is True
@@ -395,10 +404,29 @@ def resolve_clone_scope_for_local_deck(
 
 
 def query_clone_scope_cards(scope: CloneDeckScope):
+    from models.card import INCLUDE_RETIRED_CARDS
+
+    active = Card.application_status == "ACTIVE"
     source_conditions = [Note.deck_id.in_(scope.source_deck_ids)]
     if scope.source_owner_user_id is not None:
         source_conditions.append(Note.user_id == scope.source_owner_user_id)
-    release_membership = release_note_membership_filter(scope.install, Note.id)
+    release = getattr(scope.install, "applied_release", None)
+    if release is not None and release.template_pins_initialized:
+        from app.repositories.template_release_repository import deck_pins
+        pins = deck_pins(db.session, release.id)
+        application_conditions = []
+        for template_id, pin in pins.items():
+            application_ids = list((pin.get("applications_json") or {}).keys())
+            for offset in range(0, len(application_ids), 500):
+                application_conditions.append(and_(Card.template_id == template_id, Card.application_id.in_(application_ids[offset:offset + 500])))
+        # A fully initialized empty manifest intentionally exposes no source
+        # presentations. Author draft attachments cannot enter old installs,
+        # and a pinned occurrence the author later retired stays visible.
+        source_conditions.append(or_(*application_conditions) if application_conditions else false())
+    else:
+        source_conditions.append(active)
+    filter_fn = _get_release_note_membership_filter()
+    release_membership = filter_fn(scope.install, Note.id)
     if release_membership is not None:
         source_conditions.append(release_membership)
     elif scope.base_snapshot_at is not None:
@@ -413,11 +441,13 @@ def query_clone_scope_cards(scope: CloneDeckScope):
         Note.user_id == scope.install.user_id,
         Note.deck_id.in_(scope.local_deck_ids),
         local_added_exists,
+        active,
     )
+    # Pins decide source membership here, so the default ACTIVE-only Card
+    # criteria is replaced by the explicit conditions above (ADR P11).
     return Card.query.join(Note, Card.note_id == Note.id).filter(
         or_(and_(*source_conditions), local_condition)
-    )
-
+    ).execution_options(**{INCLUDE_RETIRED_CARDS: True})
 
 
 def is_clone_added_note(*, scope: CloneDeckScope, note_id: str) -> bool:
@@ -455,7 +485,9 @@ def resolve_clone_scope_for_card(
         if local_deck_id is None:
             continue
         scope = resolve_clone_scope_for_local_deck(user_id=user_id, local_deck_id=int(local_deck_id))
-        if scope is not None:
+        if scope is not None and query_clone_scope_cards(scope).filter(
+            Card.note_id == card_obj.note_id, Card.application_id == card_obj.application_id,
+        ).first() is not None:
             return scope
     return None
 
@@ -639,6 +671,7 @@ def apply_clone_note_field_overrides(
     source_note: Note,
     schema_view: CloneSchemaView,
     base_field_values: dict[str, Any] | None = None,
+    note_override_rows: list[DeckCloneNoteFieldOverride] | None = None,
 ) -> dict[str, Any]:
     if base_field_values is not None:
         values = dict(base_field_values)
@@ -683,7 +716,8 @@ def apply_clone_note_field_overrides(
             values[new_name] = values.get(old_name)
         values.pop(old_name, None)
 
-    note_override_rows = flashcards_share_repository.get_clone_note_field_overrides(install.id, source_note.id)
+    if note_override_rows is None:
+        note_override_rows = flashcards_share_repository.get_clone_note_field_overrides(install.id, source_note.id)
     from app.services.clone_field_identity_service import clone_override_field_label, clone_field_identity_labels
     identity_labels = clone_field_identity_labels(install, schema_view)
     for row in note_override_rows:
@@ -987,7 +1021,7 @@ def upsert_clone_overlay(
 
 
 def upsert_shared_deck_clone_overlay(deck_item_id: str, install: DeckInstall, user_id: int, payload: dict) -> tuple[dict | None, str | None]:
-    counters, validation_error = flashcards_share.upsert_clone_overlay(
+    counters, validation_error = upsert_clone_overlay(
         deck_install=install,
         payload=payload,
     )

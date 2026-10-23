@@ -188,6 +188,24 @@ def get_payment_link_state(
     }
 
 
+def cancel_checkout_session(*, provider_payment_id: str | None = None,
+        provider_order_code: str | None = None) -> dict[str, Any]:
+    """Invalidate an unpaid quote before replacing its price/license lines."""
+    assert_payos_provider_available()
+    identifier = str(provider_payment_id or provider_order_code or "").strip()
+    if not identifier:
+        raise PayOSProviderError("Thiếu mã phiên thanh toán cần thay thế.",
+            code="PAYMENT_PROVIDER_LOOKUP_INVALID", status=400)
+    try:
+        response = payos_client.cancel_payment_link(identifier,
+            cancellation_reason="The buyer's selected publication or existing template licenses changed.")
+    except Exception as exc:
+        raise PayOSProviderError("Không thể hủy phiên thanh toán cũ để cập nhật giá lúc này.",
+            code="PAYMENT_PROVIDER_CANCEL_FAILED", status=502) from exc
+    payload = _serialize_model(response)
+    return {"status": str(_value_from_model(response, payload, "status") or "").strip().upper()}
+
+
 def verify_webhook_payload(raw_payload: bytes | str) -> dict[str, Any]:
     assert_payos_provider_available()
     try:

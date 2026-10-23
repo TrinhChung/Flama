@@ -35,7 +35,7 @@ import { BrowseStrokeModal } from '../components/BrowseStrokeModal'
 import { BrowseAudioSelectorModal } from '../components/BrowseAudioSelectorModal'
 import { BrowseAudioDropdownMenu } from '../components/BrowseAudioDropdownMenu'
 import { BrowseMobileTabBar } from '../components/BrowseMobileTabBar'
-import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
+import { LazyDeckWorksheetModal } from '@/features/worksheets'
 import { ContextHelpButton } from '@/features/guide/components/ContextHelpButton'
 
 export function BrowsePage() {
@@ -340,7 +340,30 @@ export function BrowsePage() {
         {/* Center Side: Cards Table & Paging */}
         <div className={`flex-1 flex flex-col overflow-hidden h-full ${mobileTab === 'cards' ? 'flex' : 'hidden md:flex'}`}>
           <BrowseToolbar browse={browse} />
-          <BrowseCardTable browse={browse} />
+          <BrowseCardTable
+            cards={browse.cards}
+            isPending={browse.cardsQuery.isPending}
+            isShowingPreviousResult={browse.cardsQuery.isPlaceholderData}
+            error={browse.cardsQuery.isError && !browse.cardsQuery.data ? browse.cardsQuery.error : null}
+            onRetry={browse.refetchCards}
+            total={browse.cardsQuery.data?.total || 0}
+            pages={browse.cardsQuery.data?.pages || 1}
+            page={browse.page}
+            setPage={browse.setPage}
+            perPage={browse.perPage}
+            onPerPageChange={browse.handlePerPageChange}
+            selectedCardSet={browse.selectedCardSet}
+            selectedCount={selectedCards.length}
+            allSelected={browse.allSelected}
+            onToggleSelectAll={browse.handleToggleSelectAllCards}
+            onToggleCardSelected={browse.handleToggleCardSelected}
+            activeCardId={activeCardId}
+            onActivateCard={browse.handleActivateCard}
+            sortBy={browse.sortBy}
+            sortDir={browse.sortDir}
+            onSortChange={browse.handleSortChange}
+            arrayViewMode={browse.arrayViewMode}
+          />
         </div>
 
         {/* Right Side: Active Card Editor */}

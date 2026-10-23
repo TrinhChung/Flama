@@ -84,6 +84,38 @@ export type DeckCardTypesResponse = {
   note_counts: Record<string, number>
 }
 
+export type InstalledTemplateRelease = {
+  id: string
+  version_label: string
+  sequence_no: number
+}
+
+/** A user's received copy and the separate release pinned by this deck. */
+export type InstalledDeckTemplate = {
+  id: string
+  source_template_id: string
+  local_template_id: string
+  current_version_id: string | null
+  applied_release: InstalledTemplateRelease | null
+  current_release: InstalledTemplateRelease | null
+  pinned_release?: InstalledTemplateRelease | null
+  update_available: boolean
+  template: {
+    id: string
+    name: string
+    description?: string | null
+    origin: 'market_copy'
+    current_version_id: string | null
+  }
+}
+
+export type InstalledDeckTemplatesResponse = {
+  install_id: string
+  items: InstalledDeckTemplate[]
+  deck_release: InstalledTemplateRelease | null
+  legacy_template_fallback: boolean
+}
+
 export type TemplateInputType = 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'array'
 
 /** Display options of a typing-answer input (only on `array` inputs). */

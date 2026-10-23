@@ -5,6 +5,7 @@ import type {
   CardRenderContent,
   CardRenderTemplate,
 } from '../model/types'
+import { fieldValueEditorText } from '@/lib/arrayField'
 
 export const LINEBREAK_TOKEN = '__FC_LINEBREAK_TOKEN__'
 
@@ -572,8 +573,9 @@ export function renderCardSide(
   const fieldValueProxyUrls: string[] = []
   if (content.field_values) {
     for (const val of Object.values(content.field_values)) {
-      if (typeof val === 'string') {
-        const matches = val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
+      const text = fieldValueEditorText(val)
+      if (text) {
+        const matches = text.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
         if (matches) fieldValueProxyUrls.push(...matches)
       }
     }
@@ -599,7 +601,7 @@ export function renderCardSide(
       const lk = key.toLowerCase()
       return lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
     })
-    .flatMap(([, val]) => (typeof val === 'string' ? val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g) || [] : []))
+    .flatMap(([, val]) => fieldValueEditorText(val).match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g) || [])
   const allowedAudioUrls = [
     ...new Set([...audioFromMedia, ...audioFromFieldValues, ...trustedMedia.audio]),
   ]

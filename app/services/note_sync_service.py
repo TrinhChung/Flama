@@ -12,11 +12,12 @@ from app.repositories import template_library_repository, vocabulary_repository
 from app.services import deck_working_tree_service
 from app.services.anki_content_normalizer import normalize_anki_field_values
 from app.services.flashcard_renderer import is_field_empty
-from app.validators.flashcard_input import RequestValidationError
+from app.validators.flashcard_input import RequestValidationError, clean_array_fields
 from models import db
 from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.deck import Deck
 from models.field_def import FieldDef
+from models.field_types import ARRAY_FIELD_TYPE, field_value_text
 from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
@@ -40,7 +41,7 @@ def normalize_compare_text(value: Any) -> str:
     """Normalize text value for whitespace and unicode consistency when comparing diffs."""
     if value is None:
         return ""
-    text = unicodedata.normalize("NFKC", str(value))
+    text = unicodedata.normalize("NFKC", field_value_text(value))
     return " ".join(text.replace("\r\n", "\n").replace("\r", "\n").split()).strip()
 
 
@@ -210,10 +211,14 @@ def _resolve_note_type(
 def _validate_and_normalize_note_fields(
     raw_fields: dict[str, Any],
     field_defs: list[FieldDef],
-) -> tuple[dict[str, str], list[str]]:
+) -> tuple[dict[str, Any], list[str]]:
     """Validate required fields and normalize field values according to NoteType definition."""
     errors: list[str] = []
     normalized = normalize_anki_field_values(raw_fields or {}, tuple(field_defs))
+    try:
+        normalized = clean_array_fields(normalized, field_defs)
+    except RequestValidationError as exc:
+        errors.append(str(exc))
 
     for f_def in field_defs:
         if f_def.required:

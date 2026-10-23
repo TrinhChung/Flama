@@ -18,7 +18,7 @@ describe('TemplateLibraryPage', () => {
   afterEach(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); document.body.innerHTML = '' })
   async function render() { await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter><TemplateLibraryPage /></MemoryRouter></QueryClientProvider>)); await flush() }
   it('fetches defaults and shows distinct NoteType/application counts and details button', async () => {
-    await render(); expect(fetchTemplateLibrary).toHaveBeenCalledWith({ compact: true, page: 1, page_size: 24 }, expect.any(AbortSignal)); expect(container.textContent).toContain('Dùng ở 1 cấu trúc thẻ · 2 lần gắn'); expect(container.querySelectorAll('code')).toHaveLength(0); expect(container.textContent).toContain('Xem chi tiết'); expect(container.querySelector('a[href="/card-templates/t%2F1"]')).not.toBeNull(); expect(container.querySelector('a[href="/marketplace/note-types"]')).not.toBeNull()
+    await render(); expect(fetchTemplateLibrary).toHaveBeenCalledWith({ compact: true, page: 1, page_size: 24 }, expect.any(AbortSignal)); expect(container.textContent).toContain('Dùng ở 1 cấu trúc thẻ · 2 lần gắn'); expect(container.querySelectorAll('code')).toHaveLength(0); expect(container.textContent).toContain('Xem chi tiết'); expect(container.querySelector('a[href="/card-templates/t%2F1"]')).not.toBeNull(); expect(container.querySelector('a[href="/marketplace/templates"]')).not.toBeNull()
   })
   it('supports all five groups', async () => {
     await render()

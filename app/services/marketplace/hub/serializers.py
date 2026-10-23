@@ -25,7 +25,6 @@ from app.services import (
     flashcards_share_service,
     marketplace_query_service,
     marketplace_taxonomy_service,
-    payment_service,
 )
 from app.services.payment import presenters as payment_presenters
 from models import db
@@ -86,6 +85,7 @@ def _serialize_note_type_card(
     payload = marketplace_query_service.serialize_note_type_marketplace_card(
         note_type,
         include_definition=False,
+        user_id=user_id,
     )
     taxonomy_display = marketplace_taxonomy_service.build_taxonomy_display(
         payload.get("taxonomy_metadata") or {},
@@ -117,11 +117,11 @@ def _serialize_note_type_card(
             "short_description": _truncate_text(payload.get("description"), max_length=160),
             "primary_cta_label": _primary_cta_label(
                 ownership_status=ownership_status,
-                pricing_mode=str(note_type.pricing_mode or "free"),
+                pricing_mode=payload["pricing_mode"],
             ),
             "primary_action": _primary_action(ownership_status=ownership_status),
             "badges": _build_badges(
-                pricing_mode=str(note_type.pricing_mode or "free"),
+                pricing_mode=payload["pricing_mode"],
                 is_official=bool(note_type.is_official),
                 ownership_status=ownership_status,
                 is_saved=note_type.id in saved_ids,

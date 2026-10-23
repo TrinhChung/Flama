@@ -13,6 +13,7 @@
   --ft-success-bg: #effaf3;
   --ft-error: #b42318;
   --ft-error-bg: #fff1ee;
+  --ft-revealed: oklch(0.58 0.19 300);
 }
 html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
 .card { margin: 0; color: var(--ft-ink); background: var(--ft-bg); text-align: left; }
@@ -122,6 +123,7 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
     --ft-success-bg: #1c3023;
     --ft-error: #ffaaa0;
     --ft-error-bg: #38201c;
+    --ft-revealed: oklch(0.78 0.12 300);
   }
 }
 
@@ -129,29 +131,115 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
 .ft-card[data-mode="dictation"]:not(.ft-back) .ft-stimulus { gap: 14px; margin-top: 26px; }
 .ft-card[data-mode="dictation"]:not(.ft-back) .ft-audio { padding: 0; border: 0; border-radius: 0; background: transparent; }
 .ft-card[data-mode="dictation"]:not(.ft-back) .ft-instruction { text-align: left; font-size: 12px; line-height: 1.65; }
-.ft-dict-guide { margin-top: 28px; }
+.ft-dict-guide { position: relative; margin-top: 28px; }
 .ft-dict-guide .ft-guide-heading { margin-bottom: 8px; }
 .ft-dict-progress { color: var(--ft-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .ft-dict-passage { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding: 8px 0; border: 0; border-radius: 0; background: transparent; font-size: 17px; line-height: 2.2; overflow-wrap: anywhere; scrollbar-width: thin; scrollbar-color: var(--ft-border) transparent; }
 .ft-dict-word { display: inline-block; max-width: 100%; margin: 0; padding: 2px 1px; border: 0; border-radius: 3px; background: transparent; color: var(--ft-muted); font: inherit; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; line-height: 1.8; overflow-wrap: anywhere; cursor: pointer; transition: color .16s, background .16s; }
+/* Front only: the back reuses the passage and word classes for its transcript.
+   The top padding leaves room for the reveal button above the first line. */
+.ft-dict-guide .ft-dict-passage { max-height: 340px; padding: 28px 4px 12px; line-height: 2.3; }
+.ft-dict-guide .ft-dict-word { margin: 0 1px; padding: 1px 2px; border-radius: 4px; font-family: ui-monospace, "SFMono-Regular", Consolas, "Noto Sans JP", monospace; }
 .ft-dict-word.is-active { background: var(--ft-brand-soft); box-shadow: inset 0 -2px var(--ft-brand); }
-.ft-dict-word.is-correct { color: var(--ft-success); }
+.ft-dict-word.is-correct { color: var(--ft-success); font-weight: 550; }
+.ft-dict-word.is-revealed { color: var(--ft-revealed); font-weight: 550; text-decoration: underline dotted 2px; text-underline-offset: 4px; }
 .ft-dict-word.is-wrong { color: var(--ft-error); background: var(--ft-error-bg); }
 .ft-dict-word.is-active.is-wrong { box-shadow: inset 0 -2px var(--ft-error); }
-.ft-dict-word:hover { background: var(--ft-soft); }
+.ft-dict-word:hover:not(.is-active) { background: var(--ft-soft); }
 .ft-dict-word:focus-visible { outline: 2px solid var(--ft-brand); outline-offset: 2px; }
-.ft-dict-help { margin: 10px 0 0; color: var(--ft-muted); font-size: 11px; }
-.ft-dict-entry { max-width: 360px; margin-top: 26px; }
-.ft-dict-position { color: var(--ft-muted); font-size: 12px; font-weight: 400; }
-.ft-dict-input-row { display: flex; align-items: center; }
-.ft-dict-input-row .ft-input-wrap { flex: 1; min-width: 0; }
-.ft-dict-input-row .ft-input { height: 48px; padding: 11px 14px; font-size: 16px; }
-.ft-dict-entry .ft-actions { flex-wrap: wrap; margin-top: 8px; }
-.ft-dict-entry.is-incorrect .ft-input { color: var(--ft-error); caret-color: var(--ft-error); }
-.ft-dict-entry.is-incorrect .ft-input:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ft-error) 10%, transparent); }
+
+/* The active word keeps its dashes: typed text replaces them from the left and a
+   drawn caret marks the next dash. A transparent input over the word takes the keys. */
+.ft-dict-word.is-active .ft-word-body { position: relative; }
+.ft-inline-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-width: 1ch;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font: inherit;
+  opacity: 0;
+}
+.ft-editor-view .ft-typed { color: var(--ft-ink); }
+.ft-dict-word.is-wrong .ft-editor-view .ft-typed { color: var(--ft-error); }
+.ft-editor-view .is-selected { border-radius: 2px; background: color-mix(in srgb, var(--ft-brand) 24%, transparent); }
+.ft-editor-view.is-composing .ft-typed { text-decoration: underline; text-underline-offset: 3px; }
+.ft-caret { display: inline-block; width: 0; height: 1.1em; margin: 0 -1px; border-left: 2px solid var(--ft-brand); vertical-align: -.2em; visibility: hidden; animation: ft-caret-blink 1s steps(1) infinite; }
+.ft-dict-word.is-active:focus-within .ft-caret { visibility: visible; }
+.ft-dict-word.is-wrong .ft-caret { border-color: var(--ft-error); }
+@keyframes ft-caret-blink { 50% { visibility: hidden; } }
+
+/* One reveal button outside the scrolling passage, placed above a word by the script.
+   At rest it stays transparent over the active word, so Tab can still reach it. */
+.ft-word-reveal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateY(3px);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  height: 22px;
+  border: 1px solid var(--ft-border);
+  border-radius: 999px;
+  background: var(--ft-surface);
+  color: var(--ft-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 25;
+  transition: opacity .15s ease, transform .15s ease, color .15s, background .15s, border-color .15s;
+}
+.ft-word-reveal .ft-icon { width: 12px; height: 12px; }
+.ft-word-reveal.is-hover, .ft-word-reveal:focus-visible, .ft-dict-guide.is-touch .ft-word-reveal {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.ft-word-reveal:hover, .ft-word-reveal:focus-visible {
+  color: var(--ft-brand);
+  border-color: var(--ft-brand);
+  background: var(--ft-brand-soft);
+}
+.ft-word-reveal:focus-visible { outline: 2px solid var(--ft-brand); outline-offset: 2px; }
+.ft-word-reveal.is-offscreen { visibility: hidden; }
+.ft-dict-help-touch { display: none; }
+.ft-dict-guide.is-touch .ft-dict-help-pointer { display: none; }
+.ft-dict-guide.is-touch .ft-dict-help-touch { display: inline; }
+@media (hover: none) {
+  .ft-word-reveal { opacity: 1; pointer-events: auto; transform: none; }
+  .ft-dict-help-pointer { display: none; }
+  .ft-dict-help-touch { display: inline; }
+}
+
+/* Bottom status bar */
+.ft-dict-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.ft-dict-help { margin: 0; color: var(--ft-muted); font-size: 12px; }
+.ft-dict-bottom .ft-actions { margin: 0; }
 .ft-dict-reset { padding-right: 0; color: var(--ft-muted); background: transparent; }
 .ft-dict-remove { color: var(--ft-error); background: var(--ft-error-bg); }
-.ft-dict-word.is-shaking, .ft-dict-input-row .is-shaking { animation: ft-dict-shake .32s ease-out; }
+.ft-dict-word.is-shaking { animation: ft-dict-shake .32s ease-out; }
 @keyframes ft-dict-shake {
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-3px); }
@@ -159,7 +247,9 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
 }
 @media (max-width: 420px) {
   .ft-dict-passage { max-height: 260px; font-size: 16px; }
+  .ft-dict-guide .ft-dict-passage { max-height: 260px; padding-top: 24px; font-size: 16px; }
   .ft-dict-guide { margin-top: 24px; }
+  .ft-dict-bottom { flex-direction: column; align-items: flex-start; }
 }
 
 /* Compact reference layout for the reverse side. */

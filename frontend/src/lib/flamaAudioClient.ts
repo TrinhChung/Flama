@@ -6,6 +6,12 @@ import type {
   VoiceDescriptor,
 } from '@/features/audio/types'
 
+import {
+  safeLocalStorageGet,
+  safeLocalStorageSet,
+  safeLocalStorageRemove,
+} from '@/shared/hooks'
+
 const FLAMA_AUDIO_BASE_URL = import.meta.env.VITE_FLAMA_AUDIO_URL || 'http://127.0.0.1:4791'
 const TOKEN_STORAGE_KEY = 'flama_audio_pairing_token'
 
@@ -15,15 +21,15 @@ export class FlamaAudioClient {
 
   constructor(baseUrl: string = FLAMA_AUDIO_BASE_URL) {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
-    this.token = localStorage.getItem(TOKEN_STORAGE_KEY)
+    this.token = safeLocalStorageGet<string | null>(TOKEN_STORAGE_KEY, null, (raw) => raw)
   }
 
   public setToken(token: string | null) {
     this.token = token
     if (token) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, token)
+      safeLocalStorageSet(TOKEN_STORAGE_KEY, token, (val) => val)
     } else {
-      localStorage.removeItem(TOKEN_STORAGE_KEY)
+      safeLocalStorageRemove(TOKEN_STORAGE_KEY)
     }
   }
 

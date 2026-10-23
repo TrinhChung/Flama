@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { generateWorksheetPreview } from '../api'
 import type {
@@ -6,102 +6,55 @@ import type {
   WorksheetFieldMapping,
   WorksheetLayoutOptions,
   WorksheetPreviewResponse,
+  WorksheetTemplate,
 } from '../types'
+import { createDefaultLayoutOptions } from '../config/defaultLayoutOptions'
+import type { WizardStepId } from '../config/wizardSteps'
 import { printWorksheet } from '../utils/printEngine'
-import { getFitZoom } from '../components/studio/StudioPreviewCanvas'
-import type { WizardStepId } from '../components/WorksheetWizardStepper'
+import type { StudioSetup } from '../utils/worksheetMeta'
+import { getFirstPreviewZoom, getFitZoom, isMobileViewport } from '../utils/zoom'
+
+export type WorksheetScope = 'all' | 'first_n' | 'random_n' | 'selected'
+
+const MM_TO_PX = 3.7795
+const PREVIEW_DEBOUNCE_MS = 300
 
 export interface UseWorksheetStudioProps {
-  open: boolean
   wizardStep: WizardStepId
   currentDeckId: number | null
   deckName?: string
   initialCardIds?: (string | number)[]
   meta: DeckWorksheetMeta | null
-  currentTemplate: DeckWorksheetMeta['templates'][0] | null
-  selectedTemplateId: string
-  setSelectedTemplateId: (id: string) => void
+  initialTemplateId: string
   selectedNoteTypeId: string
-  scope: 'all' | 'first_n' | 'random_n' | 'selected'
+  scope: WorksheetScope
   limitCount: number
 }
 
+/** Template, layout, live preview, zoom and print state of the Live Studio. */
 export function useWorksheetStudio({
-  open,
   wizardStep,
   currentDeckId,
   deckName,
   initialCardIds,
   meta,
-  currentTemplate,
-  selectedTemplateId,
-  setSelectedTemplateId,
+  initialTemplateId,
   selectedNoteTypeId,
   scope,
   limitCount,
 }: UseWorksheetStudioProps) {
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(initialTemplateId)
   const [fieldMapping, setFieldMapping] = useState<WorksheetFieldMapping>({})
   const [templateOptionsMap, setTemplateOptionsMap] = useState<Record<string, WorksheetLayoutOptions>>({})
   const [templateFieldMappingMap, setTemplateFieldMappingMap] = useState<Record<string, WorksheetFieldMapping>>({})
-
-  const [layoutOptions, setLayoutOptions] = useState<WorksheetLayoutOptions>({
-    paper_size: 'a4',
-    orientation: 'portrait',
-    margin: 'standard',
-    page_fill_mode: 'max_density',
-    grid_style: 'cross',
-    trace_count: 2,
-    practice_count: 5,
-    practice_boxes_count: 5,
-    rows_per_page: 5,
-    writing_lines_count: 3,
-    writing_line_style: 'dashed',
-    show_sample_sentence: true,
-    show_sample_reading: true,
-    show_sample_meaning: true,
-    exercise_prompt: 'Hãy đặt câu hoàn chỉnh sử dụng cấu trúc / từ vựng trên:',
-    show_explanation: true,
-    show_example_hint: true,
-    watermark_enabled: true,
-    watermark_text: typeof window !== 'undefined' ? window.location.hostname : 'flama.app',
-    watermark_opacity: 0.07,
-    current_url: typeof window !== 'undefined' ? window.location.href : undefined,
-    show_stroke_diagram: true,
-    show_stroke_numbers: true,
-    reference_char_color: '#e11d48',
-    stroke_color_mode: 'monochrome',
-    show_reading: false,
-    show_meaning: false,
-    show_source_word: false,
-    show_student_info: true,
-    show_date: true,
-    header_title: '',
-    header_subtitle: 'Luyện viết từ vựng và chữ Hán mỗi ngày',
-    locale: 'ja',
-    grid_columns: 20,
-    grid_rows: 20,
-    box_style: 'square',
-    grid_color: '#475569',
-    has_spacer_band: true,
-    spacer_height: 10,
-    content_mode: 'blank',
-    custom_text: '',
-    header_student_style: 'chinese',
-    title_placement: 'none',
-    footer_date_format: 'chinese',
-    footer_brand_label: 'Flama (400格)',
-    essay_page_count: 1,
-  })
+  const [layoutOptions, setLayoutOptions] = useState<WorksheetLayoutOptions>(createDefaultLayoutOptions)
 
   const [activePresetId, setActivePresetId] = useState<string | null>(null)
   const [previewData, setPreviewData] = useState<WorksheetPreviewResponse | null>(null)
   const [currentPageIdx, setCurrentPageIdx] = useState<number>(0)
-  const [zoomLevel, setZoomLevel] = useState<number>(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      return getFitZoom('portrait', window.innerWidth)
-    }
-    return 0.8
-  })
+  const [zoomLevel, setZoomLevel] = useState<number>(() =>
+    isMobileViewport() ? getFitZoom('portrait', window.innerWidth) : 0.8,
+  )
   const [isGenerating, setIsGenerating] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
 
@@ -111,6 +64,34 @@ export function useWorksheetStudio({
   layoutOptionsRef.current = layoutOptions
   const fieldMappingRef = useRef(fieldMapping)
   fieldMappingRef.current = fieldMapping
+
+  const currentTemplate = useMemo<WorksheetTemplate | null>(() => {
+    if (!meta?.templates) return null
+    return meta.templates.find((tpl) => tpl.id === selectedTemplateId) || meta.templates[0]
+  }, [meta, selectedTemplateId])
+
+  /** Latest layout options, safe to read from async callbacks. */
+  const getLayoutOptions = () => layoutOptionsRef.current
+
+  /** Clears the preview so the next generated one re-applies the first-load zoom. */
+  const resetPreview = () => {
+    setPreviewData(null)
+    setCurrentPageIdx(0)
+    isFirstLoadRef.current = true
+    if (isMobileViewport()) {
+      setZoomLevel(getFitZoom(layoutOptionsRef.current.orientation, window.innerWidth))
+    }
+  }
+
+  const applySetup = (setup: StudioSetup) => {
+    setSelectedTemplateId(setup.templateId)
+    setFieldMapping(setup.fieldMapping)
+    setLayoutOptions(setup.layoutOptions)
+    if (setup.template) {
+      setTemplateOptionsMap({ [setup.template.id]: setup.layoutOptions })
+      setTemplateFieldMappingMap({ [setup.template.id]: setup.fieldMapping })
+    }
+  }
 
   const handleCanvasTouchEnd = (e: React.TouchEvent) => {
     const now = Date.now()
@@ -196,12 +177,11 @@ export function useWorksheetStudio({
 
   // Reactive Debounced Live Preview Generator
   useEffect(() => {
-    if (!open || wizardStep !== 'studio' || !meta || !currentTemplate) return
+    if (wizardStep !== 'studio' || !meta || !currentTemplate) return
 
     setIsGenerating(true)
     const abortController = new AbortController()
-
-    const timer = setTimeout(async () => {
+    const runPreview = async () => {
       try {
         const response = await generateWorksheetPreview({
           deck_id: currentDeckId || undefined,
@@ -222,13 +202,7 @@ export function useWorksheetStudio({
 
         if (isFirstLoadRef.current) {
           isFirstLoadRef.current = false
-          if (typeof window !== 'undefined' && window.innerWidth < 768) {
-            setZoomLevel(getFitZoom(layoutOptions.orientation, window.innerWidth))
-          } else if (layoutOptions.orientation === 'landscape') {
-            setZoomLevel(0.72)
-          } else {
-            setZoomLevel(0.8)
-          }
+          setZoomLevel(getFirstPreviewZoom(layoutOptions.orientation))
         }
       } catch (err: any) {
         if (err?.name === 'AbortError' || abortController.signal.aborted) {
@@ -240,14 +214,15 @@ export function useWorksheetStudio({
           setIsGenerating(false)
         }
       }
-    }, 300)
+    }
+
+    const timer = setTimeout(runPreview, PREVIEW_DEBOUNCE_MS)
 
     return () => {
       clearTimeout(timer)
       abortController.abort()
     }
   }, [
-    open,
     wizardStep,
     currentDeckId,
     meta,
@@ -274,36 +249,31 @@ export function useWorksheetStudio({
   }
 
   const isLandscape = layoutOptions.orientation === 'landscape'
-  const mmToPx = 3.7795
   const a4WidthMm = isLandscape ? 297 : 210
   const a4HeightMm = isLandscape ? 210 : 297
-  const containerWidthPx = Math.round(a4WidthMm * mmToPx * zoomLevel)
-  const containerHeightPx = Math.round(a4HeightMm * mmToPx * zoomLevel)
+  const containerWidthPx = Math.round(a4WidthMm * MM_TO_PX * zoomLevel)
+  const containerHeightPx = Math.round(a4HeightMm * MM_TO_PX * zoomLevel)
 
   return {
+    selectedTemplateId,
+    setSelectedTemplateId,
+    currentTemplate,
     fieldMapping,
     setFieldMapping,
-    templateOptionsMap,
-    setTemplateOptionsMap,
-    templateFieldMappingMap,
-    setTemplateFieldMappingMap,
     layoutOptions,
     setLayoutOptions,
+    getLayoutOptions,
     activePresetId,
     setActivePresetId,
     previewData,
-    setPreviewData,
     currentPageIdx,
     setCurrentPageIdx,
     zoomLevel,
     setZoomLevel,
     isGenerating,
-    setIsGenerating,
     isPrinting,
-    setIsPrinting,
-    isFirstLoadRef,
-    layoutOptionsRef,
-    fieldMappingRef,
+    applySetup,
+    resetPreview,
     handleCanvasTouchEnd,
     handleSelectTemplate,
     handleResetCurrentTemplateDefaults,
@@ -314,3 +284,5 @@ export function useWorksheetStudio({
     a4HeightMm,
   }
 }
+
+export type WorksheetStudioState = ReturnType<typeof useWorksheetStudio>

@@ -468,6 +468,117 @@ describe('StudyPage trusted keyboard boundary', () => {
     expect(mocks.prepareDecision).not.toHaveBeenCalled()
     expect(mocks.answer).not.toHaveBeenCalled()
   })
+
+  function keydown(key: string, code: string) {
+    return new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true })
+  }
+
+  it('handles shortcuts and drops focus left on a control by a click or a closed menu', async () => {
+    await renderActiveStudy()
+    const moreButton = container!.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!
+    // Radix hands focus back to the trigger on close; a mouse click leaves it too.
+    moreButton.focus()
+
+    // Dispatched on the trigger itself, so Radix's own Space handler sees it too.
+    const space = keydown(' ', 'Space')
+    await act(async () => moreButton.dispatchEvent(space))
+
+    expect(space.defaultPrevented).toBe(true)
+    expect(mocks.prepareDecision).toHaveBeenCalledOnce()
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+    expect(document.activeElement).not.toBe(moreButton)
+
+    moreButton.focus()
+    const good = keydown('3', 'Digit3')
+    await act(async () => moreButton.dispatchEvent(good))
+
+    expect(good.defaultPrevented).toBe(true)
+    expect(mocks.answer).toHaveBeenCalledOnce()
+  })
+
+  it('keeps native Space on a control reached with Tab', async () => {
+    await renderActiveStudy()
+    const moreButton = container!.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!
+    await act(async () => {
+      window.dispatchEvent(keydown('Tab', 'Tab'))
+      moreButton.focus()
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Tab', code: 'Tab', bubbles: true }))
+    })
+
+    const space = keydown(' ', 'Space')
+    await act(async () => moreButton.dispatchEvent(space))
+    expect(mocks.prepareDecision).not.toHaveBeenCalled()
+    // Radix opened its menu natively from the Tab-focused trigger.
+    expect(document.querySelector('[role="menu"]')).not.toBeNull()
+  })
+
+  it('keeps native Enter on a link reached with Tab', async () => {
+    await renderActiveStudy()
+    const decksLink = container!.querySelector<HTMLAnchorElement>('a[href="/dashboard"]')!
+    await act(async () => {
+      window.dispatchEvent(keydown('Tab', 'Tab'))
+      decksLink.focus()
+    })
+
+    const enter = keydown('Enter', 'Enter')
+    await act(async () => decksLink.dispatchEvent(enter))
+
+    expect(enter.defaultPrevented).toBe(false)
+    expect(mocks.prepareDecision).not.toHaveBeenCalled()
+  })
+
+  it('ignores Tab focus tracking left over from before a mouse focus', async () => {
+    await renderActiveStudy()
+    const moreButton = container!.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!
+    await act(async () => {
+      window.dispatchEvent(keydown('Tab', 'Tab'))
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Tab', code: 'Tab', bubbles: true }))
+      moreButton.focus()
+    })
+
+    const space = keydown(' ', 'Space')
+    await act(async () => moreButton.dispatchEvent(space))
+
+    expect(space.defaultPrevented).toBe(true)
+    expect(mocks.prepareDecision).toHaveBeenCalledOnce()
+  })
+
+  it('takes rating keys on a Tab-focused control without blurring it', async () => {
+    await renderActiveStudy()
+    const moreButton = container!.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!
+    await act(async () => window.dispatchEvent(keydown(' ', 'Space')))
+    expect(mocks.prepareDecision).toHaveBeenCalledOnce()
+    await act(async () => {
+      window.dispatchEvent(keydown('Tab', 'Tab'))
+      moreButton.focus()
+    })
+
+    const good = keydown('3', 'Digit3')
+    await act(async () => moreButton.dispatchEvent(good))
+    expect(good.defaultPrevented).toBe(true)
+    expect(mocks.answer).toHaveBeenCalledOnce()
+    expect(document.activeElement).toBe(moreButton)
+  })
+
+  it('leaves keys to an open menu instead of the card behind it', async () => {
+    await renderActiveStudy()
+    const moreButton = container!.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!
+    await act(async () => {
+      moreButton.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }))
+      moreButton.click()
+    })
+    expect(document.querySelector('[role="menu"]')).not.toBeNull()
+
+    const events = [keydown(' ', 'Space'), keydown('z', 'KeyZ'), keydown('f', 'KeyF')]
+    await act(async () => {
+      for (const event of events) window.dispatchEvent(event)
+    })
+
+    for (const event of events) expect(event.defaultPrevented).toBe(false)
+    expect(mocks.prepareDecision).not.toHaveBeenCalled()
+    expect(mocks.undo).not.toHaveBeenCalled()
+    expect(mocks.requestFullscreen).not.toHaveBeenCalled()
+  })
 })
 
 describe('StudyPage quick edit interactions', () => {

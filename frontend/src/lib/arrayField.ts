@@ -49,6 +49,9 @@ function decodeEntities(value: string): string {
 
 /** Visible text of a field value: line breaks kept, markup and sound refs dropped. */
 export function fieldValueToText(raw: unknown): string {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => fieldValueToText(item)).filter(Boolean).join('\n')
+  }
   if (typeof raw !== 'string' || !raw) return ''
   const withBreaks = raw
     .replace(/\r\n?/g, '\n')

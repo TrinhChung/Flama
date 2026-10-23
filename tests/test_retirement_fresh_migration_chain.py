@@ -58,7 +58,7 @@ class RetirementFreshMigrationChainTests(unittest.TestCase):
                     # Same migration entry point as `flask --app wsgi.py db upgrade`.
                     upgrade(directory=str(Path(__file__).resolve().parents[1] / "migrations"))
                     tables = set(sa.inspect(db.engine).get_table_names())
-                    self.assertEqual(db.session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one(), "20261014_000068")
+                    self.assertEqual(db.session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one(), "20261020_000071")
                     self.assertEqual(set(db.metadata.tables) - tables, set())
                     self.assertEqual(tables - set(db.metadata.tables), {"alembic_version"})
                     self.assertFalse(tables & {"cards", "card_progress", "vocabulary_column_preferences",

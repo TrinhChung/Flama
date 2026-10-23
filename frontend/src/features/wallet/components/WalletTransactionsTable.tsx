@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { walletApi } from '../api/walletApi'
+import { formatDate } from '@/shared/lib/date'
 
 export function WalletTransactionsTable() {
   const { t, i18n } = useTranslation('wallet')
@@ -34,17 +35,6 @@ export function WalletTransactionsTable() {
         type: filterType,
       }),
   })
-
-  const formatDate = (isoString: string | null) => {
-    if (!isoString) return '—'
-    return new Date(isoString).toLocaleString(i18n.language === 'en' ? 'en-US' : 'vi-VN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
 
   return (
     <Card className="border-border/60 shadow-xs">
@@ -124,7 +114,7 @@ export function WalletTransactionsTable() {
                   {data.items.map((tx) => (
                     <TableRow key={tx.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDate(tx.created_at)}
+                        {formatDate(tx.created_at, {}, i18n.language)}
                       </TableCell>
                       <TableCell className="text-xs font-medium">
                         <div className="flex flex-col gap-0.5">

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from sqlalchemy import and_, case, false, func, literal, or_, select, tuple_
-from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm import aliased, contains_eager, load_only, selectinload
 
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from app.repositories.field_value_query_repository import note_field_text_expression
@@ -20,6 +20,7 @@ from models.card import get_card
 from models.flashcard import Card, Note, NoteType
 from models.field_def import FieldDef
 from models.study_application import StudyApplication
+from models.template import Template
 
 
 TEXT_FIELD_TYPES = {"text", "richtext", "markdown", "array"}
@@ -307,11 +308,29 @@ def load_card_for_browse_update(*, card_id: str) -> Card | None:
     return get_card(db.session, card_id, query=(
         Card.query.join(Note, Card.note_id == Note.id)
         .options(
-            selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
-            selectinload(Card.note).selectinload(Note.media_assets),
+            # The joined Note fills Card.note; no second read of notes.
+            contains_eager(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
+            contains_eager(Card.note).selectinload(Note.media_assets),
             selectinload(Card.template),
         )
     ))
+
+
+def browse_page_load_options():
+    """Loader options for a Browse page query that already joins ``Note``.
+
+    ``Card`` is the ``card_presentations`` view over ``notes``, so the page
+    query's own ``Note`` join fills ``Card.note`` instead of a third read of
+    ``notes``. A row needs only the NoteType name and field order and the
+    Template name.
+    """
+    return (
+        contains_eager(Card.note).selectinload(Note.note_type).options(
+            load_only(NoteType.id, NoteType.user_id, NoteType.name, NoteType.field_schema_revision),
+            selectinload(NoteType.field_defs),
+        ),
+        selectinload(Card.template).load_only(Template.id, Template.name),
+    )
 
 
 def one_visible_card_per_note(query):
@@ -340,16 +359,10 @@ def one_visible_card_per_note(query):
     ))
 
 
-def page_total_and_integrity(query, *, eligible=None, violation=None) -> tuple[int, int]:
-    """Return exact filtered total for pagination without full-collection preflight scan."""
+def count_distinct_cards(query) -> int:
+    """Exact filtered total for pagination; integrity is checked per page window."""
 
-    count_query = query.order_by(None)
-    if eligible is not None:
-        count_query = count_query.filter(eligible)
-    row = count_query.with_entities(
-        func.count(func.distinct(Card.id)),
-    ).one()
-    return int(row[0] or 0), 0
+    return int(query.order_by(None).with_entities(func.count(func.distinct(Card.id))).scalar() or 0)
 
 
 def page_window_integrity(

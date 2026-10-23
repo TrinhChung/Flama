@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flama Frontend Architecture"
+  short_description: "React FSD boundaries and UI preservation"
+  default_prompt: "Use $flama-frontend-architecture to update this React slice while preserving behavior and visual layout."

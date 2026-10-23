@@ -244,3 +244,29 @@ class NativeArrayCleanupTests(TestCase):
         self.assertIsNone(cleanup.array_value(None))
         with self.assertRaisesRegex(ValueError, 'review separately'):
             cleanup.array_value('  meaningful spaces  ')
+
+    def test_vocabulary_presenter_includes_array_in_ordered_names_and_reexports(self):
+        from app.presenters import vocabulary_presenter
+        from app.repositories import vocabulary_repository
+        self.assertIs(vocabulary_presenter.note_ordered_field_names, vocabulary_repository.note_ordered_field_names)
+        self.assertIs(vocabulary_presenter.note_display_triplet, vocabulary_repository.note_display_triplet)
+        names = vocabulary_presenter.note_ordered_field_names(self.note, text_only=True)
+        self.assertIn("Answer", names)
+
+    def test_update_field_blocks_direct_type_change_to_or_from_array(self):
+        from app.services.flashcard_content_service import update_field, ContentApiError
+        # Changing from array to text is blocked
+        with self.assertRaises(ContentApiError) as cm:
+            update_field(
+                user_id=self.note.user_id,
+                note_type_id=self.field.note_type_id,
+                field_id=self.field.id,
+                payload={"name": "Answer", "field_type": "text"},
+            )
+        self.assertEqual(cm.exception.status, 409)
+        self.assertEqual(cm.exception.error, "FIELD_TYPE_REQUIRES_CONVERSION")
+
+    def test_connect_normalized_identity_handles_list_without_repr(self):
+        from app.services.connect.base import _normalized_identity
+        self.assertEqual(_normalized_identity(["word1", "word2"]), "word1 word2")
+        self.assertEqual(_normalized_identity("  simple   text  "), "simple text")

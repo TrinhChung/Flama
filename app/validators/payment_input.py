@@ -4,7 +4,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 
-SUPPORTED_PAYMENT_PRODUCT_TYPES = {"deck_marketplace_item", "note_type"}
+SUPPORTED_PAYMENT_PRODUCT_TYPES = {"deck_marketplace_item", "note_type", "template"}
 
 
 def normalize_order_create_payload(payload: Any) -> tuple[dict[str, str] | None, str | None, str | None]:
@@ -17,7 +17,7 @@ def normalize_order_create_payload(payload: Any) -> tuple[dict[str, str] | None,
     cancel_url = _normalize_url(payload.get("cancel_url"))
 
     if product_type not in SUPPORTED_PAYMENT_PRODUCT_TYPES:
-        return None, "product_type must be 'note_type' or 'deck_marketplace_item'.", "product_type"
+        return None, "product_type must be 'note_type', 'deck_marketplace_item' or 'template'.", "product_type"
     if not product_ref_id:
         return None, "product_ref_id is required.", "product_ref_id"
     if payload.get("return_url") not in (None, "") and return_url is None:

@@ -33,7 +33,7 @@ Server-rendered HTML templates (Jinja2) have been eliminated; Flask serves only 
 
 ### Architectural Guarantees
 1. **Zero Server Rendering**: All UI components, state machines, and view routing execute entirely on the client.
-2. **Pragmatic Feature-Sliced Design (FSD v2.1)**: Code is organized into strict functional layers (`app`, `pages`, `features`, `entities`, `shared`, `components`).
+2. **Feature-Sliced Design & Opportunistic Migration**: Target dependency direction is `app -> pages -> widgets (optional) -> features -> entities -> shared`. Existing root `components`, `hooks`, `lib`, `config` and `layouts` are migration debt, not additional FSD layers. On touch, follow `AGENTS.md` and the canonical frontend skill for layer placement, public APIs, hook extraction and removal of legacy API calls.
 3. **Triple-Tier State Persistence**: Server state caching (TanStack Query) is decoupled from offline study execution (IndexedDB) and UI preferences (`localStorage`).
 4. **Anti-AI-Slop & Zero Visual Regression**: Strict design system based on linear OKLCH color spaces ("Tone màu Hỏa ấm"), Geist typography, and ambient backdrops.
 5. **Native Array Preservation**: Array fields are maintained as JSON lists; no Anki flat-string degeneration is permitted.
@@ -149,7 +149,7 @@ Routing Hierarchy (frontend/src/App.tsx)
 
 ## 5. Feature-Sliced Design (FSD) Structure & Component Map
 
-The application follows Pragmatic Feature-Sliced Design (FSD v2.1):
+Current physical layout (legacy paths below are still used; this is not the target architecture):
 
 ```
 frontend/src/
@@ -167,6 +167,8 @@ frontend/src/
 ├── pages/                # Top-level standalone page components
 └── shared/               # Reusable infrastructure (API, UI primitives, i18n)
 ```
+
+The migration target is `app -> pages -> widgets (optional) -> features -> entities -> shared`, with imports toward lower layers and no sibling feature imports. New primitives/utilities go under `shared`; shared domain models/UI go under `entities`; page/widget composition coordinates independent feature workflows. Existing paths above remain until their callers, lazy routes, tests and generator aliases are migrated. See [the FSD proposal and Codex review](../architecture/FLAMA_FRONTEND_FSD_CONSOLIDATION_AND_AGENT_ALIGNMENT_PROPOSAL.md) and `skills/flama-frontend-architecture/SKILL.md` at the repository root. No bulk relocation is implied by this documentation update.
 
 ### 5.1 Domain Entities (`frontend/src/entities/`)
 Entities encapsulate domain schemas, persistent data types, and isolated API query keys:
@@ -213,17 +215,18 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
   - `client.ts`: Canonical HTTP client providing `apiRequest`, `apiJson`, `apiJsonKeepalive`, `setCsrfToken`, `getCsrfToken`.
   - Configures `credentials: "include"` for secure session cookies.
   - Automatically parses Flask-WTF CSRF tokens from cookies or response headers and injects `X-CSRFToken` on mutating requests (POST, PUT, PATCH, DELETE).
-- **10 Domain-Level Tested UI Primitives (`src/shared/ui/`)**:
-  1. `CardFieldsForm`: Dynamic form builder for note fields with validation.
-  2. `CodeSnippetBox`: Formatted code container with one-click copy feedback.
-  3. `ConfirmDialog`: Standardized modal for destructive actions.
-  4. `FilterPillGroup`: Multi-selection filter buttons with active counter badges.
-  5. `ImageUploadDropzone`: Drag-and-drop image uploader with preview thumbnail.
-  6. `LanguageSwitcher`: Bilingual selector supporting instant locale swap.
-  7. `SearchInput`: Standardized debounced search input with clear icon.
-  8. `SplitPane`: Resizable two-pane layout with persistent divider positions.
-  9. `StatusPill`: Standardized colored state indicator for reviews and decks.
-  10. `WorkspaceLayout`: Three-column responsive workspace drawer.
+- **9 Domain-Level Tested UI Primitives (`src/shared/ui/`)**:
+  1. `CodeSnippetBox`: Formatted code container with one-click copy feedback.
+  2. `ConfirmDialog`: Standardized modal for destructive actions.
+  3. `FilterPillGroup`: Multi-selection filter buttons with active counter badges.
+  4. `ImageUploadDropzone`: Drag-and-drop image uploader with preview thumbnail.
+  5. `LanguageSwitcher`: Bilingual selector supporting instant locale swap.
+  6. `SearchInput`: Standardized debounced search input with clear icon.
+  7. `SplitPane`: Resizable two-pane layout with persistent divider positions.
+  8. `StatusPill`: Standardized colored state indicator for reviews and decks.
+  9. `WorkspaceLayout`: Three-column responsive workspace drawer.
+- **Note field editing** lives in `src/entities/flashcard/ui/NoteFieldEditor.tsx` (media preview, native array input or text; Input vs Textarea is fixed at mount from field type, name and stored value). Browse edit/create and the Study quick-edit dialog share it.
+- **Note tags**: the backend limits (64 chars, 50 tags) and the casefold dedupe key are in `src/entities/flashcard/lib/noteTags.ts`; tag inputs ignore an IME-confirming Enter with `isImeEnter` from `src/shared/lib/keyboard.ts`. Browse and Study quick edit both use them, and both lock tags on cloned cards (`note.deck_install_id`).
 
 ---
 

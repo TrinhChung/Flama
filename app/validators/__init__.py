@@ -49,6 +49,7 @@ from .mcp import (
     validate_mcp_jsonrpc_request,
     validate_mcp_tool_call_params,
 )
+from .base import BaseDTO
 from .study_composition import (
     StudyCompositionSelectionInput,
     validate_study_composition_selection_request,
@@ -57,6 +58,7 @@ from .study_composition import (
 __all__ = [
     "ALLOWED_MEDIA_EXTENSIONS_BY_FAMILY",
     "ALLOWED_MEDIA_MIME_TYPES",
+    "BaseDTO",
     "ChangeRequestConflictResolutionInput",
     "ChangeRequestDraftInput",
     "ChangeRequestReviewInput",

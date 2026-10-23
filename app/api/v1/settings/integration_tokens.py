@@ -13,21 +13,20 @@ from models import db
 integration_tokens_bp = Blueprint("api_v1_integration_tokens", __name__)
 
 
+from app.utils.db import transaction
+
+
 @integration_tokens_bp.post("/sentence-mining-setup")
 @login_required
 def sentence_mining_setup():
     from app.services.connect.base import ConnectError
     from app.services.connect.mining_setup import prepare_sentence_mining
     try:
-        result = prepare_sentence_mining(current_user.id)
-        db.session.commit()
+        with transaction():
+            result = prepare_sentence_mining(current_user.id)
         return jsonify(result)
     except ConnectError as exc:
-        db.session.rollback()
         return error_response("VALIDATION_ERROR", str(exc), status=400)
-    except Exception:
-        db.session.rollback()
-        raise
 
 
 def _expiry_from_payload(payload: dict, *, default: int | None = 180) -> int | None:
@@ -59,20 +58,16 @@ def create_integration_token():
     if not isinstance(payload, dict):
         return error_response("INVALID_JSON", "A JSON object is required.", status=400)
     try:
-        issued = user_api_token_service.issue_token(
-            user_id=current_user.id,
-            name=payload.get("name"),
-            expires_in_days=_expiry_from_payload(payload),
-            preset=payload.get("preset", "legacy"),
-            scopes=payload.get("scopes"),
-        )
-        db.session.commit()
+        with transaction():
+            issued = user_api_token_service.issue_token(
+                user_id=current_user.id,
+                name=payload.get("name"),
+                expires_in_days=_expiry_from_payload(payload),
+                preset=payload.get("preset", "legacy"),
+                scopes=payload.get("scopes"),
+            )
     except user_api_token_service.TokenInputError as exc:
-        db.session.rollback()
         return error_response("VALIDATION_ERROR", str(exc), status=400)
-    except Exception:
-        db.session.rollback()
-        raise
     item = user_api_token_service.serialize_token(issued.record)
     item["token"] = issued.plaintext
     return jsonify({"item": item}), 201
@@ -81,9 +76,9 @@ def create_integration_token():
 @integration_tokens_bp.delete("/<int:token_id>")
 @login_required
 def revoke_integration_token(token_id: int):
-    if not user_api_token_service.revoke_token(user_id=current_user.id, token_id=token_id):
-        return error_response("NOT_FOUND", "Integration token not found.", status=404)
-    db.session.commit()
+    with transaction():
+        if not user_api_token_service.revoke_token(user_id=current_user.id, token_id=token_id):
+            return error_response("NOT_FOUND", "Integration token not found.", status=404)
     return "", 204
 
 
@@ -96,20 +91,16 @@ def rotate_integration_token(token_id: int):
     if not isinstance(payload, dict):
         return error_response("INVALID_JSON", "A JSON object is required.", status=400)
     try:
-        issued = user_api_token_service.rotate_token(
-            user_id=current_user.id,
-            token_id=token_id,
-            expires_in_days=_expiry_from_payload(payload),
-        )
-        if issued is None:
-            return error_response("NOT_FOUND", "Integration token not found.", status=404)
-        db.session.commit()
+        with transaction():
+            issued = user_api_token_service.rotate_token(
+                user_id=current_user.id,
+                token_id=token_id,
+                expires_in_days=_expiry_from_payload(payload),
+            )
+            if issued is None:
+                return error_response("NOT_FOUND", "Integration token not found.", status=404)
     except user_api_token_service.TokenInputError as exc:
-        db.session.rollback()
         return error_response("VALIDATION_ERROR", str(exc), status=400)
-    except Exception:
-        db.session.rollback()
-        raise
     item = user_api_token_service.serialize_token(issued.record)
     item["token"] = issued.plaintext
     return jsonify({"item": item}), 201

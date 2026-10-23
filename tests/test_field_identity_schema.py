@@ -95,9 +95,11 @@ class FieldIdentitySchemaTests(unittest.TestCase):
         metadata = sa.MetaData()
         sa.Table("users", metadata, sa.Column("id", sa.Integer, primary_key=True))
         sa.Table("decks", metadata, sa.Column("id", sa.Integer, primary_key=True))
+        sa.Table("note_type_releases", metadata, sa.Column("id", sa.String(36), primary_key=True))
         tables = {name: table.to_metadata(metadata) for name, table in MODEL_TABLES.items()}
         with fresh_engine.begin() as connection:
             metadata.create_all(connection)
+            connection.execute(metadata.tables["users"].insert().values(id=1))
             self.assertNotIn("field_values", tables["notes"].c)
             connection.execute(tables["note_types"].insert().values(id="schema", user_id=1, name="Words"))
             connection.execute(tables["notes"].insert().values(

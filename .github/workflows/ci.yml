@@ -25,6 +25,23 @@ on:
       - '.vscode/**'
       - 'flama-audio/**'
   workflow_dispatch:
+    inputs:
+      backend_jobs:
+        description: 'Backend unittest processes for a paired timing run (push and PR runs use 1)'
+        required: false
+        default: '1'
+      backend_partition_seed:
+        description: 'Optional partition seed for backend_jobs above 1'
+        required: false
+        default: ''
+      validation_scope:
+        description: "'all' runs every validation job; 'backend' runs only changes and backend, for a cheaper benchmark"
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - backend
 
 permissions:
   contents: read
@@ -80,7 +97,7 @@ jobs:
 
   frontend:
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.frontend == 'true' && inputs.validation_scope != 'backend'
     runs-on: ubuntu-latest
 
     defaults:
@@ -97,6 +114,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -132,10 +151,32 @@ jobs:
       - name: Validate Cloudflare deployment configuration
         run: npm run deploy:check
 
+      # Flask checks this job's build in place: a separate job would need to
+      # rebuild the SPA (CI uses no Actions artifacts) and bill another runner.
+      - name: Install SPA contract dependencies
+        if: needs.changes.outputs.spa_contract == 'true'
+        working-directory: .
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify Flask serves the real Vite artifact
+        if: needs.changes.outputs.spa_contract == 'true'
+        working-directory: .
+        env:
+          DB_USER: ci
+          DB_NAME: ci
+          SECRET_KEY: ci-secret
+          FLAMA_REQUIRE_REAL_SPA_ARTIFACT: '1'
+          EMAIL_ENABLED: '0'
+          EMAIL_PROVIDER: memory
+        run: python -m unittest tests.test_spa_artifact_contract
+
   backend:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    # The slowest recent backend job took 16 minutes; a hung worker must not
+    # bill the 6-hour default.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -148,74 +189,43 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-test.txt
 
+      # Push and PR runs stay single-process until paired hosted runs show the
+      # parallel runner keeps the same cases and fits this runner's resources.
+      # A manual dispatch can pass backend_jobs to collect that evidence; it also
+      # prints a case manifest hash (the file stays on the runner, no artifact).
       - name: Run backend tests
         env:
           DB_USER: ci
           DB_NAME: ci
           SECRET_KEY: ci-secret
+          BACKEND_JOBS: ${{ inputs.backend_jobs || '1' }}
+          BACKEND_PARTITION_SEED: ${{ inputs.backend_partition_seed || '' }}
+          BACKEND_MANIFEST: ${{ github.event_name == 'workflow_dispatch' && 'output/backend-test-manifest.json' || '' }}
         run: |
+          # Bound every backend bin, including the single-process baseline.
+          extra=(--bin-timeout 1200)
+          if [ -n "$BACKEND_MANIFEST" ]; then extra+=(--manifest "$BACKEND_MANIFEST"); fi
+          if [ -n "$BACKEND_PARTITION_SEED" ]; then extra+=(--partition-seed "$BACKEND_PARTITION_SEED"); fi
           if [ "${{ github.ref_name }}" = "master" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Running full backend test suite on master..."
-            python scripts/run_tests.py --all --backend-only
+            python scripts/run_tests.py --all --backend-only --jobs "$BACKEND_JOBS" "${extra[@]}"
           else
             echo "Running modular backend test suite for changed modules..."
-            python scripts/run_tests.py --changed --backend-only
+            python scripts/run_tests.py --changed --backend-only --jobs "$BACKEND_JOBS" "${extra[@]}"
           fi
-
-  spa-contract:
-    needs: [changes, frontend]
-    if: >-
-      needs.changes.outputs.spa_contract == 'true' &&
-      needs.frontend.result == 'success'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Build the SPA in this job instead of passing an artifact: CI uses no
-      # Actions artifact storage, so an exhausted quota cannot block it.
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.22.2'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Build React SPA
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build:ci
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: requirements.txt
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Verify Flask serves the real Vite artifact
-        env:
-          DB_USER: ci
-          DB_NAME: ci
-          SECRET_KEY: ci-secret
-          FLAMA_REQUIRE_REAL_SPA_ARTIFACT: '1'
-        run: python -m unittest tests.test_spa_artifact_contract
 
   redis-contract:
     needs: changes
-    if: needs.changes.outputs.redis_contract == 'true'
+    if: needs.changes.outputs.redis_contract == 'true' && inputs.validation_scope != 'backend'
     runs-on: ubuntu-latest
 
     services:
@@ -253,8 +263,11 @@ jobs:
 
   mysql-contract:
     needs: changes
-    if: needs.changes.outputs.mysql_contract == 'true'
+    if: needs.changes.outputs.mysql_contract == 'true' && inputs.validation_scope != 'backend'
     runs-on: ubuntu-latest
+    # The slowest recent run took 22 minutes; a hung probe must not bill the
+    # 6-hour default.
+    timeout-minutes: 40
 
     services:
       mysql:
@@ -264,11 +277,17 @@ jobs:
           MYSQL_ROOT_PASSWORD: ci-root-password
         ports:
           - 3306:3306
+        # Most probe time is per-test CREATE/DROP of the whole schema. A RAM
+        # datadir removes the fsync and file-creation cost without changing
+        # the engine, isolation or locking; the cap turns a runaway binlog
+        # into a clear write error instead of an out-of-memory runner.
+        # mysql:8.0 defaults to innodb_flush_method=fsync, which tmpfs supports.
         options: >-
           --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pci-root-password"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+          --tmpfs /var/lib/mysql:rw,size=2g
 
     steps:
       - name: Checkout
@@ -307,16 +326,7 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p1_02_mysql_concurrency.py
 
-      - name: Run NOTE analytics read-only contract on MySQL
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: '3306'
-          DB_USER: root
-          DB_PASSWORD: ci-root-password
-          DB_NAME: ci
-        run: python scripts/probe_p5_analytics_mysql.py
-
-      - name: Verify historical and deck count transactions on MySQL
+      - name: Setup historical and deck count MySQL anchor
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: '3306'
@@ -346,8 +356,12 @@ jobs:
           path.parent.mkdir(exist_ok=True)
           path.write_text('SQLALCHEMY_DATABASE_URI=' + url.render_as_string(hide_password=False) + '\n', encoding='utf-8')
           PY
-          python scripts/probe_review_analytics_mysql.py --env-file output/analytics-counts-ci.env
-          python scripts/probe_deck_counts_mysql.py --env-file output/analytics-counts-ci.env
+
+      - name: Verify historical review analytics transactions on MySQL
+        run: python scripts/probe_review_analytics_mysql.py --env-file output/analytics-counts-ci.env
+
+      - name: Verify deck count snapshot transactions on MySQL
+        run: python scripts/probe_deck_counts_mysql.py --env-file output/analytics-counts-ci.env
 
       - name: Run cross-learner NOTE write concurrency contract on MySQL
         env:
@@ -358,14 +372,25 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p5_concurrency_mysql.py --learners 4 --notes 24 --rounds 2 --answers 8 --signups 6 --creates 8
 
-      - name: Run NOTE overlay and pristine materialization contract on MySQL
+      # These six probes each create, guard and drop their own generated
+      # schema and share no server state, so they run two at a time, longest
+      # first (plan 6.3.1). Concurrency probes and probes that use the ci
+      # schema keep their own sequential steps.
+      - name: Run schema-owning NOTE, field value, forecast, outbox and retention contracts on MySQL
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: '3306'
           DB_USER: root
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
-        run: python scripts/probe_p5_direct_replay_mysql.py --overlay-only
+        run: >-
+          python scripts/run_mysql_probes.py --jobs 2 --timeout 1500
+          --probe "scripts/probe_review_analytics_outbox_mysql.py --output output/review-outbox-mysql-ci.json"
+          --probe "scripts/probe_p5_direct_replay_mysql.py --overlay-only"
+          --probe "scripts/probe_forecast_snapshots_mysql.py --output output/forecast-snapshots-mysql-ci.json"
+          --probe "scripts/probe_field_value_consumers_mysql.py --output output/field-value-consumers-mysql-ci.json"
+          --probe "scripts/probe_p7_session_retention_mysql.py"
+          --probe "scripts/probe_p5_analytics_mysql.py"
 
       - name: Qualify complete retirement chain on a generated MySQL schema
         env:
@@ -376,19 +401,23 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_retirement_fresh_chain_mysql.py --output output/retirement-fresh-mysql-ci.json
 
-      - name: Qualify Field identity expansion and exact forecast buckets on MySQL
+      - name: Qualify Field identity migration 63 expansion on MySQL
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: '3306'
           DB_USER: root
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
-        run: |
-          python scripts/probe_field_identity_mysql.py --output output/field-identity-mysql-ci.json
-          python scripts/probe_field_identity_cutover_mysql.py --output output/field-identity-cutover-mysql-ci.json
-          python scripts/probe_field_value_consumers_mysql.py --output output/field-value-consumers-mysql-ci.json
-          python scripts/probe_forecast_snapshots_mysql.py --output output/forecast-snapshots-mysql-ci.json
-          python scripts/probe_review_analytics_outbox_mysql.py --output output/review-outbox-mysql-ci.json
+        run: python scripts/probe_field_identity_mysql.py --output output/field-identity-mysql-ci.json
+
+      - name: Qualify Field identity cutover 66/67 and restore on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: python scripts/probe_field_identity_cutover_mysql.py --output output/field-identity-cutover-mysql-ci.json
 
       - name: Verify retirement archives and contract guards with focused tests
         env:
@@ -398,15 +427,6 @@ jobs:
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
         run: python scripts/run_tests.py --file tests/test_frozen_template_modernization.py tests/test_retirement_fresh_migration_chain.py tests/test_derived_card_retirement_migration.py tests/test_legacy_model_retirement.py tests/test_card_progress_retirement_migration.py tests/test_template_origin_retirement_migration.py --backend-only
-
-      - name: Run Phase 7 session retention contract on MySQL
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: '3306'
-          DB_USER: root
-          DB_PASSWORD: ci-root-password
-          DB_NAME: ci
-        run: python scripts/probe_p7_session_retention_mysql.py
 
 
       - name: Run migration 48 Connect authority fence probe on MySQL
@@ -418,10 +438,18 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p9_connect_fence_mysql.py --refs 2000
 
-
+      # The datadir lives in RAM (tmpfs above). Record what this run used so
+      # the size cap can be checked against real peaks.
+      - name: Report MySQL tmpfs, binlog and runner memory use
+        if: always()
+        env:
+          MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          docker exec "$MYSQL_CONTAINER" sh -c 'df -h /var/lib/mysql; du -sh /var/lib/mysql; du -ch /var/lib/mysql/binlog.0* 2>/dev/null | tail -n 1' || true
+          free -m || true
 
   deploy:
-    needs: [changes, frontend, backend, spa-contract, redis-contract, mysql-contract]
+    needs: [changes, frontend, backend, redis-contract, mysql-contract]
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&

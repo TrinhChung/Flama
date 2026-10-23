@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { apiRequest } from '@/shared/api/client'
+import { useDeckOptionsQuery, type DeckListItem } from '@/entities/deck'
 import { scanDeckAudio } from '../services/audioScanService'
 import { cleanTextForTts } from '../services/ttsTextNormalizer'
 import {
@@ -17,15 +16,7 @@ import type {
   FieldMapping,
 } from '../types'
 
-import type { DeckOption } from '@/features/import/components/DeckSelectionTreeView'
-
-export type SimpleDeck = {
-  id: number
-  name: string
-  parent_id?: number | null
-  path?: string
-  counts?: { total?: number; new?: number; learn?: number; due?: number }
-}
+export type SimpleDeck = DeckListItem
 
 function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -48,41 +39,7 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
   const [rules, setRules] = useState<AudioRuleConfig[]>([])
 
   // 1. Fetch accessible deck list
-  const decksQuery = useQuery({
-    queryKey: ['browse-decks-tree'],
-    queryFn: async () => {
-      const res = await apiRequest<{ decks: SimpleDeck[] }>('/api/browse/decks')
-      return res.decks || []
-    },
-  })
-
-  const decks = useMemo(() => decksQuery.data || [], [decksQuery.data])
-
-  const deckOptions: DeckOption[] = useMemo(() => {
-    const rawDecks = decksQuery.data || []
-    const deckMap = new Map<number, SimpleDeck>()
-    rawDecks.forEach((d) => deckMap.set(d.id, d))
-
-    const buildPath = (deck: SimpleDeck): string => {
-      const parts = [deck.name]
-      let cur = deck
-      const seen = new Set<number>()
-      while (cur.parent_id != null && deckMap.has(cur.parent_id) && !seen.has(cur.parent_id)) {
-        seen.add(cur.parent_id)
-        cur = deckMap.get(cur.parent_id)!
-        parts.unshift(cur.name)
-      }
-      return parts.join('::')
-    }
-
-    return rawDecks.map((d) => ({
-      id: d.id,
-      name: d.name,
-      path: d.path || buildPath(d),
-      parent_id: d.parent_id,
-      notes_count: d.counts?.total ?? d.counts?.due ?? 0,
-    }))
-  }, [decksQuery.data])
+  const { decks, deckOptions, isLoading: isDecksLoading } = useDeckOptionsQuery()
 
   // 2. Perform Deck Scan
   const handleScanDeck = useCallback(async (deckId: number) => {
@@ -395,7 +352,7 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
   return {
     decks,
     deckOptions,
-    isDecksLoading: decksQuery.isLoading,
+    isDecksLoading,
     selectedDeckId,
     setSelectedDeckId,
     isScanning,

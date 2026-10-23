@@ -1,23 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { appApi } from '@/app/api'
+import { createNoteType, fetchNoteTypeSummaries, noteTypeManagerQueryKey } from '../api/noteTypeManagerApi'
 
-export type NoteTypeItem = {
-  id: string
-  name: string
-  field_defs?: Array<{ id: string; name: string }>
-  templates?: Array<{ id: string; name: string }>
-  publish_status?: string
-  created_at?: string
-  updated_at?: string
-}
-
-export type NoteTypesResponse = {
-  items: NoteTypeItem[]
-}
+const TOUR_STORAGE_KEY = 'flama_notetype_spotlight_tour_v1'
 
 export function useNoteTypeManager() {
   const { t } = useTranslation('note_types')
@@ -28,13 +16,28 @@ export function useNoteTypeManager() {
   const [tourOpen, setTourOpen] = useState(false)
 
   const query = useQuery({
-    queryKey: ['note-types'],
-    queryFn: () => appApi.get<NoteTypesResponse>('/note-types'),
+    queryKey: noteTypeManagerQueryKey,
+    queryFn: ({ signal }) => fetchNoteTypeSummaries(signal),
   })
+  const noteTypes = query.data?.items || []
+
+  useEffect(() => {
+    if (query.isSuccess) {
+      const completed = localStorage.getItem(TOUR_STORAGE_KEY)
+      if (!completed && noteTypes.length === 0) {
+        const timer = setTimeout(() => setTourOpen(true), 500)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [query.isSuccess, noteTypes.length])
+
+  const closeTour = () => {
+    localStorage.setItem(TOUR_STORAGE_KEY, 'true')
+    setTourOpen(false)
+  }
 
   const createMutation = useMutation({
-    mutationFn: (newTypeName: string) =>
-      appApi.mutate<NoteTypeItem>('/note-types', 'POST', { name: newTypeName }),
+    mutationFn: createNoteType,
     onSuccess: (data) => {
       toast.success(t('manager.messages.create_success'))
       setName('')
@@ -58,11 +61,12 @@ export function useNoteTypeManager() {
 
   return {
     query,
-    noteTypes: query.data?.items || [],
+    noteTypes,
     name,
     setName,
     tourOpen,
     setTourOpen,
+    closeTour,
     createMutation,
     handleCreate,
   }

@@ -2,60 +2,31 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-import json
-import logging
-import re
-from secrets import randbelow
-import time
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from uuid import uuid4
+from typing import Any
 
-from flask import current_app
-from sqlalchemy import and_, asc, desc, func, or_
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.exc import IntegrityError
 
 from app.repositories import payment_repository
-from app.services import flashcards_share_service, support_donation_service
-from app.services.payment import config as payment_config
 from app.services.payment.provider import payos_provider
 from models import db
-from models.audit_log import AuditLog
-from models.deck_install import DeckInstall
-from models.deck_marketplace_item import DeckMarketplaceItem
-from models.note_type import NoteType
-from models.note_type_install import NoteTypeInstall
 from models.payment_attempt import PaymentAttempt
-from models.payment_entitlement import PaymentEntitlement
-from models.payment_order import PaymentOrder
-from models.payment_order_item import PaymentOrderItem
 from models.payment_webhook_event import PaymentWebhookEvent
-from models.user import User
-
-logger = logging.getLogger(__name__)
-UTC = timezone.utc
-
-PAYMENT_PROVIDER_CODE = "payos"
-PAYMENT_METHOD_CODE = "payos_checkout"
-PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
-
 
 from app.services.payment.base import (
+    PAYMENT_PROVIDER_CODE,
     PaymentServiceError,
-    _iso,
+    _require_payments_enabled,
+    _require_supported_provider,
     _utcnow,
 )
+from app.services.payment.config import payments_enabled, webhook_auto_grant_enabled
 from app.services.payment.fulfillment import (
     _ensure_entitlements_for_confirmed_order,
-    _fulfill_order_item,
     _mark_failed_attempt,
     _mark_manual_review,
 )
 from app.services.payment.orders import (
-    _latest_attempt,
+    _maybe_expire_order,
     serialize_order,
 )
 
@@ -148,13 +119,14 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Giao dịch không vượt qua bước xác minh chữ ký nên cần kiểm tra thủ công.",
+            reason="Webhook từ PayOS không vượt qua bước xác minh chữ ký nên cần kiểm tra thủ công.",
             now=now,
         )
         db.session.commit()
         return {"status": "manual_review", "order": serialize_order(order)}, 202
 
-    if order.status in {"canceled", "failed", "refunded"}:
+    invalidated_quote_paid = bool(normalized_payload.get("success") and attempt.failure_code == "quote_replaced")
+    if order.status in {"canceled", "failed", "refunded"} and not invalidated_quote_paid:
         event.processing_status = "ignored"
         event.error_message = f"Đơn hàng đã đóng trước đó với trạng thái '{order.status}'."
         event.processed_at = now
@@ -167,7 +139,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             attempt=attempt,
             event=event,
             reason=(
-                "Cổng thanh toán trả về trạng thái không thành công"
+                "PayOS trả về trạng thái không thành công"
                 f" ('{normalized_payload.get('status') or 'unknown'}') cho đơn hàng này."
             ),
             now=now,
@@ -180,7 +152,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Số tiền chuyển khoản không khớp với số tiền của đơn hàng nên cần kiểm tra thủ công.",
+            reason="Số tiền PayOS gửi về không khớp với số tiền của đơn hàng nên cần kiểm tra thủ công.",
             now=now,
         )
         db.session.commit()
@@ -193,7 +165,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Nội dung chuyển khoản không khớp với mã tham chiếu của đơn hàng.",
+            reason="Nội dung chuyển khoản PayOS gửi về không khớp với mã tham chiếu của đơn hàng.",
             now=now,
         )
         db.session.commit()
@@ -210,15 +182,45 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
         provider_metadata["payment_reference_confirmed"] = normalized_payload["payment_reference"]
     attempt.provider_metadata_json = provider_metadata
 
+    if invalidated_quote_paid:
+        from app.services.payment.template_quotes import mark_duplicate_payment_for_review
+        error = PaymentServiceError("PAYMENT_QUOTE_INVALIDATED",
+            "PayOS confirmed a previously invalidated template quote. The payment needs review; no rights or creator revenue were granted.",
+            status=409, extra={"template_ids": [item.product_ref_id for item in order.items
+                if item.product_type == "template" and item.line_total_amount_minor > 0]})
+        mark_duplicate_payment_for_review(order, attempt, error, now=now, source="invalidated_quote_webhook")
+        _mark_manual_review(order=order, attempt=attempt, event=event, reason=error.message, now=now)
+        db.session.commit()
+        return {"status": "manual_review", "order": serialize_order(order)}, 202
+
     order.status = "paid"
     order.paid_at = order.paid_at or now
     order.closed_at = now
-    _ensure_entitlements_for_confirmed_order(order, attempt, now=now)
+    try:
+        _ensure_entitlements_for_confirmed_order(order, attempt, now=now)
+    except PaymentServiceError as exc:
+        from app.services.payment.template_quotes import DUPLICATE_TEMPLATE_PAYMENT, mark_duplicate_payment_for_review
+        if exc.code != DUPLICATE_TEMPLATE_PAYMENT:
+            raise
+        mark_duplicate_payment_for_review(order, attempt, exc, now=now, source="verified_webhook")
+        _mark_manual_review(order=order, attempt=attempt, event=event, reason=exc.message, now=now)
+        db.session.commit()
+        return {"status": "manual_review", "order": serialize_order(order)}, 202
 
     event.processing_status = "processed"
     event.error_message = None
     event.processed_at = now
     db.session.commit()
+    # A newly granted template also invalidates quotes for other bundles. A
+    # provider outage must not undo the successfully recorded payment; their
+    # own webhook preflight will still fence duplicate license/revenue grants.
+    from app.services.payment.checkout import reconcile_template_quotes_after_grant
+    cleanup = reconcile_template_quotes_after_grant(user_id=order.user_id) if order.user_id else {}
+    if cleanup:
+        metadata = dict(attempt.provider_metadata_json or {})
+        metadata.update(cleanup)
+        attempt.provider_metadata_json = metadata
+        db.session.commit()
     return {"status": "processed", "order": serialize_order(order)}, 200
 
 

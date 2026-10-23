@@ -5,6 +5,8 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { NOTE_TAG_MAX_LENGTH } from '@/entities/flashcard'
+import { isImeEnter } from '@/shared/lib/keyboard'
 
 export type StudyQuickEditTagsProps = {
   tags: string[]
@@ -12,6 +14,9 @@ export type StudyQuickEditTagsProps = {
   onNewTagInputChange: (value: string) => void
   onAddTag: () => void
   onRemoveTag: (tag: string) => void
+  /** Read-only tags, e.g. on a cloned card where the backend rejects tag edits. */
+  disabled?: boolean
+  disabledReason?: string
 }
 
 export function StudyQuickEditTags({
@@ -20,6 +25,8 @@ export function StudyQuickEditTags({
   onNewTagInputChange,
   onAddTag,
   onRemoveTag,
+  disabled = false,
+  disabledReason,
 }: StudyQuickEditTagsProps) {
   const { t } = useTranslation('study')
 
@@ -34,11 +41,14 @@ export function StudyQuickEditTags({
           value={newTagInput}
           onChange={(e) => onNewTagInputChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !isImeEnter(e)) {
               e.preventDefault()
               onAddTag()
             }
           }}
+          maxLength={NOTE_TAG_MAX_LENGTH}
+          disabled={disabled}
+          title={disabled ? disabledReason : undefined}
           className="h-10 sm:h-8 rounded-lg text-base sm:text-xs bg-muted/50 flex-1"
         />
         <Button
@@ -47,6 +57,8 @@ export function StudyQuickEditTags({
           variant="outline"
           className="h-10 sm:h-8 px-3.5 sm:px-2.5 rounded-lg text-xs font-semibold bg-muted/50 hover:bg-muted border-border shrink-0"
           onClick={onAddTag}
+          disabled={disabled}
+          title={disabled ? disabledReason : undefined}
         >
           <Plus className="size-3.5 mr-1" /> {t('quick_edit.add_tag')}
         </Button>
@@ -66,14 +78,16 @@ export function StudyQuickEditTags({
             >
               <Tag className="size-3 sm:size-2.5 opacity-60" />
               <span>{tag}</span>
-              <button
-                type="button"
-                onClick={() => onRemoveTag(tag)}
-                className="p-1 sm:p-0.5 rounded-full hover:bg-muted-foreground/15 text-muted-foreground hover:text-foreground shrink-0"
-                aria-label={`Remove tag ${tag}`}
-              >
-                <X className="size-3 sm:size-2.5" />
-              </button>
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveTag(tag)}
+                  className="p-1 sm:p-0.5 rounded-full hover:bg-muted-foreground/15 text-muted-foreground hover:text-foreground shrink-0"
+                  aria-label={`Remove tag ${tag}`}
+                >
+                  <X className="size-3 sm:size-2.5" />
+                </button>
+              )}
             </Badge>
           ))
         )}

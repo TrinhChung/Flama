@@ -1,0 +1,32 @@
+# Flama
+
+> Flama (https://flama.vn) là nền tảng học tiếng Nhật và ghi nhớ đa lĩnh vực thông minh thế hệ mới, kết hợp thuật toán lặp lại ngắt quãng (SRS), khai thác từ vựng 1-click qua Yomitan bridge, phát âm chuẩn tự nhiên với Local TTS (VoiceVox & Kokoro), và cộng đồng chia sẻ bộ thẻ Flashcard.
+
+Flama được thiết kế nhằm mang lại trải nghiệm học tập vượt trội thay thế và nâng cấp Anki truyền thống: giao diện hiện đại, đồng bộ đám mây tức thì, hỗ trợ mining từ vựng trực tiếp khi đọc báo/xem phim, phát âm chuẩn ngữ điệu Nhật Bản ngay trên máy không giới hạn chi phí API, và kho dữ liệu luyện thi JLPT từ N5 đến N1.
+
+## Core Features & Concepts
+
+- [Học Từ Vựng SRS (Spaced Repetition)](https://flama.vn/guide/study/spaced-repetition): Thuật toán nhắc nhở thông minh tối ưu hóa điểm nhớ và đường cong quên lãng theo 4 mức đánh giá (Again, Hard, Good, Easy).
+- [Khai Thác Từ Vựng Yomitan (1-Click Mining)](https://flama.vn/guide/integrations/yomitan): Tiện ích Flama Connect tương thích giao thức AnkiConnect, cho phép lưu từ vựng, ngữ cảnh, furigana và âm thanh trực tiếp từ trình duyệt chỉ với 1 cú click.
+- [Local TTS Tiếng Nhật (VoiceVox & Kokoro)](https://flama.vn/guide/flama-audio): Bộ đồng hành Flama Audio desktop tích hợp VoiceVox và Kokoro TTS, phát âm ngữ điệu chuẩn tự nhiên 100% offline và miễn phí.
+- [Kho Marketplace & Lộ Trình JLPT N5-N1](https://flama.vn/guide/marketplace/discovery): Kho bộ thẻ cộng đồng được kiểm duyệt, phân cấp bài học theo chuẩn khung tham chiếu JLPT N5 đến N1.
+- [Cơ Chế Clone Overlay](https://flama.vn/guide/marketplace/overlay-clone): Mô hình cài đặt bộ thẻ độc quyền bảo toàn thay đổi cá nhân của người học khi bộ thẻ gốc được tác giả cập nhật.
+
+## Guides & Documentation
+
+- [3 Phút Bắt Đầu](https://flama.vn/guide/getting-started/getting-started): Hướng dẫn nhanh cho người mới bắt đầu học tập trên Flama.
+- [Các Khái Niệm Cốt Lõi](https://flama.vn/guide/getting-started/core-concepts): Tìm hiểu về Deck (Bộ thẻ), Note (Ghi chú), Card (Thẻ hiển thị) và Mẫu thẻ (Note Types).
+- [Quản Lý Note Types & Cloze Deletion](https://flama.vn/guide/note-types/concept): Hướng dẫn tùy biến trường dữ liệu và thẻ điền từ vào chỗ trống (Cloze).
+- [Hướng Dẫn Flama Audio Companion](https://flama.vn/guide/flama-audio): Tải và cài đặt Flama Audio cho Windows để kích hoạt VoiceVox và Kokoro TTS.
+- [Đồng Bộ Anki & Nhập File APKG/CSV](https://flama.vn/guide/import-sync/anki-connect-sync): Chuyển đổi dữ liệu học tập từ Anki sang Flama dễ dàng mà không mất tiến độ.
+
+## AI Agent & Model Context Protocol (MCP)
+
+- [Flama Connect MCP Endpoint](https://flama.vn/api/mcp): Endpoint giao thức Model Context Protocol (MCP JSON-RPC 2.0) hỗ trợ các AI Agent tra cứu từ khóa, danh mục bộ thẻ, và tham chiếu học liệu.
+- [OAuth Protected Resource Metadata](https://flama.vn/.well-known/oauth-protected-resource): Thông tin xác thực RFC 9728 cho MCP clients.
+
+## Legal & Community
+
+- [Điều Khoản Dịch Vụ](https://flama.vn/terms): Quy định sử dụng nền tảng Flama.
+- [Chính Sách Bảo Mật](https://flama.vn/privacy): Cam kết bảo vệ dữ liệu cá nhân của người dùng.
+- [Nguyên Tắc Cộng Đồng](https://flama.vn/community-guidelines): Quy chuẩn đóng góp và chia sẻ nội dung học tập.

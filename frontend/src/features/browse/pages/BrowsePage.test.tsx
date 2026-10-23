@@ -76,7 +76,7 @@ vi.mock('../components/BrowseTtsModal', () => ({
 vi.mock('../components/BrowseStrokeModal', () => ({
   BrowseStrokeModal: () => null,
 }))
-vi.mock('@/features/worksheets/components/LazyDeckWorksheetModal', () => ({
+vi.mock('@/features/worksheets', () => ({
   LazyDeckWorksheetModal: () => null,
 }))
 vi.mock('@/features/audio/components/LocalAudioDialog', () => ({

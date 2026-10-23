@@ -20,7 +20,7 @@ from app.services import (
     flashcards_share_service,
     marketplace_hub_service,
     marketplace_query_service,
-    payment_service,
+    payment,
     template_release_service,
 )
 from app.repositories import flashcards_share_repository, template_release_repository
@@ -183,25 +183,32 @@ def list_shared_note_types(
     compact = enabled_arg(args.get("compact"))
     query = visible_items_query(
         NoteType, user_id=user_id, owner_column=NoteType.user_id,
-        pricing_mode=pricing_mode, min_price=min_price_amount_minor,
-        max_price=max_price_amount_minor,
     )
     query = ordered_items_query(query, NoteType, sort_key)
     filters = dict(
         query_text=query_text, category=category, tags=tags,
-        pricing_mode=pricing_mode, min_price_amount_minor=min_price_amount_minor,
-        max_price_amount_minor=max_price_amount_minor, domain=domain,
+        pricing_mode="", min_price_amount_minor=None,
+        max_price_amount_minor=None, domain=domain,
         subject=subject, framework=framework, framework_level=framework_level,
         difficulty_band=difficulty_band, learning_goals=learning_goals,
         primary_topics=primary_topics, format_features=format_features,
     )
-    if page is not None and not has_inferred_filters(filters):
+    has_price_filter = pricing_mode in {"free", "paid"} or min_price_amount_minor is not None or max_price_amount_minor is not None
+    if page is not None and not has_inferred_filters(filters) and not has_price_filter:
         total = query.order_by(None).count()
         number, size = page
         offset = (number - 1) * size
         sorted_items = query.offset(offset).limit(size).all() if offset < total else []
     else:
         filtered = marketplace_query_service.filter_note_type_items(query.all(), **filters)
+        if has_price_filter:
+            from app.services.note_type_bundle_pricing_service import pricing_breakdown
+            amounts = {item.id: pricing_breakdown(db.session, note_type=item, user_id=user_id)["total_amount_minor"]
+                for item in filtered}
+            filtered = [item for item in filtered
+                if (pricing_mode not in {"free", "paid"} or (amounts[item.id] > 0) == (pricing_mode == "paid"))
+                and (min_price_amount_minor is None or amounts[item.id] >= min_price_amount_minor)
+                and (max_price_amount_minor is None or amounts[item.id] <= max_price_amount_minor)]
         sorted_items = marketplace_query_service.sort_note_type_items(filtered, sort_key)
         total = len(sorted_items)
         if page is not None:
@@ -217,13 +224,15 @@ def list_shared_note_types(
     payload_items = []
     for note_type in sorted_items:
         row = marketplace_query_service.serialize_note_type_marketplace_card(
-            note_type, include_definition=not compact
+            note_type, include_definition=not compact, user_id=user_id
         )
         install = install_map.get(note_type.id)
-        row["is_installed"] = install is not None
+        row["is_installed"] = bool(install and install.installed_note_type_id)
         row["installed_note_type_id"] = (
             install.installed_note_type_id if install else None
         )
+        row["applied_release_id"] = install.applied_release_id if install else None
+        row["legacy_installation"] = bool(install and not install.applied_release_id)
         row["is_owner"] = note_type.user_id == user_id
         payload_items.append(row)
 
@@ -263,12 +272,14 @@ def get_shared_note_type_detail(
         MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER - int(review_submission_count or 0),
     )
     payload = marketplace_query_service.serialize_note_type_marketplace_card(
-        note_type
+        note_type, user_id=user_id
     )
-    payload["is_installed"] = install is not None
+    payload["is_installed"] = bool(install and install.installed_note_type_id)
     payload["installed_note_type_id"] = (
         install.installed_note_type_id if install else None
     )
+    payload["applied_release_id"] = install.applied_release_id if install else None
+    payload["legacy_installation"] = bool(install and not install.applied_release_id)
     payload["is_owner"] = note_type.user_id == user_id
     payload["can_rate"] = (
         flashcards_share_service.can_user_rate_note_type(
@@ -306,7 +317,7 @@ def get_shared_note_type_detail(
             ).all()
         }
         for tmpl in templates:
-            tmpl["is_installed"] = tmpl.get("id") in subscriptions
+            tmpl["is_installed"] = tmpl.get("id") in subscriptions and tmpl.get("already_entitled", True)
             tmpl["installed_template_id"] = subscriptions.get(tmpl.get("id"))
     return payload
 
@@ -401,43 +412,49 @@ def preview_shared_note_type_template(
     user_id: int,
     note_type_id: str,
     template_id: str,
+    application_id: str | None = None,
 ) -> dict[str, Any]:
     """Compile and render preview HTML pair for a shared note type template."""
+    if application_id is not None and (
+        not isinstance(application_id, str) or not application_id.strip() or len(application_id) > 36
+    ):
+        raise MarketplaceNoteTypeError("VALIDATION_ERROR", "application_id must identify a published application.",
+            status=400, field="application_id")
     note_type = _get_shared_note_type_for_view(note_type_id, user_id)
     if not note_type:
         raise MarketplaceNoteTypeError(
             "FIELD_NOT_FOUND", "Note type not found.", status=404
         )
 
-    attached = flashcards_share_repository.get_template_applications_by_note_type(note_type.id)
-    application = next((app for template, app in attached if template.id == template_id), None)
-    template = next((template for template, _app in attached if template.id == template_id), None)
-    if template is None:
-        template = next((row for row in flashcards_share_repository.get_templates_by_note_type(note_type.id) if row.id == template_id), None)
-    if not template:
+    from app.services.note_type_release_service import released_definition
+    definition = released_definition(db.session, note_type)
+    if not definition["release_available"]:
+        raise MarketplaceNoteTypeError("NOTE_TYPE_RELEASE_NOT_READY",
+            "The author must publish a complete Note Type release before preview is available.", status=409)
+    candidates = [row for row in definition["templates"] if row["id"] == template_id]
+    if application_id is not None:
+        candidates = [row for row in candidates if row["application_id"] == application_id]
+    if not candidates:
         raise MarketplaceNoteTypeError(
             "FIELD_NOT_FOUND", "Template not found.", status=404
         )
+    if len(candidates) > 1:
+        raise MarketplaceNoteTypeError("APPLICATION_SELECTION_REQUIRED",
+            "Choose the published application to preview this template mapping.",
+            status=409, field="application_id")
+    template = candidates[0]
 
-    sample_field_values = _build_preview_sample_values(note_type.field_defs)
-    publication = template_release_repository.publication(db.session, template.id)
-    release = template_release_repository.release(db.session, publication["current_release_id"], template.id) if publication and publication["current_release_id"] else None
-    content = template_release_repository.version(db.session, release["version_id"], template.id) if release else None
-    preview_template = SimpleNamespace(
-        id=template.id, input_bindings=application.input_bindings if application else None,
-        input_schema=content["input_schema"] if content else template.input_schema,
-        front_html=content["front_html"] if content else template.front_html,
-        back_html=content["back_html"] if content else template.back_html,
-        shared_css=content["shared_css"] if content else template.shared_css,
-    )
+    fields = [SimpleNamespace(**field) for field in definition["field_defs"]]
+    sample_field_values = _build_preview_sample_values(fields)
+    preview_template = SimpleNamespace(**template)
 
     try:
         rendered = render_template_pair(
             template=preview_template,
-            field_defs=note_type.field_defs,
+            field_defs=fields,
             field_values=sample_field_values,
             media_assets=[],
-            preview_note_key=f"shared-preview:{note_type.id}",
+            preview_note_key=f"shared-preview:{note_type.id}:{template['application_id']}",
         )
     except TemplateCompileError as exc:
         raise MarketplaceNoteTypeError(
@@ -460,13 +477,6 @@ def install_shared_note_type(
         raise MarketplaceNoteTypeError(
             "FIELD_NOT_FOUND", "Note type not found.", status=404
         )
-    status = str(source_note_type.publish_status or "").strip().lower()
-    if status not in PUBLISH_STATUSES_VISIBLE:
-        raise MarketplaceNoteTypeError(
-            "VALIDATION_ERROR",
-            "This note type is not available for install.",
-            status=409,
-        )
     if source_note_type.user_id == user_id:
         raise MarketplaceNoteTypeError(
             "VALIDATION_ERROR", "Owner cannot install own note type.", status=409
@@ -476,32 +486,61 @@ def install_shared_note_type(
         source_note_type_id=source_note_type.id,
         user_id=user_id,
     ).first()
-    if existing:
+    status = str(source_note_type.publish_status or "").strip().lower()
+    if status not in PUBLISH_STATUSES_VISIBLE and existing is None:
+        raise MarketplaceNoteTypeError("VALIDATION_ERROR", "This note type is not available for install.", status=409)
+    # This also closes an obsolete payable quote when acquiring the last paid
+    # dependency has made the requested bundle free.
+    from app.services.payment.checkout import reconcile_stale_template_quotes
+    try:
+        reconcile_stale_template_quotes(user_id=user_id)
+    except payment.PaymentServiceError as exc:
+        raise MarketplaceNoteTypeError(exc.error, exc.message, status=exc.status, field=exc.field) from exc
+    if existing and existing.installed_note_type_id and db.session.get(NoteType, existing.installed_note_type_id):
         return (
             {
                 "installed_note_type_id": existing.installed_note_type_id,
                 "source_note_type_id": source_note_type.id,
                 "already_installed": True,
+                "applied_release_id": existing.applied_release_id,
+                "legacy_installation": not bool(existing.applied_release_id),
             },
             200,
         )
 
-    if source_note_type.pricing_mode == "paid":
-        if not payment_service.paid_install_interception_enabled():
+    from app.services.note_type_release_service import current_release, NoteTypeReleaseError
+    from app.repositories import note_type_release_repository
+    if existing and not existing.applied_release_id:
+        raise MarketplaceNoteTypeError("NOTE_TYPE_LEGACY_RELEASE_UNKNOWN",
+            "This legacy installation has no recorded historical release to restore.", status=409)
+    target_release = (note_type_release_repository.release(db.session, existing.applied_release_id, source_note_type.id)
+        if existing else current_release(db.session, source_note_type))
+    if target_release is None:
+        raise MarketplaceNoteTypeError("NOTE_TYPE_RELEASE_NOT_READY",
+            "The author must publish a complete Note Type release before it can be installed.", status=409)
+
+    from app.services.note_type_bundle_pricing_service import pricing_breakdown, require_available
+    try:
+        breakdown = pricing_breakdown(db.session, note_type=source_note_type, user_id=user_id, release=target_release)
+        require_available(breakdown)
+    except NoteTypeReleaseError as exc:
+        raise MarketplaceNoteTypeError(exc.code, exc.message, status=exc.status) from exc
+    if breakdown["payment_required"] and existing is None:
+        if not payment.paid_install_interception_enabled():
             raise MarketplaceNoteTypeError(
                 "PAYMENT_UNAVAILABLE",
                 "Thanh toán cho nội dung trả phí chưa được bật trong môi trường này. Vui lòng thử lại sau.",
                 status=503,
             )
         try:
-            checkout = payment_service.prepare_checkout_for_product(
+            checkout = payment.prepare_checkout_for_product(
                 user_id=user_id,
                 product_type="note_type",
                 product_ref_id=source_note_type.id,
                 return_url=return_url,
                 cancel_url=cancel_url,
             )
-        except payment_service.PaymentServiceError as exc:
+        except payment.PaymentServiceError as exc:
             raise MarketplaceNoteTypeError(
                 exc.error,
                 exc.message,
@@ -518,6 +557,9 @@ def install_shared_note_type(
                 user_id=user_id,
             )
         )
+    except NoteTypeReleaseError as exc:
+        db.session.rollback()
+        raise MarketplaceNoteTypeError(exc.code, exc.message, status=exc.status) from exc
     except IntegrityError:
         db.session.rollback()
         concurrent_install = NoteTypeInstall.query.filter_by(
@@ -539,12 +581,18 @@ def install_shared_note_type(
             "VALIDATION_ERROR", "Unable to install note type.", status=500
         )
     db.session.commit()
+    installation = NoteTypeInstall.query.filter_by(source_note_type_id=source_note_type.id, user_id=user_id).one()
+    from app.services.payment.checkout import reconcile_template_quotes_after_grant
+    quote_reconciliation = reconcile_template_quotes_after_grant(user_id=user_id)
     return (
         {
             "installed_note_type_id": installed_copy.id,
             "source_note_type_id": source_note_type.id,
             "purchase_amount_minor": purchase_amount_minor,
             "purchase_price_cents": purchase_amount_minor,
+            "applied_release_id": installation.applied_release_id,
+            "legacy_installation": not bool(installation.applied_release_id),
+            **quote_reconciliation,
         },
         201,
     )
@@ -555,6 +603,8 @@ def install_shared_note_type_template(
     user_id: int,
     note_type_id: str,
     template_id: str,
+    return_url: str | None = None,
+    cancel_url: str | None = None,
 ) -> dict[str, Any]:
     """Install an individual template from a shared note type into current user account."""
     source_note_type = db.session.get(NoteType, note_type_id)
@@ -574,63 +624,42 @@ def install_shared_note_type_template(
             "VALIDATION_ERROR", "Owner cannot install own template.", status=409
         )
 
-    attached = flashcards_share_repository.get_template_applications_by_note_type(source_note_type.id)
-    template = next((t for t, _app in attached if t.id == template_id), None)
-    if template is None:
-        template = next((row for row in flashcards_share_repository.get_templates_by_note_type(source_note_type.id) if row.id == template_id), None)
-    if not template:
+    from app.services.note_type_release_service import current_release
+    release = current_release(db.session, source_note_type)
+    if release is None:
+        raise MarketplaceNoteTypeError("NOTE_TYPE_RELEASE_NOT_READY",
+            "The author must publish a complete Note Type release before it can be installed.", status=409)
+    application = next((row for row in release.manifest_json["applications"] if row["template_id"] == template_id), None)
+    if not application:
         raise MarketplaceNoteTypeError(
             "FIELD_NOT_FOUND", "Template not found in this note type.", status=404
         )
-
-    if source_note_type.pricing_mode == "paid":
-        has_installed = NoteTypeInstall.query.filter_by(
-            source_note_type_id=source_note_type.id,
-            user_id=user_id,
-        ).first() is not None
-        if not has_installed:
-            raise MarketplaceNoteTypeError(
-                "PAYMENT_REQUIRED",
-                "Mẫu thẻ thuộc Loại thẻ trả phí. Vui lòng mua Loại thẻ để thêm mẫu này vào thư viện.",
-                status=402,
-            )
 
     existing = template_release_repository.subscription(
         db.session,
         user_id=user_id,
         source_template_id=template_id,
     )
-    if existing:
+    from app.services.note_type_bundle_pricing_service import has_template_access
+    if existing and has_template_access(db.session, user_id=user_id, template_id=template_id):
         return {
             "local_template_id": existing["local_template_id"],
             "source_template_id": template_id,
             "already_installed": True,
         }
 
+    # An individual download follows the original template's listing and
+    # license, independently from the price/visibility of its containing bundle.
+    from app.services import template_marketplace_service
+    source = db.session.get(Template, template_id)
+    if source and source.owner_user_id == user_id:
+        return {"local_template_id": source.id, "source_template_id": source.id, "already_installed": True}
     try:
-        template_release_service.stage_note_type_publications(
-            db.session,
-            note_type_id=source_note_type.id,
-            actor_user_id=source_note_type.user_id,
-            initialize_only=True,
-        )
-        subscription = template_release_service.ensure_subscription(
-            db.session,
-            user_id=user_id,
-            source_template_id=template_id,
-        )
-        db.session.commit()
-        return {
-            "local_template_id": subscription["local_template_id"],
-            "source_template_id": template_id,
-            "already_installed": False,
-        }
+        response, _status = template_marketplace_service.install(user_id=user_id, template_id=template_id,
+            return_url=return_url, cancel_url=cancel_url)
+        return response
     except template_release_service.TemplateReleaseError as exc:
-        db.session.rollback()
         raise MarketplaceNoteTypeError(exc.code, str(exc), status=exc.status, field=exc.field) from exc
-    except Exception:
-        db.session.rollback()
-        raise
 
 
 def rate_shared_note_type(

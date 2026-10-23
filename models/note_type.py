@@ -5,6 +5,7 @@ from sqlalchemy.orm import synonym
 
 from models import db
 from models.model_uuid import uuid_str
+from models.note_type_release import NoteTypeRelease  # noqa: F401 - register FK target in isolated harnesses
 
 
 class NoteType(db.Model):
@@ -28,6 +29,10 @@ class NoteType(db.Model):
     price_amount_minor = db.Column(db.Integer, nullable=False, default=0)
     price_cents = synonym("price_amount_minor")
     version = db.Column(db.String(50), nullable=False, default="1.0.0")
+    current_release_id = db.Column(
+        db.String(36), db.ForeignKey("note_type_releases.id", ondelete="SET NULL",
+            name="fk_note_types_current_release", use_alter=True), nullable=True, index=True,
+    )
     field_schema_revision = db.Column(db.BigInteger, nullable=False, default=0, server_default="0")
     changelog = db.Column(db.Text, nullable=True)
     publish_status = db.Column(

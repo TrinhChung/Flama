@@ -44,7 +44,7 @@ const VerifyEmailPage = lazy(() =>
 )
 
 const loadDashboardPage = () =>
-  import('./features/dashboard/pages/DashboardPage').then((module) => ({
+  import('./features/dashboard').then((module) => ({
     default: module.DashboardPage,
   }))
 
@@ -58,7 +58,7 @@ if (
   void loadDashboardPage().catch(() => undefined)
 }
 const StatisticsPage = lazy(() =>
-  import('./features/statistics/pages/StatisticsPage').then((module) => ({
+  import('./features/statistics').then((module) => ({
     default: module.StatisticsPage,
   })),
 )
@@ -73,7 +73,7 @@ const StudyPage = lazy(() =>
   })),
 )
 const NoteTypeManagerPage = lazy(() =>
-  import('./features/note-types/pages/NoteTypeManagerPage').then((module) => ({
+  import('./pages/note-types').then((module) => ({
     default: module.NoteTypeManagerPage,
   })),
 )
@@ -99,7 +99,7 @@ const NoteTypeTemplateMappingPage = lazy(() =>
   import('./features/note-types/pages/NoteTypeTemplateMappingPage').then((module) => ({ default: module.NoteTypeTemplateMappingPage })),
 )
 const InstalledDecksPage = lazy(() =>
-  import('./features/library/pages/LibraryPages').then((module) => ({
+  import('./features/library').then((module) => ({
     default: module.InstalledDecksPage,
   })),
 )
@@ -110,7 +110,7 @@ const TemplateDetailPage = lazy(() =>
   import('./features/template-library').then((module) => ({ default: module.TemplateDetailPage })),
 )
 const InstallTemplatesPage = lazy(() =>
-  import('./features/library/pages/InstallTemplatesPage').then((module) => ({ default: module.InstallTemplatesPage })),
+  import('./pages/installed-deck-templates').then((module) => ({ default: module.InstallTemplatesPage })),
 )
 const AnkiSyncPage = lazy(() =>
   import('./features/import/pages/AnkiSyncPage').then((module) => ({
@@ -139,9 +139,15 @@ const SharedNoteTypesPage = lazy(() =>
   })),
 )
 const SharedNoteTypeDetailPage = lazy(() =>
-  import('./features/marketplace/pages/MarketplacePages').then((module) => ({
+  import('./pages/marketplace-note-type-detail').then((module) => ({
     default: module.SharedNoteTypeDetailPage,
   })),
+)
+const TemplateMarketplacePage = lazy(() =>
+  import('./features/template-marketplace').then((module) => ({ default: module.TemplateMarketplacePage })),
+)
+const TemplateMarketDetailPage = lazy(() =>
+  import('./features/template-marketplace').then((module) => ({ default: module.TemplateMarketDetailPage })),
 )
 const PaymentResultPage = lazy(() =>
   import('./features/marketplace/pages/MarketplacePages').then((module) => ({
@@ -233,7 +239,7 @@ const MarketplacePublishDeckPage = lazy(() =>
   })),
 )
 const MarketplacePublishNoteTypePage = lazy(() =>
-  import('./features/marketplace/pages/MarketplacePublishNoteTypePage').then((module) => ({
+  import('./pages/marketplace-note-type-publish').then((module) => ({
     default: module.MarketplacePublishNoteTypePage,
   })),
 )
@@ -636,6 +642,14 @@ const router = createBrowserRouter([
           {
             path: 'flashcards/shared-note-types/:id',
             element: deferred(<SharedNoteTypeDetailPage />),
+          },
+          {
+            path: 'marketplace/templates',
+            element: deferred(<TemplateMarketplacePage />),
+          },
+          {
+            path: 'marketplace/templates/:id',
+            element: deferred(<TemplateMarketDetailPage />),
           },
           { path: 'orders', element: deferred(<OrdersPage />) },
           { path: 'profile', element: deferred(<ProfilePage />) },

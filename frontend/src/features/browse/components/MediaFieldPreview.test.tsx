@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MediaFieldPreview } from './MediaFieldPreview'
+import { MediaFieldPreview } from '@/entities/flashcard'
 
 describe('MediaFieldPreview', () => {
   let container: HTMLDivElement | null = null

@@ -81,7 +81,10 @@ class ContentApiError(ValueError):
 from sqlalchemy.orm import selectinload
 
 
-def list_note_types(*, user_id: int, compact: bool = False) -> dict[str, Any]:
+def list_note_types(*, user_id: int, compact: bool = False, summary: bool = False) -> dict[str, Any]:
+    if summary:
+        from app.repositories.note_type_summary_repository import list_summaries
+        return {"items": list_summaries(user_id=user_id)}
     installed_ids = [
         r[0]
         for r in db.session.query(NoteTypeInstall.installed_note_type_id)
@@ -587,12 +590,12 @@ def update_field(
             "Unsupported field_type.",
             field="field_type",
         )
-    if new_type == ARRAY_FIELD_TYPE and field.field_type != ARRAY_FIELD_TYPE:
-        # Existing values must be split into lines first; only the array
-        # conversion changes the type together with every Note's value.
+    if (new_type == ARRAY_FIELD_TYPE and field.field_type != ARRAY_FIELD_TYPE) or (
+        field.field_type == ARRAY_FIELD_TYPE and new_type != ARRAY_FIELD_TYPE
+    ):
         raise ContentApiError(
             "FIELD_TYPE_REQUIRES_CONVERSION",
-            "Use the array conversion to switch an existing field to array.",
+            "Direct type changes involving array fields are not permitted.",
             status=409,
             field="field_type",
         )

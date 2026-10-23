@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from app import create_app
 from models import db
@@ -16,14 +17,23 @@ SPA_INDEX = ROOT / "frontend" / "dist" / "index.html"
 
 @unittest.skipUnless(
     os.getenv("FLAMA_REQUIRE_REAL_SPA_ARTIFACT") == "1",
-    "real SPA artifact contract runs in its dedicated CI tier",
+    "real SPA artifact contract runs after the CI frontend build",
 )
 class SpaArtifactContractTests(unittest.TestCase):
     def setUp(self):
+        connection_guard = patch(
+            "sqlalchemy.engine.Engine.connect",
+            side_effect=AssertionError("SPA artifact checks must not connect to a database"),
+        )
+        self.connection_guard = connection_guard.start()
+        self.addCleanup(connection_guard.stop)
         self.app = create_app(
             {
                 "TESTING": True,
-                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+                # Serving static SPA bytes needs no schema or DB connection.
+                # Keep the normal MySQL configuration lazy, including in CI.
+                "STARTUP_RUN_MAINTENANCE": False,
+                "STARTUP_CHECK_DB_CONNECTIVITY": False,
                 "WTF_CSRF_ENABLED": False,
                 "SPA_TEST_SHELL_ENABLED": False,
             }
@@ -33,7 +43,8 @@ class SpaArtifactContractTests(unittest.TestCase):
     def tearDown(self):
         with self.app.app_context():
             db.session.remove()
-            db.drop_all()
+            db.engine.dispose()
+        self.connection_guard.assert_not_called()
 
     def test_real_vite_index_is_served_by_flask(self):
         self.assertTrue(SPA_INDEX.is_file(), "frontend/dist/index.html is missing")

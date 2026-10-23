@@ -6,19 +6,25 @@ import logging
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
-from flask import jsonify, request, redirect, url_for, flash, send_file, current_app, make_response
+from flask import jsonify, request, url_for, send_file, current_app, make_response
 from flask_login import current_user, login_required
 from app.spa import serve_react_spa
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import selectinload
 from models import db
-from models.flashcard import *
+from models.flashcard import (
+    Card,
+    DeckInstall,
+    DeckMarketplaceItem,
+    Note,
+    NoteType,
+)
 from models.deck import Deck
 from app.utils.permissions import is_admin_user
-
-# Import everything from core module so routes can use helpers
-from . import *
+from app.services import flashcards_share
+from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
+from . import flashcards_bp
 
 from app.repositories.deck_tree_query import (
     collect_subtree_ids as _collect_deck_subtree_ids,
