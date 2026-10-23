@@ -157,9 +157,10 @@ class StudyNoteTemplateTests(unittest.TestCase):
         with self.app.app_context():
             before = self._identity()
             template_id = Template.query.first().id
-            for changes in ([], [{"id": "not-owned", "name": "A"}],
-                    [{"id": template_id}, {"id": template_id}], {"removed": ["not-an-attachment"]}):
-                with self.subTest(changes=changes), self.assertRaises(RequestValidationError):
+            for label, changes in (("empty", []), ("unowned", [{"id": "not-owned", "name": "A"}]),
+                    ("duplicate", [{"id": template_id}, {"id": template_id}]),
+                    ("unknown_removal", {"removed": ["not-an-attachment"]})):
+                with self.subTest(case=label), self.assertRaises(RequestValidationError):
                     self._update(changes, confirmed=True, name="Must roll back")
                 self._assert_state(before, cards=2)
                 self.assertEqual(NoteType.query.one().name, "Direct replay")

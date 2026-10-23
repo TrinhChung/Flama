@@ -6,6 +6,8 @@ import gzip
 import io
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -70,6 +72,25 @@ def _connect_read_metrics():
     finally:
         event.remove(engine, "before_cursor_execute", record_sql)
         event.remove(Note, "load", record_note)
+
+
+class FlamaConnectRegistrationTests(unittest.TestCase):
+    def test_standalone_entrypoint_registers_sync_jobs_without_main_app_or_schema_mutation(self):
+        # Another test module must not mask missing model registration.
+        source = """
+from unittest.mock import patch
+from models import db
+with patch('app.create_app', side_effect=AssertionError('main factory called')), \\
+        patch.object(db, 'create_all', side_effect=AssertionError('schema mutation')):
+    from connect_wsgi import app
+assert 'template_sync_jobs' in db.metadata.tables, 'Connect did not register TemplateSyncJob'
+assert app.test_client().get('/healthz').status_code == 200
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", source], cwd=Path(__file__).resolve().parents[1],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 class FlamaConnectTests(unittest.TestCase):
@@ -255,8 +276,8 @@ class FlamaConnectTests(unittest.TestCase):
         )
 
     def test_note_type_resolution_never_falls_back_to_another_user(self):
-        for model_name in (self.other_note_type_id, "Other private model"):
-            with self.subTest(model_name=model_name):
+        for label, model_name in (("unowned_id", self.other_note_type_id), ("unowned_name", "Other private model")):
+            with self.subTest(case=label):
                 response = self._call("modelFieldNames", {"modelName": model_name})
                 self.assertEqual(
                     response.get_json(),

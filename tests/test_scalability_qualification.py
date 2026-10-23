@@ -64,13 +64,13 @@ class ScalabilityQualificationTests(unittest.TestCase):
     def test_cleanup_requires_exact_generated_name_created_by_this_run(self):
         target = qualification.generated_target()
         qualification.assert_owned_target(target=target, source="nihongo", created_target=target)
-        for candidate, source, created in (
-                ("nihongo", "nihongo", "nihongo"),
-                (target, target, target),
-                (target, "nihongo", None),
-                (target, "nihongo", qualification.generated_target()),
-                (target + ";DROP DATABASE nihongo", "nihongo", target)):
-            with self.subTest(candidate=candidate), self.assertRaises(RuntimeError):
+        for label, candidate, source, created in (
+                ("source_database", "nihongo", "nihongo", "nihongo"),
+                ("target_is_source", target, target, target),
+                ("not_created", target, "nihongo", None),
+                ("another_run", target, "nihongo", qualification.generated_target()),
+                ("sql_injection", target + ";DROP DATABASE nihongo", "nihongo", target)):
+            with self.subTest(case=label), self.assertRaises(RuntimeError):
                 qualification.assert_owned_target(target=candidate, source=source, created_target=created)
 
     def test_clients_use_env_password_and_lock_free_copy_flags(self):

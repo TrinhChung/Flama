@@ -2071,6 +2071,35 @@ class _WindowsJob:
                 self.handle = None
 
 
+def _posix_process_group_alive(pgid: int) -> bool:
+    """Ignore Linux zombies: orphan reaping belongs to PID 1, not this runner."""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    if not sys.platform.startswith("linux"):
+        return True
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdecimal():
+            continue
+        try:
+            # comm may contain spaces and ')'; the final ')' ends that field.
+            fields = (entry / "stat").read_text(encoding="utf-8", errors="replace").rsplit(")", 1)[1].split()
+        except (FileNotFoundError, ProcessLookupError):
+            continue  # The process exited during this scan.
+        if int(fields[2]) == pgid and fields[0] not in {"Z", "X"}:
+            return True
+    return False
+
+
+def _wait_for_posix_process_group(pgid: int) -> None:
+    deadline = time.monotonic() + BACKEND_CLEANUP_TIMEOUT
+    while _posix_process_group_alive(pgid):
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"POSIX worker group {pgid} did not terminate")
+        time.sleep(0.01)
+
+
 def _terminate_process_tree(proc: subprocess.Popen) -> None:
     """Kill descendants even after the root exited, then reap the root."""
     job = getattr(proc, "_flama_job", None)
@@ -2104,6 +2133,10 @@ def _terminate_process_tree(proc: subprocess.Popen) -> None:
         proc.wait(timeout=BACKEND_CLEANUP_TIMEOUT)
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"worker {proc.pid} could not be reaped") from exc
+    if sys.platform != "win32" and getattr(proc, "_flama_session", False):
+        # killpg only queues the signal; reaping the root says nothing about
+        # descendants. Wait before reporting completion or deleting worker media.
+        _wait_for_posix_process_group(proc.pid)
     if cleanup_error is not None:
         raise RuntimeError(f"worker tree cleanup failed: {cleanup_error}") from cleanup_error
 

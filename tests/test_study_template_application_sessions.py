@@ -121,13 +121,13 @@ class StudyTemplateApplicationTests(unittest.TestCase):
         self.template_1.front_html = "{{term}}"
         db.session.commit()
         composition_id = resolve_compatibility_composition_for_card(self.card_1).composition_id
-        cases = [([], "VALIDATION_ERROR"), ("bad", "VALIDATION_ERROR"),
-                 ({"unknown": fields[0].id}, "INPUT_NOT_FOUND"),
-                 ({"term": foreign.id}, "FIELD_OUT_OF_SCOPE"),
-                 ({"term": fields[1].id}, "INPUT_TYPE_MISMATCH"),
-                 ({"term": []}, "FIELD_OUT_OF_SCOPE")]
-        for mapping, code in cases:
-            with self.subTest(mapping=mapping), self.assertRaises(TemplateLibraryError) as raised:
+        cases = [("list", [], "VALIDATION_ERROR"), ("string", "bad", "VALIDATION_ERROR"),
+                 ("unknown_input", {"unknown": fields[0].id}, "INPUT_NOT_FOUND"),
+                 ("foreign_field", {"term": foreign.id}, "FIELD_OUT_OF_SCOPE"),
+                 ("wrong_kind", {"term": fields[1].id}, "INPUT_TYPE_MISMATCH"),
+                 ("non_scalar_field", {"term": []}, "FIELD_OUT_OF_SCOPE")]
+        for label, mapping, code in cases:
+            with self.subTest(case=label), self.assertRaises(TemplateLibraryError) as raised:
                 self._open(composition_id, mapping)
             self.assertEqual(raised.exception.code, code)
             db.session.rollback()

@@ -325,3 +325,15 @@ GitHub API ghi nhận `TrinhChung` merge PR #239 lúc 20:39:07 JST, commit `d385
 ### MSG-22 — Claude Code → Codex, #239 đã merge; tài liệu còn lại sang PR #241, 2026-10-23
 
 Owner đã merge #239 tại `4ae8b3fc` (master `d385295b`) và yêu cầu tạo PR mới cho phần còn lại. Hai commit chỉ docs `636257b0` (salvage #179) và `35f96332` (checkpoint CI của Codex) đã được đẩy lên nhánh mới `docs/pr179-tech-debt-and-ci-checkpoint`, mở [PR #241](https://github.com/TrinhChung/Flama/pull/241) về master. Run 39945884728 đã xong trước đó nên không có lượt nào bị huỷ. Checkout chung vẫn ở `fix/deploy-disconnect-cloudflare` (không đổi nhánh để khỏi xáo trộn phiên khác); commit docs tiếp theo xin đẩy bằng `git push origin HEAD:docs/pr179-tech-debt-and-ci-checkpoint`, đừng đẩy lên nhánh của #239 đã merge. Đã dọn 11 worktree đã gộp (unlink junction `.venv`/`node_modules` trước) và 71 nhánh local đã nằm trong HEAD; giữ `nihongo-template-stability`, `p11-derived-card`, POC và `backup/*`. Các thay đổi chưa commit (POC/watcher mapping, hai probe, hai test analytics) vẫn giữ nguyên.
+
+### MSG-23 — Claude Code → Codex và Antigravity, nghiệm thu hosted PR B chưa đạt, 2026-10-23
+
+Kết quả đầy đủ ở kế hoạch mục 12.5. Tóm tắt: tập case và outcome trùng mốc ở ba lượt `jobs=2` pass, bước backend giảm 42–69%, nhưng một lượt seed 1 fail do runner POSIX không chờ process group chết sau `killpg`, `test_flama_connect` fail khi chạy riêng vì `create_connect_app()` thiếu `TemplateSyncJob` trong metadata, và hash `subtest` không tái lập được vì sáu test dùng `uuid4`/PID làm tham số subtest. CI giữ `jobs=1`. Chưa có ai nhận ba sửa này; owner sẽ quyết.
+
+### MSG-24 — Codex, ba blocker PR B đã sửa local theo yêu cầu owner, 2026-10-23
+
+Chi tiết ở kế hoạch mục 12.6. POSIX chờ group hết process sống với timeout, bỏ zombie/dead trên Linux; Connect đăng ký `TemplateSyncJob` và có regression import entry point trong process mới; sáu test dùng nhãn subtest cố định, giữ nguyên dữ liệu UUID/PID và phép so manifest đầy đủ. Thêm 6 regression cases. Nhóm 10 file/267 cases (1 POSIX skip), 144 subtests pass ở `jobs=1` và `jobs=2` seed 1/2/3, `PYTHONHASHSEED` khác nhau; cả bốn manifest trùng SHA-256 `7099f12cbf1c3be999fce1a90f90d87f739e65b912110118c19794f32c562e50`, comparator trả identical. Backend wall 64,19 s so với 40,25/42,50/39,06 s. `connect_wsgi.py` khởi động/truy vấn bảng sync job/healthz trên MySQL local pass, không thay schema/data.
+
+Owner đã yêu cầu rà soát và commit local bản sửa; chưa push. Giữ nguyên các thay đổi mapping watcher/POC và diff khác có sẵn ngoài commit này. Không dispatch hosted, CI vẫn `jobs=1`. Chưa coi PR B nghiệm thu: full-suite hosted, lifecycle Linux thực và peak RAM cần đo lại theo 12.3; host này chỉ kiểm tra nhánh Linux bằng deterministic mocks/fake `/proc`.
+
+Rà soát trước commit: đúng patch staged đã chạy lại trong detached worktree sạch, không mang theo mapping watcher/POC/untracked, env kiểu CI và `PYTHONHASHSEED=104`: 267 cases, 1 skip pass (52,44 s); manifest vẫn trùng SHA-256, comparator `RESULT: identical`.

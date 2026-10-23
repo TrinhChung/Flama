@@ -193,6 +193,17 @@ class ManagedBackendRunnerTests(unittest.TestCase):
         self.assertTrue(result.passed, result.read_output())
         self.assertFalse(self._alive(self._read_pid(pid_path)))
 
+    def test_concurrent_successful_roots_wait_for_descendants_before_returning(self):
+        paths = [self.root / f"concurrent-child-{index}.pid" for index in range(4)]
+        files = [self._module(self._child_source(path, hang=False)) for path in paths]
+        with mock.patch.object(run_tests, "_manifest_command", side_effect=self._command), redirect_stdout(io.StringIO()):
+            self.assertTrue(run_tests.run_backend_tests_parallel(
+                [sys.executable], files, jobs=2, weights=dict.fromkeys(files, 1),
+            ))
+        for index, path in enumerate(paths):
+            with self.subTest(worker=index):
+                self.assertFalse(self._alive(self._read_pid(path)))
+
     def test_failfast_stops_running_tree_and_pending_bins(self):
         pid_path = self.root / "slow-child.pid"
         slow = self._module(self._child_source(pid_path))
@@ -483,6 +494,65 @@ class ManagedBackendRunnerTests(unittest.TestCase):
                     if coordinator.poll() is None:
                         coordinator.kill()
                     coordinator.wait(timeout=5)
+
+
+class PosixCleanupContracts(unittest.TestCase):
+    """Deterministic Linux cleanup races, also executable on Windows hosts."""
+
+    def test_cleanup_reaps_root_and_waits_until_group_has_no_live_members(self):
+        proc = mock.Mock(pid=123, _flama_job=None, _flama_session=True)
+        proc.poll.return_value = 0  # The root exited before its child.
+        order = mock.Mock()
+        with mock.patch.object(run_tests.sys, "platform", "linux"), \
+                mock.patch.object(run_tests.signal, "SIGKILL", 9, create=True), \
+                mock.patch.object(run_tests.os, "killpg", create=True) as kill, \
+                mock.patch.object(run_tests, "_posix_process_group_alive", side_effect=[True, True, False]) as alive, \
+                mock.patch.object(run_tests.time, "sleep") as sleep:
+            order.attach_mock(kill, "kill")
+            order.attach_mock(proc.wait, "reap")
+            order.attach_mock(alive, "alive")
+            run_tests._terminate_process_tree(proc)
+        self.assertEqual(order.mock_calls, [
+            mock.call.kill(123, 9),
+            mock.call.reap(timeout=run_tests.BACKEND_CLEANUP_TIMEOUT),
+            mock.call.alive(123), mock.call.alive(123), mock.call.alive(123),
+        ])
+        self.assertEqual(sleep.call_count, 2)
+
+    def test_live_group_past_deadline_fails_cleanup(self):
+        proc = mock.Mock(pid=123, _flama_job=None, _flama_session=True)
+        proc.poll.return_value = 0
+        with mock.patch.object(run_tests.sys, "platform", "linux"), \
+                mock.patch.object(run_tests.signal, "SIGKILL", 9, create=True), \
+                mock.patch.object(run_tests.os, "killpg", create=True), \
+                mock.patch.object(run_tests, "_posix_process_group_alive", return_value=True), \
+                mock.patch.object(run_tests.time, "monotonic", side_effect=[0, run_tests.BACKEND_CLEANUP_TIMEOUT + 1]):
+            with self.assertRaisesRegex(RuntimeError, "POSIX worker group 123 did not terminate"):
+                run_tests._terminate_process_tree(proc)
+        proc.wait.assert_called_once()
+
+    def test_linux_group_scan_ignores_zombies_other_groups_and_vanished_processes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for pid, state, group in ((11, "Z", 123), (12, "X", 123), (13, "S", 456)):
+                entry = root / str(pid)
+                entry.mkdir()
+                (entry / "stat").write_text(f"{pid} (worker ) with spaces) {state} 1 {group} 0")
+            (root / "14").mkdir()  # Exited between iterdir() and stat read.
+            (root / "self").mkdir()
+            with mock.patch.object(run_tests.sys, "platform", "linux"), \
+                    mock.patch.object(run_tests.os, "killpg", create=True) as kill, \
+                    mock.patch.object(run_tests, "Path", return_value=root):
+                self.assertFalse(run_tests._posix_process_group_alive(123))
+                (root / "13" / "stat").write_text("13 (live worker) R 1 123 0")
+                self.assertTrue(run_tests._posix_process_group_alive(123))
+            self.assertEqual(kill.call_args_list, [mock.call(123, 0), mock.call(123, 0)])
+
+    def test_vanished_group_needs_no_proc_scan(self):
+        with mock.patch.object(run_tests.os, "killpg", side_effect=ProcessLookupError, create=True), \
+                mock.patch.object(run_tests, "Path") as path:
+            self.assertFalse(run_tests._posix_process_group_alive(123))
+        path.assert_not_called()
 
 
 if __name__ == "__main__":
