@@ -324,7 +324,7 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p5_analytics_mysql.py
 
-      - name: Verify historical and deck count transactions on MySQL
+      - name: Setup historical and deck count MySQL anchor
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: '3306'
@@ -354,8 +354,12 @@ jobs:
           path.parent.mkdir(exist_ok=True)
           path.write_text('SQLALCHEMY_DATABASE_URI=' + url.render_as_string(hide_password=False) + '\n', encoding='utf-8')
           PY
-          python scripts/probe_review_analytics_mysql.py --env-file output/analytics-counts-ci.env
-          python scripts/probe_deck_counts_mysql.py --env-file output/analytics-counts-ci.env
+
+      - name: Verify historical review analytics transactions on MySQL
+        run: python scripts/probe_review_analytics_mysql.py --env-file output/analytics-counts-ci.env
+
+      - name: Verify deck count snapshot transactions on MySQL
+        run: python scripts/probe_deck_counts_mysql.py --env-file output/analytics-counts-ci.env
 
       - name: Run cross-learner NOTE write concurrency contract on MySQL
         env:
@@ -384,19 +388,50 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_retirement_fresh_chain_mysql.py --output output/retirement-fresh-mysql-ci.json
 
-      - name: Qualify Field identity expansion and exact forecast buckets on MySQL
+      - name: Qualify Field identity migration 63 expansion on MySQL
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: '3306'
           DB_USER: root
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
-        run: |
-          python scripts/probe_field_identity_mysql.py --output output/field-identity-mysql-ci.json
-          python scripts/probe_field_identity_cutover_mysql.py --output output/field-identity-cutover-mysql-ci.json
-          python scripts/probe_field_value_consumers_mysql.py --output output/field-value-consumers-mysql-ci.json
-          python scripts/probe_forecast_snapshots_mysql.py --output output/forecast-snapshots-mysql-ci.json
-          python scripts/probe_review_analytics_outbox_mysql.py --output output/review-outbox-mysql-ci.json
+        run: python scripts/probe_field_identity_mysql.py --output output/field-identity-mysql-ci.json
+
+      - name: Qualify Field identity cutover 66/67 and restore on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: python scripts/probe_field_identity_cutover_mysql.py --output output/field-identity-cutover-mysql-ci.json
+
+      - name: Qualify Field value consumer contracts on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: python scripts/probe_field_value_consumers_mysql.py --output output/field-value-consumers-mysql-ci.json
+
+      - name: Qualify forecast snapshot MySQL precision and schema
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: python scripts/probe_forecast_snapshots_mysql.py --output output/forecast-snapshots-mysql-ci.json
+
+      - name: Qualify review analytics outbox atomicity on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: python scripts/probe_review_analytics_outbox_mysql.py --output output/review-outbox-mysql-ci.json
 
       - name: Verify retirement archives and contract guards with focused tests
         env:
