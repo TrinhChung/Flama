@@ -182,7 +182,12 @@ def aggregate_deck_study_counts(
         learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
         overlay=overlay, owned_by_any_user=owned_by_any_user,
     )
-    rows = note_reads.note_rows(scope, learner_user_id=learner_user_id).subquery("rows")
+    # Only the worst violation is read, so one learner-wide live-pointer scan
+    # replaces the per-Note probe unless it finds drift (then probe exactly).
+    live_drift = note_reads.learner_live_identity_drift(session, learner_user_id=learner_user_id)
+    rows = note_reads.note_rows(
+        scope, learner_user_id=learner_user_id, check_live_identity=live_drift,
+    ).subquery("rows")
 
     # A Card without progress/state has NULL columns and reads as active NEW.
     is_active = and_(

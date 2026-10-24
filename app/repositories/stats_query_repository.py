@@ -192,7 +192,10 @@ def query_canonical_future_due_day_counts_mysql(
     scope = note_reads.learner_note_scope(
         learner_user_id=user_id, storage_profile=storage_profile
     )
-    rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("availability")
+    # This grouping never reads `violation`; leaving it out avoids a per-Note probe.
+    rows = note_reads.note_rows(
+        scope, learner_user_id=user_id, include_violation=False,
+    ).subquery("availability")
     # TO_DAYS has a year-zero origin; Python date ordinals start at 0001-01-01.
     # Review due_day overrides due_at; every other queue uses its UTC timestamp.
     day = case(

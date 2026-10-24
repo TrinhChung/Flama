@@ -401,6 +401,43 @@ class NoteQueryRetirementTests(unittest.TestCase):
                                                        now=NOW, timezone_name='UTC')
         self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
 
+    def test_dashboard_counts_probe_live_pointers_only_when_the_learner_has_drift(self):
+        from app.services.deck_aggregation_service import aggregate_deck_study_counts
+        from app.services.study_authority_read_service import StudyAuthorityReadError
+
+        self._add(1)
+        card = self._add(2, 'review', due_day=999999)
+        statements = []
+
+        def capture(conn, cursor, statement, params, context, executemany):
+            statements.append(statement)
+
+        def counts():
+            statements.clear()
+            event.listen(db.engine, 'before_cursor_execute', capture)
+            try:
+                return aggregate_deck_study_counts(
+                    db.session, learner_user_id=self.user.id, visible_deck_ids=[self.deck.id],
+                    today_day_index=NOW.date().toordinal(), day_cutoff_utc=NOW + timedelta(days=1),
+                    include_note_types=False,
+                )[0]
+            finally:
+                event.remove(db.engine, 'before_cursor_execute', capture)
+
+        def aggregate_sql():
+            return next(s for s in statements if 'GROUP BY rows.deck_id' in s)
+
+        self.assertEqual(counts()[self.deck.id], {'total': 2, 'new': 1, 'learn': 0, 'due': 0})
+        self.assertNotIn('EXISTS', aggregate_sql())  # clean learner: no per-Note live probe
+
+        subject = StudyProgressSubject.query.filter_by(live_note_id=card.note_id).one()
+        subject.logical_note_key = b'noncanonical-key'
+        db.session.commit()
+        with self.assertRaises(StudyAuthorityReadError) as caught:
+            counts()
+        self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
+        self.assertIn('EXISTS', aggregate_sql())
+
     def test_browse_page_rejects_empty_nonpristine_envelope(self):
         card = self._add(1)
         db.session.add(StudyProgressSubject(learner_user_id=self.user.id,

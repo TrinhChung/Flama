@@ -45,13 +45,35 @@ def violation_error(rank: int | None) -> tuple[str, str] | None:
     return code, _VIOLATION_MESSAGES[code]
 
 
-def subject_integrity_violation(subject, *, note_id, learner_user_id: int):
+def learner_live_identity_drift(session: Session, *, learner_user_id: int) -> bool:
+    """Whether any of the learner's rows points its live Note at another logical key.
+
+    A learner-wide superset of the per-Note ``wrong_live_identity`` probe in
+    :func:`subject_integrity_violation`: a row with ``live_note_id = n`` and a
+    logical key other than ``n`` is exactly what that probe finds for Note
+    ``n``. When this is False the per-Note probe is false for every Note, so a
+    caller that only needs the worst violation may drop it (one learner scan
+    instead of one probe per Note). Run it in the same read snapshot.
+    """
+
+    live = StudyProgressSubject
+    return session.execute(select(literal(1)).where(
+        live.learner_user_id == int(learner_user_id),
+        live.live_note_id.isnot(None),
+        live.logical_note_key != cast(live.live_note_id, LargeBinary),
+    ).limit(1)).first() is not None
+
+
+def subject_integrity_violation(subject, *, note_id, learner_user_id: int,
+                                check_live_identity: bool = True):
     """Cheap identity/presence guard folded into an existing aggregate.
 
     This does not re-decode every state payload or recompute hashes. The
     canonical writer owns availability; full state/hash validation is bounded
     to returned rows, and the read-only retirement audit checks whole stores.
     A detached or partial envelope must never silently count as pristine.
+    ``check_live_identity=False`` omits the per-Note live-pointer probe; only
+    pass it after :func:`learner_live_identity_drift` returned False.
     """
 
     from app.services.study_progress_contract import (
@@ -62,16 +84,19 @@ def subject_integrity_violation(subject, *, note_id, learner_user_id: int):
     absent = and_(*(getattr(subject, key).is_(None) for key in (
         *SUBJECT_PROGRESS_COLUMNS, *SUBJECT_AVAILABILITY_NULLABLE_COLUMNS,
     )))
-    # The canonical logical-key join cannot see a row whose key was damaged.
-    # A second indexed live-Note probe catches that relevant evidence even
-    # when the canonical envelope is absent, without an OR join/full scan.
-    live = aliased(StudyProgressSubject)
-    wrong_live_identity = select(literal(1)).where(
-        live.learner_user_id == int(learner_user_id), live.live_note_id == note_id,
-        live.logical_note_key != cast(note_id, LargeBinary),
-    ).correlate_except(live).exists()
+    live_identity_case = ()
+    if check_live_identity:
+        # The canonical logical-key join cannot see a row whose key was damaged.
+        # A second indexed live-Note probe catches that relevant evidence even
+        # when the canonical envelope is absent, without an OR join/full scan.
+        live = aliased(StudyProgressSubject)
+        wrong_live_identity = select(literal(1)).where(
+            live.learner_user_id == int(learner_user_id), live.live_note_id == note_id,
+            live.logical_note_key != cast(note_id, LargeBinary),
+        ).correlate_except(live).exists()
+        live_identity_case = ((wrong_live_identity, 2),)
     return case(
-        (wrong_live_identity, 2),
+        *live_identity_case,
         (subject.id.is_(None), 0),
         (or_(subject.live_note_id.is_(None), subject.live_note_id != note_id,
              subject.logical_note_key != cast(note_id, LargeBinary),
@@ -117,20 +142,27 @@ def note_card_rows(scope, *, learner_user_id: int, storage_profile: str | None =
     )
 
 
-def note_rows(scope, *, learner_user_id: int, include_state: bool = False):
+def note_rows(scope, *, learner_user_id: int, include_state: bool = False,
+              include_violation: bool = True, check_live_identity: bool = True):
     """Availability once per scoped Note; Card metrics carry a multiplicity.
 
     Both identity probes are retained. A live-key match alone is not equivalent
     to the canonical logical-key join when historical evidence is damaged.
+    Callers that never read ``violation`` should set ``include_violation=False``:
+    MySQL materializes the derived rows and would still evaluate it per Note.
+    See :func:`subject_integrity_violation` for ``check_live_identity``.
     """
     subject = aliased(StudyProgressSubject)
     columns = [
         scope.c.deck_id, scope.c.note_id, scope.c.card_count,
         subject.normalized_queue.label("queue"), subject.due_day, subject.due_at,
         subject.is_suspended, subject.is_buried, subject.buried_until_day,
-        subject_integrity_violation(subject, note_id=scope.c.note_id,
-                                    learner_user_id=learner_user_id).label("violation"),
     ]
+    if include_violation:
+        columns.append(subject_integrity_violation(
+            subject, note_id=scope.c.note_id, learner_user_id=learner_user_id,
+            check_live_identity=check_live_identity,
+        ).label("violation"))
     if include_state:
         columns.extend([
             subject.state_payload["type"].as_string().label("state_type"),
