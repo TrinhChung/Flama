@@ -299,7 +299,8 @@ def _consolidated_due_rows_and_load(
 ) -> tuple[list[tuple[Any, Any, Any, int]], float]:
     """CONSOLIDATED_V1: weighted due rows and daily load at Note grain.
 
-    Preserve per-presentation arithmetic while resolving installed sources
+    Each row weighs one Note under Note-unit counting, else its Cards
+    (``forecast_counts_notes``). Resolve installed sources
     onto their local decks and retaining release-pinned applications. Read
     current Note subjects without entity hydration or subject locks. Scope
     resolution may first check whether the learner has an installation.

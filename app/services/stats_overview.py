@@ -7,7 +7,7 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import or_, select
+from sqlalchemy import literal, or_, select
 
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
 from app.repositories.study_authority_repository import read_study_authority_route
@@ -15,6 +15,7 @@ from app.services.scheduler_config_service import resolve_day_boundary_hour_loca
 from app.services.scheduler_config_service import resolve_deck_options
 from app.repositories.stats_query_repository import (
     can_use_mysql_local_day_sql,
+    forecast_counts_notes,
     query_canonical_future_due_day_counts_mysql,
     query_active_review_days,
     query_daily_review_aggregates,
@@ -206,13 +207,15 @@ def _canonical_future_due_day_counts(
 
     from app.repositories import note_analytics_read_repository as note_reads
 
+    by_note = forecast_counts_notes()
     # The guarded scope raises StudyAuthorityReadError for unreadable evidence.
     scope = note_reads.learner_note_scope(
-        learner_user_id=user_id, storage_profile=storage_profile
+        learner_user_id=user_id, storage_profile=storage_profile, presence_only=by_note,
     )
     rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("rows")
+    weight = literal(1).label("card_count") if by_note else rows.c.card_count
     fetched = db.session.execute(
-        select(rows.c.due_at, rows.c.due_day, rows.c.queue, rows.c.card_count).where(
+        select(rows.c.due_at, rows.c.due_day, rows.c.queue, weight).where(
             or_(rows.c.due_at.isnot(None), rows.c.due_day.isnot(None)),
             or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),
         ).execution_options(include_retired_cards=True)

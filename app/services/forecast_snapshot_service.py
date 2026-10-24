@@ -92,7 +92,7 @@ def resolve_forecast_summary(session, *, user_id, deck_ids, timezone_name, day_b
 
 def resolve_overview_due_counts(session, *, user_id, timezone_name, day_boundary_hour,
                                 start_local_day, end_local_day, now_utc):
-    """Overview folds overdue buckets to its first day, preserving Card units."""
+    """Overview folds overdue buckets to its first day, in the raw forecast's unit."""
     header = _resolve(session, user_id=user_id, deck_ids=None, timezone_name=timezone_name,
                       day_boundary_hour=day_boundary_hour, now=_utc(now_utc))
     if header is None:

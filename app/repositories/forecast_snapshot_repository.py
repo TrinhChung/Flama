@@ -8,6 +8,7 @@ from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.repositories.deck_count_snapshot_repository import read_revision_vectors
+from app.repositories.stats_query_repository import forecast_counts_notes
 from app.repositories.study_authority_repository import read_study_authority_route
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
@@ -68,7 +69,9 @@ def dependency_hash(session, *, user_id, deck_ids):
         DeckCountLearnerRevision.effective_deck_id == 0,
     )).scalar_one_or_none() or 0
     route = read_study_authority_route(session, learner_user_id=user_id)
-    return _hash({"implementation": "forecast-card-buckets.v1", "scope": scope_key(deck_ids).hex(),
+    # Buckets hold the raw forecast's unit; flipping it invalidates them.
+    unit = "note" if forecast_counts_notes() else "card"
+    return _hash({"implementation": f"forecast-{unit}-buckets.v1", "scope": scope_key(deck_ids).hex(),
                   "owned_decks": [tuple(row) for row in owned],
                   "installs": [tuple(row) for row in installs], "maps": [tuple(row) for row in maps],
                   "revisions": vectors, "global_content": int(global_content),

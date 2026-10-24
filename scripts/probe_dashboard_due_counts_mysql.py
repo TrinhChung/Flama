@@ -126,24 +126,33 @@ def run() -> dict:
                 (date(2026, 12, 31), date(2027, 1, 1)),
                 (date(2028, 2, 28), date(2028, 3, 1)),
             )
-            for timezone_name in SQL_PATH_TIMEZONES:
-                if fixed_utc_offset_minutes(timezone_name) is None:
-                    report["problems"].append({"timezone": timezone_name, "not_routed_to_sql": True})
-                    continue
-                for boundary in (0, 4, 23):
-                    for start, end in windows:
-                        args = dict(timezone_name=timezone_name, boundary=boundary, start=start, end=end)
-                        with patch("app.services.stats_overview.can_use_mysql_local_day_sql", return_value=False):
-                            expected = fixture._canonical_day_counts(**args)
-                        actual = fixture._canonical_day_counts(**args)
-                        report["parity_cases"] += 1
-                        if actual != expected:
-                            report["problems"].append({
-                                "timezone": timezone_name, "boundary": boundary,
-                                "start": str(start), "end": str(end),
-                                "expected": {str(day): count for day, count in expected.items()},
-                                "actual": {str(day): count for day, count in actual.items()},
-                            })
+            # Both counting units (D6-04): Note units weigh each Note once.
+            totals = {"card": 0, "note": 0}
+            for unit in ("card", "note"):
+                app.config["STUDY_NOTE_COUNT_ENABLED"] = unit == "note"
+                for timezone_name in SQL_PATH_TIMEZONES:
+                    if fixed_utc_offset_minutes(timezone_name) is None:
+                        report["problems"].append({"timezone": timezone_name, "not_routed_to_sql": True})
+                        continue
+                    for boundary in (0, 4, 23):
+                        for start, end in windows:
+                            args = dict(timezone_name=timezone_name, boundary=boundary, start=start, end=end)
+                            with patch("app.services.stats_overview.can_use_mysql_local_day_sql", return_value=False):
+                                expected = fixture._canonical_day_counts(**args)
+                            actual = fixture._canonical_day_counts(**args)
+                            report["parity_cases"] += 1
+                            totals[unit] += sum(actual.values())
+                            if actual != expected:
+                                report["problems"].append({
+                                    "unit": unit, "timezone": timezone_name, "boundary": boundary,
+                                    "start": str(start), "end": str(end),
+                                    "expected": {str(day): count for day, count in expected.items()},
+                                    "actual": {str(day): count for day, count in actual.items()},
+                                })
+            app.config["STUDY_NOTE_COUNT_ENABLED"] = False
+            report["unit_totals"] = totals
+            if not 0 < totals["note"] < totals["card"]:
+                report["problems"].append({"unit_totals_not_distinct": totals})
             with patch("app.services.stats_overview.query_canonical_future_due_day_counts_mysql", side_effect=AssertionError("DST routed to fixed-offset SQL")):
                 for start, end in ((date(2026, 3, 8), date(2026, 3, 10)), (date(2026, 11, 1), date(2026, 11, 3))):
                     fixture._canonical_day_counts(timezone_name="America/New_York", start=start, end=end)

@@ -210,15 +210,19 @@ def deck_note_scope(session, *, learner_user_id, deck_ids, overlay=None, owned_b
     return build()
 
 
-def collection_note_scope_query(session, *, learner_user_id, deck_ids=None, note_ids=None):
+def collection_note_scope_query(session, *, learner_user_id, deck_ids=None, note_ids=None,
+                                presence_only=False):
     """One row per visible Note, with Card multiplicity deduped across installs (unguarded).
 
     Owned active presentations are present once. Installed applications absent
     from that owned scope (including retired pins) are counted distinctly per
     Note across all selected installations. Different pin subsets therefore
     form a union, rather than a max/sum of each installation's count.
+    ``presence_only`` proves owned membership without counting aliases; the
+    reader then weighs each Note once and ignores ``card_count``.
     """
-    owned = owned_note_scope(learner_user_id=learner_user_id, deck_ids=deck_ids, note_ids=note_ids)
+    owned = owned_note_scope(learner_user_id=learner_user_id, deck_ids=deck_ids, note_ids=note_ids,
+                             presence_only=presence_only)
     has_install = session.execute(select(DeckInstall.id).where(
         DeckInstall.user_id == int(learner_user_id),
         DeckInstall.clone_mode == "logical_overlay", DeckInstall.local_deck_id.isnot(None),
@@ -238,13 +242,14 @@ def collection_note_scope_query(session, *, learner_user_id, deck_ids=None, note
     return _combine(owned, installed, per_deck=False)
 
 
-def collection_note_scope(session, *, learner_user_id, deck_ids=None):
+def collection_note_scope(session, *, learner_user_id, deck_ids=None, presence_only=False):
     """:func:`collection_note_scope_query`, after failing closed on unreadable evidence."""
     from app.repositories.note_analytics_read_repository import guard_scope
 
     def build(note_ids=None):
         return collection_note_scope_query(
             session, learner_user_id=learner_user_id, deck_ids=deck_ids, note_ids=note_ids,
+            presence_only=presence_only,
         )
 
     guard_scope(session, learner_user_id=learner_user_id, build=build)
