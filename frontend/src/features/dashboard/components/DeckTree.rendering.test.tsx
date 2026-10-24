@@ -34,8 +34,8 @@ function deck(id: number, children: DeckNode[] = [], parentId: number | null = n
     depth: parentId === null ? 0 : 1,
     study_url: `/study?deck_id=${id}`,
     counts: { new: 0, learning: 0, due: 0 },
-    move: { alias: `deck-${id}`, token: '', parent_alias: null, parent_token: null },
-    actions: { rename: '', move: '', delete: '', reset: '', share: '' },
+    move_alias: `deck-${id}`,
+    share_url: '',
     children,
   }
 }

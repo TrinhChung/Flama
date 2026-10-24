@@ -143,22 +143,14 @@ const sampleDeck: DeckNode = {
   study_url: '/study?deck_id=42',
   note_type_id: 'nt-vocab',
   counts: { new: 10, learning: 2, due: 3 },
-  move: { alias: 'deck-42', token: 'token', parent_alias: null, parent_token: null },
-  actions: {
-    rename: '/api/decks/42',
-    move: '/api/decks/42',
-    delete: '/api/decks/42',
-    reset: '/api/decks/42/progress-reset',
-    share: '/marketplace/decks',
-  },
+  move_alias: 'deck-42',
+  share_url: '/marketplace/decks',
   children: [],
 }
 
 const sampleDashboard: DashboardPayload = {
   decks: [sampleDeck],
-  totals: { new: 10, learning: 2, due: 3 },
   admin_mode: false,
-  actions: { create: '/api/decks', move: '/api/decks/move' },
 }
 
 describe('DeckCardTypesDialog', () => {

@@ -8,10 +8,7 @@ const API_BASE = API_BASE_URL
 type DashboardRow = {
   deck_id: number
   parent_id: number | null
-  move_alias: string
-  move_token?: string
-  parent_move_alias?: string | null
-  parent_move_token?: string | null
+  move_alias?: string
   label: string
   depth: number
   new_count: number
@@ -23,12 +20,6 @@ type DashboardRow = {
 
 type DashboardResponse = {
   items: DashboardRow[]
-  summary: {
-    new: number
-    learning: number
-    due: number
-    total_due: number
-  }
   admin_mode: boolean
 }
 
@@ -47,19 +38,8 @@ function toDeckNode(row: DashboardRow): DeckNode {
       learning: row.learn_count,
       due: row.due_count,
     },
-    move: {
-      alias: row.move_alias,
-      token: row.move_token ?? '',
-      parent_alias: row.parent_move_alias ?? null,
-      parent_token: row.parent_move_token ?? null,
-    },
-    actions: {
-      rename: `${API_BASE}/decks/${row.deck_id}`,
-      move: `${API_BASE}/decks/${row.deck_id}`,
-      delete: `${API_BASE}/decks/${row.deck_id}`,
-      reset: `${API_BASE}/decks/${row.deck_id}/progress-reset`,
-      share: `/marketplace/decks/publish?deck_id=${row.deck_id}`,
-    },
+    move_alias: row.move_alias,
+    share_url: `/marketplace/decks/publish?deck_id=${row.deck_id}`,
     children: row.children.map(toDeckNode),
   }
 }
@@ -67,16 +47,7 @@ function toDeckNode(row: DashboardRow): DeckNode {
 function toDashboard(payload: DashboardResponse): DashboardPayload {
   return {
     decks: payload.items.map(toDeckNode),
-    totals: {
-      new: payload.summary.new,
-      learning: payload.summary.learning,
-      due: payload.summary.due,
-    },
     admin_mode: payload.admin_mode,
-    actions: {
-      create: `${API_BASE}/decks`,
-      move: `${API_BASE}/decks`,
-    },
   }
 }
 

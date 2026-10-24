@@ -69,14 +69,8 @@ const createTestNode = (
   depth: 0,
   study_url: `/study?deck_id=${id}`,
   counts: { new: 0, learning: 0, due: 0 },
-  move: { alias: `alias-${id}`, token: 't', parent_alias: null, parent_token: null },
-  actions: {
-    rename: '',
-    move: '',
-    delete: '',
-    reset: '',
-    share: '',
-  },
+  move_alias: `alias-${id}`,
+  share_url: '',
   children,
 })
 

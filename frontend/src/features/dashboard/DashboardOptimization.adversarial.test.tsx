@@ -43,7 +43,6 @@ describe('Dashboard transport regression coverage', () => {
     }
     const fetchMock = mockJson({
       items: [{ ...child, deck_id: 10, parent_id: null, move_alias: 'MID-ROOT', label: 'Root', depth: 0, children: [child] }],
-      summary: { new: 2, learning: 1, due: 3, total_due: 6 },
       admin_mode: true,
     })
     const result = await dashboardApi.getDashboard()
@@ -52,9 +51,9 @@ describe('Dashboard transport regression coverage', () => {
     expect(result.decks[0].children[0]).toMatchObject({
       id: 11, parent_id: 10, study_url: '/study?deck_id=11',
       counts: { new: 2, learning: 1, due: 3 },
-      move: { alias: 'MID-CHILD', token: '', parent_alias: null, parent_token: null },
+      move_alias: 'MID-CHILD', share_url: '/marketplace/decks/publish?deck_id=11',
     })
-    expect(result.decks[0].move.alias).toBe('MID-ROOT')
+    expect(result.decks[0].move_alias).toBe('MID-ROOT')
   })
 
   it('sends the browser timezone in the overview query, preserving year and credentials', async () => {

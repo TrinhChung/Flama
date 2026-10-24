@@ -87,7 +87,7 @@ function DeckRowComponent({
   const isInvalidDrop = dropHover === 'invalid'
 
   const handleCopyMoveId = () => {
-    void navigator.clipboard.writeText(node.move.alias)
+    if (node.move_alias) void navigator.clipboard.writeText(node.move_alias)
   }
 
   const handleRowPointerDown = (e: React.PointerEvent) => {
@@ -280,7 +280,7 @@ function DeckRowComponent({
 
               <DropdownMenuItem
                 className="cursor-pointer text-sm py-2 px-2.5 font-semibold text-orange-700 flex items-center gap-2"
-                onSelect={() => window.location.assign(node.actions.share)}
+                onSelect={() => window.location.assign(node.share_url)}
               >
                 <Share className="size-4 text-orange-600" />
                 <span>{t('tree.row.menu.share')}</span>

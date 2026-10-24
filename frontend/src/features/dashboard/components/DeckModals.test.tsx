@@ -38,14 +38,8 @@ const childDeck: DeckNode = {
   study_url: '/study?deck_id=10',
   note_type_id: 'nt-kanji',
   counts: { new: 5, learning: 1, due: 2 },
-  move: { alias: 'deck-10', token: 'token', parent_alias: 'deck-2', parent_token: 'token2' },
-  actions: {
-    rename: '/api/decks/10',
-    move: '/api/decks/10',
-    delete: '/api/decks/10',
-    reset: '/api/decks/10/progress-reset',
-    share: '/marketplace/decks',
-  },
+  move_alias: 'deck-10',
+  share_url: '/marketplace/decks',
   children: [],
 }
 
@@ -57,22 +51,14 @@ const parentDeck: DeckNode = {
   study_url: '/study?deck_id=2',
   note_type_id: 'nt-kanji',
   counts: { new: 10, learning: 2, due: 3 },
-  move: { alias: 'deck-2', token: 'token', parent_alias: null, parent_token: null },
-  actions: {
-    rename: '/api/decks/2',
-    move: '/api/decks/2',
-    delete: '/api/decks/2',
-    reset: '/api/decks/2/progress-reset',
-    share: '/marketplace/decks',
-  },
+  move_alias: 'deck-2',
+  share_url: '/marketplace/decks',
   children: [childDeck],
 }
 
 const dummyDashboard: DashboardPayload = {
   decks: [parentDeck],
-  totals: { new: 15, learning: 3, due: 5 },
   admin_mode: false,
-  actions: { create: '/api/decks', move: '/api/decks/move' },
 }
 
 describe('CreateDeckModal', () => {
