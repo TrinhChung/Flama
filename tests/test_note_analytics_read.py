@@ -197,7 +197,7 @@ class NoteAnalyticsReadTests(unittest.TestCase):
     def test_note_overview_shows_the_rows_future_due(self):
         self._answer("easy")
         heatmap = self._overview()["heatmap"]
-        self.assertTrue(any(point.get("source") == "due" for point in heatmap))
+        self.assertTrue(any(point["is_future"] and point["cards"] for point in heatmap))
 
     def test_overlay_install_dashboard_counts_the_source_note_row(self):
         self._install_overlay()

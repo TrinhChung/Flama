@@ -1498,6 +1498,13 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(payload["year"], 2026)
         self.assertEqual(payload["timezone"], "Asia/Tokyo")
         self.assertEqual(len(payload["heatmap"]), 365)
+        # The page reads only these; MCP keeps the builder's full shape.
+        self.assertEqual(set(payload), {"year", "timezone", "today", "heatmap", "metrics"})
+        self.assertEqual(set(payload["today"]), {"date", "cards", "minutes"})
+        self.assertEqual(set(payload["heatmap"][0]), {"date", "cards", "minutes", "is_future"})
+        self.assertEqual(set(payload["metrics"]), {
+            "daily_average_cards", "days_learned_percent", "longest_streak_days", "current_streak_days",
+        })
 
     def test_today_future_note_analytics_bypass_legacy_progress_queries(self):
         self._enable_existing_state_note_authority(epoch=16)

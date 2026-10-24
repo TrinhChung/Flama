@@ -13,7 +13,7 @@ import { StudyHeatmap } from './StudyHeatmap'
 
 const overview: HeatmapOverviewData = {
   year: 2026,
-  today: { date: '2026-10-24', cards: 3, minutes: 1.5, sec_per_card: 30 },
+  today: { date: '2026-10-24', cards: 3, minutes: 1.5 },
   heatmap: [],
 }
 

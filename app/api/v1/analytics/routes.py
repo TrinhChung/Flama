@@ -81,6 +81,24 @@ def statistics_bootstrap():
     )
 
 
+# The heatmap reads only these; MCP keeps the builder's full shape.
+_OVERVIEW_DAY_KEYS = ("date", "cards", "minutes", "is_future")
+_OVERVIEW_METRIC_KEYS = (
+    "daily_average_cards", "days_learned_percent", "longest_streak_days", "current_streak_days",
+)
+
+
+def _overview_response(payload: dict) -> dict:
+    today = payload["today"]
+    return {
+        "year": payload["year"],
+        "timezone": payload["timezone"],
+        "today": {"date": today["date"], "cards": today["cards"], "minutes": today["minutes"]},
+        "heatmap": [{key: day[key] for key in _OVERVIEW_DAY_KEYS} for day in payload["heatmap"]],
+        "metrics": {key: payload["metrics"][key] for key in _OVERVIEW_METRIC_KEYS},
+    }
+
+
 @analytics_bp.get("/statistics/overview")
 @login_required
 def statistics_overview():
@@ -111,7 +129,7 @@ def statistics_overview():
             str(exc),
             status=409,
         )
-    return jsonify(payload)
+    return jsonify(_overview_response(payload))
 
 
 @analytics_bp.get("/statistics/today-future")
