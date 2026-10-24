@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DashboardPayload, DeckNode } from '../types'
+import type { DashboardPayload, DeckNode } from '@/features/dashboard'
 import { DashboardPage } from './DashboardPage'
 
 const sampleDeck: DeckNode = {
@@ -43,16 +43,22 @@ vi.mock('@/shared/api/bootstrap', () => ({
   }),
 }))
 
-vi.mock('../api', () => ({
+vi.mock('@/features/dashboard/api', () => ({
   dashboardQueryKey: ['dashboard'],
+  dashboardApi: {},
   useDashboard: () => ({
     data: dummyDashboard,
     isPending: false,
     error: null,
   }),
-  useDashboardOverview: () => ({
+}))
+
+vi.mock('@/entities/study-overview', () => ({
+  studyOverviewBaseKey: ['frontend', 'statistics', 'overview'],
+  useStudyOverviewQuery: () => ({
     data: { days: [] },
     isPending: false,
+    isPlaceholderData: false,
   }),
 }))
 

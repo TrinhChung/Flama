@@ -44,7 +44,7 @@ const VerifyEmailPage = lazy(() =>
 )
 
 const loadDashboardPage = () =>
-  import('./features/dashboard').then((module) => ({
+  import('./pages/dashboard').then((module) => ({
     default: module.DashboardPage,
   }))
 

@@ -364,9 +364,12 @@ describe('DeckCardTypesDialog', () => {
         node={sampleDeck}
         adminMode={false}
         onAction={onAction}
-        draggedDeck={null}
-        dragOverId={null}
-        isInvalidDrop={false}
+        isSelected={false}
+        expanded={false}
+        onToggleExpand={vi.fn()}
+        isDraggingSelf={false}
+        dropHover={null}
+        isDragActive={() => false}
         isDragJustEnded={() => false}
         onPointerDownRow={vi.fn()}
       />,

@@ -6,7 +6,8 @@ import '@/shared/config/i18n'
 import { toast } from 'sonner'
 import { useBootstrap } from '@/shared/api/bootstrap'
 import { Button } from '@/components/ui/button'
-import { dashboardApi, dashboardQueryKey, useDashboard, useDashboardOverview } from '../api'
+import { useStudyOverviewQuery } from '@/entities/study-overview'
+import { dashboardApi, dashboardQueryKey, useDashboard } from '../api'
 import type { DeckNode, SelectedDeckAction } from '../types'
 
 export function findDeck(nodes: DeckNode[], deckId: number | null): DeckNode | null {
@@ -29,7 +30,7 @@ export function useDashboardPage() {
   // the heatmap keeps its own skeleton. A deck-first gate (2026-10-04) measured
   // ~0.1 s faster for the tree but held the heatmap back by a whole deck request
   // (~1 s then, 3-5 s in the 2026-10-13 production audit).
-  const overviewQuery = useDashboardOverview(year)
+  const overviewQuery = useStudyOverviewQuery(year, { keepPreviousYear: true })
 
   const [createOpened, setCreateOpened] = useState(false)
   const [selection, setSelection] = useState<SelectedDeckAction | null>(null)

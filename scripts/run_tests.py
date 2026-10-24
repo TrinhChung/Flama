@@ -529,6 +529,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "models/deck_release*.py",
             "models/deck_working_dirty_entity.py",
             "frontend/src/features/dashboard/**",
+            "frontend/src/pages/dashboard/**",
+            "frontend/src/entities/study-overview/**",
         ],
         "backend_tests": [
             "tests/test_deck_access_keys.py",
@@ -546,8 +548,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "frontend_tests": [
             "src/features/dashboard/components/DeckModals.test.tsx",
             "src/features/dashboard/components/DeckTree.test.tsx",
-            "src/features/dashboard/pages/DashboardPage.test.tsx",
             "src/features/dashboard/utils/deckNaming.test.ts",
+            "src/pages/dashboard/ui/DashboardPage.test.tsx",
+            "src/pages/dashboard/ui/DashboardPage.queries.test.tsx",
         ],
     },
     "deck_collaboration": {

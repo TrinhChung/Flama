@@ -16,10 +16,15 @@ import {
   Upload,
 } from '@/shared/components/Icons'
 import { StudyHeatmap } from '@/shared/components/StudyHeatmap'
-import { DeckTree } from '../components/DeckTree'
-import { CreateDeckModal, DeckActionModal } from '../components/DeckModals'
-import { findDeck, useDashboardPage } from '../hooks/useDashboardPage'
-import type { DeckNode } from '../types'
+import {
+  CreateDeckModal,
+  DeckActionModal,
+  DeckTree,
+  findDeck,
+  useDashboardPage,
+  type DeckNode,
+} from '@/features/dashboard'
+import { LazyDeckWorksheetModal } from '@/features/worksheets'
 
 export function DashboardPage() {
   const { t } = useTranslation('dashboard')
@@ -235,11 +240,21 @@ export function DashboardPage() {
         dashboard={dashboard}
         selectedDeck={selectedDeck}
       />
-      <DeckActionModal
-        selection={selection}
-        onClose={handleCloseAction}
-        dashboard={dashboard}
-      />
+      {/* The page composes the worksheet workflow; the dashboard feature only raises the action. */}
+      {selection?.type === 'worksheet' ? (
+        <LazyDeckWorksheetModal
+          open
+          onOpenChange={(open) => !open && handleCloseAction()}
+          deckId={selection.deck.id}
+          deckName={selection.deck.name}
+        />
+      ) : (
+        <DeckActionModal
+          selection={selection}
+          onClose={handleCloseAction}
+          dashboard={dashboard}
+        />
+      )}
     </Page>
   )
 }

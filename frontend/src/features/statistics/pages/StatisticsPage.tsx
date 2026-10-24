@@ -1,8 +1,7 @@
 import '@/shared/config/i18n'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
-import { appApi } from '@/app/api'
+import { useStudyOverviewQuery } from '@/entities/study-overview'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -53,10 +52,7 @@ export function StatisticsPage() {
     deckId: filters.deckId,
     range: studyTimeRange,
   })
-  const overviewQuery = useQuery({
-    queryKey: ['frontend', 'statistics', 'overview', currentYear],
-    queryFn: () => appApi.getDashboardOverview(currentYear),
-  })
+  const overviewQuery = useStudyOverviewQuery(currentYear)
 
   if (configQuery.isPending) return <PageLoading label={t('loading.config')} />
   if (configQuery.error) return <Page><PageError error={configQuery.error} /></Page>

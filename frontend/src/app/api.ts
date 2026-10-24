@@ -6,7 +6,6 @@ import type {
 } from '../features/auth/api'
 
 import { API_BASE_URL, resolveBackendUrl } from '../config/env'
-import type { DashboardOverview } from '@/features/dashboard'
 import type {
   StatisticsConfig,
   StatisticsFilters,
@@ -18,7 +17,6 @@ import {
   apiJson,
   apiJsonKeepalive,
   apiRequest,
-  getBrowserTimezone,
   setCsrfToken,
 } from '../shared/api/client'
 import type {
@@ -200,16 +198,6 @@ export const appApi = {
     )
     toBootstrap(result)
     return { redirect_to: '/' }
-  },
-
-  async getDashboardOverview(year: number): Promise<DashboardOverview> {
-    const query = new URLSearchParams({ year: String(year) })
-    const tz = getBrowserTimezone()
-    if (tz) query.set('timezone', tz)
-    return apiRequest<DashboardOverview>(
-      `${API_BASE}/statistics/overview?${query}`,
-      { includeTimezone: false },
-    )
   },
 
   async getStatisticsConfig(): Promise<StatisticsConfig> {

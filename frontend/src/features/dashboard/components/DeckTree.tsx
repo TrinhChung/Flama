@@ -1,9 +1,12 @@
+import { useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import { cn } from '@/lib/utils'
 import type { DeckNode, SelectedDeckAction } from '../types'
 import { useDeckTreeDragDrop } from '../hooks/useDeckTreeDragDrop'
 import { useDeckTreeExpanded } from '../hooks/useDeckTreeExpanded'
+import { useWindowedRows } from '../hooks/useWindowedRows'
+import { flattenVisibleDecks } from '../utils/flattenDeckTree'
 import { DeckRow } from './DeckRow'
 
 export type DeckTreeProps = {
@@ -14,8 +17,15 @@ export type DeckTreeProps = {
   onActivate?: (deck: DeckNode) => void
   onAction: (action: SelectedDeckAction) => void
   onMoveDeck?: (deckId: number, targetParentId: number | null) => Promise<void>
-  isExpanded?: (deckId: number) => boolean
-  onToggleExpand?: (deckId: number) => void
+}
+
+// Spacers stand in for unmounted rows; zero borders keep them out of the divider rhythm.
+function RowSpacer({ height, anchorRef, position }: {
+  height: number
+  anchorRef?: React.Ref<HTMLDivElement>
+  position: 'before' | 'after'
+}) {
+  return <div ref={anchorRef} aria-hidden="true" data-virtual-spacer={position} style={{ height, borderWidth: 0 }} />
 }
 
 export function DeckTree({
@@ -26,25 +36,26 @@ export function DeckTree({
   onActivate,
   onAction,
   onMoveDeck,
-  isExpanded,
-  onToggleExpand,
 }: DeckTreeProps) {
   const { t } = useTranslation('dashboard')
-  const expandedState = useDeckTreeExpanded(nodes, selectedDeckId)
-  const activeIsExpanded = isExpanded ?? expandedState.isExpanded
-  const activeToggleExpand = onToggleExpand ?? expandedState.toggleExpand
+  const { expandedDeckIds, toggleExpand } = useDeckTreeExpanded(nodes, selectedDeckId)
+  const rows = useMemo(() => flattenVisibleDecks(nodes, expandedDeckIds), [nodes, expandedDeckIds])
   const {
     draggedDeck,
     dragPos,
     ghostRef,
     dragOverId,
     isInvalidDrop,
+    isDragActive,
     isDragJustEnded,
     handlePointerDownRow,
   } = useDeckTreeDragDrop(onMoveDeck)
+  const listRef = useRef<HTMLDivElement>(null)
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const rowWindow = useWindowedRows(rows.length, anchorRef, listRef)
 
   return (
-    <div className="deck-list flex flex-col divide-y divide-gray-100 relative">
+    <div ref={listRef} className="deck-list flex flex-col divide-y divide-gray-100 relative">
       {/* Floating Ghost Badge preview attached to mouse cursor */}
       {draggedDeck && dragPos ? (
         <div
@@ -93,25 +104,36 @@ export function DeckTree({
         </div>
       ) : null}
 
-      {nodes.map((node, index) => (
-        <DeckRow
-          key={node.id}
-          node={node}
-          adminMode={adminMode}
-          selectedDeckId={selectedDeckId}
-          dataTour={index === 0 ? 'dash-deck-row-first' : undefined}
-          onSelect={onSelect}
-          onActivate={onActivate}
-          onAction={onAction}
-          draggedDeck={draggedDeck}
-          dragOverId={dragOverId}
-          isInvalidDrop={isInvalidDrop}
-          isDragJustEnded={isDragJustEnded}
-          onPointerDownRow={handlePointerDownRow}
-          isExpanded={activeIsExpanded}
-          onToggleExpand={activeToggleExpand}
-        />
-      ))}
+      {rowWindow.enabled ? (
+        <RowSpacer height={rowWindow.paddingTop} anchorRef={anchorRef} position="before" />
+      ) : null}
+
+      {rows.slice(rowWindow.start, rowWindow.end).map((node, offset) => {
+        const index = rowWindow.start + offset
+        return (
+          <DeckRow
+            key={node.id}
+            node={node}
+            adminMode={adminMode}
+            isSelected={selectedDeckId === node.id}
+            expanded={expandedDeckIds.has(node.id)}
+            dataTour={index === 0 ? 'dash-deck-row-first' : undefined}
+            onSelect={onSelect}
+            onActivate={onActivate}
+            onAction={onAction}
+            onToggleExpand={toggleExpand}
+            isDraggingSelf={draggedDeck?.id === node.id}
+            dropHover={dragOverId === node.id ? (isInvalidDrop ? 'invalid' : 'valid') : null}
+            isDragActive={isDragActive}
+            isDragJustEnded={isDragJustEnded}
+            onPointerDownRow={handlePointerDownRow}
+          />
+        )
+      })}
+
+      {rowWindow.enabled && rowWindow.paddingBottom > 0 ? (
+        <RowSpacer height={rowWindow.paddingBottom} position="after" />
+      ) : null}
     </div>
   )
 }

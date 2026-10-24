@@ -71,6 +71,7 @@ export function useDeckTreeDragDrop(onMoveDeck?: (deckId: number, targetParentId
 
   // Stable identities let memoized DeckRows skip renders; both only touch refs and setters.
   const isDragJustEnded = useCallback(() => isJustDraggedRef.current, [])
+  const isDragActive = useCallback(() => draggedDeckRef.current !== null, [])
 
   const handlePointerDownRow = useCallback((e: React.PointerEvent, node: DeckNode) => {
     if (e.button !== 0) return // Only primary click / primary touch
@@ -290,6 +291,7 @@ export function useDeckTreeDragDrop(onMoveDeck?: (deckId: number, targetParentId
     ghostRef,
     dragOverId,
     isInvalidDrop,
+    isDragActive,
     isDragJustEnded,
     handlePointerDownRow,
   }

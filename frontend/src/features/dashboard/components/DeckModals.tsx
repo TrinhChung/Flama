@@ -21,9 +21,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { LazyDeckWorksheetModal } from '@/features/worksheets'
 import { DeckCardTypesDialog } from './DeckCardTypesDialog'
-import { dashboardApi, dashboardQueryKey, studyOverviewBaseKey } from '../api'
+import { studyOverviewBaseKey } from '@/entities/study-overview'
+import { dashboardApi, dashboardQueryKey } from '../api'
 import {
   getCreateDeckSchema,
   getRenameDeckSchema,
@@ -274,16 +274,8 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
   if (!selection) return null
   const { type, deck } = selection
 
-  if (type === 'worksheet') {
-    return (
-      <LazyDeckWorksheetModal
-        open
-        onOpenChange={(open) => !open && onClose()}
-        deckId={deck.id}
-        deckName={deck.name}
-      />
-    )
-  }
+  // The worksheet modal belongs to another feature; the dashboard page renders it.
+  if (type === 'worksheet') return null
 
   if (type === 'card-types') {
     return (

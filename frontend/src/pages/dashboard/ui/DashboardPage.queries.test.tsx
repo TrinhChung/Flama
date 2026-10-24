@@ -5,9 +5,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DashboardOverview, DashboardPayload } from '../types'
-import { dashboardQueryKey, studyOverviewQueryKey } from '../api'
-import { DashboardPage } from '../pages/DashboardPage'
+import { studyOverviewQueryKey } from '@/entities/study-overview'
+import type { DashboardOverview, DashboardPayload } from '@/features/dashboard'
+import { dashboardQueryKey } from '@/features/dashboard/api'
+import { DashboardPage } from './DashboardPage'
 
 ;(globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT: boolean
@@ -18,8 +19,11 @@ const api = vi.hoisted(() => ({
   getDashboardOverview: vi.fn(),
 }))
 
-vi.mock('@/app/api', () => ({ appApi: { getDashboardOverview: api.getDashboardOverview } }))
-vi.mock('../api/dashboardApi', () => ({ dashboardApi: { getDashboard: api.getDashboard } }))
+vi.mock('@/entities/study-overview/api/studyOverviewApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/entities/study-overview/api/studyOverviewApi')>()),
+  fetchStudyOverview: api.getDashboardOverview,
+}))
+vi.mock('@/features/dashboard/api/dashboardApi', () => ({ dashboardApi: { getDashboard: api.getDashboard } }))
 
 vi.mock('@/shared/api/bootstrap', () => ({
   useBootstrap: () => ({

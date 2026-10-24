@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { appApi } from '@/app/api'
 import { dashboardApi } from './api/dashboardApi'
+import { fetchStudyOverview } from '@/entities/study-overview'
 import { apiRequest, setCsrfToken } from '@/shared/api/client'
 
 function mockJson(payload: unknown) {
@@ -59,7 +60,7 @@ describe('Dashboard transport regression coverage', () => {
   it('sends the browser timezone in the overview query, preserving year and credentials', async () => {
     mockTimezone('America/New_York')
     const fetchMock = mockJson({ days: [] })
-    await appApi.getDashboardOverview(2025)
+    await fetchStudyOverview(2025)
     const url = new URL(fetchMock.mock.calls[0][0], 'http://localhost')
     expect(url.searchParams.get('year')).toBe('2025')
     expect(url.searchParams.get('timezone')).toBe('America/New_York')
@@ -85,7 +86,7 @@ describe('Dashboard transport regression coverage', () => {
   it('uses the stored server timezone if browser timezone lookup fails', async () => {
     const fetchMock = mockJson({ days: [] })
     vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => { throw new Error('Intl unavailable') })
-    await expect(appApi.getDashboardOverview(2026)).resolves.toEqual({ days: [] })
+    await expect(fetchStudyOverview(2026)).resolves.toEqual({ days: [] })
     const url = new URL(fetchMock.mock.calls[0][0], 'http://localhost')
     expect(url.searchParams.has('timezone')).toBe(false)
   })
