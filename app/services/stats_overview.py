@@ -162,13 +162,12 @@ def _canonical_future_due_day_counts(
     start_utc: datetime,
     end_utc: datetime,
     day_boundary_hour_local: int,
-    storage_profile: str,
     now_utc: datetime | None = None,
 ) -> dict[date, int]:
     """Future due days from the learner's current Note availability.
 
-    Every unsuspended presentation with a due value contributes one count;
-    overdue items count today. Divergent current Note evidence fails closed.
+    Every unsuspended Note with a due value contributes its forecast weight
+    (``forecast_counts_notes``); overdue items count today.
     """
     from app.repositories.stats_query_repository import (
         _progress_due_local_day,
@@ -202,13 +201,14 @@ def _canonical_future_due_day_counts(
             day_boundary_hour_local=day_boundary_hour_local,
             start_local_day=start_local_day,
             end_local_day=end_local_day,
-            storage_profile=storage_profile,
         )
 
     from app.repositories import note_analytics_read_repository as note_reads
+    from app.repositories.note_analytics_scope_repository import collection_note_scope
 
     by_note = forecast_counts_notes()
-    scope = note_reads.learner_note_scope(learner_user_id=user_id, storage_profile=storage_profile)
+    # A due value implies current state, so the due filter alone keeps the scheduled Notes.
+    scope = collection_note_scope(db.session, learner_user_id=user_id)
     rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("rows")
     weight = literal(1).label("card_count") if by_note else rows.c.card_count
     fetched = db.session.execute(
@@ -422,7 +422,6 @@ def build_stats_overview(
                 start_utc=future_start_utc,
                 end_utc=year_end_utc,
                 day_boundary_hour_local=day_boundary_hour,
-                storage_profile=authority_route.storage_profile,
                 now_utc=now_utc_naive,
             )
 

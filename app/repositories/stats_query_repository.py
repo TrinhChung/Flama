@@ -211,7 +211,6 @@ def query_canonical_future_due_day_counts_mysql(
     day_boundary_hour_local: int,
     start_local_day: date,
     end_local_day: date,
-    storage_profile: str,
 ) -> dict[date, int]:
     """Group the existing NOTE Card availability scope for fixed-offset zones.
 
@@ -222,11 +221,14 @@ def query_canonical_future_due_day_counts_mysql(
     unless :func:`forecast_counts_notes`, then each Note does.
     """
     from app.repositories import note_analytics_read_repository as note_reads
+    from app.repositories.note_analytics_scope_repository import collection_note_scope
 
     offset = fixed_utc_offset_minutes(timezone_name)
     shift = int(offset) - int(day_boundary_hour_local) * 60
     by_note = forecast_counts_notes()
-    scope = note_reads.learner_note_scope(learner_user_id=user_id, storage_profile=storage_profile)
+    # A due value implies current state (ck_sp_subject_progress_group), so the
+    # due filter below alone keeps the scheduled Notes.
+    scope = collection_note_scope(db.session, learner_user_id=user_id)
     rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("availability")
     # TO_DAYS has a year-zero origin; Python date ordinals start at 0001-01-01.
     # Review due_day overrides due_at; every other queue uses its UTC timestamp.

@@ -462,8 +462,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
                 include_note_types=False),
             'overview_future_due': lambda: _canonical_future_due_day_counts(
                 user_id=self.user.id, timezone_name='UTC', timezone_obj=None, start_utc=NOW,
-                end_utc=NOW + timedelta(days=30), day_boundary_hour_local=4,
-                storage_profile='CONSOLIDATED_V1'),
+                end_utc=NOW + timedelta(days=30), day_boundary_hour_local=4),
             'today_future_rows': lambda: _consolidated_due_rows_and_load(
                 user_id=self.user.id, scope_deck_ids=[self.deck.id]),
             'study_queue_counts': lambda: study_repository.query_study_queue_counts(

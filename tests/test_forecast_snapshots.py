@@ -117,12 +117,12 @@ class ForecastSnapshotTests(unittest.TestCase):
         raw = [self._payload("raw", backlog=value) for value in (False, True)]
         overview = _canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
             start_utc=NOW.replace(hour=4), end_utc=NOW.replace(hour=4) + timedelta(days=30),
-            day_boundary_hour_local=4, storage_profile="CONSOLIDATED_V1", now_utc=NOW)
+            day_boundary_hour_local=4, now_utc=NOW)
         self._prewarm()
         self.assertEqual([self._payload(backlog=value) for value in (False, True)], raw)
         self.assertEqual(_canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
             start_utc=NOW.replace(hour=4), end_utc=NOW.replace(hour=4) + timedelta(days=30),
-            day_boundary_hour_local=4, storage_profile="CONSOLIDATED_V1", now_utc=NOW), overview)
+            day_boundary_hour_local=4, now_utc=NOW), overview)
 
     def test_worker_retry_empty_projection_and_bucket_budget(self):
         self.assertTrue(self._prewarm()["published"])

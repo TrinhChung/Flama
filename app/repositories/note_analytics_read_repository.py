@@ -165,8 +165,7 @@ def guard_scope(session: Session, *, learner_user_id: int, build) -> None:
 def note_rows(scope, *, learner_user_id: int, include_state: bool = False):
     """Availability once per scoped Note; Card metrics carry a multiplicity.
 
-    ``scope`` comes from ``deck_note_scope``, ``collection_note_scope`` or
-    :func:`learner_note_scope`.
+    ``scope`` comes from ``deck_note_scope`` or ``collection_note_scope``.
     """
     subject = aliased(StudyProgressSubject)
     columns = [
@@ -183,30 +182,6 @@ def note_rows(scope, *, learner_user_id: int, include_state: bool = False):
         subject.learner_user_id == int(learner_user_id),
         subject.logical_note_key == cast(scope.c.note_id, LargeBinary),
     ))
-
-
-def learner_note_scope(*, learner_user_id: int, storage_profile: str | None = None):
-    """Visible owned/install Notes whose live Note holds current state.
-
-    The shared scope preserves release-pinned retired applications and local
-    added Notes. An outer ORM statement embedding this scope must retain
-    ``include_retired_cards=True``; its owned branch explicitly selects ACTIVE
-    applications, while the overlay branch enforces its release pin.
-    """
-
-    from models import db
-    from app.repositories.note_analytics_scope_repository import collection_note_scope
-
-    scope = collection_note_scope(db.session, learner_user_id=learner_user_id)
-    # A bounded scalar presence probe has the same semantics as EXISTS. It
-    # prevents MySQL's semijoin rewrite from placing application counts before
-    # the Note join (measured 31 x 39k intermediate rows on the production set).
-    state = select(literal(1)).where(
-        StudyProgressSubject.learner_user_id == int(learner_user_id),
-        StudyProgressSubject.live_note_id == scope.c.note_id,
-        StudyProgressSubject.semantic_state_hash.isnot(None),
-    ).correlate(scope).limit(1).scalar_subquery().isnot(None)
-    return select(scope.c.deck_id, scope.c.note_id, scope.c.card_count).where(state).subquery("learner_note_scope")
 
 
 def consolidated_card_rows(card_query, *, learner_user_id: int):

@@ -119,7 +119,7 @@ class StatsOverviewTests(unittest.TestCase):
             user_id=self.user_id, timezone_name=timezone_name, timezone_obj=None,
             start_utc=_day_index_to_datetime(start.toordinal(), boundary, timezone_name=timezone_name),
             end_utc=_day_index_to_datetime(end.toordinal(), boundary, timezone_name=timezone_name),
-            day_boundary_hour_local=boundary, storage_profile="CONSOLIDATED_V1",
+            day_boundary_hour_local=boundary,
         )
 
     @staticmethod
@@ -448,14 +448,13 @@ class StatsOverviewTests(unittest.TestCase):
                     start_utc=now_utc,
                     end_utc=datetime(2026, 1, 11, 12),
                     day_boundary_hour_local=4,
-                    storage_profile="CONSOLIDATED_V1",
                 )
                 self.assertEqual(result, {date(2026, 1, 10): 5})
                 mock_can.assert_called_once_with(timezone_name="Asia/Tokyo")
                 mock_query.assert_called_once_with(
                     user_id=self.user_id, timezone_name="Asia/Tokyo",
                     day_boundary_hour_local=4, start_local_day=date(2026, 1, 10),
-                    end_local_day=date(2026, 1, 11), storage_profile="CONSOLIDATED_V1",
+                    end_local_day=date(2026, 1, 11),
                 )
 
     def test_canonical_due_counts_keep_precedence_day_boundary_and_card_units(self):
@@ -487,9 +486,10 @@ class StatsOverviewTests(unittest.TestCase):
             # The scope's live association does not substitute for logical-key availability.
             self._add_canonical_due(due_day=due, logical_key=b"mismatched-logical-key")
             db.session.commit()
-            # None counts: the publisher's Notes are not installed, a detached
-            # subject has no live state, and a mismatched key has no availability.
-            self.assertEqual(self._canonical_day_counts(), {})
+            # The publisher's Notes are not installed and a mismatched key has no
+            # availability; a detached subject still names its Note by logical
+            # key, so it reads as stored, like every other count.
+            self.assertEqual(self._canonical_day_counts(), {date(2026, 1, 11): 1})
 
     def test_canonical_due_dst_timezone_uses_python_business_day_mapping(self):
         with self.app.app_context():

@@ -224,7 +224,7 @@ class NoteStatsRetirementTests(unittest.TestCase):
         self._clone(local_deck=4, duplicate=True)
         counts = _canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
                                                  start_utc=NOW.replace(hour=0), end_utc=NOW + timedelta(days=30),
-                                                 day_boundary_hour_local=0, storage_profile="CONSOLIDATED_V1")
+                                                 day_boundary_hour_local=0)
         self.assertEqual(counts, {date.fromordinal(DAY): 1, date.fromordinal(DAY + 1): 1})
 
     def test_forecast_reads_detached_rows_as_stored_and_no_retired_table_is_queried(self):
@@ -317,7 +317,7 @@ class NoteStatsRetirementTests(unittest.TestCase):
                 self.assertEqual(by_day[0]["due_count"], weight)
                 due = _canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
                     start_utc=NOW.replace(hour=0), end_utc=NOW + timedelta(days=30),
-                    day_boundary_hour_local=0, storage_profile="CONSOLIDATED_V1")
+                    day_boundary_hour_local=0)
                 self.assertEqual(due, {date.fromordinal(DAY): weight})
 
     def test_collection_unions_disjoint_release_pins_instead_of_max_or_sum(self):
