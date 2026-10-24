@@ -1,4 +1,4 @@
-import { memo, useRef } from 'react'
+import { memo, useLayoutEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
@@ -43,6 +43,10 @@ export interface DeckRowProps {
   isDragActive: () => boolean
   isDragJustEnded: () => boolean
   onPointerDownRow: (e: React.PointerEvent, node: DeckNode) => void
+  /** Called while this row still holds focus right before it unmounts. */
+  onUnmountWhileFocused?: (deckId: number) => void
+  /** Whether this row should take back focus it lost when it unmounted. */
+  claimRestoredFocus?: (deckId: number) => boolean
 }
 
 function DeckRowComponent({
@@ -60,11 +64,23 @@ function DeckRowComponent({
   isDragActive,
   isDragJustEnded,
   onPointerDownRow,
+  onUnmountWhileFocused,
+  claimRestoredFocus,
 }: DeckRowProps) {
   const { t, i18n } = useTranslation('dashboard')
   const navigate = useNavigate()
   const numberLocale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
   const lastPointerTypeRef = useRef<string>('mouse')
+  const rowRef = useRef<HTMLDivElement>(null)
+
+  // Layout cleanup runs before React removes the node, so focus can still be handed off.
+  useLayoutEffect(() => {
+    const row = rowRef.current
+    if (row && claimRestoredFocus?.(node.id)) row.focus({ preventScroll: true })
+    return () => {
+      if (row && document.activeElement === row) onUnmountWhileFocused?.(node.id)
+    }
+  }, [node.id, claimRestoredFocus, onUnmountWhileFocused])
   const hasChildren = node.children.length > 0
 
   const isTargetHover = dropHover !== null
@@ -132,6 +148,7 @@ function DeckRowComponent({
 
   return (
     <div
+      ref={rowRef}
       data-node-id={node.id}
       data-tour={dataTour}
       role="button"

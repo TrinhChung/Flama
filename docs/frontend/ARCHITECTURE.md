@@ -164,7 +164,7 @@ frontend/src/
 ├── hooks/                # Global device and utility hooks
 ├── layouts/              # AppLayout shell
 ├── lib/                  # Foundational utilities (arrayField, audioClient, ankiSync)
-├── pages/                # Top-level standalone page components
+├── pages/                # Route compositions (`pages/<slice>/ui`) and standalone pages
 └── shared/               # Reusable infrastructure (API, UI primitives, i18n)
 ```
 
@@ -179,6 +179,10 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
 2. **`flashcard`** (`frontend/src/entities/flashcard/`):
    - Client Renderer: `clientRenderer.ts` (in-memory Mustache compilation, safe DOMPurify sanitization, and native array preservation).
    - Event Hub: Cross-component flashcard content synchronization events (`studyContentSync.ts`).
+3. **`deck`** (`frontend/src/entities/deck/`): accessible deck list (`/api/browse/decks`), picker options and `DeckSelectionTreeView`.
+4. **`study-overview`** (`frontend/src/entities/study-overview/`):
+   - API: `fetchStudyOverview(year)` for `GET /api/statistics/overview` (browser timezone in the `timezone` query, no `X-Timezone` header) and `useStudyOverviewQuery(year, { keepPreviousYear })`.
+   - Query keys: `studyOverviewQueryKey(year)` = `['frontend', 'statistics', 'overview', year]`, shared by Dashboard and Statistics so both read one cache entry. It sits outside `['frontend', 'dashboard']`; study, Anki import and timezone changes refresh it through `['frontend', 'statistics']`, deck delete/reset through `studyOverviewBaseKey`.
 
 ### 5.2 The 25 Feature Slices (`frontend/src/features/`)
 
@@ -188,7 +192,7 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
 | **`audio`** | `features/audio/` | Flama Audio desktop companion integration, local audio dialog (`LocalAudioDialog.tsx`), connection gate (`FlamaAudioConnectionGate.tsx`), deck scan, batch audio queue monitor (`DeckAudioQueueMonitor.tsx`). |
 | **`auth`** | `features/auth/` | Authentication forms (`LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `ResetPasswordPage`), form hooks (`useLoginForm.ts`, `useRegisterForm.ts`), session auth gating via `useBootstrap()` in `RequireAuth.tsx`. |
 | **`browse`** | `features/browse/` | Vocabulary browse table (`BrowsePage`), virtualized card list, multi-deck tree filter, tag search, bulk edit dialogs. |
-| **`dashboard`** | `features/dashboard/` | Learner home (`DashboardPage`), deck tree hierarchy, daily review forecast heatmap, due counts rollup, speculative page preload. |
+| **`dashboard`** | `features/dashboard/` | Deck tree (`DeckTree`, `DeckRow`), deck create/rename/move/delete/reset modals, drag-and-drop moves, `useDashboardPage`; slice-local API in `api/dashboardApi.ts`. The page itself is `pages/dashboard`. |
 | **`deck-collaboration`** | `features/deck-collaboration/` | Community deck contribution: `ChangeRequestInboxPage`, `ChangeRequestDetailPage`, `ReleaseBuilderPage`, `InstalledDeckUpdatePage`. |
 | **`guide`** | `features/guide/` | Interactive knowledge base (`GuidePage`, `GuideArticlePage`), Yomitan, asbplayer, and desktop companion tutorials. |
 | **`import`** | `features/import/` | Import wizard (`FileImportPage`, `AnkiSyncPage`), AnkiConnect field mapping, progress streaming, zip extraction via zip.js. |
@@ -201,7 +205,7 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
 | **`orders`** | `features/orders/` | Transaction invoices, payment receipts, order ledger (`OrdersPage`). |
 | **`profile`** | `features/profile/` | User profile management (`ProfilePage`), avatar upload, biography, account preferences. |
 | **`settings`** | `features/settings/` | Study goals (`StudyGoalsPage`), Yomitan API tokens (`YomitanTokensPage`), asbplayer settings, scheduler parameters. |
-| **`statistics`** | `features/statistics/` | Study analytics (`StatisticsPage`), retention rate charts, memory stability distribution, calendar heatmaps. |
+| **`statistics`** | `features/statistics/` | Study analytics filters, KPI grid, future-due and study-time charts, `useStatisticsFilters`; slice-local API in `api/statisticsApi.ts`. The page itself is `pages/statistics`. |
 | **`study`** | `features/study/` | Flashcard study engine (`StudyPage.tsx`, `useStudySession.ts` hook, `StudyCardRendererFrame.tsx`, `StudyHeaderToolbar.tsx`, `StudyBottomBar.tsx`), SRS rating buttons, answer reveal, quick card edit dialog. |
 | **`support`** | `features/support/` | Support portal (`SupportPage`), feedback submission (`FeedbackPage`), user ticket status (`TicketDetailPage`). |
 | **`template-distribution`**| `features/template-distribution/` | Card template publishing to marketplace, licensing options, pricing setup. |
@@ -227,6 +231,18 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
   9. `WorkspaceLayout`: Three-column responsive workspace drawer.
 - **Note field editing** lives in `src/entities/flashcard/ui/NoteFieldEditor.tsx` (media preview, native array input or text; Input vs Textarea is fixed at mount from field type, name and stored value). Browse edit/create and the Study quick-edit dialog share it.
 - **Note tags**: the backend limits (64 chars, 50 tags) and the casefold dedupe key are in `src/entities/flashcard/lib/noteTags.ts`; tag inputs ignore an IME-confirming Enter with `isImeEnter` from `src/shared/lib/keyboard.ts`. Browse and Study quick edit both use them, and both lock tags on cloned cards (`note.deck_install_id`).
+
+### 5.4 Page Compositions (`frontend/src/pages/`)
+
+Route pages that assemble several slices live in `pages/<slice>/ui/` with an `index.ts` used by the lazy routes in `App.tsx`. They import features only through `@/features/<slice>`.
+
+- **`pages/dashboard`** (`/dashboard`, preloaded while the session request runs):
+  - Composes the dashboard feature, the `study-overview` heatmap and the worksheet modal; `DeckActionModal` returns `null` for the `worksheet` action so the dashboard slice does not import `features/worksheets`.
+  - The deck tree (`GET /api/dashboard?compact=1`) and the heatmap overview load in parallel. The page waits only for the tree; the heatmap has its own skeleton and, on year change, keeps the previous year dimmed (`keepPreviousYear`) until the new one arrives.
+  - Create/rename/move refresh only `['frontend', 'dashboard']`; delete/reset also refresh the overview because they change the due forecast.
+  - `DeckTree` flattens expanded branches and renders memoized `DeckRow`s that receive only their own selection, expand and drop-target state, so a hover, selection or expand change re-renders just the affected rows. The drag ghost moves through a ref, not per-pointermove state.
+  - From 150 visible rows (`useWindowedRows`), only rows near the viewport mount, in normal flow between two spacers, so the page keeps its scrollbar, dividers and tab order. Ctrl/Cmd+F or F3 mounts the whole tree for browser find. If the focused row unmounts, the list container holds focus and the row takes it back when it mounts again. The find bar opened from the browser menu sends no key event and still sees only mounted rows.
+- **`pages/statistics`** (`/statistics`): composes the statistics feature with the shared `study-overview` heatmap.
 
 ---
 

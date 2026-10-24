@@ -162,4 +162,59 @@ describe('DeckTree render scope and windowing', () => {
     expect(anchor.style.height).toBe(`${start * ESTIMATED_ROW_HEIGHT}px`)
     expect(row(1)).toBeNull()
   })
+
+  async function scrollTo(rowsAbove: number) {
+    const anchor = container.querySelector<HTMLElement>('[data-virtual-spacer="before"]')!
+    vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue({
+      top: -rowsAbove * ESTIMATED_ROW_HEIGHT,
+    } as DOMRect)
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'))
+      await new Promise((resolve) => setTimeout(resolve, 40))
+    })
+  }
+
+  it('keeps focus in the list while the focused row is scrolled out, then returns it', async () => {
+    const nodes = Array.from({ length: 400 }, (_, index) => deck(index + 1))
+    act(() => root.render(<SelectableTree nodes={nodes} />))
+    const list = container.querySelector<HTMLElement>('.deck-list')!
+
+    act(() => row(5)?.focus())
+    expect(document.activeElement).toBe(row(5))
+
+    await scrollTo(200)
+    expect(row(5)).toBeNull()
+    expect(document.activeElement).toBe(list)
+
+    await scrollTo(0)
+    expect(document.activeElement).toBe(row(5))
+  })
+
+  it('does not pull focus back after the learner moved focus elsewhere', async () => {
+    const nodes = Array.from({ length: 400 }, (_, index) => deck(index + 1))
+    const outside = document.createElement('button')
+    document.body.appendChild(outside)
+    act(() => root.render(<SelectableTree nodes={nodes} />))
+
+    act(() => row(5)?.focus())
+    await scrollTo(200)
+    act(() => outside.focus())
+    await scrollTo(0)
+
+    expect(document.activeElement).toBe(outside)
+    outside.remove()
+  })
+
+  it('mounts every row once browser find is opened so Ctrl+F can match any deck', () => {
+    const nodes = Array.from({ length: 400 }, (_, index) => deck(index + 1))
+    act(() => root.render(<SelectableTree nodes={nodes} />))
+    expect(renderedIds().length).toBeLessThan(400)
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true }))
+    })
+
+    expect(renderedIds()).toHaveLength(400)
+    expect(container.querySelector('[data-virtual-spacer]')).toBeNull()
+  })
 })

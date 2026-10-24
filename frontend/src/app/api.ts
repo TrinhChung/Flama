@@ -6,13 +6,6 @@ import type {
 } from '../features/auth/api'
 
 import { API_BASE_URL, resolveBackendUrl } from '../config/env'
-import type {
-  StatisticsConfig,
-  StatisticsFilters,
-  TodayFutureStats,
-  UserStudyTimeFilters,
-  UserStudyTimeResponse,
-} from '@/features/statistics'
 import {
   apiJson,
   apiJsonKeepalive,
@@ -75,11 +68,6 @@ type LoginResponse = SessionResponse & {
 type RegisterResponse = {
   created: boolean
   user: Pick<FrontendUser, 'id' | 'email' | 'username'>
-}
-
-type StatisticsResponse = {
-  decks: Array<{ id: number; name: string; parent_id?: number | null }>
-  selected_deck_id: number | null
 }
 
 function toBootstrap(payload: SessionResponse): FrontendBootstrap {
@@ -198,58 +186,6 @@ export const appApi = {
     )
     toBootstrap(result)
     return { redirect_to: '/' }
-  },
-
-  async getStatisticsConfig(): Promise<StatisticsConfig> {
-    const payload = await apiRequest<StatisticsResponse>(
-      `${API_BASE}/statistics`,
-    )
-    return {
-      decks: payload.decks.map(({ id, name }) => ({ id, name })),
-      initial_deck_id: payload.selected_deck_id,
-    }
-  },
-
-  async getTodayFutureStats(
-    filters: StatisticsFilters,
-  ): Promise<TodayFutureStats> {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-    const params = new URLSearchParams({
-      scope: filters.scope,
-      history_range: filters.historyRange,
-      future_range: filters.futureRange,
-      backlog: String(filters.backlog),
-      timezone: tz,
-    })
-    if (filters.deckId !== null) {
-      params.set('deck_id', String(filters.deckId))
-    }
-    return apiRequest<TodayFutureStats>(
-      `${API_BASE}/statistics/today-future?${params.toString()}`,
-    )
-  },
-
-  async getUserStudyTimeStats(
-    filters: UserStudyTimeFilters,
-  ): Promise<UserStudyTimeResponse> {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-    const params = new URLSearchParams({
-      scope: filters.scope,
-      range: filters.range,
-      timezone: tz,
-    })
-    if (filters.deckId !== null) {
-      params.set('deck_id', String(filters.deckId))
-    }
-    if (filters.startDate) {
-      params.set('start_date', filters.startDate)
-    }
-    if (filters.endDate) {
-      params.set('end_date', filters.endDate)
-    }
-    return apiRequest<UserStudyTimeResponse>(
-      `${API_BASE}/statistics/study-time?${params.toString()}`,
-    )
   },
 
   async generateStrokes(payload: GenerateStrokesPayload): Promise<GenerateStrokesResponse> {

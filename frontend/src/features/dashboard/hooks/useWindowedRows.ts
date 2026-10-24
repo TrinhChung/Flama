@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useState, type RefObject } from 'react'
 
 // Below this many visible rows the tree renders every row, exactly as before.
-// Above it (e.g. a fully expanded 1,500-deck tree) only rows near the viewport mount.
+// Above it (e.g. a fully expanded 1,500-deck tree) only rows near the viewport
+// mount, until the learner uses browser find.
 export const VIRTUALIZE_MIN_ROWS = 150
 export const OVERSCAN_ROWS = 12
 export const ESTIMATED_ROW_HEIGHT = 36
@@ -53,7 +54,11 @@ export function useWindowedRows(
   anchorRef: RefObject<HTMLElement | null>,
   listRef: RefObject<HTMLElement | null>,
 ): RowWindow {
-  const enabled = count >= VIRTUALIZE_MIN_ROWS
+  // Browser find only sees mounted rows, so Ctrl/Cmd+F or F3 mounts the whole
+  // tree once (one heavy render, then memoized rows) and keeps it mounted.
+  const [showAll, setShowAll] = useState(false)
+  const needsWindow = count >= VIRTUALIZE_MIN_ROWS
+  const enabled = needsWindow && !showAll
   const [state, setState] = useState<WindowState>(() => ({
     start: 0,
     end: INITIAL_ROWS,
@@ -80,6 +85,16 @@ export function useWindowedRows(
   useLayoutEffect(() => {
     update()
   }, [update, state.start, state.end])
+
+  useEffect(() => {
+    if (!enabled) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const findShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f'
+      if (findShortcut || e.key === 'F3') setShowAll(true)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [enabled])
 
   useEffect(() => {
     if (!enabled) return

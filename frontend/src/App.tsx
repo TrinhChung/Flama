@@ -58,7 +58,7 @@ if (
   void loadDashboardPage().catch(() => undefined)
 }
 const StatisticsPage = lazy(() =>
-  import('./features/statistics').then((module) => ({
+  import('./pages/statistics').then((module) => ({
     default: module.StatisticsPage,
   })),
 )

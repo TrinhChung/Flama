@@ -8,13 +8,17 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StudyHeatmap } from '@/shared/components/StudyHeatmap'
 import { Page, PageHeader, SectionCard } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-import { useStatisticsConfig, useTodayFutureStats, useUserStudyTimeStats } from '../api'
-import { FutureDueChart } from '../components/FutureDueChart'
-import { StatisticsFilterCard } from '../components/StatisticsFilterCard'
-import { StatisticsKpiGrid } from '../components/StatisticsKpiGrid'
-import { UserStudyTimeChart } from '../components/UserStudyTimeChart'
-import { useStatisticsFilters } from '../hooks/useStatisticsFilters'
-import type { UserStudyTimePreset } from '../types'
+import {
+  FutureDueChart,
+  StatisticsFilterCard,
+  StatisticsKpiGrid,
+  UserStudyTimeChart,
+  useStatisticsConfig,
+  useStatisticsFilters,
+  useTodayFutureStats,
+  useUserStudyTimeStats,
+  type UserStudyTimePreset,
+} from '@/features/statistics'
 
 function ChoiceTabs<T extends string>({
   value,

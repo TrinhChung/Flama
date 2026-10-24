@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import { cn } from '@/lib/utils'
@@ -54,8 +54,34 @@ export function DeckTree({
   const anchorRef = useRef<HTMLDivElement>(null)
   const rowWindow = useWindowedRows(rows.length, anchorRef, listRef)
 
+  // When the focused row unmounts (scrolled out of the window, or its branch
+  // collapsed) the list holds focus instead of <body>, so Tab continues from the
+  // visible rows; the row takes focus back if it mounts again first.
+  const lostFocusDeckIdRef = useRef<number | null>(null)
+  const handleRowUnmountWhileFocused = useCallback((deckId: number) => {
+    lostFocusDeckIdRef.current = deckId
+    listRef.current?.focus({ preventScroll: true })
+  }, [])
+  const claimRestoredFocus = useCallback((deckId: number) => {
+    if (lostFocusDeckIdRef.current !== deckId || document.activeElement !== listRef.current) return false
+    lostFocusDeckIdRef.current = null
+    return true
+  }, [])
+  const handleListFocus = useCallback((e: React.FocusEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) lostFocusDeckIdRef.current = null
+  }, [])
+  const handleListBlur = useCallback((e: React.FocusEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) lostFocusDeckIdRef.current = null
+  }, [])
+
   return (
-    <div ref={listRef} className="deck-list flex flex-col divide-y divide-gray-100 relative">
+    <div
+      ref={listRef}
+      tabIndex={-1}
+      onFocus={handleListFocus}
+      onBlur={handleListBlur}
+      className="deck-list flex flex-col divide-y divide-gray-100 relative focus:outline-none"
+    >
       {/* Floating Ghost Badge preview attached to mouse cursor */}
       {draggedDeck && dragPos ? (
         <div
@@ -127,6 +153,8 @@ export function DeckTree({
             isDragActive={isDragActive}
             isDragJustEnded={isDragJustEnded}
             onPointerDownRow={handlePointerDownRow}
+            onUnmountWhileFocused={handleRowUnmountWhileFocused}
+            claimRestoredFocus={claimRestoredFocus}
           />
         )
       })}
