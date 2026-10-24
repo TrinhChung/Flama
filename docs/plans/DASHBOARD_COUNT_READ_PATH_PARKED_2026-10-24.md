@@ -15,6 +15,18 @@ Câu đếm đi từ **toàn bộ Note** của learner rồi tra tiến độ ch
 | 3 | Tra tiến độ cả Note đang "mới" | 23.897 / 39.338 (61%) là `new`; chỉ 15.441 đã lên lịch, đọc được qua `ix_sp_subject_note_due` | Đổi chiều: đi từ dòng tiến độ đã lên lịch; "mới" = tổng Note của deck − đã lên lịch. Giữ đúng quy tắc buried/suspended (`is_buried` không nằm trong index) |
 | 4 | Dashboard và heatmap mỗi bên dựng scope riêng | Hai request độc lập | Xem lại sau khi xong 1–3 |
 
+## Bằng chứng bổ sung (2026-10-25)
+
+- **Production (chỉ đọc, user SELECT-only):** buffer pool 134.217.728 byte. Trong 602.253 s (khoảng 7 ngày) có 8.762.354 lần đọc trang từ đĩa trên 517.716.255 lần truy cập trang (khoảng 134 GiB đọc đĩa).
+  - Đếm Note của user 1 qua index: 28 ms, 113 trang đọc đĩa.
+  - Lấy `deck_id`/`note_type_id` của user 1 (phải đọc dòng đầy đủ): 172 / 167 / 178 ms, mỗi lần 5.497–5.963 trang đọc đĩa (khoảng 86 MiB), kể cả ba lần chạy liền nhau. Dữ liệu Note không ở lại được trong buffer pool.
+  - Đọc toàn bộ dòng tiến độ của user 1: 41 ms, 168 trang. Bảng tiến độ vẫn nằm trong cache.
+- **Thành phần dòng `notes` (user 1):** `field_values_by_id` trung bình 1.849 byte trên tổng 2.786 byte. Ba cột cần cho số đếm khoảng 80 byte.
+- **A/B vấn đề 2 trên dump:** bỏ lần tra theo `live_note_id` cho kết quả giống hệt (user 1/4/2: 25/1/59 ngày, tổng 15.203/1.064/543). Thời gian 587 → 322 ms, lượt đọc trang 549.199 → 339.404, lượt tra khoá 93.914 → 54.576.
+- **Bury/suspend:** hiện 0 dòng tiến độ bị bury hoặc suspend. Trạng thái bury có thể đến từ import Anki (`anki_sync_service`) và trạng thái scheduler (`study_note_card_projection._burial_anchors`), nên không phải luôn bằng 0. Cách "trừ" ở vấn đề 3 vẫn phải xử lý Note mới bị bury; `is_buried` không nằm trong `ix_sp_subject_note_due`.
+- **Ghi vào `notes`:** tạo mới theo tháng 2026-07: 68, 08: 18.374, 09: 21.818, 10: 1.364 (chủ yếu import hàng loạt). Sửa nội dung field không đổi `user_id`/`deck_id`/`note_type_id`.
+- **Index có sẵn:** `ix_notes_user_id`, `ix_notes_deck_id`, `ix_notes_note_type_id`; `ix_notes_user_deck (user_id, deck_id)` mới có ở local (migration `000073` của session browse). Nếu đề xuất index cho vấn đề 1, nên cân nhắc mở rộng index đó thành `(user_id, deck_id, note_type_id)`: nó thay được `ix_notes_user_id` (tiền tố `user_id`), nên số index trên `notes` không tăng.
+
 ## Điều kiện quay lại
 
 - Thời gian dashboard hoặc heatmap trên production vượt mức chấp nhận được, hoặc có learner vượt khoảng 40 nghìn Note.
