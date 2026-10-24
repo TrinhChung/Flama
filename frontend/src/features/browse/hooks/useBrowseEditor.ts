@@ -91,6 +91,16 @@ export function useBrowseEditor({ urlDeckId, urlCardId, filters, data, selection
     enabled: Boolean(activeCardId),
   })
 
+  // Old Card bookmarks resolve to a Note once. Keep every subsequent editor
+  // and tool action on the canonical Note identity, including untemplated Notes.
+  useEffect(() => {
+    const detail = cardDetailQuery.data
+    const noteId = detail?.note.id
+    if (!activeCardId || !noteId || detail.card.card_id !== noteId || activeCardId === noteId) return
+    queryClient.setQueryData(['browse', 'card-detail', noteId], detail)
+    setActiveCardId(noteId)
+  }, [activeCardId, cardDetailQuery.data, queryClient])
+
   useEffect(() => {
     if (!activeCardId || isCreatingCard) {
       hydratedCardIdRef.current = null
@@ -190,7 +200,7 @@ export function useBrowseEditor({ urlDeckId, urlCardId, filters, data, selection
         setSelectedDeckId(targetDeckId)
       }
 
-      const rawCardId = data?.first_card_id ?? data?.card_ids?.[0]
+      const rawCardId = data?.id ?? data?.first_card_id ?? data?.card_ids?.[0]
       const newCardId = rawCardId !== undefined && rawCardId !== null ? String(rawCardId) : null
 
       if (newCardId) {

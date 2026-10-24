@@ -370,6 +370,7 @@ export function BrowsePage() {
           onOpenChange={browse.setIsWorksheetModalOpen}
           deckId={browse.worksheetTargetDeckId || browse.selectedDeckId || 1}
           initialCardIds={browse.worksheetTargetCardIds}
+          selectionKind="note"
         />
       )}
 
@@ -379,6 +380,7 @@ export function BrowsePage() {
           isOpen={isLocalAudioModalOpen}
           onClose={() => setIsLocalAudioModalOpen(false)}
           selectedCardIds={localAudioTargetCardIds}
+          targetKind="note"
           activeCardId={activeCardId}
           deckId={browse.selectedDeckId || undefined}
           deckName={browse.selectedDeck?.name}

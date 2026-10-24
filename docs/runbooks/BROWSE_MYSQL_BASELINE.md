@@ -87,4 +87,6 @@ try {
 
 Suite tái sử dụng các query-bounds fixtures hiện có nhưng chạy trên MySQL; bổ sung local-name ASC/DESC/pagination, giữ source values, added/removed/renamed/disabled fields, nested arrays, nhiều applications, retired/historical missing pairs và baseline context/write guard. Các schema này kiểm ORM/query contract, không kiểm chuỗi Alembic migrations hoặc concurrent reviews.
 
-B01 compact NoteType đã hoàn thành và đo lại bằng operation `note_types` với hai cases `compact: false/true`; xem [báo cáo triển khai](../architecture/BROWSE_TECH_DEBT_IMPLEMENTATION_2026-10-24.md). B02–B07, HTTP/load metrics và những phân bố dữ liệu lớn hơn vẫn cần xử lý ở pha tiếp theo.
+B01 compact NoteType và B02 Note-first Browse đã triển khai; xem [báo cáo](../architecture/BROWSE_TECH_DEBT_IMPLEMENTATION_2026-10-24.md). Dùng operation `notes`/`note_decks` cho luồng mới, `cards`/`decks` để đo legacy, `note_types` với `compact: false/true` cho B01. Note và Card views có semantics/response khác nhau; không dùng hash toàn payload để tuyên bố parity giữa hai operation.
+
+MySQL tests cho Note Browse: đặt `FLAMA_BROWSE_MYSQL_TESTS=1`, chạy `scripts/run_tests.py --file tests/test_browse_notes_mysql.py --backend-only`. Harness tạo và cleanup schema riêng như suite contract ở trên. HTTP/load, search/sort clone và các phân bố dữ liệu lớn hơn vẫn cần đo tiếp.

@@ -82,6 +82,7 @@
   ["GET", "/api/browse/decks/tree"],
   ["GET", "/api/browse/notes"],
   ["DELETE", "/api/browse/notes/<note_id>"],
+  ["GET", "/api/browse/notes/<note_id>"],
   ["PATCH", "/api/browse/notes/<note_id>"],
   ["POST", "/api/browse/notes/batch-delete"],
   ["POST", "/api/browse/voicevox/generate"],

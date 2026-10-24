@@ -1,8 +1,21 @@
 # Browse — pha xử lý nợ kỹ thuật
 
-Ngày: 2026-10-24. Pha đầu xử lý B00 (công cụ baseline/contract) và B08 (sort tên deck local). Theo yêu cầu tiếp theo, đã tách Browse frontend theo FSD và hoàn thành B01 compact NoteType. B02–B07 còn lại cho pha tiếp theo.
+Ngày: 2026-10-24. Đã xử lý baseline B00, ordering B08, Browse FSD và B01. Theo yêu cầu tiếp theo, đã chuyển React Browse sang Note và bỏ các bước presentation/template không phục vụ màn quản lý Note (B02, kèm một phần B04/B05/B07).
 
 ## Thay đổi đã thực hiện
+
+### Browse đọc Note trực tiếp
+
+- React dùng `GET /api/browse/notes?view=rows`, `GET /api/browse/notes/:id`, `PATCH /api/browse/notes/:id?view=rows` và `GET /api/browse/decks?view=notes`. List/count/counters không expand `Card`, không `ROW_NUMBER`, không đọc `templates`/`study_applications`. View parameters tách contract mới khỏi Notes/Card APIs legacy đang phục vụ caller khác.
+- Bảng trả một row/Note, bao gồm Note không có application hoặc chỉ có application retired. Browse dùng quyền Note/deck/install và release Note membership; bỏ template membership khỏi Browse. Dashboard/Study vẫn có eligibility riêng, nên counts có thể khác khi Note chưa có template học.
+- Chọn IDs và install context trước phân trang, batch-load nội dung/schema sau. Bỏ template/card-type metadata khỏi wire list; clone release không tải author working JSON. Giữ native arrays, pinned values và local overrides; source Note không bị sửa khi edit clone.
+- Không dò install trên từng deck con thuộc owner: prefilter candidate deck IDs bằng một truy vấn. Owned detail/edit kiểm quyền owner trực tiếp, không resolve toàn bộ installs. URL Card cũ chỉ resolve identity rồi chuyển editor về Note ID.
+- SVG/worksheet/VoiceVox dùng `note_ids`; local audio đọc Note detail và scan Note mà không tải presentations. Giữ Card selectors cho các caller legacy. Tên `card_id`/selected-card còn trong một số component React là adapter nội bộ, không phải yêu cầu template hay Card ID của wire Note API.
+- Không bỏ validation về ownership, immutable release, revisions, strict array writes hoặc toàn vẹn trạng thái học. Không có DDL/migration, cache lưu bản sao Note hay thay đổi Study renderer.
+- MySQL integration chạy trên schema sinh riêng: Note không template, nhiều applications, clone release/snapshot, source isolation, unauthorized access, HTTP/revision conflict, audio selection/scan và progress divergence. Legacy MySQL matrix cũng đã chạy để kiểm refactor query contract. Các số test và số đo dưới đây có artifacts local trong `output/playwright/browse-note-query/`.
+- Đo service trên cùng MySQL local: 39.338 Note, trang 100 rows **median 1.119 ms**, 1.534 decks **766 ms** (3 samples sau 1 warmup). Đường Card cũ bị MySQL error 3024 ở count với giới hạn 5 giây trong cả 2 measured samples; sidebar cũ median **1.178 ms**. Hai selected-deck cases cùng total 118: wire mới 4.262/4.021 bytes so với 11.582/10.943 bytes cũ. Đây không phải HTTP/load benchmark; không suy ra speedup ổn định cho search/sort clone hay production.
+- Ảnh form create/edit trước/sau ở 1440×1000 và 390×844 giống nhau hoàn toàn (0 pixel khác biệt ở 4 cặp). Browser kiểm thêm bookmark Card cũ mở được nested array. Dependency junction chỉ phục vụ worktree; so sánh dùng cùng font files.
+- Kiểm chứng cuối: **7 tests MySQL mới**, **180 frontend tests / 25 suites**, **5 baseline tool tests** đạt; TypeScript, lint phần thay đổi và Vite production build đạt. MySQL cases bao gồm field clone đổi tên thành array, nested lists và source không đổi. Đã tích hợp vào checkout chính, giữ thay đổi của phiên khác; Flask local được restart với startup maintenance tắt để nạp routes mới.
 
 ### Browse frontend và B01
 
@@ -52,4 +65,4 @@ Không đổi count, visibility, đại diện một Note, word/due sort, API re
 
 ## Công việc để lại cho pha tối ưu
 
-B02 count/preview; B03 clone search expressions; B04 scope batching; B05 sidebar aggregate/cache; B06 authority reader; B07 hydrate/DTO. B01 đã dùng compact; lazy load là tùy chọn chưa áp dụng. Dùng baseline/contract để đánh giá các thay đổi tiếp theo.
+B03 clone search expressions; phần còn lại B04 scope batching và B05 aggregate; đánh giá B06 authority reader. B07 đã giảm list DTO và hydrate JSON theo page/pinned scope; chưa audit mọi API caller hoặc đổi legacy DTO. B01 đã dùng compact, lazy load chưa áp dụng. Scope/count/sort trên toàn collection vẫn có chi phí; không coi toàn bộ Browse đã đạt mức millisecond.

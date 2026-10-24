@@ -2,7 +2,7 @@
 
 Ngày: 2026-10-24. Căn cứ: [báo cáo điều tra](../architecture/BROWSE_PERFORMANCE_DATA_REVIEW_2026-10-24.md) và [evidence MySQL local](../architecture/BROWSE_PERFORMANCE_DATA_REVIEW_2026-10-24.evidence.json).
 
-Cập nhật phạm vi: đã triển khai công cụ service baseline/MySQL contract của B00, sửa ordering B08, tách Browse frontend theo FSD và hoàn thành B01 compact NoteType với cache riêng. Kết quả kiểm chứng ghi tại [báo cáo triển khai](../architecture/BROWSE_TECH_DEBT_IMPLEMENTATION_2026-10-24.md). B02–B07 chưa triển khai. HTTP/load measurements của B00 vẫn cần thực hiện ở pha tối ưu.
+Cập nhật phạm vi: đã có baseline/MySQL contract B00, ordering B08, Browse FSD và compact NoteType B01. B02 đã chuyển luồng React Browse sang đọc Note trực tiếp, kèm một phần B04/B05/B07 (lọc ứng viên install, counters theo Note, phân trang ID trước và bỏ dữ liệu không dùng). Kết quả tại [báo cáo triển khai](../architecture/BROWSE_TECH_DEBT_IMPLEMENTATION_2026-10-24.md). B03, phần còn lại B04/B05/B07 và đánh giá B06 vẫn cần xử lý; HTTP/load của B00 chưa được đo.
 
 Các số đo là mẫu service local một lần/case, không phải HTTP production hoặc p95. Ngưỡng 5 giây là giới hạn do probe đặt. Phần “vì sao cách cũ như vậy” phân biệt hành vi/lịch sử đã kiểm chứng với lý do kỹ thuật suy luận từ code; không khẳng định động cơ của người viết nếu Git không ghi rõ.
 
@@ -57,6 +57,10 @@ Phạm vi: `tests/test_browse_query_bounds.py`, các test Browse/NOTE hiện có
 Phạm vi triển khai: `frontend/src/features/browse/hooks/useBrowseData.ts`, `api/browseApi.ts`, public entry của slice, `frontend/src/pages/browse/` và focused tests. Endpoint compact hiện có ở `app/api/v1/flashcards/note_types.py`, service `app/services/flashcard_content_service.py`; không thay đổi backend/schema.
 
 ## B02 — Count theo Note và chọn preview hiệu quả hơn
+
+**Trạng thái:** Đã triển khai luồng Note cho React Browse. `GET /api/browse/notes?view=rows` đếm trực tiếp Note, không dựng/rank presentation; `GET /api/browse/notes/:id` và `PATCH ...?view=rows` dùng Note ID. Note không có application hoặc chỉ có application retired vẫn hiện và sửa được. Điều kiện owner/install/release và kiểm tra trạng thái học được giữ; Browse không còn áp điều kiện template membership. API Card và Notes legacy giữ contract riêng cho caller cũ.
+
+Sidebar dùng `/api/browse/decks?view=notes`, counts mỗi Note một lần trong mỗi deck local. Phân trang chỉ chọn IDs trước, sau đó tải JSON/schema của trang; clone release không tải author working JSON. Mẫu MySQL local 39.338 Note: trang 100 rows median khoảng 1,12 giây (3 samples sau 1 warmup); đường Card cũ bị ngắt ở count với giới hạn SQL 5 giây trong cả hai measured samples. Đây là phép đo service, không phải HTTP/p95 hay cam kết mọi workload đã nhanh.
 
 **Vì sao cần:** Toàn collection phải count xong mới lấy trang. Mẫu A/B chạm ngưỡng 5 giây ở count dù yêu cầu 100 hay 500 dòng. Đây là nút thắt trực tiếp của trang đầu.
 

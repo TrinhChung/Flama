@@ -1,6 +1,12 @@
 import { API_BASE_URL } from '@/config/env'
 import { apiBlob, apiJson, apiRequest } from '@/shared/api/client'
-import type { BrowseCardsResponse, BrowseDeck, BrowseSortBy, BrowseSortDir, BrowseStatusFilter, CardDetailResponse, NoteTypeSummary } from '../types'
+import type { BrowseCardRow, BrowseCardsResponse, BrowseDeck, BrowseSortBy, BrowseSortDir, BrowseStatusFilter, CardDetailResponse, NoteTypeSummary } from '../types'
+
+type NoteRow = Omit<BrowseCardRow, 'card_id'>
+type NoteDetail = Omit<CardDetailResponse, 'card'> & { row: NoteRow }
+// Existing UI component names retain "card"; their identities now refer to Notes.
+const editorRow = (row: NoteRow): BrowseCardRow => ({ ...row, card_id: row.note_id })
+const editorDetail = ({ row, ...detail }: NoteDetail): CardDetailResponse => ({ ...detail, card: editorRow(row) })
 
 export type BrowseCardsParams = {
   q: string; deck_id: number | ''; status: BrowseStatusFilter; sort_by: BrowseSortBy
@@ -21,19 +27,24 @@ type VoiceVoxPreview = { text: string; character_id?: string; api_key?: string; 
 export const browseQueryKeys = { noteTypes: ['note-types', 'browse', 'compact'] as const }
 
 export const browseApi = {
-  fetchDecks: (signal?: AbortSignal) => apiRequest<{ decks: BrowseDeck[] }>(`${API_BASE_URL}/browse/decks`, { signal }),
+  fetchDecks: (signal?: AbortSignal) => apiRequest<{ decks: BrowseDeck[] }>(`${API_BASE_URL}/browse/decks?view=notes`, { signal }),
   fetchNoteTypes: (signal?: AbortSignal) => apiRequest<{ items: NoteTypeSummary[] }>(`${API_BASE_URL}/note-types?compact=1`, { signal }),
-  fetchCards(params: BrowseCardsParams, signal?: AbortSignal) {
+  async fetchCards(params: BrowseCardsParams, signal?: AbortSignal) {
     const query = new URLSearchParams()
+    query.set('view', 'rows')
     for (const [key, value] of Object.entries(params)) if (value !== '') query.set(key, String(value))
-    return apiRequest<BrowseCardsResponse>(`${API_BASE_URL}/browse/cards?${query}`, { signal })
+    const result = await apiRequest<Omit<BrowseCardsResponse, 'items'> & { items: NoteRow[] }>(`${API_BASE_URL}/browse/notes?${query}`, { signal })
+    return { ...result, items: result.items.map(editorRow) }
   },
-  fetchCardDetail: (id: string, signal?: AbortSignal) => apiRequest<CardDetailResponse>(`${API_BASE_URL}/browse/cards/${encodeURIComponent(id)}`, { signal }),
+  fetchCardDetail: async (id: string, signal?: AbortSignal) => editorDetail(await apiRequest<NoteDetail>(`${API_BASE_URL}/browse/notes/${encodeURIComponent(id)}`, { signal })),
   createNote: (body: BrowseNoteCreate) => apiJson<{ id: string; card_ids?: Array<string | number>; first_card_id?: string | number }>(`${API_BASE_URL}/notes`, 'POST', body),
-  updateCard: (id: string, body: BrowseNoteUpdate) => apiJson<{ detail: CardDetailResponse }>(`${API_BASE_URL}/browse/cards/${encodeURIComponent(id)}`, 'PATCH', body),
+  async updateCard(id: string, body: BrowseNoteUpdate) {
+    const result = await apiJson<{ detail: NoteDetail }>(`${API_BASE_URL}/browse/notes/${encodeURIComponent(id)}?view=rows`, 'PATCH', body)
+    return { ...result, detail: editorDetail(result.detail) }
+  },
   deleteNote: (id: string) => apiJson(`${API_BASE_URL}/browse/notes/${encodeURIComponent(id)}`, 'DELETE'),
   deleteNotes: (noteIds: string[]) => apiJson<{ success: boolean; deleted_count?: number }>(`${API_BASE_URL}/browse/notes/batch-delete`, 'POST', { note_ids: noteIds }),
-  generateVoiceVox: (body: VoiceVoxGenerate) => apiJson(`${API_BASE_URL}/browse/voicevox/generate`, 'POST', body),
+  generateVoiceVox: ({ card_ids, ...body }: VoiceVoxGenerate) => apiJson(`${API_BASE_URL}/browse/voicevox/generate`, 'POST', { ...body, note_ids: card_ids }),
   // These provider routes were already canonical /api URLs, independent of API_BASE_URL's path.
   fetchVoiceVoxProfile: (signal?: AbortSignal) => apiRequest<{ profile?: { has_api_key: boolean; key_status: string } }>('/api/tts/providers/voicevox/profile', { signal }),
   saveVoiceVoxProfile: (body: { api_key: string; validate_key: boolean }) => apiJson('/api/tts/providers/voicevox/profile', 'PUT', body),

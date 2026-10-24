@@ -38,6 +38,7 @@ def scan_deck_audio(deck_id: int | None = None):
             deck_id=deck_id,
             admin_mode=is_admin_user(current_user),
             upload_root=Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]),
+            note_only=payload.get("reference_kind") == "note",
         )
     except flashcard_audio_scan_service.AudioScanError as exc:
         return _error(exc)

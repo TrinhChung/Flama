@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { updateCardFieldValues } from '@/entities/flashcard/model/cardContentUpdates'
+import { updateCardFieldValues } from '@/entities/flashcard/contentUpdates'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
 import { apiRequest } from '@/shared/api/client'
 import {
@@ -15,7 +15,7 @@ import {
   type LocalAudioSettings,
 } from '../services/localAudioStorage'
 import { scanDeckAudio } from '../services/audioScanService'
-import { fieldValueEditorText } from '@/lib/arrayField'
+import { fieldValueEditorText } from '@/entities/flashcard/fields'
 import { cleanTextForTts } from '../services/ttsTextNormalizer'
 import { startLocalAudioPolling } from '../services/localAudioPolling'
 import type { VoiceDescriptor, DeckScanResponse } from '../types'
@@ -200,6 +200,7 @@ function autoSelectDestinationField(fields: string[], currentDest?: string, note
 export function useLocalAudioEngine(options: {
   isOpen: boolean
   selectedCardIds: string[]
+  targetKind?: 'card' | 'note'
   activeCardId?: string | null
   deckId?: number | null
   deckName?: string
@@ -213,6 +214,7 @@ export function useLocalAudioEngine(options: {
   const {
     isOpen,
     selectedCardIds,
+    targetKind = 'card',
     activeCardId,
     deckId,
     availableFieldNames = ['Reading', 'Word', 'Meaning'],
@@ -232,7 +234,7 @@ export function useLocalAudioEngine(options: {
   useEffect(() => {
     if (isOpen && selectedCardIds.length === 0 && deckId) {
       setIsScanningDeck(true)
-      scanDeckAudio(deckId)
+      scanDeckAudio(deckId, targetKind)
         .then((res) => {
           setDeckScanResult(res)
           if (res.note_types?.[0]?.name) {
@@ -259,12 +261,12 @@ export function useLocalAudioEngine(options: {
     } else {
       setDeckScanResult(null)
     }
-  }, [isOpen, selectedCardIds.length, deckId])
+  }, [isOpen, selectedCardIds.length, deckId, targetKind])
 
   const deckCardIds = useMemo(() => {
     if (!deckScanResult?.notes) return []
-    return deckScanResult.notes.map((n) => n.card_id).filter(Boolean)
-  }, [deckScanResult])
+    return deckScanResult.notes.map((n) => targetKind === 'note' ? n.note_id : n.card_id).filter(Boolean)
+  }, [deckScanResult, targetKind])
 
   const hasMixedNoteTypes = useMemo(() => {
     if (selectedCardIds.length > 0) return false
@@ -357,7 +359,7 @@ export function useLocalAudioEngine(options: {
         card: { word: string }
         fields?: Array<{ name: string; field_type?: string }>
         note?: { note_type_name?: string; field_values?: Record<string, string> }
-      }>(`/api/browse/cards/${encodeURIComponent(cardId)}`)
+      }>(`/api/browse/${targetKind === 'note' ? 'notes' : 'cards'}/${encodeURIComponent(cardId)}`)
         .then((res) => {
           if (res.note?.note_type_name) {
             setDiscoveredNoteTypeName(res.note.note_type_name)
@@ -382,7 +384,7 @@ export function useLocalAudioEngine(options: {
         })
         .catch(() => {})
     }
-  }, [isOpen, targetCardIds])
+  }, [isOpen, targetCardIds, targetKind])
 
   // Source & Destination Fields Sync
   const [sourceField, setSourceFieldState] = useState<string>(() => {
@@ -818,7 +820,7 @@ export function useLocalAudioEngine(options: {
           const detail = await apiRequest<{
             card: { word: string }
             note: { field_values?: Record<string, unknown> }
-          }>(`/api/browse/cards/${encodeURIComponent(targetCardIds[0])}`)
+          }>(`/api/browse/${targetKind === 'note' ? 'notes' : 'cards'}/${encodeURIComponent(targetCardIds[0])}`)
           const raw = fieldValueEditorText(detail.note?.field_values?.[sourceField]) || detail.card.word || sampleText
           sampleText = cleanTextForTts(raw, engineId) || sampleText
         } catch {}
@@ -885,7 +887,7 @@ export function useLocalAudioEngine(options: {
               card: { word: string }
               note: { id: string; field_values?: Record<string, string> }
               can_upload_media?: boolean
-            }>(`/api/browse/cards/${encodeURIComponent(cardId)}`)
+            }>(`/api/browse/${targetKind === 'note' ? 'notes' : 'cards'}/${encodeURIComponent(cardId)}`)
 
             const noteValues = detail.note.field_values || {}
             const rawText =

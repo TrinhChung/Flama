@@ -6,7 +6,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_login import current_user, login_required
 
-from app.services import browse_card_service, browse_voicevox_service
+from app.services import browse_card_service, browse_note_service, browse_voicevox_service
 from app.services.stats_overview import get_effective_timezone_name
 from app.utils.permissions import is_admin_user
 from app.validators import RequestValidationError
@@ -67,6 +67,9 @@ def browse_decks_tree():
 def browse_decks():
     user_id, admin_mode, timezone_name = _context()
     try:
+        if request.args.get("view") == "notes":
+            return jsonify(browse_note_service.build_decks(user_id=user_id, admin_mode=admin_mode,
+                timezone_name=timezone_name))
         payload = browse_card_service.build_browse_decks(
             user_id=user_id,
             admin_mode=admin_mode,
@@ -182,6 +185,9 @@ def browse_cards_batch_delete():
 def browse_notes():
     user_id, admin_mode, timezone_name = _context()
     try:
+        if request.args.get("view") == "rows":
+            return jsonify(browse_note_service.list_notes(user_id=user_id, admin_mode=admin_mode,
+                timezone_name=timezone_name, query_args=request.args))
         cards_payload = browse_card_service.list_browse_cards(
             user_id=user_id,
             admin_mode=admin_mode,
@@ -191,6 +197,17 @@ def browse_notes():
     except browse_card_service.BrowseApiError as exc:
         return _browse_error(exc)
     return jsonify(browse_card_service.build_legacy_notes_payload(cards_payload))
+
+
+@browse_bp.get("/notes/<note_id>")
+@login_required
+def browse_note_detail(note_id: str):
+    user_id, admin_mode, timezone_name = _context()
+    try:
+        return jsonify(browse_note_service.get_note_detail(user_id=user_id, admin_mode=admin_mode,
+            timezone_name=timezone_name, note_id=note_id))
+    except browse_card_service.BrowseApiError as exc:
+        return _browse_error(exc)
 
 
 @browse_bp.delete("/notes/<note_id>")
@@ -225,14 +242,22 @@ def browse_notes_batch_delete():
 @browse_bp.patch("/notes/<note_id>")
 @login_required
 def browse_update_note(note_id: str):
-    user_id, admin_mode, _timezone_name = _context()
+    user_id, admin_mode, timezone_name = _context()
     try:
+        if request.args.get("view") == "rows":
+            return jsonify(browse_note_service.update_note(user_id=user_id, admin_mode=admin_mode,
+                timezone_name=timezone_name, note_id=note_id, payload=request.get_json(silent=True) or {}))
         payload = browse_card_service.update_legacy_browse_note(
             user_id=user_id,
             admin_mode=admin_mode,
             note_id=note_id,
             payload=request.get_json(silent=True) or {},
         )
+    except browse_card_service.BrowseCardUpdateError as exc:
+        error_payload = {"error": str(exc)}
+        if exc.include_details:
+            error_payload.update(field=exc.field, code=exc.code)
+        return jsonify(error_payload), exc.status
     except browse_card_service.BrowseApiError as exc:
         return _browse_error(exc)
     return jsonify(payload)

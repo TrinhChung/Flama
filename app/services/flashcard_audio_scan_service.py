@@ -166,6 +166,7 @@ def scan_deck_audio(
     deck_id: int,
     admin_mode: bool,
     upload_root: Path,
+    note_only: bool = False,
 ) -> dict[str, Any]:
     """Scan a deck's notes, note types, and media assets for audio generation readiness."""
     from app.repositories.deck_tree_query import collect_subtree_ids
@@ -186,7 +187,7 @@ def scan_deck_audio(
         Note.query.filter(Note.deck_id.in_(subtree_deck_ids))
         .options(
             selectinload(Note.note_type).selectinload(NoteType.field_defs),
-            selectinload(Note.cards),
+            *([] if note_only else [selectinload(Note.cards)]),
             selectinload(Note.media_assets),
         )
         .order_by(Note.created_at.asc())
@@ -257,7 +258,7 @@ def scan_deck_audio(
 
     for note in notes:
         field_values = dict(note.field_values or {})
-        card_id = note.cards[0].id if note.cards else ""
+        card_id = "" if note_only else (note.cards[0].id if note.cards else "")
 
         # Determine primary word representation
         word = (

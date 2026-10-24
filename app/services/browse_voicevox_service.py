@@ -11,7 +11,6 @@ from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import selectinload
 from werkzeug.utils import secure_filename
 
 from app.services import deck_working_tree_service, tts_provider_service
@@ -22,8 +21,7 @@ from app.services.media_field_codec import (
 )
 from models import db
 from models.field_types import field_value_text
-from models.card import card_id_clause
-from models.flashcard import Card, MediaAsset, Note, NoteType
+from models.flashcard import MediaAsset, Note
 
 
 _VOICEVOX_TEMPLATE_TOKEN_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
@@ -97,7 +95,8 @@ def precheck_voicevox(
     admin_mode: bool,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    raw_card_ids = payload.get("card_ids")
+    note_only = "note_ids" in payload
+    raw_card_ids = payload.get("note_ids" if note_only else "card_ids")
     if not isinstance(raw_card_ids, list):
         raise BrowseVoiceVoxError("card_ids phải là mảng.")
     destination_field = str(payload.get("destination_field") or "").strip()
@@ -115,18 +114,9 @@ def precheck_voicevox(
     if not card_ids:
         return empty_payload
 
-    query = (
-        Card.query.join(Note, Card.note_id == Note.id)
-        .filter(card_id_clause(db.session, card_ids))
-        .options(
-            selectinload(Card.note)
-            .selectinload(Note.note_type)
-            .selectinload(NoteType.field_defs),
-        )
-    )
-    if not admin_mode:
-        query = query.filter(Note.user_id == user_id)
-    cards = query.all()
+    from app.repositories.browse_note_repository import load_voicevox_notes
+    cards = load_voicevox_notes(card_ids, user_id=user_id, admin_mode=admin_mode,
+        note_only=note_only, include_media=False)
     if not cards:
         return empty_payload
 
@@ -193,7 +183,8 @@ def generate_voicevox(
     provider = _active_voicevox_provider()
     if not isinstance(payload, dict):
         raise BrowseVoiceVoxError("Payload phải là JSON object.")
-    raw_card_ids = payload.get("card_ids")
+    note_only = "note_ids" in payload
+    raw_card_ids = payload.get("note_ids" if note_only else "card_ids")
     card_ids: list[str] = []
     if isinstance(raw_card_ids, list):
         card_ids = _unique_ids(raw_card_ids)
@@ -209,13 +200,11 @@ def generate_voicevox(
     if not card_ids and deck_id_int is not None:
         from app.repositories.deck_tree_query import collect_subtree_ids
         subtree_ids = collect_subtree_ids(deck_id_int) or [deck_id_int]
-        deck_cards_query = (
-            Card.query.join(Note, Card.note_id == Note.id)
-            .filter(Note.deck_id.in_(subtree_ids))
-        )
+        query = Note.query.filter(Note.deck_id.in_(subtree_ids))
         if not admin_mode:
-            deck_cards_query = deck_cards_query.filter(Note.user_id == user_id)
-        card_ids = [c.id for c in deck_cards_query.all()]
+            query = query.filter(Note.user_id == user_id)
+        card_ids = [row[0] for row in query.with_entities(Note.id).all()]
+        note_only = True
 
     if not card_ids:
         if raw_card_ids is not None and not isinstance(raw_card_ids, list):
@@ -244,19 +233,9 @@ def generate_voicevox(
     style_label = str(payload.get("style_label") or "").strip()
     api_key_override = str(payload.get("api_key") or "").strip() or None
 
-    query = (
-        Card.query.join(Note, Card.note_id == Note.id)
-        .filter(card_id_clause(db.session, card_ids))
-        .options(
-            selectinload(Card.note)
-            .selectinload(Note.note_type)
-            .selectinload(NoteType.field_defs),
-            selectinload(Card.note).selectinload(Note.media_assets),
-        )
-    )
-    if not admin_mode:
-        query = query.filter(Note.user_id == user_id)
-    cards = query.all()
+    from app.repositories.browse_note_repository import load_voicevox_notes
+    cards = load_voicevox_notes(card_ids, user_id=user_id, admin_mode=admin_mode,
+        note_only=note_only, include_media=True)
     if not cards:
         raise BrowseVoiceVoxError(
             "Không tìm thấy card hợp lệ để tạo audio.",

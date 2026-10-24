@@ -24,6 +24,7 @@ export interface UseWorksheetStudioProps {
   currentDeckId: number | null
   deckName?: string
   initialCardIds?: (string | number)[]
+  selectionKind?: 'card' | 'note'
   meta: DeckWorksheetMeta | null
   initialTemplateId: string
   selectedNoteTypeId: string
@@ -37,6 +38,7 @@ export function useWorksheetStudio({
   currentDeckId,
   deckName,
   initialCardIds,
+  selectionKind = 'card',
   meta,
   initialTemplateId,
   selectedNoteTypeId,
@@ -191,7 +193,8 @@ export function useWorksheetStudio({
           options: layoutOptions,
           scope: scope === 'selected' ? 'all' : scope,
           limit: scope === 'first_n' || scope === 'random_n' ? limitCount : undefined,
-          card_ids: scope === 'selected' ? initialCardIds : undefined,
+          card_ids: scope === 'selected' && selectionKind === 'card' ? initialCardIds : undefined,
+          note_ids: scope === 'selected' && selectionKind === 'note' ? initialCardIds : undefined,
           signal: abortController.signal,
         })
 
@@ -233,6 +236,7 @@ export function useWorksheetStudio({
     scope,
     limitCount,
     initialCardIds,
+    selectionKind,
     currentTemplate,
   ])
 

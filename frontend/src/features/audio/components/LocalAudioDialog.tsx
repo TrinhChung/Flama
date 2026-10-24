@@ -32,6 +32,7 @@ type LocalAudioDialogProps = {
   isOpen: boolean
   onClose: () => void
   selectedCardIds: string[]
+  targetKind?: 'card' | 'note'
   activeCardId?: string | null
   deckId?: number | null
   deckName?: string

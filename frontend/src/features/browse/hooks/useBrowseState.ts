@@ -14,7 +14,7 @@ export function useBrowseState() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const urlDeckId = searchParams.get('deck_id')
-  const urlCardId = searchParams.get('card_id')
+  const urlCardId = searchParams.get('note_id') || searchParams.get('card_id')
   const queryClient = useQueryClient()
   const bootstrapQuery = useBootstrap()
   const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)

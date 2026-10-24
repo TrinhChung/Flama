@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLocalAudioEngine } from './useLocalAudioEngine'
+import { apiRequest } from '@/shared/api/client'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -20,8 +21,8 @@ const emptyCards: string[] = []
 const fields = ['Word']
 const audioFields = ['Audio']
 let engine!: ReturnType<typeof useLocalAudioEngine>
-function Harness({ isOpen = true, engineId = 'voicevox' }: { isOpen?: boolean; engineId?: 'voicevox' | 'kokoro' }) {
-  engine = useLocalAudioEngine({ isOpen, engineId, selectedCardIds: emptyCards, availableFieldNames: fields, availableAudioFieldNames: audioFields })
+function Harness({ isOpen = true, engineId = 'voicevox', selectedCardIds = emptyCards, targetKind = 'card' }: { isOpen?: boolean; engineId?: 'voicevox' | 'kokoro'; selectedCardIds?: string[]; targetKind?: 'card' | 'note' }) {
+  engine = useLocalAudioEngine({ isOpen, engineId, selectedCardIds, targetKind, availableFieldNames: fields, availableAudioFieldNames: audioFields })
   return null
 }
 
@@ -54,6 +55,11 @@ describe('local engine polling lifecycle', () => {
     await act(async () => { root.unmount() })
     container.remove()
     vi.useRealTimers()
+  })
+
+  it('loads a selected Browse Note directly without a presentation ID', async () => {
+    await act(async () => { root.render(<Harness selectedCardIds={['note-only']} targetKind="note" />) })
+    expect(apiRequest).toHaveBeenCalledWith('/api/browse/notes/note-only')
   })
 
   it('stops installation after 15 empty voice lists and returns to idle', async () => {

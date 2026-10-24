@@ -125,6 +125,15 @@ describe('Browse field editing and persistence', () => {
     container.remove()
   })
 
+  it('canonicalizes an old Card bookmark before editor and tool actions', async () => {
+    const canonical = { ...details.A, card: { ...details.A.card, card_id: 'note-A' } }
+    details['note-A'] = canonical
+    await act(async () => queryClient.setQueryData(['browse', 'card-detail', 'A'], canonical))
+    await waitFor(() => browse.activeCardId === 'note-A' && browse.cardDetailQuery.data?.card.card_id === 'note-A')
+    expect(browse.editFieldValues.Answer).toEqual([['a', 'b'], ['c']])
+    expect(browse.isDirty).toBe(false)
+  })
+
   it('isolates compact note types from the full cache and retains broad invalidation', async () => {
     const fullResponse = { items: [{ id: 'other', name: 'Full response', field_defs: [] }] }
     await act(async () => queryClient.setQueryData(['note-types'], fullResponse))

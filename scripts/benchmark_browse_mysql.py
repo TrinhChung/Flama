@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-OPERATIONS = {"cards", "decks", "note_types"}
+OPERATIONS = {"cards", "decks", "note_types", "notes", "note_decks"}
 QUERY_KEYS = {"deck_id", "include_subdecks", "all_templates", "q", "tag", "status", "sort_by", "sort_dir", "page", "per_page"}
 
 
@@ -108,9 +108,9 @@ def plan_summary(plan):
 def sample(app, case, options):
     from sqlalchemy import event, text
     from flask_sqlalchemy.query import Query
-    from app.repositories import browse_card_repository, vocabulary_repository
+    from app.repositories import browse_card_repository, browse_note_repository, vocabulary_repository
     from app.repositories import flashcards_share_repository
-    from app.services import browse_card_service, deck_release_service, flashcard_content_service
+    from app.services import browse_card_service, browse_note_service, deck_release_service, flashcard_content_service
     from models import db
 
     sql, phases = [], {}
@@ -150,6 +150,7 @@ def sample(app, case, options):
         for owner, name, label in (
             (vocabulary_repository, "collect_accessible_browse_decks", "scope"),
             (browse_card_repository, "count_distinct_cards", "count"),
+            (browse_note_repository, "count_notes", "note_count"),
             (Query, "paginate", "page_and_hydrate"),
             (browse_card_service, "load_study_authority_card_reads", "authority"),
             (browse_card_service, "aggregate_deck_study_counts", "deck_aggregate"),
@@ -167,6 +168,10 @@ def sample(app, case, options):
             operation = case.get("operation", "cards")
             if operation == "cards":
                 payload = browse_card_service.list_browse_cards(**common, query_args=case.get("query", {}))
+            elif operation == "notes":
+                payload = browse_note_service.list_notes(**common, query_args=case.get("query", {}))
+            elif operation == "note_decks":
+                payload = browse_note_service.build_decks(**common)
             elif operation == "decks":
                 payload = browse_card_service.build_browse_decks(**common)
             else:

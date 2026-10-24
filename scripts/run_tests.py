@@ -273,7 +273,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/api/v1/learning/__init__.py",
             "app/api/v1/learning/browse.py",
             "app/services/browse_card_service.py",
+            "app/services/browse_note_service.py",
             "app/repositories/browse_card_repository.py",
+            "app/repositories/browse_note_repository.py",
             "app/repositories/logical_overlay_scope_repository.py",
             "app/presenters/vocabulary_presenter.py",
             "app/routes/vocabulary.py",
@@ -283,6 +285,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "backend_tests": [
             "tests/test_browse_query_bounds.py",
+            "tests/test_browse_notes_mysql.py",
             "tests/test_flashcard_api_integration.py",
             "tests/test_flashcard_validation_security.py",
             "tests/test_rest_api_v1.py",
