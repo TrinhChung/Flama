@@ -36,6 +36,9 @@ def list_notes(*, user_id, admin_mode, timezone_name, query_args):
             "per_page": max(1, min(500, int(query_args.get("per_page") or 100))),
             "total": 0, "pages": 0, "has_next": False}
     total = repository.count_notes(context.query)
+    if total == 0:
+        return {"items": [], "page": context.page, "per_page": context.per_page,
+            "total": 0, "pages": 0, "has_next": False}
     scope_cases = [(condition, str(scope.install.id)) for scope, condition in context.clone_scope_conditions]
     scope_id = case(*scope_cases, else_=None) if scope_cases else db.literal(None)
     query = repository.order_notes(context, user_id=user_id)

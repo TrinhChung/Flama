@@ -83,6 +83,74 @@ class BrowseNotesMySQLTests(unittest.TestCase):
     def test_snapshot_clone_values_and_search_are_pinned(self):
         self._assert_clone_values(release=False)
 
+    def test_clone_search_values_preserve_clears_and_pinned_release_history(self):
+        from app.repositories.browse_card_repository import clone_effective_field_text_expression
+        from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
+        from models.deck_install import DeckInstall
+        from models.deck_release import DeckRelease
+        from models.deck_release_change import DeckReleaseChange
+
+        ids = fixtures.seed_clone_install(self.learner_id, count=9, release=True, override_every=0)
+        install = db.session.get(DeckInstall, ids['install_id'])
+        word_id = ids['word_field_id']
+        releases = []
+        for sequence in (2, 3):
+            release = DeckRelease(deck_item_id=install.deck_item_id, sequence_no=sequence,
+                version_label=f'{sequence}.0.0', status='published', created_by_user_id=install.source_owner_user_id)
+            db.session.add(release)
+            db.session.flush()
+            releases.append(release)
+        install.applied_release_id = releases[0].id
+        changes = [(1, 'set', None), (2, 'set', ''), (3, 'remove', 'ignored'),
+            (4, 'set', [['nested', 'values'], 'last']), (5, 'set', 'release-value'),
+            (6, 'set', 'release-value'), (7, 'set', None), (8, 'set', 'legacy-identity')]
+        for index, operation, value in changes:
+            db.session.add(DeckReleaseChange(release_id=releases[0].id, release_sequence_no=2,
+                change_key=f'note:{index}:word', entity_kind='note_field', entity_id=ids['note_ids'][index],
+                field_def_id=None if index == 8 else word_id, property_key=f'field:{word_id}',
+                operation=operation, after_value=value))
+        # A newer published value must not leak into an install pinned to v2.
+        db.session.add(DeckReleaseChange(release_id=releases[1].id, release_sequence_no=3,
+            change_key='future-word', entity_kind='note_field', entity_id=ids['note_ids'][0],
+            field_def_id=word_id, property_key=f'field:{word_id}', operation='set', after_value='future-value'))
+        for index, operation, value in ((5, 'set', None), (6, 'remove', None), (7, 'set', 'local-value')):
+            db.session.add(DeckCloneNoteFieldOverride(deck_install_id=install.id,
+                source_note_id=ids['note_ids'][index], source_field_def_id=word_id,
+                field_identity_key=word_id, field_name='Word', operation=operation, value=value))
+        db.session.commit()
+        expression = clone_effective_field_text_expression(deck_install_id=install.id,
+            deck_item_id=install.deck_item_id, target_release_sequence=2,
+            source_field_def_id=word_id, checkpoint_field_name='Word', field_identity_key=word_id)
+        values = dict(db.session.query(Note.id, expression).filter(Note.id.in_(ids['note_ids'])).all())
+        self.assertEqual(values[ids['note_ids'][0]], 'pinned-word-000001')
+        for index in (1, 2, 3, 5, 6):
+            self.assertEqual(values[ids['note_ids'][index]], '', f'cleared field {index} fell back to base')
+        self.assertEqual(json.loads(values[ids['note_ids'][4]]), [['nested', 'values'], 'last'])
+        self.assertEqual(values[ids['note_ids'][7]], 'local-value')
+        self.assertEqual(values[ids['note_ids'][8]], 'legacy-identity')
+
+        snapshot = fixtures.seed_clone_install(self.learner_id, count=4, release=False,
+            override_every=0, prefix='50000000')
+        for index, operation, value in ((1, 'set', None), (2, 'set', ''), (3, 'remove', None)):
+            db.session.add(DeckCloneNoteFieldOverride(deck_install_id=snapshot['install_id'],
+                source_note_id=snapshot['note_ids'][index], source_field_def_id=snapshot['word_field_id'],
+                field_identity_key=snapshot['word_field_id'], field_name='Word', operation=operation, value=value))
+        db.session.commit()
+        expression = clone_effective_field_text_expression(deck_install_id=snapshot['install_id'],
+            deck_item_id=None, target_release_sequence=None, source_field_def_id=snapshot['word_field_id'],
+            checkpoint_field_name='Word', field_identity_key=snapshot['word_field_id'])
+        values = dict(db.session.query(Note.id, expression).filter(Note.id.in_(snapshot['note_ids'])).all())
+        self.assertEqual([values[note_id] for note_id in snapshot['note_ids']], ['w000001', '', '', ''])
+
+    def test_no_search_matches_return_empty_pagination_without_loading_a_page(self):
+        ids = fixtures.seed_clone_install(self.learner_id, count=4, release=True)
+        page, capture = self._notes(deck_id=ids['local_root_id'], q='no-matching-note', page=7, per_page=20)
+        self.assertEqual(page, {'items': [], 'page': 7, 'per_page': 20,
+            'total': 0, 'pages': 0, 'has_next': False})
+        note_page_reads = [sql for sql in capture.statements if 'from notes' in sql.lower()
+            and 'limit' in sql.lower() and not sql.lstrip().lower().startswith('select count(')]
+        self.assertEqual(note_page_reads, [], 'An empty result should not repeat the search to fetch a page')
+
     def _assert_clone_values(self, *, release):
         ids = fixtures.seed_clone_install(self.learner_id, count=4, release=release, prefix='40000000' if release else '30000000')
         page, _ = self._notes(deck_id=ids['local_root_id'])

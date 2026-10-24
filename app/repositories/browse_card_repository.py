@@ -211,20 +211,15 @@ def clone_effective_field_text_expression(
             change_release.deck_item_id == str(deck_item_id),
             change_release.status == "published",
         )
-        latest_operation = (
-            select(release_change.operation)
-            .join(change_release, change_release.id == release_change.release_id)
-            .where(*change_filters)
-            .order_by(
-                release_change.release_sequence_no.desc(),
-                release_change.id.desc(),
-            )
-            .limit(1)
-            .correlate(Note)
-            .scalar_subquery()
-        )
+        # Resolve operation and value in the same lookup. An explicit clear
+        # yields ""; only a missing/unhandled change falls back to checkpoint.
         latest_value = (
-            select(_json_scalar_text(release_change.after_value))
+            select(case(
+                (release_change.operation.in_(["add", "set"]),
+                 func.coalesce(_json_scalar_text(release_change.after_value), "")),
+                (release_change.operation == "remove", literal("")),
+                else_=None,
+            ))
             .join(change_release, change_release.id == release_change.release_id)
             .where(*change_filters)
             .order_by(
@@ -235,11 +230,7 @@ def clone_effective_field_text_expression(
             .correlate(Note)
             .scalar_subquery()
         )
-        base_text = case(
-            (latest_operation.in_(["add", "set"]), latest_value),
-            (latest_operation == "remove", literal("")),
-            else_=checkpoint_value,
-        )
+        base_text = func.coalesce(latest_value, checkpoint_value)
     elif normalized_field_id:
         base_text = note_field_text_expression(normalized_field_id)
 
@@ -249,30 +240,19 @@ def clone_effective_field_text_expression(
         note_override.source_note_id == Note.id,
         note_override.field_identity_key == field_identity_key,
     )
-    override_operation = (
-        select(note_override.operation)
-        .where(*override_filters)
-        .order_by(note_override.created_at.desc(), note_override.id.desc())
-        .limit(1)
-        .correlate(Note)
-        .scalar_subquery()
-    )
     override_value = (
-        select(_json_scalar_text(note_override.value))
+        select(case(
+            (note_override.operation == "set", func.coalesce(_json_scalar_text(note_override.value), "")),
+            (note_override.operation == "remove", literal("")),
+            else_=None,
+        ))
         .where(*override_filters)
         .order_by(note_override.created_at.desc(), note_override.id.desc())
         .limit(1)
         .correlate(Note)
         .scalar_subquery()
     )
-    return func.coalesce(
-        case(
-            (override_operation == "set", override_value),
-            (override_operation == "remove", literal("")),
-            else_=base_text,
-        ),
-        "",
-    )
+    return func.coalesce(override_value, base_text, "")
 
 
 def first_non_empty_text_expression(field_expressions: list):
