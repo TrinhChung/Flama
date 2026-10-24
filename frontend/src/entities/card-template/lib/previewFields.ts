@@ -6,6 +6,7 @@ export type PreviewFieldDef = { id: string; name: string; field_type: string; po
  * Field definitions handed to the sandbox renderer for template previews. Library and
  * mapping previews render a template's inputs (not Note Type fields), so IDs are positional.
  */
-export function inputSchemaPreviewFields(inputs: ReadonlyArray<Pick<TemplateInputSpec, 'key' | 'type'>>): PreviewFieldDef[] {
-  return inputs.map((input, position) => ({ id: `f_${position}`, name: input.key, field_type: input.type, position }))
+export function inputSchemaPreviewFields(inputs: ReadonlyArray<Pick<TemplateInputSpec, 'key' | 'type'>>, sourceTypes: Record<string, string> = {}): PreviewFieldDef[] {
+  return inputs.map((input, position) => ({ id: `f_${position}`, name: input.key,
+    field_type: Object.hasOwn(sourceTypes, input.key) ? sourceTypes[input.key] : input.type, position }))
 }

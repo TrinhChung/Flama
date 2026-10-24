@@ -196,6 +196,7 @@
     "render_error": "Could not render card."
   },
   "fields": {
+    "type_mismatch": "The field type differs from the template hint. Data is still passed through; the template can handle it with JavaScript.",
     "title": "Field setup",
     "description": "Choose which note field feeds each input of the {{name}} template.",
     "empty_option": "Leave empty",

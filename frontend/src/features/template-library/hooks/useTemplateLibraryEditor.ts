@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '@/shared/api/client'
 import {
-  archiveLibraryTemplate, cardTemplateQueryKeys, deleteLibraryTemplate, fetchLibraryTemplate, previewLibraryTemplate, updateLibraryTemplate,
+  archiveLibraryTemplate, cardTemplateQueryKeys, deleteLibraryTemplate, fetchLibraryTemplate, previewLibraryTemplate, previewSampleValue, updateLibraryTemplate,
   type CardTemplateItem, type TemplateInputSpec, type TemplateLibraryDetail, type TemplateLibraryPreview,
   type TemplateLibraryTemplate, type TemplateWriteBody,
 } from '@/entities/card-template'
@@ -129,7 +129,8 @@ export function useTemplateLibraryEditor(id: string) {
   }, [id, client])
 
   const [preview, setPreview] = useState<{ key: string; data: TemplateLibraryPreview | null; error: string | null; loading: boolean } | null>(null)
-  const previewBody = draft ? { front_html: draft.front_html, back_html: draft.back_html, shared_css: draft.shared_css, input_schema: draft.input_schema, sample_values: sampleValues } : null
+  const previewBody = draft ? { front_html: draft.front_html, back_html: draft.back_html, shared_css: draft.shared_css, input_schema: draft.input_schema,
+    sample_values: Object.fromEntries(Object.entries(sampleValues).map(([key, value]) => [key, previewSampleValue(value, draft.input_schema.find((input) => input.key === key)?.type ?? 'text')])) } : null
   const previewKey = JSON.stringify([id, previewBody])
   useEffect(() => {
     if (!previewBody || schemaIssues.length) return

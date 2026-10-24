@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useStudyTemplatePreparation, type StudyTemplatePreparationState } from './useStudyTemplatePreparation'
+import { mappingFor, useStudyTemplatePreparation, type StudyTemplatePreparationState } from './useStudyTemplatePreparation'
 import type { StudyTemplateInputsResponse, StudyTemplatePreset } from '@/entities/card-template'
 
 ;(globalThis as typeof globalThis & {
@@ -99,6 +99,16 @@ const mockInputsResponse: StudyTemplateInputsResponse = {
 }
 
 describe('useStudyTemplatePreparation', () => {
+  it('keeps mismatched default and saved targets while distinguishing removed fields', () => {
+    const entry = {
+      ...mockInputsResponse.template_inputs['comp-1'],
+      field_defs: [{ id: 'f1', name: 'Kanji', field_type: 'array' }, { id: 'audio', name: 'Voice', field_type: 'audio' }],
+    }
+    expect(mappingFor(entry).inputBindings).toEqual({ front: 'f1' })
+    expect(mappingFor(entry, { front: 'audio' })).toEqual({ inputBindings: { front: 'audio' }, staleInputs: [], customized: true })
+    expect(mappingFor(entry, { front: null }).inputBindings).toEqual({ front: null })
+    expect(mappingFor(entry, { front: 'removed' }).staleInputs).toEqual(['front'])
+  })
   beforeEach(() => {
     window.localStorage.clear()
     mocks.fetchInputs.mockReset().mockResolvedValue(mockInputsResponse)

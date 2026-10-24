@@ -417,7 +417,7 @@ def _assert_required_fields(
             )
 
 
-def _clean_array_items(items: list[Any], *, field_name: str, depth: int, budget: int) -> tuple[list[Any], int]:
+def _clean_array_items(items: list[Any], *, field_name: str, depth: int, budget: int, maximum: int = MAX_TEXT_FIELD_LENGTH) -> tuple[list[Any], int]:
     """Sanitize items, spending ``budget`` (text length, at least 1 per item or list)."""
     if depth > MAX_ARRAY_DEPTH:
         raise RequestValidationError(
@@ -427,7 +427,7 @@ def _clean_array_items(items: list[Any], *, field_name: str, depth: int, budget:
     cleaned: list[Any] = []
     for item in items:
         if isinstance(item, list):
-            value, budget = _clean_array_items(item, field_name=field_name, depth=depth + 1, budget=budget - 1)
+            value, budget = _clean_array_items(item, field_name=field_name, depth=depth + 1, budget=budget - 1, maximum=maximum)
         elif isinstance(item, str):
             if _SCRIPT_TAG_RE.search(item) or _DANGEROUS_ELEMENT_RE.search(item):
                 raise RequestValidationError(
@@ -453,7 +453,7 @@ def _clean_array_items(items: list[Any], *, field_name: str, depth: int, budget:
             )
         if budget < 0:
             raise RequestValidationError(
-                f"Field '{field_name}' exceeds max length {MAX_TEXT_FIELD_LENGTH}.",
+                f"Field '{field_name}' exceeds max length {maximum}.",
                 field=field_name,
             )
         cleaned.append(value)
@@ -489,6 +489,27 @@ def clean_array_fields(values: dict[str, Any], field_defs: Any) -> dict[str, Any
         name: _clean_array_field_value(value, field_name=name) if name in array_names else value
         for name, value in values.items()
     }
+
+
+def validate_note_field_value_shapes(values: dict[str, Any], field_defs: Any) -> None:
+    """Validate direct writes before import-oriented normalizers can coerce them.
+
+    Legacy text arrays remain readable; Anki/text import adapters explicitly
+    normalize their source format through ``clean_array_fields`` instead.
+    """
+    for field in field_defs:
+        if field.name not in values:
+            continue
+        value = values[field.name]
+        if field.field_type == ARRAY_FIELD_TYPE:
+            if not isinstance(value, list):
+                raise RequestValidationError(
+                    f"Field '{field.name}' must be a JSON array.", field=field.name,
+                )
+        elif value is not None and not isinstance(value, str):
+            raise RequestValidationError(
+                f"Field '{field.name}' must be text.", field=field.name,
+            )
 
 
 def clean_note_field_values(
@@ -528,6 +549,8 @@ def clean_note_field_values(
             f"Unknown fields: {', '.join(unknown)}",
             field="field_values",
         )
+
+    validate_note_field_value_shapes(raw_field_values, note_type.field_defs)
 
     merged: dict[str, Any] = {}
     if current_values:

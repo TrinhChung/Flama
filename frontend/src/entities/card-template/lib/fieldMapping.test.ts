@@ -14,10 +14,10 @@ describe('template field mapping', () => {
     expect(isTypeCompatible(type, type)).toBe(true)
     expect(isTypeCompatible(type, type === 'text' ? 'markdown' : 'text')).toBe(false)
   })
-  it('lets typed-answer inputs and text fields bind to each other only', () => {
-    expect(isTypeCompatible('array', 'text')).toBe(true)
+  it('compares storage shapes for advisory warnings', () => {
+    expect(isTypeCompatible('array', 'text')).toBe(false)
     expect(isTypeCompatible('array', 'array')).toBe(true)
-    expect(isTypeCompatible('text', 'array')).toBe(true)
+    expect(isTypeCompatible('text', 'array')).toBe(false)
     expect(isTypeCompatible('array', 'richtext')).toBe(false)
     expect(isTypeCompatible('image', 'array')).toBe(false)
   })
@@ -26,7 +26,7 @@ describe('template field mapping', () => {
     expect(isTypeCompatible('text', 'richtext')).toBe(false)
     expect(isTypeCompatible('audio', 'image')).toBe(false)
   })
-  it('suggests by normalized key, skips wrong type and reuses IDs', () => {
+  it('suggests by normalized key regardless of type and reuses IDs', () => {
     expect(suggestBindings([input('Word'), input('word'), input('Missing'), { ...input('Other'), label: 'Word' }], fields))
       .toEqual({ Word: 'word-id', word: 'word-id', Missing: null, Other: null })
   })
@@ -43,7 +43,7 @@ describe('template field mapping', () => {
       { unknown2: null, C: null, B: 'picture-id', A: 'foreign', unknown1: 'word-id' }))
       .toEqual([
         { kind: 'field_out_of_scope', key: 'A', fieldId: 'foreign', blocking: true },
-        { kind: 'type_mismatch', key: 'B', fieldId: 'picture-id', blocking: true },
+        { kind: 'type_mismatch', key: 'B', fieldId: 'picture-id', blocking: false },
         { kind: 'unbound', key: 'C', required: false, blocking: false },
         { kind: 'unknown_input', key: 'unknown2', blocking: true },
         { kind: 'unknown_input', key: 'unknown1', blocking: true },

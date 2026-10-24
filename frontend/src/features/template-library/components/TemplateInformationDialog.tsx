@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/shared/ui'
-import type { TemplateLibraryDraft } from '../model/useTemplateLibraryEditor'
+import type { TemplateLibraryDraft } from '../hooks/useTemplateLibraryEditor'
 
 export function TemplateInformationDialog({ draft, onApply, onClose, onDirtyChange }: {
   draft: TemplateLibraryDraft

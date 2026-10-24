@@ -109,7 +109,7 @@ class StudyTemplateApplicationTests(unittest.TestCase):
         self.assertEqual(db.session.get(study_session_service.StudySession, snapshot["session_id"]).config_snapshot_json, stored)
         self.assertEqual(content["render_context"]["term"], "test back")
 
-    def test_transient_bindings_reject_malformed_unknown_cross_type_and_wrong_kind(self):
+    def test_transient_bindings_reject_malformed_unknown_and_out_of_scope(self):
         other = NoteType(name="Other", user_id=self.user.id)
         fields = [FieldDef(note_type_id=self.note_type.id, name="Front", field_type="text"),
                   FieldDef(note_type_id=self.note_type.id, name="Voice", field_type="audio")]
@@ -124,7 +124,6 @@ class StudyTemplateApplicationTests(unittest.TestCase):
         cases = [("list", [], "VALIDATION_ERROR"), ("string", "bad", "VALIDATION_ERROR"),
                  ("unknown_input", {"unknown": fields[0].id}, "INPUT_NOT_FOUND"),
                  ("foreign_field", {"term": foreign.id}, "FIELD_OUT_OF_SCOPE"),
-                 ("wrong_kind", {"term": fields[1].id}, "INPUT_TYPE_MISMATCH"),
                  ("non_scalar_field", {"term": []}, "FIELD_OUT_OF_SCOPE")]
         for label, mapping, code in cases:
             with self.subTest(case=label), self.assertRaises(TemplateLibraryError) as raised:
@@ -132,6 +131,27 @@ class StudyTemplateApplicationTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, code)
             db.session.rollback()
             self.assertEqual(StudySession.query.count(), 0)
+
+    def test_mismatched_preset_and_transient_binding_keep_native_array_in_session(self):
+        from app.services import study_template_preset_service
+
+        values = dict(self.note.field_values)
+        field = FieldDef(note_type_id=self.note_type.id, name="Items", field_type="array")
+        db.session.add(field)
+        db.session.flush()
+        self.note.field_values = {**values, "Items": ["one", ["two"]]}
+        self.template_1.input_schema = [{"key": "term", "type": "audio"}]
+        self.template_1.front_html = "{{#term}}[{{.}}]{{/term}}"
+        db.session.commit()
+        composition_id = resolve_compatibility_composition_for_card(self.card_1).composition_id
+        saved = study_template_preset_service.save_preset(user_id=self.user.id, deck_id=self.deck.id, payload={
+            "selected_compositions": [composition_id], "input_bindings": {composition_id: {"term": field.id}},
+        })
+        self.assertEqual(saved["input_bindings"][composition_id], {"term": field.id})
+        snapshot = self._open(composition_id, {"term": field.id})
+        content = next(iter(snapshot["contents"].values()))
+        self.assertEqual(content["render_context"]["term"], ["one", ["two"]])
+        self.assertEqual(next(iter(snapshot["templates"].values()))["binding_projection"]["input_bindings"], {"term": field.id})
 
     def test_empty_override_shadows_legacy_inputs_without_saving(self):
         values = self.note.field_values

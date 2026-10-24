@@ -1,22 +1,18 @@
 import '@/shared/config/i18n'
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { ArrowUpRight, Database, Save, Settings2 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { FieldMappingEditor, inputSchemaPreviewFields, SampleValuesSheet } from '@/entities/card-template'
+import { FieldMappingEditor, SampleValuesSheet } from '@/entities/card-template'
 import { CardPreviewPanel } from '@/entities/flashcard'
 import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-import { useUnsavedChangesGuard } from '@/shared/hooks/useUnsavedChangesGuard'
 import { WorkspaceLayout } from '@/shared/ui'
 import { ApiError } from '@/shared/api/client'
-import { NoteTypeSetupShell } from '../components/NoteTypeSetupShell'
-import { useTemplateMappingDraft } from '../hooks/useTemplateMappingDraft'
+import { NoteTypeSetupShell, useTemplateMappingWorkspace } from '@/features/note-types'
 
 export function NoteTypeTemplateMappingPage() {
   const { id = '', applicationId = '' } = useParams<{ id: string; applicationId: string }>()
@@ -24,34 +20,11 @@ export function NoteTypeTemplateMappingPage() {
 }
 
 function MappingEditor({ noteTypeId, applicationId }: { noteTypeId: string; applicationId: string }) {
-  const { t } = useTranslation('template_mapping')
-  const navigate = useNavigate()
-  const state = useTemplateMappingDraft(noteTypeId, applicationId)
-  const [samplesOpen, setSamplesOpen] = useState(false)
-  const [side, setSide] = useState<'front' | 'back'>('front')
-  const previewFields = useMemo(() => inputSchemaPreviewFields(state.application?.input_schema ?? []), [state.application?.input_schema])
-  const { confirmDialog, requestNavigation } = useUnsavedChangesGuard(state.dirty, t('discard_message'), {
-    onSave: async () => {
-      if (state.saveMutation.isPending) throw new Error(t('saving'))
-      await state.saveMutation.mutateAsync()
-    },
-  })
-  const { application, draft } = state
-  const effectiveId = application?.id ?? applicationId
-
-  useEffect(() => {
-    if (application?.id && application.id !== applicationId) {
-      window.history.replaceState(null, '', `/flashcards/note-types/${encodeURIComponent(noteTypeId)}/templates/${encodeURIComponent(application.id)}`)
-    }
-  }, [application?.id, applicationId, noteTypeId])
-
-  const listPath = `/flashcards/note-types/${encodeURIComponent(noteTypeId)}/templates`
-  const mappingPath = `${listPath}/${encodeURIComponent(effectiveId)}`
+  const { t, state, samplesOpen, setSamplesOpen, side, setSide, previewFields, confirmDialog, listPath, mappingPath, effectiveId, application, draft, pending, handleNavigate } = useTemplateMappingWorkspace(noteTypeId, applicationId)
   if (state.detail.isPending || state.applications.isPending) return <PageLoading />
   if (state.detail.error || state.applications.error) return <Page><PageError error={state.detail.error ?? state.applications.error} /><Button variant="outline" onClick={() => { void state.detail.refetch(); void state.applications.refetch() }}>{t('retry')}</Button></Page>
   if (!application) return <Page><PageError error={new Error(t('not_found'))} /><Button asChild variant="outline"><Link to={listPath}>{t('back')}</Link></Button></Page>
   if (!draft) return <PageLoading />
-  const pending = state.saveMutation.isPending
   const readOnly = pending || application.status_code === 'RETIRED'
   const save = () => { void state.saveMutation.mutateAsync().catch(() => { /* Mutation error is shown with the draft. */ }) }
   const usedFieldIds = new Set(Object.values(draft.bindings))
@@ -60,9 +33,6 @@ function MappingEditor({ noteTypeId, applicationId }: { noteTypeId: string; appl
 
   const templateName = application.display_name ?? application.template.name
   const noteTypeName = state.detail.data!.name
-  const handleNavigate = (to: string) => {
-    if (!pending) requestNavigation(() => navigate(to))
-  }
 
   return <NoteTypeSetupShell noteTypeId={noteTypeId} name={templateName} activeTab="templates" fill
     fieldCount={state.fields.length} templateCount={state.applications.data!.items.filter((item) => item.status_code === 'ACTIVE').length}

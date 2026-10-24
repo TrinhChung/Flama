@@ -10,7 +10,6 @@ import {
   type StudyTemplatePreset,
   fetchStudyTemplateInputs,
   fetchStudyTemplatePreset,
-  isTypeCompatible,
   saveStudyTemplatePreset,
 } from '@/entities/card-template'
 
@@ -41,8 +40,8 @@ export type StudyTemplateMapping = {
   customized: boolean
 }
 
-function isValidTarget(entry: StudyTemplatePreparationEntry, input: TemplateInputSpec, target: string | null | undefined) {
-  return Boolean(target && entry.field_defs.some((field: StudyTemplateFieldDef) => field.id === target && isTypeCompatible(input.type, field.field_type)))
+function isValidTarget(entry: StudyTemplatePreparationEntry, target: string | null | undefined) {
+  return Boolean(target && entry.field_defs.some((field: StudyTemplateFieldDef) => field.id === target))
 }
 
 /** Saved targets win; a saved target that no longer fits falls back to the
@@ -50,11 +49,11 @@ function isValidTarget(entry: StudyTemplatePreparationEntry, input: TemplateInpu
 export function mappingFor(entry: StudyTemplatePreparationEntry, saved?: TemplateBindings): StudyTemplateMapping {
   const staleInputs: string[] = []
   const inputBindings = Object.fromEntries(entry.input_schema.map((input: TemplateInputSpec) => {
-    const fallback = isValidTarget(entry, input, entry.input_bindings[input.key]) ? entry.input_bindings[input.key] : null
+    const fallback = isValidTarget(entry, entry.input_bindings[input.key]) ? entry.input_bindings[input.key] : null
     if (!saved || !Object.hasOwn(saved, input.key)) return [input.key, fallback]
     const target = saved[input.key]
     if (target === null) return [input.key, null]
-    if (isValidTarget(entry, input, target)) return [input.key, target]
+    if (isValidTarget(entry, target)) return [input.key, target]
     staleInputs.push(input.key)
     return [input.key, fallback]
   }))

@@ -214,8 +214,11 @@ export type TemplatePreviewBody = {
   back_html?: string
   shared_css?: string
   input_schema?: TemplateInputSpec[]
-  sample_values?: Record<string, string>
+  sample_values?: Record<string, string | TemplatePreviewArray>
+  sample_field_types?: Record<string, string>
 }
+
+export type TemplatePreviewArray = Array<string | TemplatePreviewArray>
 
 export type TemplateLibraryPreview = {
   front_html: string

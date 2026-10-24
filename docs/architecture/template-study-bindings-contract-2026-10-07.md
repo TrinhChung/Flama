@@ -1,6 +1,27 @@
 # Template study preparation contract — 2026-10-07
 
-Status: backend preparation/preset/session runtime implemented; Gemini frontend phases remain unimplemented. This contract follows U1/U3/U6 and uses the existing canonical `/api` routes registered through `wsgi.py -> create_app()`. It does not introduce scheduler policy or queue changes.
+Status: preparation, presets, session runtime and frontend mapping are implemented. The 2026-10-24 type-policy update makes template input types advisory. This contract uses the canonical `/api` routes registered through `wsgi.py -> create_app()` and does not change scheduling or queues.
+
+## Type policy (updated 2026-10-24)
+
+NoteType field types validate direct note writes. An `array` write must supply a
+JSON list of text/safe-richtext items or nested lists, rather than a string holding
+the whole value. Editors serialize their array input before saving. Existing
+legacy text arrays remain readable; Anki/text import adapters still convert
+their source format explicitly.
+
+Template input types are advisory hints. Any existing in-scope field can bind to
+any declared input. A differing type produces `INPUT_TYPE_MISMATCH` in warnings,
+including `text` versus `array`, but never blocks attachment updates, presets or
+session opening. Mapping preserves the source field's type and value; a template
+can handle it in its own JavaScript. Existing rendering/sanitization and media
+helpers still use the source field type.
+
+Library previews accept string or native-list `sample_values`. Optional
+`sample_field_types` maps declared input keys to source field types for mapping
+previews; it affects only the preview. Native list samples stay lists regardless
+of the template hint. Missing/removed fields remain separate scope errors;
+type differences do not clear, replace or mark saved mappings as stale.
 
 ## Preparation data
 
@@ -42,7 +63,7 @@ The preparation data contains schema and attachment defaults, never note values 
 
 A missing row returns `selected_compositions: []`, `input_bindings: {}`, `ask_before_study: true`, `stale_compositions: []`. The row belongs to the signed-in user and local deck; it does not edit the shared attachment or publisher's template.
 
-`PUT` to the same route replaces all three preference fields. Only `selected_compositions`, `input_bindings`, and `ask_before_study` are allowed. Omitted fields default to `[]`, `{}`, and `true`; this is not a PATCH. `selected_compositions` must be a unique string array of currently available composition IDs. Each binding-map key must be one of those selected compositions. Each input target must be `null`, `""` (normalized to `null`), or a stable field ID from the effective field schema; field and input types must match. Missing keys remain unbound. An empty map does not merge attachment defaults.
+`PUT` to the same route replaces all three preference fields. Only `selected_compositions`, `input_bindings`, and `ask_before_study` are allowed. Omitted fields default to `[]`, `{}`, and `true`; this is not a PATCH. `selected_compositions` must be a unique string array of currently available composition IDs. Each binding-map key must be one of those selected compositions. Each input target must be `null`, `""` (normalized to `null`), or a stable field ID from the effective field schema; differing field and input types produce advisory warnings. Missing keys remain unbound. An empty map does not merge attachment defaults.
 
 The endpoint accepts zero/multiple selections for compatibility, but the study frontend saves exactly one choice for a session. It must not interpret multiple saved choices as a request to mix templates in one session.
 
@@ -86,14 +107,13 @@ Responses use `{error, message}` with optional `field`/`details`; session-open t
 | 400 | `VALIDATION_ERROR` | Unsupported preset properties, invalid list/boolean/map shape, or malformed input schema. |
 | 400 | `INPUT_NOT_FOUND` | Binding key is not a declared input. |
 | 400 | `FIELD_OUT_OF_SCOPE` | Target missing/disabled, belongs to another NoteType, or target is not a field ID string. |
-| 400 | `INPUT_TYPE_MISMATCH` | Target's effective field type differs from the input type. |
 | 403 | `COMPOSITION_OUT_OF_SCOPE` | Choice or saved preference is outside the current effective deck. |
 | 400 | `INVALID_COMPOSITION_ID` | Explicit choice has an unsupported identity format. |
 | 409 | `COMPOSITION_STALE` | Saved singleton unavailable, or explicit choice refers to a removed template. |
 | 409 | `COMPOSITION_SELECTION_REQUIRED` | Scope has several choices and no applicable singleton selection. |
 | 404 | `NO_STUDY_CARDS` | Scope has no available cards. |
 
-If a previously saved target field was removed or changed type, session opening rejects that stale personal override with the same binding validation code. Reload preparation, clear/fix the affected target, and save/send the corrected map; do not substitute a field by name. Attachment defaults with unbound or removed targets render empty with advisory warnings.
+If a previously saved target field was removed, session opening rejects that stale personal override with the scope validation code. A changed field type is advisory and the saved target stays selected. Reload preparation, clear/fix the affected target, and save/send the corrected map; do not substitute a field by name. Attachment defaults with unbound or removed targets render empty with advisory warnings.
 
 ## Frozen render metadata
 
@@ -114,6 +134,6 @@ These field definitions snapshot the original effective source fields; the artif
 
 Frontend session restore accepts old artifacts and checks optional projection schema, field IDs, declared inputs, and fingerprint. Content patches use the frozen ID/name map to update bound aliases and media helpers; unbound inputs/helpers stay empty. Template edits, source binding edits, or later preset writes cannot replace an existing session's template/field map. This metadata belongs to the programmer-facing contract; do not surface it in product UI. Wire schemas, composition identity, scheduler policy hashes, authority pins, rating actions, and queue algorithms retain their existing behavior.
 
-## Validation and remaining frontend work
+## Validation
 
-Focused coverage lives in `tests/test_study_template_presets.py`, `tests/test_study_template_application_sessions.py`, `tests/test_template_binding_service.py`, and the study session content-patch/restore tests. Gemini implementation phases and acceptance checks are in [GT-18](../task/template-features/GT-18_STUDY_TEMPLATE_PREPARATION.md). These APIs do not imply that the preparation screen, remember controls, or frontend integration are implemented.
+Focused coverage lives in `tests/test_study_template_presets.py`, `tests/test_study_template_application_sessions.py`, `tests/test_template_binding_service.py`, `tests/test_template_input_policy.py`, and the frontend mapping/preparation/content-patch/restore tests. `scripts/probe_template_bindings_mysql.py` runs API, preset, session and installed-overlay checks in a guarded disposable local MySQL schema.

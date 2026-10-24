@@ -81,6 +81,7 @@ export type { SampleValueItem, SampleValuesSheetProps } from './ui/SampleValuesS
 export { isTypeCompatible, suggestBindings, validateBindings } from './lib/fieldMapping'
 export type { MappingField, MappingInput, MappingIssue } from './lib/fieldMapping'
 export { inputSchemaPreviewFields } from './lib/previewFields'
+export { previewSampleValue } from './lib/previewSamples'
 export type { PreviewFieldDef } from './lib/previewFields'
 
 export { TemplateListingFields } from './ui/TemplateListingFields'

@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { apiRequest } from '@/shared/api/client'
 import {
-  cardTemplateQueryKeys, fetchTemplateApplications, isTypeCompatible, previewLibraryTemplate, updateTemplateApplication, validateBindings,
-  type MappingField, type TemplateApplication, type TemplateBindings, type TemplateInputSpec, type TemplateLibraryPreview,
+  cardTemplateQueryKeys, fetchTemplateApplications, previewLibraryTemplate, previewSampleValue, updateTemplateApplication, validateBindings,
+  type MappingField, type TemplateApplication, type TemplateBindings, type TemplateInputSpec, type TemplateLibraryPreview, type TemplatePreviewBody,
 } from '@/entities/card-template'
 
 export type MappingNoteType = { id: string; name: string; field_defs: Array<MappingField & { position: number; required?: boolean }> }
@@ -21,15 +21,15 @@ const fromApplication = (application: TemplateApplication, fields: MappingField[
 }
 
 /** An omitted value requests a system sample; an explicitly empty value must render empty. */
-export function mappingSampleValues(inputs: TemplateInputSpec[], fields: MappingField[], bindings: TemplateBindings, samples: Record<string, string>): Record<string, string> {
+export function mappingSampleValues(inputs: TemplateInputSpec[], fields: MappingField[], bindings: TemplateBindings, samples: Record<string, string>): NonNullable<TemplatePreviewBody['sample_values']> {
   const fieldById = new Map(fields.map((field) => [field.id, field]))
-  return Object.fromEntries(inputs.flatMap((input) => {
+  return Object.fromEntries(inputs.flatMap((input): Array<[string, ReturnType<typeof previewSampleValue>]> => {
     const target = Object.hasOwn(bindings, input.key) ? bindings[input.key] : null
     const field = target ? fieldById.get(target) : undefined
-    if (!field || !isTypeCompatible(input.type, field.field_type)) return [[input.key, '']]
-    if (Object.hasOwn(samples, field.id)) return [[input.key, samples[field.id]]]
-    if (input.type === 'image' || input.type === 'audio') return []
-    return [[input.key, field.name]]
+    if (!field) return [[input.key, '']]
+    if (Object.hasOwn(samples, field.id)) return [[input.key, previewSampleValue(samples[field.id], field.field_type)]]
+    if (['image', 'audio', 'diagram'].includes(field.field_type)) return []
+    return [[input.key, field.field_type === 'array' ? [field.name] : field.name]]
   }))
 }
 
@@ -105,10 +105,16 @@ export function useTemplateMappingDraft(noteTypeId: string, applicationId: strin
     },
   })
   const bindings = current?.bindings
+  const sampleFieldTypes = useMemo(() => Object.fromEntries((application?.input_schema ?? []).flatMap((input) => {
+    const target = bindings && Object.hasOwn(bindings, input.key) ? bindings[input.key] : null
+    const field = fields.find((item) => item.id === target)
+    return field ? [[input.key, field.field_type]] : []
+  })), [application?.input_schema, bindings, fields])
   const previewBody = useMemo(() => application && bindings ? {
     front_html: application.template.front_html, back_html: application.template.back_html, shared_css: application.template.shared_css,
     input_schema: application.input_schema, sample_values: mappingSampleValues(application.input_schema, fields, bindings, samples),
-  } : null, [application, bindings, fields, samples])
+    sample_field_types: sampleFieldTypes,
+  } : null, [application, bindings, fields, samples, sampleFieldTypes])
   const previewKey = previewBody ? JSON.stringify([application?.template_id, previewBody]) : ''
   const templateId = application?.template_id
   useEffect(() => {
@@ -125,7 +131,7 @@ export function useTemplateMappingDraft(noteTypeId: string, applicationId: strin
     return () => { cancelled = true; controller.abort(); window.clearTimeout(timer) }
   }, [templateId, previewBody, previewKey, t])
   return {
-    detail, applications, application, fields, draft: current, dirty, issues, invalid, sourceChanged, saveMutation,
+    detail, applications, application, fields, draft: current, dirty, issues, invalid, sourceChanged, saveMutation, sampleFieldTypes,
     updateName: (name: string) => { saveMutation.reset(); setDraft((old) => old ? { ...old, name } : old) },
     updateBindings: (bindings: TemplateBindings) => { saveMutation.reset(); setDraft((old) => old ? { ...old, bindings } : old) },
     samples, setSample: (fieldId: string, value: string) => setSamples((old) => ({ ...old, [fieldId]: value })), resetSamples: () => setSamples({}),

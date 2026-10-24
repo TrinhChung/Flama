@@ -18,7 +18,7 @@ import { useUnsavedChangesGuard } from '@/shared/hooks/useUnsavedChangesGuard'
 import { ConfirmDialog, WorkspaceLayout } from '@/shared/ui'
 import { TemplateInputsDialog } from '../components/TemplateInputsDialog'
 import { TemplateInformationDialog } from '../components/TemplateInformationDialog'
-import { useTemplateLibraryEditor } from '../model/useTemplateLibraryEditor'
+import { useTemplateLibraryEditor } from '../hooks/useTemplateLibraryEditor'
 import { ApplyTemplateWizard } from '../components/ApplyTemplateWizard'
 import { templateInputReferences } from '../lib/templateInputReferences'
 

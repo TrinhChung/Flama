@@ -96,7 +96,7 @@ const NoteTypeTemplatesPage = lazy(() =>
   import('./features/note-types/pages/NoteTypeTemplatesPage').then((module) => ({ default: module.NoteTypeTemplatesPage })),
 )
 const NoteTypeTemplateMappingPage = lazy(() =>
-  import('./features/note-types/pages/NoteTypeTemplateMappingPage').then((module) => ({ default: module.NoteTypeTemplateMappingPage })),
+  import('./pages/note-type-template-mapping').then((module) => ({ default: module.NoteTypeTemplateMappingPage })),
 )
 const InstalledDecksPage = lazy(() =>
   import('./features/library').then((module) => ({

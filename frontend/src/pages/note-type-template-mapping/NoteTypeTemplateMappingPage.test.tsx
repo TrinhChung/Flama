@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setCsrfToken } from '@/shared/api/client'
 import type { TemplateApplication } from '@/entities/card-template'
-import { NoteTypeTemplateMappingPage } from './NoteTypeTemplateMappingPage'
+import { NoteTypeTemplateMappingPage } from './index'
 
 const preview = vi.hoisted(() => vi.fn())
 vi.mock('@/entities/flashcard/ui/CardPreviewPanel', () => ({ CardPreviewPanel: preview }))

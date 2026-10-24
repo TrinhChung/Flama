@@ -196,6 +196,7 @@
     "render_error": "Không thể render thẻ."
   },
   "fields": {
+    "type_mismatch": "Kiểu trường khác kiểu template mong đợi. Dữ liệu vẫn được truyền; template có thể tự xử lý bằng JavaScript.",
     "title": "Thiết lập trường",
     "description": "Chọn trường dữ liệu đưa vào từng input của template {{name}}.",
     "empty_option": "Để trống",

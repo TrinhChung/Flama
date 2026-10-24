@@ -10,6 +10,14 @@ const inputs: MappingInput[] = [{ key: 'Word', label: 'Từ', type: 'text', requ
 const fields: MappingField[] = [{ id: 'field-text', name: 'Word', field_type: 'text' }, { id: 'field-image', name: 'Picture', field_type: 'image' }]
 
 describe('FieldMappingEditor', () => {
+  it('shows a nonblocking warning for a selected mismatched field', async () => {
+    const bindings = { Word: 'field-image', word: null }
+    await act(async () => root.render(<FieldMappingEditor inputs={inputs} fields={fields} bindings={bindings} onChange={vi.fn()} issues={validateBindings(inputs, fields, bindings)} />))
+    const select = container.querySelector('select')!
+    expect(select.value).toBe('field-image')
+    expect(select.getAttribute('aria-invalid')).toBe('false')
+    expect(container.textContent).toContain('Dữ liệu vẫn được truyền')
+  })
   let root: Root
   let container: HTMLDivElement
   beforeEach(() => {
@@ -32,12 +40,12 @@ describe('FieldMappingEditor', () => {
     await act(async () => { select.value = ''; select.dispatchEvent(new Event('change', { bubbles: true })) })
     expect(onChange).toHaveBeenLastCalledWith({ Word: null, word: 'field-text' })
   })
-  it('disables wrong types, retains stale value and shows scope error', async () => {
+  it('allows other types, retains stale value and shows scope error', async () => {
     const bindings = { Word: 'foreign', word: null }
     await act(async () => root.render(<FieldMappingEditor inputs={inputs} fields={fields} bindings={bindings} onChange={vi.fn()} issues={validateBindings(inputs, fields, bindings)} />))
     const select = container.querySelector('select')!
     expect(select.value).toBe('foreign')
-    expect(select.querySelector<HTMLOptionElement>('option[value="field-image"]')?.disabled).toBe(true)
+    expect(select.querySelector<HTMLOptionElement>('option[value="field-image"]')?.disabled).toBe(false)
     expect(select.getAttribute('aria-invalid')).toBe('true')
     expect(container.textContent).toContain('Trường không thuộc loại thẻ đã chọn.')
     expect(container.textContent).toContain('Input này sẽ hiển thị rỗng.')

@@ -161,6 +161,48 @@ class TemplateLibraryTests(unittest.TestCase):
             context = build_effective_study_card(card=card, clone_scope=None)
             self.assertEqual(context.field_values["term"], "")
 
+    def test_mismatched_mapping_round_trips_with_warning_and_original_text(self):
+        changed = self.client.patch(f"/api/card-templates/{self.template_id}", json={
+            "input_schema": [{"key": "term", "type": "array", "required": True}],
+        })
+        self.assertEqual(changed.status_code, 200, changed.get_json())
+        application = self._attach()
+        self.assertEqual(application["warnings"], [{"input_key": "term", "code": "INPUT_TYPE_MISMATCH", "required": True}])
+        base = f"/api/note-types/{self.types[0]['id']}/template-applications/{application['id']}"
+        saved = self.client.patch(base, json={"input_bindings": application["input_bindings"]})
+        self.assertEqual(saved.status_code, 200, saved.get_json())
+        self.assertEqual(saved.get_json()["input_bindings"], application["input_bindings"])
+        note_id = self._note()
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note_id, template_id=self.template_id).one()
+            self.assertEqual(build_effective_study_card(card=card, clone_scope=None).field_values["term"], "犬")
+
+    def test_array_note_writes_reject_text_and_accept_native_lists(self):
+        nt_id = self.types[0]["id"]
+        field = self.client.post(f"/api/note-types/{nt_id}/fields", json={"name": "Items", "field_type": "array"})
+        self.assertEqual(field.status_code, 201, field.get_json())
+        bad = self.client.post("/api/notes", json={"note_type_id": nt_id, "field_values": {"Items": "one\ntwo"}})
+        self.assertEqual(bad.status_code, 400, bad.get_json())
+        good = self.client.post("/api/notes", json={"note_type_id": nt_id, "field_values": {"Items": ["one", ["two"]]}})
+        self.assertEqual(good.status_code, 201, good.get_json())
+        rejected = self.client.patch(f"/api/notes/{good.get_json()['id']}", json={"field_values": {"Items": "bad"}})
+        self.assertEqual(rejected.status_code, 400, rejected.get_json())
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Note, good.get_json()["id"]).field_values["Items"], ["one", ["two"]])
+
+    def test_preview_accepts_arrays_and_source_type_metadata_without_saving(self):
+        response = self.client.post(f"/api/card-templates/{self.template_id}/preview", json={
+            "front_html": "{{#term}}[{{.}}]{{/term}}", "sample_values": {"term": ["a", "b"]},
+        })
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["front_html"], "[a][b]")
+        response = self.client.post(f"/api/card-templates/{self.template_id}/preview", json={
+            "sample_values": {"term": "**source**"}, "sample_field_types": {"term": "markdown"},
+        })
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertIn("<strong>source</strong>", response.get_json()["front_html"])
+        self.assertEqual(self.client.get(f"/api/card-templates/{self.template_id}").get_json()["input_schema"][0]["type"], "text")
+
     def test_invalid_schema_bindings_compile_and_body_are_atomic(self):
         before = self.client.get(f"/api/card-templates/{self.template_id}/versions").get_json()
         for payload in (["bad"], {"input_schema": [{"key": "x"}, {"key": "x"}]}, {"input_schema": [{"key": "FrontSide"}]}, {"front_html": "{{#unclosed}}"}, {"name": ""}):
