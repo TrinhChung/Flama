@@ -257,6 +257,9 @@ class NoteStatsRetirementTests(unittest.TestCase):
         db.session.execute(sa.insert(cutover_applications).values(application_id=self.own_app))
         db.session.commit()
         self.assertEqual(self._assert_collection_scope_parity(), {})
+        # An original Note without an alias has no Card in either unit.
+        self.assertEqual(self._aggregate([1])[1]["total"], 0)
+        self.assertEqual(self._aggregate([1], by_note=False)[1]["total"], 0)
 
         self._insert(PresentationAlias.__table__, id=str(uuid4()), note_id=self.own_note,
                      application_id=self.own_app, template_id=self.own_template,
@@ -286,6 +289,9 @@ class NoteStatsRetirementTests(unittest.TestCase):
                      application_id=application, template_id=template, created_at=NOW, updated_at=NOW)
         db.session.commit()
         self.assertEqual(self._assert_collection_scope_parity(), {})
+        # An alias of another note type's application proves no membership.
+        self.assertEqual(self._aggregate([1])[1]["total"], 0)
+        self.assertEqual(self._aggregate([1], by_note=False)[1]["total"], 0)
 
     def test_forecast_reads_one_row_for_many_occurrences_and_preserves_card_units(self):
         from app.repositories.stats_query_repository import query_consolidated_forecast_rows

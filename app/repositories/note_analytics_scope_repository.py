@@ -11,7 +11,7 @@ guard_scope``). The ``*_query`` builders are unguarded; a caller that uses one
 must run that guard on its own final scope.
 """
 
-from sqlalchemy import and_, case, func, not_, null, or_, select, union_all
+from sqlalchemy import and_, case, func, literal, not_, null, or_, select, union_all
 
 from models.card import Card, PresentationAlias, cutover_applications, cutover_notes
 from models.deck_clone_deck_map import DeckCloneDeckMap
@@ -20,7 +20,8 @@ from models.note import Note
 from models.study_application import StudyApplication
 
 
-def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False, note_ids=None):
+def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False, note_ids=None,
+                     presence_only=False):
     """One row per owned Note with at least one ACTIVE presentation.
 
     P11 membership: an original Note/original application pair exists only
@@ -29,6 +30,8 @@ def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False,
     Note, count all active applications. Alias counts are scoped to the same
     requested Notes, never a whole-store scan for a small learner/deck.
     ``note_ids`` narrows the scope (the evidence guard's exact pass).
+    ``presence_only`` keeps the same Notes but reports ``card_count = 1``, for
+    readers that weigh each Note once (Note-unit counts).
     """
     notes = select(Note.id, Note.deck_id, Note.note_type_id)
     if not owned_by_any_user:
@@ -66,6 +69,30 @@ def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False,
         .distinct()
         .subquery("analytics_original_applications")
     )
+    if presence_only:
+        # count > 0 exactly when the Note is new (active_count >= 1 via the
+        # inner join), its type has a new application, or one alias of an
+        # ACTIVE original application exists, so probe for a single alias
+        # instead of counting all of them. OR stops before the probe.
+        has_original_alias = (
+            select(literal(1))
+            .select_from(aliases.join(
+                original_applications,
+                original_applications.c.application_id == aliases.c.application_id,
+            ))
+            .where(aliases.c.note_id == notes.c.id,
+                   original_applications.c.note_type_id == notes.c.note_type_id)
+            .exists()
+        )
+        return (
+            select(notes.c.deck_id, notes.c.id.label("note_id"), literal(1).label("card_count"))
+            .select_from(notes)
+            .join(applications, applications.c.note_type_id == notes.c.note_type_id)
+            .outerjoin(cutover_notes, cutover_notes.c.note_id == notes.c.id)
+            .where(or_(cutover_notes.c.note_id.is_(None), applications.c.new_count > 0,
+                       has_original_alias))
+            .subquery("analytics_owned_note_counts")
+        )
     # Read only for cutover Notes (see `count`), so no cutover_notes join here.
     original_aliases = (
         select(notes.c.id.label("note_id"), func.count().label("alias_count"))
@@ -144,11 +171,11 @@ def _combine(owned, installed, *, per_deck):
 
 
 def deck_note_scope_query(*, learner_user_id, deck_ids, overlay=None, owned_by_any_user=False,
-                          note_ids=None):
+                          note_ids=None, presence_only=False):
     """One row per effective deck/Note; duplicate installations count once (unguarded)."""
     owned = owned_note_scope(
         learner_user_id=learner_user_id, deck_ids=deck_ids,
-        owned_by_any_user=owned_by_any_user, note_ids=note_ids,
+        owned_by_any_user=owned_by_any_user, note_ids=note_ids, presence_only=presence_only,
     )
     if overlay is None:
         return owned
@@ -168,14 +195,15 @@ def deck_note_scope_query(*, learner_user_id, deck_ids, overlay=None, owned_by_a
     return _combine(owned, installed, per_deck=True)
 
 
-def deck_note_scope(session, *, learner_user_id, deck_ids, overlay=None, owned_by_any_user=False):
+def deck_note_scope(session, *, learner_user_id, deck_ids, overlay=None, owned_by_any_user=False,
+                    presence_only=False):
     """:func:`deck_note_scope_query`, after failing closed on unreadable evidence."""
     from app.repositories.note_analytics_read_repository import guard_scope
 
     def build(note_ids=None):
         return deck_note_scope_query(
             learner_user_id=learner_user_id, deck_ids=deck_ids, overlay=overlay,
-            owned_by_any_user=owned_by_any_user, note_ids=note_ids,
+            owned_by_any_user=owned_by_any_user, note_ids=note_ids, presence_only=presence_only,
         )
 
     guard_scope(session, learner_user_id=learner_user_id, build=build)

@@ -176,9 +176,10 @@ def aggregate_deck_study_counts(
     from app.repositories.note_analytics_scope_repository import deck_note_scope
 
     # Raises StudyAuthorityReadError for unreadable evidence in this scope.
+    # Note units weigh each Note once, so the scope only proves membership.
     scope = deck_note_scope(
         session, learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
-        overlay=overlay, owned_by_any_user=owned_by_any_user,
+        overlay=overlay, owned_by_any_user=owned_by_any_user, presence_only=count_by_note,
     )
     rows = note_reads.note_rows(scope, learner_user_id=learner_user_id).subquery("rows")
 
