@@ -46,21 +46,33 @@ def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False)
         .group_by(application.c.note_type_id)
         .subquery("analytics_application_counts")
     )
+    # The few ACTIVE original applications, materialized once (DISTINCT blocks
+    # derived-table merging) so each alias probes a small in-memory key rather
+    # than two InnoDB primary keys.
+    original_applications = (
+        select(application.c.id.label("application_id"), application.c.note_type_id)
+        .select_from(application.join(
+            cutover_applications, cutover_applications.c.application_id == application.c.id,
+        ))
+        .where(application.c.status_code == "ACTIVE")
+        .distinct()
+        .subquery("analytics_original_applications")
+    )
+    # Read only for cutover Notes (see `count`), so no cutover_notes join here.
     original_aliases = (
         select(notes.c.id.label("note_id"), func.count().label("alias_count"))
         # Measured MySQL otherwise starts from applications and reads each
         # wide Note again for every sibling. Scope Notes first, then probe
-        # their alias prefix; SQLite retains its own planner.
-        .prefix_with("STRAIGHT_JOIN", dialect="mysql")
+        # their alias prefix; SQLite retains its own planner. NO_BNL keeps the
+        # application probe a key lookup: a hash join loses the Note order and
+        # turns the GROUP BY into a temporary table.
+        .prefix_with("/*+ NO_BNL(analytics_original_applications) */ STRAIGHT_JOIN", dialect="mysql")
         .select_from(notes)
-        .join(cutover_notes, cutover_notes.c.note_id == notes.c.id)
         .join(aliases, aliases.c.note_id == notes.c.id)
-        .join(application, and_(
-            application.c.id == aliases.c.application_id,
-            application.c.note_type_id == notes.c.note_type_id,
-            application.c.status_code == "ACTIVE",
+        .join(original_applications, and_(
+            original_applications.c.application_id == aliases.c.application_id,
+            original_applications.c.note_type_id == notes.c.note_type_id,
         ))
-        .join(cutover_applications, cutover_applications.c.application_id == application.c.id)
         .group_by(notes.c.id)
         .subquery("analytics_original_alias_counts")
     )
