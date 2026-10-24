@@ -13,6 +13,8 @@ import secrets
 import sys
 import time
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from dotenv import load_dotenv
 import pymysql
 import sqlalchemy as sa
@@ -30,6 +32,13 @@ from scripts.mysql_probe_db import _connection_settings, _database_uri, _source_
 PROBE_NAME = re.compile(r'^flama_retirement_fresh_probe_[0-9]+_[a-f0-9]{12}$')
 RETIRED = {'cards','card_progress','vocabulary_column_preferences','study_progress_backfill_runs',
            'study_progress_backfill_checkpoints','study_progress_backfill_dispositions','field_rename_jobs'}
+
+
+def _repository_head():
+    # The single head of the checked-in chain; raises when the chain forks.
+    config = Config()
+    config.set_main_option('script_location', str(ROOT/'migrations'))
+    return ScriptDirectory.from_config(config).get_current_head()
 
 
 def main():
@@ -67,7 +76,7 @@ def main():
                 upgrade(directory=str(ROOT/'migrations'))
                 tables = set(sa.inspect(db.engine).get_table_names())
                 head = db.session.execute(sa.text('SELECT version_num FROM alembic_version')).scalar_one()
-                if head != '20261020_000071' or tables & RETIRED:
+                if head != _repository_head() or tables & RETIRED:
                     raise RuntimeError('Retirement head/table contract failed.')
                 if tables != set(db.metadata.tables) | {'alembic_version'}:
                     raise RuntimeError('Fresh migration schema differs from current runtime metadata.')
