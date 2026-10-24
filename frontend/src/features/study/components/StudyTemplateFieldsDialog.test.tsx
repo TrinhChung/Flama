@@ -61,7 +61,7 @@ describe('StudyTemplateFieldsDialog', () => {
     const dialogProps = props()
     await render(dialogProps)
     const selects = document.querySelectorAll<HTMLSelectElement>('[role="dialog"] select')
-    expect(Array.from(selects[1].options).map(option => option.value)).toEqual(['', 'f3'])
+    expect(Array.from(selects[1].options).map(option => option.value)).toEqual(['', 'f1', 'f2', 'f3'])
     await act(async () => {
       selects[1].value = ''
       selects[1].dispatchEvent(new Event('change', { bubbles: true }))
@@ -69,6 +69,20 @@ describe('StudyTemplateFieldsDialog', () => {
     expect(dialogProps.onSave).not.toHaveBeenCalled()
     await act(async () => button('Lưu').click())
     expect(dialogProps.onSave).toHaveBeenCalledWith({ front: 'f1', audio: null })
+  })
+
+  it('saves a mismatched field with a warning instead of clearing it', async () => {
+    const dialogProps = props()
+    await render(dialogProps)
+    await act(async () => {
+      const select = document.querySelectorAll<HTMLSelectElement>('[role="dialog"] select')[1]
+      select.value = 'f2'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(document.body.textContent).toContain('Dữ liệu vẫn được truyền')
+    expect(button('Lưu').disabled).toBe(false)
+    await act(async () => button('Lưu').click())
+    expect(dialogProps.onSave).toHaveBeenCalledWith({ front: 'f1', audio: 'f2' })
   })
 
   it('cancels a draft without saving and restores persisted bindings when reopened', async () => {

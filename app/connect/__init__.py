@@ -80,6 +80,7 @@ def _register_models() -> None:
     from models.template_version import TemplateVersion  # noqa: F401
     from models.template_publication import TemplatePublication  # noqa: F401
     from models.template_release import TemplateRelease  # noqa: F401
+    from models.template_sync_job import TemplateSyncJob  # noqa: F401
     from models.template_subscription import TemplateSubscription  # noqa: F401
     from models.study_template_preset import StudyTemplatePreset  # noqa: F401
     from models.deck_release_template_pin import DeckReleaseTemplatePin  # noqa: F401

@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -58,13 +59,14 @@ function SelectInputsDialog({
   disabled = false,
 }: SelectInputsDialogProps) {
   const baseId = useId()
+  const { t } = useTranslation('study')
 
   const handleSelectAll = () => {
     const updated: TemplateBindings = {}
     for (const input of inputSchema) {
-      const candidates = fieldDefs.filter((f) => f.id && isTypeCompatible(input.type, f.field_type))
+      const candidates = fieldDefs.filter((f) => f.id)
       updated[input.key] =
-        value[input.key] || defaultBindings[input.key] || candidates[0]?.id || null
+        value[input.key] || defaultBindings[input.key] || candidates.find((f) => isTypeCompatible(input.type, f.field_type))?.id || candidates[0]?.id || null
     }
     onChange(updated)
   }
@@ -79,8 +81,8 @@ function SelectInputsDialog({
 
   const handleToggleInput = (inputKey: string, inputType: string, checked: boolean) => {
     if (checked) {
-      const candidates = fieldDefs.filter((f) => f.id && isTypeCompatible(inputType, f.field_type))
-      const target = defaultBindings[inputKey] || candidates[0]?.id || null
+      const candidates = fieldDefs.filter((f) => f.id)
+      const target = defaultBindings[inputKey] || candidates.find((f) => isTypeCompatible(inputType, f.field_type))?.id || candidates[0]?.id || null
       onChange({ ...value, [inputKey]: target })
     } else {
       onChange({ ...value, [inputKey]: null })
@@ -137,12 +139,13 @@ function SelectInputsDialog({
           ) : (
             inputSchema.map((input, index) => {
               const inputId = `${baseId}-${index}`
-              const candidates = fieldDefs.filter((f) => f.id && isTypeCompatible(input.type, f.field_type))
+              const candidates = fieldDefs.filter((f) => f.id)
               const mappedFieldId = value[input.key] || defaultBindings[input.key] || candidates[0]?.id
               const mappedField = fieldDefs.find((f) => f.id === mappedFieldId)
               const currentVal = value[input.key]
               const isTransmitted = currentVal !== null && currentVal !== undefined && currentVal !== ''
               const isStale = Boolean(isTransmitted && !candidates.some((f) => f.id === currentVal))
+              const mismatch = isTransmitted && mappedField && !isTypeCompatible(input.type, mappedField.field_type)
 
               return (
                 <div
@@ -223,6 +226,7 @@ function SelectInputsDialog({
                           Trường đã lưu không còn phù hợp. Hãy bỏ chọn để truyền null.
                         </p>
                       )}
+                      {!isStale && mismatch && <p role="status" className="mt-1.5 text-xs text-amber-700 dark:text-amber-400 font-medium">{t('fields.type_mismatch')}</p>}
                     </div>
                   </label>
                 </div>

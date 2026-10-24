@@ -365,6 +365,36 @@ def count_distinct_cards(query) -> int:
     return int(query.order_by(None).with_entities(func.count(func.distinct(Card.id))).scalar() or 0)
 
 
+def order_browse_cards_by_deck(
+    query,
+    *,
+    learner_user_id: int,
+    sort_dir: str,
+    source_to_local_deck_id: dict[int, int],
+    deck_name_lookup: dict[int, str],
+):
+    """Sort by the same effective deck names used to build Browse rows.
+
+    Owned Notes keep their own deck even if that deck is also an install's
+    source. For foreign Notes, the first resolved source/local mapping is the
+    same one the page formatter uses. Resolve names before LIMIT/OFFSET.
+    """
+    query = query.outerjoin(Deck, Note.deck_id == Deck.id)
+    name_cases = [
+        (
+            and_(Note.user_id != int(learner_user_id), Note.deck_id == source_deck_id),
+            literal(deck_name_lookup[local_deck_id]),
+        )
+        for source_deck_id, local_deck_id in sorted(source_to_local_deck_id.items())
+        if deck_name_lookup.get(local_deck_id)
+    ]
+    name = case(*name_cases, else_=Deck.name) if name_cases else Deck.name
+    return query.order_by(
+        name.desc() if sort_dir == "desc" else name.asc(),
+        Card.updated_at.desc(),
+    )
+
+
 def page_window_integrity(
     session,
     *,

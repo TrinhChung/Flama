@@ -179,6 +179,28 @@ class HierarchicalDeckCreateTests(unittest.TestCase):
         found = next((item for item in data["items"] if item["deck_id"] == deck_id), None)
         self.assertIsNotNone(found)
         self.assertEqual(found.get("note_type_id"), nt_id)
+        # Only the admin row menu copies move aliases.
+        self.assertNotIn("move_alias", found)
+
+        own = self.client.get(f"/api/decks/{deck_id}/note-type")
+        self.assertEqual(own.status_code, 200)
+        self.assertEqual(own.get_json(), {"note_type_id": nt_id})
+
+    def test_deck_note_type_fallback_is_scoped_to_accessible_decks(self):
+        self._login()
+        with self.app.app_context():
+            other = create_note_user(db.session, username="other", email="other@example.com", is_admin=False)
+            db.session.flush()
+            foreign = Deck(name="Not mine", owner_user_id=other.id)
+            empty = Deck(name="Empty", owner_user_id=self.user_id)
+            db.session.add_all([foreign, empty])
+            db.session.commit()
+            foreign_id, empty_id = foreign.id, empty.id
+
+        self.assertEqual(self.client.get(f"/api/decks/{foreign_id}/note-type").status_code, 404)
+        empty_response = self.client.get(f"/api/decks/{empty_id}/note-type")
+        self.assertEqual(empty_response.status_code, 200)
+        self.assertEqual(empty_response.get_json(), {"note_type_id": None})
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Exact projected Card buckets versus the canonical NOTE forecast oracle."""
+"""Exact projected due buckets versus the canonical NOTE forecast oracle."""
 
 from datetime import date, timedelta
 import importlib
@@ -91,6 +91,24 @@ class ForecastSnapshotTests(unittest.TestCase):
         self.app.config["FORECAST_SUMMARY_READ_USER_IDS"] = [2]
         self.assertIsNone(service.resolve_forecast_summary(db.session, user_id=1, deck_ids=None,
             timezone_name="UTC", day_boundary_hour=4, now_utc=NOW, backlog=True, end_offset=29))
+
+    def test_counting_unit_flip_rejects_the_snapshot_until_rebuilt(self):
+        # Two more presentations give the Note three Cards, so the units differ.
+        for _ in range(2):
+            self.fixture._application(1, self.fixture.own_type)
+        db.session.commit()
+        args = dict(user_id=1, deck_ids=None, timezone_name="UTC", day_boundary_hour=4,
+                    now_utc=NOW, backlog=True, end_offset=29)
+        self.app.config["STUDY_NOTE_COUNT_ENABLED"] = False
+        card_raw = self._payload("raw")
+        self.assertTrue(self._prewarm()["published"])
+        self.assertEqual(self._payload(), card_raw)
+        self.app.config["STUDY_NOTE_COUNT_ENABLED"] = True
+        self.assertIsNone(service.resolve_forecast_summary(db.session, **args))
+        note_raw = self._payload("raw")
+        self.assertNotEqual(note_raw["totals"], card_raw["totals"])
+        self.assertTrue(self._prewarm()["published"])
+        self.assertEqual(self._payload(), note_raw)
 
     def test_window_backlog_overdue_and_overview_fold_parity(self):
         subject = db.session.execute(sa.select(StudyProgressSubject)).scalar_one()

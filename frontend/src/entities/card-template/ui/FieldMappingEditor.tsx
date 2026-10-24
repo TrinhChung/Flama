@@ -8,7 +8,7 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { TemplateBindings } from '../model/types'
-import { isTypeCompatible, type MappingField, type MappingInput, type MappingIssue } from '../lib/fieldMapping'
+import type { MappingField, MappingInput, MappingIssue } from '../lib/fieldMapping'
 
 export type FieldMappingEditorProps = {
   inputs: MappingInput[]
@@ -70,12 +70,11 @@ export function FieldMappingEditor({ inputs, fields, bindings, onChange, issues,
             onChange={(event) => { if (!disabled) onChange({ ...bindings, [input.key]: event.target.value || null }) }}>
             <NativeSelectOption value="">{t('mapping_editor.select_unbound')}</NativeSelectOption>
             {stale && <NativeSelectOption value={fieldId} disabled>{t('mapping_editor.stale_field', { id: fieldId })}</NativeSelectOption>}
-            {fields.filter((field) => !searchable || matches.some((match) => match.id === field.id) || field.id === fieldId).map((field) => <NativeSelectOption key={field.id} value={field.id}
-              disabled={!isTypeCompatible(input.type, field.field_type)}>{field.name} · {field.field_type}</NativeSelectOption>)}
+            {fields.filter((field) => !searchable || matches.some((match) => match.id === field.id) || field.id === fieldId).map((field) => <NativeSelectOption key={field.id} value={field.id}>{field.name} · {field.field_type}</NativeSelectOption>)}
           </NativeSelect>
         </div>
         {(inputIssues.length > 0 || fieldError) && <div id={`${id}-issues`} className="space-y-1">
-          {inputIssues.map((issue) => <p key={issue.kind} className={`text-xs ${issue.blocking ? 'text-destructive' : 'text-muted-foreground'}`}>{issueMessage(issue, t)}</p>)}
+          {inputIssues.map((issue) => <p key={issue.kind} role={issue.kind === 'type_mismatch' ? 'status' : undefined} className={`text-xs ${issue.blocking ? 'text-destructive' : issue.kind === 'type_mismatch' ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>{issueMessage(issue, t)}</p>)}
           {fieldError && <p role="alert" className="text-xs text-destructive">{fieldError}</p>}
         </div>}
       </div>

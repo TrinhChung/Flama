@@ -8,12 +8,19 @@ describe('mapping preview field projection', () => {
     expect(mappingSampleValues(inputs, fields, { Word: 'text-id', Audio: 'audio-id' }, { 'text-id': '' })).toEqual({ Word: '' })
     expect(mappingSampleValues(inputs, fields, { Word: 'text-id', Audio: 'audio-id' }, {})).toEqual({ Word: 'Renamed' })
   })
-  it('renders invalid and unbound inputs empty rather than fabricating complete mappings', () => {
-    expect(mappingSampleValues(inputs, fields, { Word: 'audio-id', Audio: 'missing' }, {})).toEqual({ Word: '', Audio: '' })
+  it('keeps mismatched sources and only renders missing targets empty', () => {
+    expect(mappingSampleValues(inputs, fields, { Word: 'audio-id', Audio: 'missing' }, {})).toEqual({ Audio: '' })
   })
   it('treats prototype-looking keys as real own keys and allows one field for multiple inputs', () => {
     const schema = [{ key: '__proto__', label: '', type: 'text' as const, required: false }, { key: 'constructor', label: '', type: 'text' as const, required: false }]
     const bindings = Object.fromEntries(schema.map((input) => [input.key, 'text-id']))
     expect(mappingSampleValues(schema, fields, bindings, { 'text-id': 'same' })).toEqual(Object.fromEntries(schema.map((input) => [input.key, 'same'])))
   })
+})
+
+it('keeps nested JSON lists in mapped samples without coercing JSON-looking text', () => {
+  const schema = [{ key: 'answer', label: 'Answer', type: 'audio' as const, required: false }]
+  const fields = [{ id: 'a', name: 'Items', field_type: 'array' }]
+  expect(mappingSampleValues(schema, fields, { answer: 'a' }, { a: '["one",["two"]]' })).toEqual({ answer: ['one', ['two']] })
+  expect(mappingSampleValues(schema, [{ ...fields[0], field_type: 'text' }], { answer: 'a' }, { a: '["one"]' })).toEqual({ answer: '["one"]' })
 })

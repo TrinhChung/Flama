@@ -402,7 +402,9 @@ class DeckAggregationServiceTests(unittest.TestCase):
             db.session.commit()
 
             with self.app.test_request_context():
-                rows, total_new, total_learn, total_due, admin_mode = build_dashboard_data(user)
+                rows, admin_mode = build_dashboard_data(user)
+                total_new = sum(row.new_count for row in rows)
+                total_due = sum(row.due_count for row in rows)
 
             self.assertFalse(admin_mode)
             owned_node = next((n for n in rows if n.deck_id == self.owned_deck_id), None)
@@ -523,7 +525,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             learner_user = db.session.get(User, self.learner_id)
             with self.app.test_request_context():
-                nodes, total_new, total_learn, total_due, _ = build_dashboard_data(learner_user)
+                nodes, _ = build_dashboard_data(learner_user)
 
             node_a = next(n for n in nodes if n.deck_id == local_a.id)
             node_b = next(n for n in nodes if n.deck_id == local_b.id)
@@ -533,13 +535,19 @@ class DeckAggregationServiceTests(unittest.TestCase):
             self.assertEqual(node_a.new_count, 2)
             self.assertEqual(node_a.due_count, 1)
             self.assertEqual(node_a.learn_count, 0)
-            self.assertEqual(node_a.note_type_id, "nt-author1")
 
             # Local B subtree (B, B1): total=2, new=1 (B), learn=1 (B1), due=0
             self.assertEqual(node_b.new_count, 1)
             self.assertEqual(node_b.learn_count, 1)
             self.assertEqual(node_b.due_count, 0)
-            self.assertEqual(node_b.note_type_id, "nt-author2")
+
+            # The tree carries only a deck's own type; the install's type is
+            # the fallback a new sub-deck reads on demand.
+            from app.services.deck_api_service import default_note_type_id
+            self.assertIsNone(node_a.note_type_id)
+            self.assertIsNone(node_b.note_type_id)
+            self.assertEqual(default_note_type_id(deck_id=local_a.id, user_id=self.learner_id, admin_mode=False), "nt-author1")
+            self.assertEqual(default_note_type_id(deck_id=local_b.id, user_id=self.learner_id, admin_mode=False), "nt-author2")
 
     def test_analytics_read_transaction_isolation_and_write_safety(self):
         """Test R5 & Open Issue 2: Verify analytics_read_transaction contract, dirty write rejection, and MySQL snapshot."""
@@ -665,7 +673,8 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             with self.app.test_request_context():
                 with patch("app.services.dashboard_service._utcnow", return_value=now_utc):
-                    rows, total_new, total_learn, total_due, _ = build_dashboard_data(user)
+                    rows, _ = build_dashboard_data(user)
+                    total_due = sum(row.due_count for row in rows)
                     # Should be due on today's study day because due_at is before tomorrow's 6 AM boundary!
                     self.assertEqual(total_due, 1)
 
@@ -998,7 +1007,9 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 self.assertEqual(metadata, {})
                 self.assertFalse(any("min(notes.created_at)" in sql for sql in statements))
 
-    def test_metadata_subset_preserves_oldest_note_and_owned_overlay_precedence(self):
+    def test_single_deck_metadata_preserves_oldest_note_and_owned_overlay_precedence(self):
+        from app.services.deck_aggregation_service import deck_note_type_metadata
+
         with self.app.app_context():
             today_day = self._install_overlay_with_source_card(note_type_id="install-type")
             self._create_note_and_cards(
@@ -1015,40 +1026,20 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 note_type_id="explicit-deck-type",
             )
             db.session.commit()
-            args = dict(
-                learner_user_id=self.learner_id,
+            _, expected_types = aggregate_deck_study_counts(
+                db.session, learner_user_id=self.learner_id,
                 visible_deck_ids=[self.owned_deck_id, self.local_deck_id],
                 today_day_index=today_day, day_cutoff_utc=_next_day_start(today_day),
                 count_by_note=True,
             )
-            expected, expected_types = aggregate_deck_study_counts(db.session, **args)
-            actual, metadata = aggregate_deck_study_counts(
-                db.session, **args,
-                note_type_deck_ids=[self.local_deck_id, self.source_deck_id],
+            metadata = deck_note_type_metadata(
+                db.session, learner_user_id=self.learner_id, deck_ids=[self.local_deck_id],
             )
-            self.assertEqual(actual, expected)
             self.assertEqual(metadata, {self.local_deck_id: "old-owned-type"})
             self.assertEqual(metadata[self.local_deck_id], expected_types[self.local_deck_id])
-
-    def test_empty_metadata_subset_skips_scan_and_overlay_fallback(self):
-        with self.app.app_context():
-            today_day = self._install_overlay_with_source_card()
-            statements = []
-            def capture(_conn, _cursor, statement, *_args):
-                statements.append(statement.lower())
-            event.listen(db.engine, "before_cursor_execute", capture)
-            try:
-                counts, metadata = aggregate_deck_study_counts(
-                    db.session, learner_user_id=self.learner_id,
-                    visible_deck_ids=[self.local_deck_id], today_day_index=today_day,
-                    day_cutoff_utc=_next_day_start(today_day), note_type_deck_ids=[],
-                )
-            finally:
-                event.remove(db.engine, "before_cursor_execute", capture)
-            self.assertEqual(counts[self.local_deck_id]["total"], 1)
-            self.assertEqual(metadata, {})
-            self.assertFalse(any("min(notes.created_at)" in sql for sql in statements))
-
+            self.assertEqual(deck_note_type_metadata(
+                db.session, learner_user_id=self.learner_id, deck_ids=[],
+            ), {})
 
 if __name__ == "__main__":
     unittest.main()

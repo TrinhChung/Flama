@@ -48,14 +48,9 @@ def _resolve_request_timezone() -> str:
 @analytics_bp.get("/dashboard")
 @login_required
 def dashboard():
-    compact = str(request.args.get("compact", "0")).strip().lower()
-    if compact not in {"0", "1", "false", "true"}:
-        return error_response(
-            "VALIDATION_ERROR", "compact must be a boolean.", status=400, field="compact"
-        )
     try:
         with analytics_read_transaction():
-            payload = build_dashboard_payload(current_user, compact=compact in {"1", "true"})
+            payload = build_dashboard_payload(current_user)
         return jsonify(payload)
     except AnalyticsSummaryNotReady as exc:
         return _summary_pending_response(exc)
@@ -79,6 +74,24 @@ def statistics_bootstrap():
             requested_deck_id=deck_id,
         )
     )
+
+
+# The heatmap reads only these; MCP keeps the builder's full shape.
+_OVERVIEW_DAY_KEYS = ("date", "cards", "minutes", "is_future")
+_OVERVIEW_METRIC_KEYS = (
+    "daily_average_cards", "days_learned_percent", "longest_streak_days", "current_streak_days",
+)
+
+
+def _overview_response(payload: dict) -> dict:
+    today = payload["today"]
+    return {
+        "year": payload["year"],
+        "timezone": payload["timezone"],
+        "today": {"date": today["date"], "cards": today["cards"], "minutes": today["minutes"]},
+        "heatmap": [{key: day[key] for key in _OVERVIEW_DAY_KEYS} for day in payload["heatmap"]],
+        "metrics": {key: payload["metrics"][key] for key in _OVERVIEW_METRIC_KEYS},
+    }
 
 
 @analytics_bp.get("/statistics/overview")
@@ -111,7 +124,7 @@ def statistics_overview():
             str(exc),
             status=409,
         )
-    return jsonify(payload)
+    return jsonify(_overview_response(payload))
 
 
 @analytics_bp.get("/statistics/today-future")

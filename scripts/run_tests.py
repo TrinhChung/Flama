@@ -273,26 +273,37 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/api/v1/learning/__init__.py",
             "app/api/v1/learning/browse.py",
             "app/services/browse_card_service.py",
+            "app/services/browse_note_service.py",
             "app/repositories/browse_card_repository.py",
+            "app/repositories/browse_note_repository.py",
             "app/repositories/logical_overlay_scope_repository.py",
             "app/presenters/vocabulary_presenter.py",
             "app/routes/vocabulary.py",
             "app/validators/browse_note.py",
+            "scripts/benchmark_browse_mysql.py",
             "frontend/src/features/browse/**",
+            "frontend/src/pages/browse/**",
         ],
         "backend_tests": [
             "tests/test_browse_query_bounds.py",
+            "tests/test_browse_baseline_tool.py",
+            "tests/test_browse_notes_mysql.py",
             "tests/test_flashcard_api_integration.py",
             "tests/test_flashcard_validation_security.py",
             "tests/test_rest_api_v1.py",
             "tests/test_study_note_overlay.py",
         ],
         "frontend_tests": [
+            "src/features/browse/api/browseApi.test.ts",
+            "src/features/browse/hooks/useBrowseState.test.tsx",
             "src/features/browse/components/BrowseCardTable.test.tsx",
             "src/features/browse/components/MediaFieldPreview.test.tsx",
             "src/features/browse/components/BrowseAudioSelectorModal.test.tsx",
             "src/features/browse/components/BrowsePagination.test.tsx",
-            "src/features/browse/pages/BrowsePage.test.tsx",
+            "src/pages/browse/ui/BrowsePage.test.tsx",
+            "src/pages/browse/ui/BrowsePage.contract.test.tsx",
+            "src/features/browse/components/BrowseStrokeModal.test.tsx",
+            "src/features/browse/components/BrowseTtsModal.test.tsx",
             "src/features/browse/services/strokeStorage.test.ts",
             "src/features/browse/services/ttsSettingsStorage.test.ts",
         ],
@@ -404,8 +415,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/probe_note_type_bundle_mysql.py",
             "scripts/probe_note_type_releases_mysql.py",
             "scripts/probe_template_pin_isolation_mysql.py",
+            "scripts/probe_template_bindings_mysql.py",
             "scripts/probe_template_sync_mysql.py",
             "app/validators/template_library.py",
+            "app/validators/template_preview.py",
             "models/template*.py",
             "models/study_template_preset.py",
             "models/deck_release_template_pin.py",
@@ -419,6 +432,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "frontend/src/shared/ui/SplitPane*",
             "frontend/src/shared/ui/WorkspaceLayout*",
             "frontend/src/features/note-types/**",
+            "frontend/src/pages/note-type-template-mapping/**",
             "frontend/src/features/template-library/**",
             "frontend/src/features/template-versions/**",
             "frontend/src/features/template-distribution/**",
@@ -440,6 +454,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_template_attachment_migration.py",
             "tests/test_template_distribution_migration.py",
             "tests/test_template_binding_service.py",
+            "tests/test_template_input_policy.py",
             "tests/test_template_library.py",
             "tests/test_template_library_fe_contract.py",
             "tests/test_template_release_service.py",
@@ -461,6 +476,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/entities/card-template/api/cardTemplateApi.test.ts",
             "src/entities/card-template/api/cardTemplateApi.adversarial.test.ts",
             "src/entities/card-template/lib/fieldMapping.test.ts",
+            "src/entities/card-template/lib/previewSamples.test.ts",
             "src/entities/card-template/lib/lineDiff.test.ts",
             "src/entities/card-template/ui/TemplateCodeEditor.test.tsx",
             "src/entities/card-template/ui/TemplateDiffView.test.tsx",
@@ -477,7 +493,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/template-library/components/TemplateApplicationsPanel.test.tsx",
             "src/features/template-library/lib/inputSchemaValidation.test.ts",
             "src/features/template-library/lib/templateInputReferences.test.ts",
-            "src/features/template-library/model/useTemplateLibraryEditor.test.tsx",
+            "src/features/template-library/hooks/useTemplateLibraryEditor.test.tsx",
             "src/features/template-library/pages/TemplateLibraryPage.test.tsx",
             "src/features/template-library/pages/TemplateDetailPage.test.tsx",
             "src/features/template-library/pages/TemplateLocalization.test.tsx",
@@ -490,7 +506,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/note-types/components/fields/FieldListCard.test.tsx",
             "src/features/note-types/components/fields/FieldEditorPreview.test.tsx",
             "src/features/note-types/hooks/useTemplateMappingDraft.test.ts",
-            "src/features/note-types/pages/NoteTypeTemplateMappingPage.test.tsx",
+            "src/pages/note-type-template-mapping/NoteTypeTemplateMappingPage.test.tsx",
             "src/shared/hooks/useUnsavedChangesGuard.test.tsx",
             "src/features/study/hooks/useStudySession.test.tsx",
             "src/features/study/pages/StudyPage.test.tsx",
@@ -529,6 +545,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "models/deck_release*.py",
             "models/deck_working_dirty_entity.py",
             "frontend/src/features/dashboard/**",
+            "frontend/src/pages/dashboard/**",
+            "frontend/src/entities/study-overview/**",
         ],
         "backend_tests": [
             "tests/test_deck_access_keys.py",
@@ -546,8 +564,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "frontend_tests": [
             "src/features/dashboard/components/DeckModals.test.tsx",
             "src/features/dashboard/components/DeckTree.test.tsx",
-            "src/features/dashboard/pages/DashboardPage.test.tsx",
             "src/features/dashboard/utils/deckNaming.test.ts",
+            "src/pages/dashboard/ui/DashboardPage.test.tsx",
+            "src/pages/dashboard/ui/DashboardPage.queries.test.tsx",
         ],
     },
     "deck_collaboration": {
@@ -785,6 +804,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "backend_tests": [
             "tests/test_deck_aggregation_service.py",
+            "tests/test_fixed_offset_timezones.py",
             "tests/test_note_analytics_read.py",
             "tests/test_note_stats_retirement.py",
             "tests/test_stats_overview.py",
@@ -814,6 +834,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/tts_*.py",
             "models/tts_*.py",
             "frontend/src/features/audio/**",
+            "frontend/src/entities/audio/**",
             "scripts/compare_tts_kokoro_vs_cosyvoice.py",
             "scripts/test_cosyvoice_synthesis.py",
         ],
@@ -959,6 +980,11 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/shared/ui/LanguageSwitcher.test.tsx",
         ],
     },
+    "test_coordination": {
+        "source_patterns": ["scripts/watch_test_coordination.py"],
+        "backend_tests": ["tests/test_watch_test_coordination.py"],
+        "frontend_tests": [],
+    },
     "tooling": {
         "source_patterns": [
             ".github/workflows/**",
@@ -1032,7 +1058,6 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/rest_api_service.py",
             "app/utils/__init__.py",
             "app/utils/db.py",
-            "app/utils/deck_move_token.py",
             "app/utils/logging_redactor.py",
             "app/utils/permissions.py",
             "app/utils/redirects.py",
@@ -1131,8 +1156,16 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "app/services/dashboard_service.py",
     "app/services/stats_overview.py",
     "app/repositories/note_analytics_read_repository.py",
+    "app/repositories/note_analytics_scope_repository.py",
+    "app/repositories/stats_query_repository.py",
+    "app/services/stats_today_future.py",
+    "app/repositories/browse_card_repository.py",
     "scripts/probe_p5_analytics_mysql.py",
+    "scripts/probe_note_analytics_mysql.py",
+    "scripts/probe_dashboard_due_counts_mysql.py",
     "tests/test_note_analytics_read.py",
+    "tests/test_note_stats_retirement.py",
+    "tests/test_stats_overview.py",
     "app/services/review_analytics_*.py",
     "app/repositories/review_analytics_*.py",
     "app/services/deck_count_*.py",
@@ -2071,6 +2104,35 @@ class _WindowsJob:
                 self.handle = None
 
 
+def _posix_process_group_alive(pgid: int) -> bool:
+    """Ignore Linux zombies: orphan reaping belongs to PID 1, not this runner."""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    if not sys.platform.startswith("linux"):
+        return True
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdecimal():
+            continue
+        try:
+            # comm may contain spaces and ')'; the final ')' ends that field.
+            fields = (entry / "stat").read_text(encoding="utf-8", errors="replace").rsplit(")", 1)[1].split()
+        except (FileNotFoundError, ProcessLookupError):
+            continue  # The process exited during this scan.
+        if int(fields[2]) == pgid and fields[0] not in {"Z", "X"}:
+            return True
+    return False
+
+
+def _wait_for_posix_process_group(pgid: int) -> None:
+    deadline = time.monotonic() + BACKEND_CLEANUP_TIMEOUT
+    while _posix_process_group_alive(pgid):
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"POSIX worker group {pgid} did not terminate")
+        time.sleep(0.01)
+
+
 def _terminate_process_tree(proc: subprocess.Popen) -> None:
     """Kill descendants even after the root exited, then reap the root."""
     job = getattr(proc, "_flama_job", None)
@@ -2104,6 +2166,10 @@ def _terminate_process_tree(proc: subprocess.Popen) -> None:
         proc.wait(timeout=BACKEND_CLEANUP_TIMEOUT)
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"worker {proc.pid} could not be reaped") from exc
+    if sys.platform != "win32" and getattr(proc, "_flama_session", False):
+        # killpg only queues the signal; reaping the root says nothing about
+        # descendants. Wait before reporting completion or deleting worker media.
+        _wait_for_posix_process_group(proc.pid)
     if cleanup_error is not None:
         raise RuntimeError(f"worker tree cleanup failed: {cleanup_error}") from cleanup_error
 

@@ -257,6 +257,9 @@ class NoteStatsRetirementTests(unittest.TestCase):
         db.session.execute(sa.insert(cutover_applications).values(application_id=self.own_app))
         db.session.commit()
         self.assertEqual(self._assert_collection_scope_parity(), {})
+        # An original Note without an alias has no Card in either unit.
+        self.assertEqual(self._aggregate([1])[1]["total"], 0)
+        self.assertEqual(self._aggregate([1], by_note=False)[1]["total"], 0)
 
         self._insert(PresentationAlias.__table__, id=str(uuid4()), note_id=self.own_note,
                      application_id=self.own_app, template_id=self.own_template,
@@ -286,8 +289,11 @@ class NoteStatsRetirementTests(unittest.TestCase):
                      application_id=application, template_id=template, created_at=NOW, updated_at=NOW)
         db.session.commit()
         self.assertEqual(self._assert_collection_scope_parity(), {})
+        # An alias of another note type's application proves no membership.
+        self.assertEqual(self._aggregate([1])[1]["total"], 0)
+        self.assertEqual(self._aggregate([1], by_note=False)[1]["total"], 0)
 
-    def test_forecast_reads_one_row_for_many_occurrences_and_preserves_card_units(self):
+    def test_forecast_reads_one_row_for_many_occurrences_in_the_counted_unit(self):
         from app.repositories.stats_query_repository import query_consolidated_forecast_rows
         for _ in range(20):
             self._insert(StudyApplication, id=str(uuid4()), note_type_id=self.own_type,
@@ -295,19 +301,23 @@ class NoteStatsRetirementTests(unittest.TestCase):
                          status_code="ACTIVE", created_at=NOW, updated_at=NOW)
         db.session.commit()
         self.assertEqual(self._assert_collection_scope_parity()[self.own_note], 21)
-        fetched = query_consolidated_forecast_rows(user_id=1, scope_deck_ids=[1])
-        self.assertEqual(len(fetched), 1)
-        self.assertEqual(fetched[0][-1], 21)
-        rows, load = _consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1])
-        self.assertEqual(len(rows), 1)
-        self.assertAlmostEqual(load, 2.1)
-        by_day, _ = _aggregate_future_due_python(rows=rows, timezone_name="UTC",
-            today_local=date.fromordinal(DAY), backlog=False, end_offset=29, day_boundary_hour_local=0)
-        self.assertEqual(by_day[0]["due_count"], 21)
-        due = _canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
-            start_utc=NOW.replace(hour=0), end_utc=NOW + timedelta(days=30),
-            day_boundary_hour_local=0, storage_profile="CONSOLIDATED_V1")
-        self.assertEqual(due, {date.fromordinal(DAY): 21})
+        # The 21 Cards share one state: one answer under Note-unit counting (D6-04).
+        for by_note, weight in ((False, 21), (True, 1)):
+            with self.subTest(by_note=by_note):
+                self.app.config["STUDY_NOTE_COUNT_ENABLED"] = by_note
+                fetched = query_consolidated_forecast_rows(user_id=1, scope_deck_ids=[1])
+                self.assertEqual(len(fetched), 1)
+                self.assertEqual(fetched[0][-1], weight)
+                rows, load = _consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1])
+                self.assertEqual(len(rows), 1)
+                self.assertAlmostEqual(load, weight / 10)
+                by_day, _ = _aggregate_future_due_python(rows=rows, timezone_name="UTC",
+                    today_local=date.fromordinal(DAY), backlog=False, end_offset=29, day_boundary_hour_local=0)
+                self.assertEqual(by_day[0]["due_count"], weight)
+                due = _canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
+                    start_utc=NOW.replace(hour=0), end_utc=NOW + timedelta(days=30),
+                    day_boundary_hour_local=0, storage_profile="CONSOLIDATED_V1")
+                self.assertEqual(due, {date.fromordinal(DAY): weight})
 
     def test_collection_unions_disjoint_release_pins_instead_of_max_or_sum(self):
         self._clone()

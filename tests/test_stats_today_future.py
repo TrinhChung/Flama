@@ -228,7 +228,7 @@ class StatsTodayFutureTests(unittest.TestCase):
 
         self._login()
         response = self.client.get(
-            f"/api/stats/today-future?scope=deck&deck_id={self.deck_id}&history_range=12m&future_range=30&backlog=false"
+            f"/api/statistics/today-future?scope=deck&deck_id={self.deck_id}&history_range=12m&future_range=30&backlog=false"
         )
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()

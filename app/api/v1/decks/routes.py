@@ -55,6 +55,20 @@ def create_deck():
     ), 201 if result.created_count else 200
 
 
+@decks_bp.get("/<int:deck_id>/note-type")
+@login_required
+def deck_default_note_type(deck_id: int):
+    try:
+        note_type_id = deck_api_service.default_note_type_id(
+            deck_id=deck_id,
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+        )
+    except deck_api_service.DeckApiError as exc:
+        return _service_error(exc)
+    return jsonify({"note_type_id": note_type_id})
+
+
 @decks_bp.patch("/<int:deck_id>")
 @admin_required
 def update_deck(deck_id: int):
@@ -69,7 +83,6 @@ def update_deck(deck_id: int):
         result = deck_api_service.update_deck(
             deck_id=deck_id,
             payload=payload,
-            user_id=current_user.id,
         )
     except deck_api_service.DeckApiError as exc:
         return _service_error(exc)

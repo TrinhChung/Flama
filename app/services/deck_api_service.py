@@ -10,7 +10,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.repositories import flashcards_share_repository, vocabulary_repository
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services import deck_management_service, flashcards_share_service
-from app.utils.deck_move_token import parse_deck_move_token
 from models import db
 from models.deck import Deck
 
@@ -152,7 +151,6 @@ def update_deck(
     *,
     deck_id: int,
     payload: dict[str, Any],
-    user_id: int | None = None,
 ) -> DeckUpdateResult:
     deck = db.session.get(Deck, deck_id)
     if deck is None or deck.deleted_at is not None:
@@ -187,24 +185,8 @@ def update_deck(
             deck.name = new_name
             changed = True
 
-    if "parent_id" in payload or "parent_token" in payload:
-        parent_token_raw = str(payload.get("parent_token") or "").strip()
-        if parent_token_raw:
-            new_parent_id = parse_deck_move_token(
-                parent_token_raw,
-                user_id=user_id,
-            )
-            if new_parent_id is None:
-                raise DeckApiError(
-                    "VALIDATION_ERROR",
-                    "Parent move token is invalid or expired.",
-                    status=400,
-                    field="parent_token",
-                )
-        elif "parent_id" in payload:
-            new_parent_id = _parse_parent_id(payload.get("parent_id"))
-        else:
-            new_parent_id = None
+    if "parent_id" in payload:
+        new_parent_id = _parse_parent_id(payload.get("parent_id"))
         new_parent = (
             db.session.get(Deck, new_parent_id) if new_parent_id else None
         )
@@ -335,6 +317,27 @@ def reset_deck_progress(
             "Could not reset deck progress.",
             status=500,
         ) from exc
+
+
+def default_note_type_id(*, deck_id: int, user_id: int, admin_mode: bool) -> str | None:
+    """Note type a new sub-deck of ``deck_id`` inherits, as the dashboard chose it.
+
+    The deck's own note type, else the type of its oldest owned Note, else its
+    logical-overlay install's source type (not for admins). Read on demand by
+    the create-deck dialog instead of for every deck on each dashboard load.
+    """
+    from app.repositories.deck_tree_query import collect_accessible_decks
+    from app.services.deck_aggregation_service import deck_note_type_metadata
+
+    deck = next((item for item in collect_accessible_decks(user_id=user_id, admin_mode=admin_mode)
+                 if item.id == deck_id), None)
+    if deck is None:
+        raise DeckApiError("NOT_FOUND", "Deck not found.", status=404)
+    if deck.note_type_id:
+        return str(deck.note_type_id)
+    return deck_note_type_metadata(
+        db.session, learner_user_id=user_id, deck_ids=[deck_id], admin_mode=admin_mode,
+    ).get(deck_id)
 
 
 def _parse_parent_id(raw_parent_id: Any) -> int | None:

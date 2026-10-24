@@ -129,9 +129,9 @@ def resolve_review_analytics_policy(session, user_id: int) -> ReviewAnalyticsPol
 
 
 def uses_mysql_day_sql(policy: ReviewAnalyticsPolicy, dialect_name: str) -> bool:
-    from app.repositories.stats_query_repository import MYSQL_FIXED_OFFSET_MINUTES
+    from app.repositories.stats_query_repository import fixed_utc_offset_minutes
 
-    return dialect_name == "mysql" and policy.timezone_name.upper() in MYSQL_FIXED_OFFSET_MINUTES
+    return dialect_name == "mysql" and fixed_utc_offset_minutes(policy.timezone_name) is not None
 
 
 def passed_count_for_policy(

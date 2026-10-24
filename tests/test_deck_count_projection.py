@@ -13,7 +13,7 @@ from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts
 from app.services.field_value_identity_service import FieldIdentityError
 from models import db
 from models.card import Card, PresentationAlias, cutover_notes
-from tests.study_note_fixtures import attach_template, enroll_note_user
+from tests.study_note_fixtures import attach_template, dashboard_totals, enroll_note_user
 from tests.note_progress_fixtures import stage_note_state
 from models.deck import Deck
 from models.deck_count_snapshot import DeckCountContentRevision, DeckCountLearnerRevision
@@ -326,19 +326,20 @@ class DeckCountProjectionTests(unittest.TestCase):
         db.session.commit()
         self.assertEqual(self._revisions(), ({}, {}))
 
-    def _dashboard(self):
+    def _dashboard(self, path="/api/dashboard"):
         # Each HTTP request has its own app context, as in production. Reusing
         # the fixture's outer context would retain Flask-Login's cached user.
         with self.app.app_context(), self.app.test_client() as client:
             with client.session_transaction() as session:
                 session["_user_id"] = str(self.user_id)
                 session["_fresh"] = True
-            response = client.get("/api/dashboard?compact=1")
+            response = client.get(path)
             self.assertEqual(response.status_code, 200, response.get_json())
             return response.get_json()
 
-    def test_dashboard_summary_hit_preserves_raw_metadata_and_has_no_dml(self):
-        # Deck.note_type_id is NULL, so cached counters still need oldest-Note metadata.
+    def test_dashboard_summary_hit_matches_raw_and_has_no_dml(self):
+        # Deck.note_type_id is NULL: the tree sends none, and the on-demand
+        # fallback still reads the oldest Note when counters come from the cache.
         before = self._dashboard()
         db.session.remove()
         warmed = prewarm_owned_deck_counts(user_id=self.user_id)
@@ -359,7 +360,9 @@ class DeckCountProjectionTests(unittest.TestCase):
         finally:
             event.remove(db.engine, "before_cursor_execute", capture)
         self.assertEqual(after, before)
-        self.assertTrue(all(row["note_type_id"] == self.note_type_id for row in after["items"]))
+        self.assertTrue(all(row["note_type_id"] is None for row in after["items"]))
+        self.assertEqual(self._dashboard(f"/api/decks/{self.deck_ids[0]}/note-type"),
+                         {"note_type_id": self.note_type_id})
         self.assertEqual(mutations, [])
         # A committed availability change must turn only that cache entry into raw fallback.
         db.session.add(stage_note_state(db.session, user_id=self.user_id, card_id=self.card_ids[0], queue="learning"))
@@ -368,7 +371,7 @@ class DeckCountProjectionTests(unittest.TestCase):
                    wraps=aggregate_deck_study_counts) as aggregate:
             updated = self._dashboard()
         self.assertEqual(aggregate.call_args.kwargs["visible_deck_ids"], [self.deck_ids[0]])
-        self.assertEqual(updated["summary"]["learning"], 1)
+        self.assertEqual(dashboard_totals(updated)["learning"], 1)
         self.app.config["DECK_COUNT_READ_MODE"] = "raw"
         self.assertEqual(updated, self._dashboard())
 
@@ -394,7 +397,7 @@ class DeckCountNotePipelineTests(unittest.TestCase):
     def _dashboard(self, dirty_ids):
         with patch("app.services.dashboard_service.aggregate_deck_study_counts",
                    wraps=aggregate_deck_study_counts) as aggregate:
-            response = self.fixture.client.get("/api/dashboard?compact=1")
+            response = self.fixture.client.get("/api/dashboard")
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(aggregate.call_args.kwargs["visible_deck_ids"], dirty_ids)
         return response.get_json()
@@ -404,11 +407,11 @@ class DeckCountNotePipelineTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(prewarm_owned_deck_counts(user_id=fixture.user_id)["published"], 1)
         pristine = self._dashboard([])
-        self.assertEqual(pristine["summary"]["new"], 2)
+        self.assertEqual(dashboard_totals(pristine)["new"], 2)
         fixture.payload["rating"] = "again"
         fixture._answer()
         updated = self._dashboard([fixture.deck_id])
-        self.assertEqual((updated["summary"]["new"], updated["summary"]["learning"]), (0, 2))
+        self.assertEqual((dashboard_totals(updated)["new"], dashboard_totals(updated)["learning"]), (0, 2))
         with self.app.app_context():
             revisions = dict(db.session.execute(select(
                 DeckCountLearnerRevision.effective_deck_id, DeckCountLearnerRevision.revision)

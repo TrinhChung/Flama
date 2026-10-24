@@ -16,6 +16,7 @@ export interface UseWorksheetWizardProps {
   deckId?: number | null
   deckName?: string
   initialCardIds?: (string | number)[]
+  selectionKind?: 'card' | 'note'
   initialStep?: WizardStepId
 }
 
@@ -24,7 +25,7 @@ function initialStepFor(deckId: number | null, initialStep?: WizardStepId): Wiza
 }
 
 /** Deck → mapping → template → studio flow, including deck metadata loading. */
-export function useWorksheetWizard({ deckId, deckName, initialCardIds, initialStep }: UseWorksheetWizardProps) {
+export function useWorksheetWizard({ deckId, deckName, initialCardIds, selectionKind, initialStep }: UseWorksheetWizardProps) {
   const [currentDeckId, setCurrentDeckId] = useState<number | null>(deckId || null)
   const [isStandalone, setIsStandalone] = useState<boolean>(!deckId)
   const [wizardStep, setWizardStep] = useState<WizardStepId>(() => initialStepFor(deckId || null, initialStep))
@@ -39,6 +40,7 @@ export function useWorksheetWizard({ deckId, deckName, initialCardIds, initialSt
     currentDeckId,
     deckName,
     initialCardIds,
+    selectionKind,
     meta,
     initialTemplateId: defaultTemplateIdFor(deckId),
     selectedNoteTypeId,

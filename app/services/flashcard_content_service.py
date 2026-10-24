@@ -1091,13 +1091,15 @@ def preview_raw_template(
 
         supplied_value = raw_field_values.get(name)
         if supplied_value is not None:
-            if not isinstance(supplied_value, str) or len(supplied_value) > 100_000:
+            from app.validators.template_preview import preview_field_value
+            from app.validators.flashcard_input import RequestValidationError
+            try:
+                supplied_value, supplied_chars = preview_field_value(supplied_value, field_name=name)
+            except RequestValidationError as exc:
                 raise ContentApiError(
-                    "VALIDATION_ERROR",
-                    f"field_values.{name} must be a string no longer than 100000 characters.",
-                    field=f"field_values.{name}",
-                )
-            total_supplied_chars += len(supplied_value)
+                    "VALIDATION_ERROR", str(exc), field=f"field_values.{name}",
+                ) from exc
+            total_supplied_chars += supplied_chars
             if total_supplied_chars > 250_000:
                 raise ContentApiError(
                     "VALIDATION_ERROR",
@@ -1105,6 +1107,10 @@ def preview_raw_template(
                     field="field_values",
                 )
             sample_values[name] = supplied_value
+            if isinstance(supplied_value, list):
+                # A template hint must not stringify a native list as Markdown
+                # or turn it into media HTML before its script can handle it.
+                f_def.field_type = "array"
         elif field_type == "image":
             sample_values[name] = PREVIEW_MEDIA_IMAGE_TOKEN
         elif field_type == "audio":

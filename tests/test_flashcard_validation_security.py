@@ -769,7 +769,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         colls = (detail.get("field_values") or {}).get("Collocations")
         self.assertEqual(colls, ["<b>Tokyo tower</b>", "<i>central Tokyo</i>", '<span style="color:red;">metropolis</span>'])
 
-        # String input with <br> splits into array items preserving safe HTML
+        # Direct writes must send a list; text import conversion is separate.
         str_resp = self.client.post(
             "/api/notes",
             json={
@@ -781,11 +781,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
                 },
             },
         )
-        self.assertEqual(str_resp.status_code, 201, str_resp.get_json())
-        str_id = str_resp.get_json()["id"]
-        str_detail = self.client.get(f"/api/notes/{str_id}").get_json()
-        str_colls = (str_detail.get("field_values") or {}).get("Collocations")
-        self.assertEqual(str_colls, ["<b>Osaka castle</b>", "great food", "<i>Kansai</i>"])
+        self.assertEqual(str_resp.status_code, 400, str_resp.get_json())
 
         # Malicious payloads are rejected
         for malicious in (

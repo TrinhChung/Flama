@@ -3,14 +3,16 @@
 Dashboard, overview and queue counts read each Note's availability from its
 ``study_progress_subjects`` row in one consistent snapshot. Nothing here
 locks, writes or materializes state, so these reads may run inside
-``analytics_read_transaction()``. Cheap envelope identity and presence checks
-can share required aggregates. The offline audit re-derives whole-store
-availability and hashes from state; Browse validates its returned page fully.
+``analytics_read_transaction()``. Unreadable evidence fails closed through
+:func:`guard_scope`, which the shared scope builders run before returning a
+scope; metric queries carry no integrity column. The offline audit
+re-derives whole-store availability and hashes from state; Browse validates
+its returned page fully.
 """
 
 from __future__ import annotations
 
-from sqlalchemy import LargeBinary, and_, case, cast, literal, null, or_, select
+from sqlalchemy import LargeBinary, and_, case, cast, func, literal, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from models.card import Card
@@ -34,6 +36,7 @@ _VIOLATION_MESSAGES = {
     "INCOMPLETE_AUTHORITY_COMPATIBILITY": "NOTE analytics has no complete contributor/availability/compatibility vector.",
     "AUTHORITY_READ_PARITY_DIVERGED": "NOTE availability or compatibility linkage differs from current state.",
 }
+_UNREADABLE_STATUSES = ("TOMBSTONED_RESET", "TOMBSTONED_SUBJECT_DELETED", "REKEYED_CLONE_CUTOVER")
 
 
 def violation_error(rank: int | None) -> tuple[str, str] | None:
@@ -45,14 +48,18 @@ def violation_error(rank: int | None) -> tuple[str, str] | None:
     return code, _VIOLATION_MESSAGES[code]
 
 
-def subject_integrity_violation(subject, *, note_id, learner_user_id: int):
-    """Cheap identity/presence guard folded into an existing aggregate.
+def raise_for_violation(rank: int | None) -> None:
+    """Raise ``StudyAuthorityReadError`` for a non-zero violation rank."""
 
-    This does not re-decode every state payload or recompute hashes. The
-    canonical writer owns availability; full state/hash validation is bounded
-    to returned rows, and the read-only retirement audit checks whole stores.
-    A detached or partial envelope must never silently count as pristine.
-    """
+    error = violation_error(rank)
+    if error is not None:
+        from app.services.study_authority_read_service import StudyAuthorityReadError
+
+        raise StudyAuthorityReadError(*error)
+
+
+def _progress_shape_defect(subject):
+    """Rank-1 shape: state without full progress, or progress/status without state."""
 
     from app.services.study_progress_contract import (
         SUBJECT_AVAILABILITY_NULLABLE_COLUMNS, SUBJECT_PROGRESS_COLUMNS,
@@ -62,6 +69,20 @@ def subject_integrity_violation(subject, *, note_id, learner_user_id: int):
     absent = and_(*(getattr(subject, key).is_(None) for key in (
         *SUBJECT_PROGRESS_COLUMNS, *SUBJECT_AVAILABILITY_NULLABLE_COLUMNS,
     )))
+    return or_(and_(subject.semantic_state_hash.isnot(None), ~present),
+               and_(subject.semantic_state_hash.is_(None),
+                    or_(~absent, subject.status_code != 'NO_CURRENT_PROGRESS')))
+
+
+def subject_integrity_violation(subject, *, note_id, learner_user_id: int):
+    """Cheap identity/presence check of one Note's evidence (the violation rank).
+
+    This does not re-decode every state payload or recompute hashes. The
+    canonical writer owns availability; full state/hash validation is bounded
+    to returned rows, and the read-only retirement audit checks whole stores.
+    A detached or partial envelope must never silently count as pristine.
+    """
+
     # The canonical logical-key join cannot see a row whose key was damaged.
     # A second indexed live-Note probe catches that relevant evidence even
     # when the canonical envelope is absent, without an OR join/full scan.
@@ -75,61 +96,84 @@ def subject_integrity_violation(subject, *, note_id, learner_user_id: int):
         (subject.id.is_(None), 0),
         (or_(subject.live_note_id.is_(None), subject.live_note_id != note_id,
              subject.logical_note_key != cast(note_id, LargeBinary),
-             subject.status_code.in_(['TOMBSTONED_RESET', 'TOMBSTONED_SUBJECT_DELETED',
-                                     'REKEYED_CLONE_CUTOVER'])), 2),
-        (or_(and_(subject.semantic_state_hash.isnot(None), ~present),
-             and_(subject.semantic_state_hash.is_(None),
-                  or_(~absent, subject.status_code != 'NO_CURRENT_PROGRESS'))), 1),
+             subject.status_code.in_(_UNREADABLE_STATUSES)), 2),
+        (_progress_shape_defect(subject), 1),
         else_=0,
     )
 
 
-def note_card_rows(scope, *, learner_user_id: int, storage_profile: str | None = None):
-    """Each Note row's availability for each Card in ``scope``.
+def evidence_candidate_note_ids(session: Session, *, learner_user_id: int) -> list[str]:
+    """Notes whose evidence :func:`subject_integrity_violation` could flag.
 
-    ``scope`` is a subquery exposing ``deck_id``, ``card_id`` and ``note_id``.
-    A Note without current state (pristine) yields NULL availability and reads
-    as NEW, exactly like the locking reader.
+    One scan of the learner's rows, usually empty. Every row condition of the
+    violation CASE is matched on the row itself; a row whose live pointer and
+    logical key differ is the ``wrong_live_identity`` evidence of its live
+    Note. Both keys of a matching row are candidates. A superset: the scope
+    decides whether a candidate is read at all (a tombstone of a deleted Note
+    is in no scope).
     """
 
+    subject = StudyProgressSubject
+    rows = session.execute(select(subject.logical_note_key, subject.live_note_id).where(
+        subject.learner_user_id == int(learner_user_id),
+        or_(
+            subject.live_note_id.is_(None),
+            subject.logical_note_key != cast(subject.live_note_id, LargeBinary),
+            subject.status_code.in_(_UNREADABLE_STATUSES),
+            _progress_shape_defect(subject),
+        ),
+    )).all()
+    candidates = set()
+    for logical_key, live_note_id in rows:
+        if live_note_id:
+            candidates.add(str(live_note_id))
+        try:
+            candidates.add(bytes(logical_key).decode("utf-8"))
+        except UnicodeDecodeError:
+            pass  # Not a Note ID; only its live pointer can be read.
+    return sorted(candidates)
+
+
+def guard_scope(session: Session, *, learner_user_id: int, build) -> None:
+    """Fail closed when a Note of a scope has unreadable evidence.
+
+    ``build(note_ids)`` returns the caller's scope, restricted to ``note_ids``
+    when given. The worst rank over the candidate Notes inside that exact
+    scope equals the per-Note rank of the whole scope, because every other
+    Note is clean. Run it in the same read snapshot as the metric query.
+    """
+
+    note_ids = evidence_candidate_note_ids(session, learner_user_id=learner_user_id)
+    if not note_ids:
+        return
+    scope = build(note_ids=note_ids)
     subject = aliased(StudyProgressSubject)
-    stateful = subject.semantic_state_hash.isnot(None)
-    return (
-        select(
-            scope.c.deck_id.label("deck_id"),
-            scope.c.card_id.label("card_id"),
-            scope.c.note_id.label("note_id"),
-            case((stateful, subject.id), else_=null()).label("state_subject_id"),
-            subject.normalized_queue.label("queue"),
-            subject.due_day.label("due_day"),
-            subject.due_at.label("due_at"),
-            subject.is_suspended.label("is_suspended"),
-            subject.is_buried.label("is_buried"),
-            subject.buried_until_day.label("buried_until_day"),
-            subject_integrity_violation(subject, note_id=scope.c.note_id,
-                                        learner_user_id=learner_user_id).label("violation"),
-        )
+    worst = session.execute(
+        select(func.max(subject_integrity_violation(
+            subject, note_id=scope.c.note_id, learner_user_id=learner_user_id,
+        )))
         .select_from(scope)
         .outerjoin(subject, and_(
             subject.learner_user_id == int(learner_user_id),
             subject.logical_note_key == cast(scope.c.note_id, LargeBinary),
         ))
-    )
+        .execution_options(include_retired_cards=True)
+    ).scalar()
+    raise_for_violation(worst)
 
 
 def note_rows(scope, *, learner_user_id: int, include_state: bool = False):
     """Availability once per scoped Note; Card metrics carry a multiplicity.
 
-    Both identity probes are retained. A live-key match alone is not equivalent
-    to the canonical logical-key join when historical evidence is damaged.
+    ``scope`` must come from a guarded builder (``deck_note_scope``,
+    ``collection_note_scope`` or :func:`learner_note_scope`), which already
+    failed closed on unreadable evidence.
     """
     subject = aliased(StudyProgressSubject)
     columns = [
         scope.c.deck_id, scope.c.note_id, scope.c.card_count,
         subject.normalized_queue.label("queue"), subject.due_day, subject.due_at,
         subject.is_suspended, subject.is_buried, subject.buried_until_day,
-        subject_integrity_violation(subject, note_id=scope.c.note_id,
-                                    learner_user_id=learner_user_id).label("violation"),
     ]
     if include_state:
         columns.extend([
@@ -142,34 +186,36 @@ def note_rows(scope, *, learner_user_id: int, include_state: bool = False):
     ))
 
 
-def subject_vector_violation(session: Session, *, scope, learner_user_id: int, storage_profile: str | None = None) -> int:
-    """Former I5 (contributor coverage): Cards carry no progress any more."""
-
-    return 0
-
-
-def learner_note_scope(*, learner_user_id: int, storage_profile: str | None = None):
-    """Visible owned/install Notes whose live Note holds current state.
+def learner_note_scope(*, learner_user_id: int, storage_profile: str | None = None,
+                       presence_only: bool = False):
+    """Visible owned/install Notes whose live Note holds current state (guarded).
 
     The shared scope preserves release-pinned retired applications and local
     added Notes. An outer ORM statement embedding this scope must retain
     ``include_retired_cards=True``; its owned branch explicitly selects ACTIVE
-    applications, while the overlay branch enforces its release pin.
+    applications, while the overlay branch enforces its release pin. The guard
+    covers this state-filtered scope: a detached subject's Note is not in it.
+    ``presence_only`` is for readers that weigh each Note once.
     """
 
     from models import db
-    from app.repositories.note_analytics_scope_repository import collection_note_scope
+    from app.repositories.note_analytics_scope_repository import collection_note_scope_query
 
-    scope = collection_note_scope(db.session, learner_user_id=learner_user_id)
-    # A bounded scalar presence probe has the same semantics as EXISTS. It
-    # prevents MySQL's semijoin rewrite from placing application counts before
-    # the Note join (measured 31 x 39k intermediate rows on the production set).
-    state = select(literal(1)).where(
-        StudyProgressSubject.learner_user_id == int(learner_user_id),
-        StudyProgressSubject.live_note_id == scope.c.note_id,
-        StudyProgressSubject.semantic_state_hash.isnot(None),
-    ).correlate(scope).limit(1).scalar_subquery().isnot(None)
-    return select(scope.c.deck_id, scope.c.note_id, scope.c.card_count).where(state).subquery("learner_note_scope")
+    def build(note_ids=None):
+        scope = collection_note_scope_query(db.session, learner_user_id=learner_user_id, note_ids=note_ids,
+                                            presence_only=presence_only)
+        # A bounded scalar presence probe has the same semantics as EXISTS. It
+        # prevents MySQL's semijoin rewrite from placing application counts before
+        # the Note join (measured 31 x 39k intermediate rows on the production set).
+        state = select(literal(1)).where(
+            StudyProgressSubject.learner_user_id == int(learner_user_id),
+            StudyProgressSubject.live_note_id == scope.c.note_id,
+            StudyProgressSubject.semantic_state_hash.isnot(None),
+        ).correlate(scope).limit(1).scalar_subquery().isnot(None)
+        return select(scope.c.deck_id, scope.c.note_id, scope.c.card_count).where(state).subquery("learner_note_scope")
+
+    guard_scope(db.session, learner_user_id=learner_user_id, build=build)
+    return build()
 
 
 def consolidated_card_rows(card_query, *, learner_user_id: int):

@@ -542,3 +542,50 @@ Lượt 2 (cùng model và chế độ, trên commit `a1f08cda`): reviewer xác 
 | P2: FIX-01 và PR B cùng sửa `ci.yml`, rebase dễ mất cấu hình của một bên | Bổ sung chỉ dẫn hợp nhất và các test phải chạy lại vào mục 8 bước 3 |
 | P3: `shlex.split` kiểu POSIX nuốt `\` trong đường dẫn Windows của `--probe` | Sửa: chuẩn hoá `\` thành `/` trước khi tách (`72ce0f5c`, có test) |
 | P3: hash mốc hosted có thể khác hash local vì khác nền tảng | Sửa gate "PR B, mốc" ở 12.3: so bằng script, hash hosted là chuẩn cho các lượt hosted |
+
+### 12.5 Kết quả nghiệm thu hosted PR B (2026-10-23, Claude Code)
+
+Bốn lượt `workflow_dispatch` với `validation_scope=backend` chạy trên tag tạm `bench/prb-f140c0f8`, tức `f140c0f8` (master); tag đã xoá sau đo. Một lượt seed 1 chạy trùng do lỗi điều phối của script dispatch nên có thêm mẫu thứ hai. Tổng khoảng 54 phút tính tiền (job làm tròn), 0 artifact.
+
+| Lượt | Run | Bước backend | Job | Kết quả |
+| --- | --- | ---: | ---: | --- |
+| Mốc `jobs=1` | [39949971329](https://github.com/TrinhChung/Flama/actions/runs/39949971329) | 944,3 s | 967 s | PASS 2.740 tests, 9 skip |
+| `jobs=2` seed 1 | [39951999818](https://github.com/TrinhChung/Flama/actions/runs/39951999818) | 314,0 s | 334 s | **FAIL 1**: `test_parallel_backend_runner…test_exited_successful_root_cannot_leave_descendant_alive` |
+| `jobs=2` seed 1 (lặp) | [39952110786](https://github.com/TrinhChung/Flama/actions/runs/39952110786) | 548,3 s | 566 s | PASS |
+| `jobs=2` seed 2 | [39952779623](https://github.com/TrinhChung/Flama/actions/runs/39952779623) | 296,2 s | 312 s | PASS |
+| `jobs=2` seed 3 | [39954752393](https://github.com/TrinhChung/Flama/actions/runs/39954752393) | 526,5 s | 547 s | PASS |
+
+Parity: `[SELECTION]` (253 file) và các nhóm `loaded`/`started`/`finished` trùng hash ở mọi lượt; `outcome` và danh sách skip của ba lượt pass trùng mốc. Baseline tuần tự local (Windows, cùng commit) trùng tập case; khác biệt chỉ do nền tảng: Linux skip hai test Windows Job Object, Windows skip một test tín hiệu POSIX (test này tạo hai subtest trên Linux, nên 1.620 so với 1.618). Hash nhóm `subtest` khác ở mọi lượt dù cùng 1.620: sáu test đặt tham số subtest bằng `uuid4` hoặc PID sinh lúc chạy (`test_flama_connect`, `test_scalability_qualification`, `test_study_note_batch` ×2, `test_study_note_templates`, `test_study_template_application_sessions`), xác nhận bằng hai lượt local với `PYTHONHASHSEED` khác nhau. Không mất case, nhưng gate subtest theo hash hiện không thể đạt.
+
+Thời gian: bước backend giảm 42–69% (296–548 s so với 944 s), dao động lớn giữa các lượt. Runner không in RAM nên gate tài nguyên chưa có số đo; không có worker bị kill hoặc timeout.
+
+**Kết luận: chưa nghiệm thu, giữ `jobs=1`.** Ba việc cần làm trước lượt đo lại:
+
+1. Runner: `_terminate_process_tree` trên POSIX gửi `killpg(SIGKILL)` rồi trả về ngay, không chờ group hết process sống như nhánh Windows (`ActiveProcesses == 0`). Lúc runner tải nặng, con cháu còn sống vài ms sau khi bin kết thúc; seed 1 bắt đúng khoảng này (1/4 lượt song song).
+2. Thứ tự test: `tests.test_flama_connect` fail khi chạy riêng (`no such table: template_sync_jobs`, ví dụ `test_clone_checks_batch_pinned_release_and_overlay_without_source_live`). `create_connect_app()` không import `models.template_sync_job` (chỉ `create_app()` import ở `app/__init__.py:138`), nên `db.create_all()` thiếu bảng. Trong suite tuần tự file này pass nhờ module chạy trước đã gọi `create_app()`; một cách chia bin khác đã làm lộ lỗi ở lượt local `jobs=2`.
+3. Manifest: so `subtest` theo `parent_id`, số lượng và outcome thay vì theo ID đầy đủ, hoặc đổi sáu test sang nhãn subtest ổn định. Không được bỏ nhóm này khỏi gate.
+
+Sau ba sửa này, lặp lại 12.3 (một mốc, ba seed) và thêm đo RAM đỉnh của runner trong bước backend.
+
+### 12.6 Sửa ba blocker PR B và kiểm chứng local (2026-10-23, Codex)
+
+Bản sửa được rà soát để commit local theo yêu cầu owner; chưa push. Giữ nguyên bằng chứng hosted ở 12.5 và mặc định CI `jobs=1`.
+
+- **Cleanup POSIX:** sau `killpg(SIGKILL)` và reap root, chờ process group không còn process sống trong `BACKEND_CLEANUP_TIMEOUT`. Linux đọc `/proc/*/stat`, bỏ qua zombie/dead (`Z`/`X`) vì runner không thể reap orphan do PID 1 sở hữu; group còn sống quá hạn làm bin fail. Không báo bin hoàn tất hoặc xoá media trước khi chờ xong. Có test root đã thoát nhưng con còn sống, group quá hạn, zombie/process khác group/process biến mất, và nhiều worker thật cùng để lại con.
+- **Connect độc lập:** `_register_models()` đăng ký `TemplateSyncJob`. Đã tái hiện lỗi `no such table: template_sync_jobs` bằng cách chạy riêng `tests/test_flama_connect.py` trước sửa; sau sửa 35 cases pass trong worker riêng. Test mới import entry point `connect_wsgi.py` trong interpreter mới, chặn main factory và `db.create_all()`, kiểm tra metadata/healthz để không bị thứ tự import trong suite che lỗi. Kiểm chứng riêng trên MySQL local: cold `connect_wsgi.py`, `SELECT 1`, `SELECT id FROM template_sync_jobs LIMIT 0`, `/healthz` đều pass, không sửa schema/data.
+- **Manifest:** đổi đúng sáu test ở 12.5 sang nhãn subtest cố định, giữ nguyên UUID/PID và payload trong dữ liệu test. Không đổi schema, comparator hoặc giảm độ chặt của hash; vẫn so đầy đủ ID, parent, số lần, outcome và skip reason.
+
+Nhóm kiểm chứng gồm 10 file: `test_parallel_backend_runner`, `test_unittest_manifest`, `test_modular_test_runner`, `test_ci_workflow`, `test_test_mapping_coverage`, `test_flama_connect`, `test_scalability_qualification`, `test_study_note_batch`, `test_study_note_templates`, `test_study_template_application_sessions` (đều dưới `tests/`). Chạy bằng `scripts/run_tests.py --file ... --backend-only --bin-timeout 180 --manifest ...`, trung hoà bảy study rollout flags theo local-dev skill và dùng `PYTHONHASHSEED` khác nhau (`100`..`103`).
+
+| Lượt local Windows | Backend wall | Kết quả |
+| --- | ---: | --- |
+| `jobs=1` | 64,19 s | 267 cases, 1 POSIX skip, 144 subtests |
+| `jobs=2`, seed 1 | 40,25 s | PASS; comparator `RESULT: identical` |
+| `jobs=2`, seed 2 | 42,50 s | PASS; comparator `RESULT: identical` |
+| `jobs=2`, seed 3 | 39,06 s | PASS; comparator `RESULT: identical` |
+
+Cả bốn manifest có SHA-256 `7099f12cbf1c3be999fce1a90f90d87f739e65b912110118c19794f32c562e50`; hash từng nhóm, gồm `subtest`, đều trùng. File bằng chứng local (không đưa vào commit): `.tmp/prb-fixes/{sequential,seed1,seed2,seed3}.json`. Lượt focused đầu tiên cũng pass 161 cases, 1 skip; `git diff --check` pass.
+
+Rà soát trước commit: dựng detached worktree từ HEAD, áp dụng đúng patch staged (không có mapping watcher/POC hoặc file untracked của phiên khác), chạy lại nhóm 267 cases với `jobs=2`, seed 3, `PYTHONHASHSEED=104` và env kiểu CI không dùng `.env` local: PASS, 1 skip, 52,44 s. Manifest `.tmp/prb-fixes/commit-candidate.json` có cùng SHA-256 ở trên; comparator trả `RESULT: identical`.
+
+**Giới hạn nghiệm thu:** đây là nhóm liên quan, chưa phải full inventory 2.740 cases. Host Windows không có Linux/WSL nên nhánh Linux được kiểm tra bằng test deterministic với fake `/proc`; lifecycle thực trên Linux, full-suite hosted parity và peak RAM vẫn chờ lượt benchmark theo 12.3. Không dispatch Actions thêm và chưa bật `jobs=2` mặc định.

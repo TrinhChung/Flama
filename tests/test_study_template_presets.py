@@ -154,8 +154,11 @@ class StudyInstalledTemplatePresetTests(unittest.TestCase):
         composition_id = compositions["compositions"][0]["composition_id"]
         response = self.client.put(f"/api/decks/{self.local_deck_id}/study-template-preset", json={
             "selected_compositions": [composition_id], "input_bindings": {composition_id: {"term": field_id}}})
-        self.assertEqual(response.status_code, 400, response.get_json())
-        self.assertEqual(response.get_json()["error"], "INPUT_TYPE_MISMATCH")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["input_bindings"][composition_id], {"term": field_id})
+        prepared = self.client.get(f"/api/study/scopes/deck/{self.local_deck_id}/compositions?include_template_inputs=1").get_json()
+        entry = prepared["template_inputs"][composition_id]
+        self.assertEqual(entry["field_defs"][0]["field_type"], "audio")
 
 
 if __name__ == "__main__":

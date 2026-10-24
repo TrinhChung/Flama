@@ -15,7 +15,6 @@ from sqlalchemy import and_, case, func, not_, or_, select
 from sqlalchemy.orm import Session
 
 from app.repositories import note_analytics_read_repository as note_reads
-from app.services.study_authority_read_service import StudyAuthorityReadError
 from models.card import Card
 from models.flashcard import DeckCloneDeckMap, DeckInstall, Note
 
@@ -145,7 +144,6 @@ def aggregate_deck_study_counts(
     count_by_note: bool = False,
     owned_by_any_user: bool = False,
     include_note_types: bool = True,
-    note_type_deck_ids: list[int] | None = None,
 ) -> Tuple[Dict[int, Dict[str, int]], Dict[int, str]]:
     """Count total/new/learn/due per visible deck (subtrees are summed by the caller).
 
@@ -155,9 +153,8 @@ def aggregate_deck_study_counts(
     all its Cards share one state, so a Note with two Templates is one due item.
     ``owned_by_any_user`` (admin-wide Browse) counts every Note in the visible
     decks with the learner's own state, not only the learner's Notes.
-    Metadata is optional: counts-only callers set ``include_note_types=False``.
-    ``note_type_deck_ids`` restricts fallback metadata to visible decks that
-    need it, without changing the counted scope or oldest-Note precedence.
+    Metadata is optional: counts-only callers set ``include_note_types=False``
+    (one deck's fallback alone is ``deck_note_type_metadata``).
     Raises ``StudyAuthorityReadError`` when a NOTE learner's evidence diverges.
     """
 
@@ -175,12 +172,12 @@ def aggregate_deck_study_counts(
         )
     )
     from app.repositories.note_analytics_scope_repository import deck_note_scope
-    from app.repositories.study_authority_repository import read_study_storage_profile
 
-    storage_profile = read_study_storage_profile(session)
+    # Raises StudyAuthorityReadError for unreadable evidence in this scope.
+    # Note units weigh each Note once, so the scope only proves membership.
     scope = deck_note_scope(
-        learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
-        overlay=overlay, owned_by_any_user=owned_by_any_user,
+        session, learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
+        overlay=overlay, owned_by_any_user=owned_by_any_user, presence_only=count_by_note,
     )
     rows = note_reads.note_rows(scope, learner_user_id=learner_user_id).subquery("rows")
 
@@ -216,25 +213,14 @@ def aggregate_deck_study_counts(
             func.sum(case((is_new, weight), else_=0)),
             func.sum(case((is_learn, weight), else_=0)),
             func.sum(case((is_due, weight), else_=0)),
-            func.max(rows.c.violation),
         ).group_by(rows.c.deck_id).execution_options(include_retired_cards=True)
     ).all()
-
-    worst = max((int(row[5] or 0) for row in aggregated), default=0)
-    if not worst:
-        worst = note_reads.subject_vector_violation(
-            session, scope=scope, learner_user_id=learner_user_id,
-            storage_profile=storage_profile,
-        )
-    error = note_reads.violation_error(worst)
-    if error is not None:
-        raise StudyAuthorityReadError(*error)
 
     counts: Dict[int, Dict[str, int]] = {
         int(deck_id): {"total": 0, "new": 0, "learn": 0, "due": 0}
         for deck_id in visible_deck_ids
     }
-    for deck_id, total, new, learn, due, _violation in aggregated:
+    for deck_id, total, new, learn, due in aggregated:
         if deck_id is not None and int(deck_id) in counts:
             counts[int(deck_id)] = {
                 "total": int(total or 0),
@@ -242,13 +228,10 @@ def aggregate_deck_study_counts(
                 "learn": int(learn or 0),
                 "due": int(due or 0),
             }
-    metadata_deck_ids = visible_deck_ids if note_type_deck_ids is None else [
-        deck_id for deck_id in note_type_deck_ids if deck_id in counts
-    ]
     note_types = _deck_note_types(
         session,
         learner_user_id=learner_user_id,
-        visible_deck_ids=metadata_deck_ids,
+        visible_deck_ids=visible_deck_ids,
         overlay_types=overlay_types,
     ) if include_note_types else {}
     return counts, note_types

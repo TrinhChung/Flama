@@ -13,12 +13,28 @@ import type { CardDetailResponse } from '../types'
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), mutate: vi.fn(), sync: vi.fn() }))
-vi.mock('@/app/api', () => ({ appApi: { get: mocks.get, mutate: mocks.mutate } }))
+vi.mock('@/features/browse/api/browseApi', () => ({
+  browseQueryKeys: { noteTypes: ['note-types', 'browse', 'compact'] },
+  browseApi: {
+    fetchDecks: () => mocks.get('/browse/decks'),
+    fetchNoteTypes: () => mocks.get('/note-types', { compact: 1 }),
+    fetchCards: (params: unknown) => mocks.get('/browse/cards', params),
+    fetchCardDetail: (id: string) => mocks.get(`/browse/cards/${id}`),
+    createNote: (body: unknown) => mocks.mutate('/notes', 'POST', body),
+    updateCard: (id: string, body: unknown) => mocks.mutate(`/browse/cards/${id}`, 'PATCH', body),
+    deleteNote: (id: string) => mocks.mutate(`/browse/notes/${id}`, 'DELETE'),
+    deleteNotes: (ids: string[]) => mocks.mutate('/browse/notes/batch-delete', 'POST', { note_ids: ids }),
+    generateVoiceVox: (body: unknown) => mocks.mutate('/browse/voicevox/generate', 'POST', body),
+    fetchVoiceVoxProfile: () => mocks.get('/api/tts/providers/voicevox/profile'),
+    saveVoiceVoxProfile: (body: unknown) => mocks.mutate('/api/tts/providers/voicevox/profile', 'PUT', body),
+    fetchVoiceVoxVoices: (api_key: string) => mocks.mutate('/api/tts/providers/voicevox/voices', 'POST', { api_key }),
+  },
+}))
 vi.mock('@/shared/api/bootstrap', () => ({
   bootstrapQueryKey: ['bootstrap'],
   useBootstrap: () => ({ data: { user: { is_admin: false } } }),
 }))
-vi.mock('@/entities/flashcard/model/cardContentUpdates', () => ({ updateCardFieldValues: mocks.sync }))
+vi.mock('@/entities/flashcard/contentUpdates', () => ({ updateCardFieldValues: mocks.sync }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 
 function makeDetail(cardId: string): CardDetailResponse {
@@ -107,6 +123,28 @@ describe('Browse field editing and persistence', () => {
     act(() => root.unmount())
     queryClient.clear()
     container.remove()
+  })
+
+  it('canonicalizes an old Card bookmark before editor and tool actions', async () => {
+    const canonical = { ...details.A, card: { ...details.A.card, card_id: 'note-A' } }
+    details['note-A'] = canonical
+    await act(async () => queryClient.setQueryData(['browse', 'card-detail', 'A'], canonical))
+    await waitFor(() => browse.activeCardId === 'note-A' && browse.cardDetailQuery.data?.card.card_id === 'note-A')
+    expect(browse.editFieldValues.Answer).toEqual([['a', 'b'], ['c']])
+    expect(browse.isDirty).toBe(false)
+  })
+
+  it('isolates compact note types from the full cache and retains broad invalidation', async () => {
+    const fullResponse = { items: [{ id: 'other', name: 'Full response', field_defs: [] }] }
+    await act(async () => queryClient.setQueryData(['note-types'], fullResponse))
+    expect(browse.noteTypesQuery.data?.items[0].id).toBe('type')
+    expect(browse.noteTypesQuery.data?.items[0].field_defs).toEqual(details.A.fields)
+    expect(queryClient.getQueryData(['note-types'])).toBe(fullResponse)
+    const previousCalls = mocks.get.mock.calls.filter(([path]) => path === '/note-types').length
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: ['note-types'] }) })
+    expect(mocks.get.mock.calls.filter(([path]) => path === '/note-types')).toHaveLength(previousCalls + 1)
+    expect(mocks.get).toHaveBeenCalledWith('/note-types', { compact: 1 })
+    expect(browse.noteTypesQuery.data?.items[0].field_defs?.[1].field_type).toBe('array')
   })
 
   it('sends only changed fields and retains an untouched native nested list', async () => {

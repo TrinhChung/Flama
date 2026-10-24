@@ -143,6 +143,7 @@
   "heatmap": {
     "summary_with_data": "Hôm nay đã học {{cards}} thẻ trong {{minutes}} phút ({{seconds}}s/thẻ)",
     "summary_zero": "Hôm nay đã học 0 thẻ trong 0.00 phút (0.00s/thẻ)",
+    "error": "Không tải được thống kê học tập. Dữ liệu tiến độ của bạn cần được kiểm tra; vui lòng thử lại sau hoặc liên hệ hỗ trợ.",
     "nav": {
       "prev_year_aria": "Previous year",
       "next_year_aria": "Next year",

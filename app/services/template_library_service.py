@@ -113,7 +113,7 @@ def get_template(*, user_id, template_id):
 
 def preview_template(*, user_id, template_id, payload):
     """Compile an owned template draft without persisting source or history."""
-    body(payload, CONTENT_KEYS | {"sample_values"})
+    body(payload, CONTENT_KEYS | {"sample_values", "sample_field_types"})
     template = _owned(user_id, template_id)
     draft = SimpleNamespace(**{
         key: text(payload.get(key, getattr(template, key)), field=key)
@@ -126,9 +126,17 @@ def preview_template(*, user_id, template_id, payload):
     unknown = set(values) - {item["key"] for item in schema}
     if unknown:
         raise TemplateLibraryError("INPUT_NOT_FOUND", "Unknown preview input.", field="sample_values")
+    # Mapping previews use source field types, not the template's advisory hints.
+    # This metadata affects this preview only and is never saved on the Template.
+    from models.field_types import FIELD_TYPES
+    sample_types = payload.get("sample_field_types", {})
+    if (not isinstance(sample_types, dict)
+            or set(sample_types) - {item["key"] for item in schema}
+            or any(not isinstance(kind, str) or kind not in FIELD_TYPES for kind in sample_types.values())):
+        raise TemplateLibraryError("VALIDATION_ERROR", "Invalid sample field types.", field="sample_field_types")
     from app.services.flashcard_content_service import preview_raw_template
     return preview_raw_template(payload={
-        **vars(draft), "fields": [{"name": item["key"], "field_type": item["type"]} for item in schema],
+        **vars(draft), "fields": [{"name": item["key"], "field_type": sample_types.get(item["key"], item["type"])} for item in schema],
         "field_values": values,
     })
 

@@ -44,7 +44,7 @@ const VerifyEmailPage = lazy(() =>
 )
 
 const loadDashboardPage = () =>
-  import('./features/dashboard').then((module) => ({
+  import('./pages/dashboard').then((module) => ({
     default: module.DashboardPage,
   }))
 
@@ -58,12 +58,12 @@ if (
   void loadDashboardPage().catch(() => undefined)
 }
 const StatisticsPage = lazy(() =>
-  import('./features/statistics').then((module) => ({
+  import('./pages/statistics').then((module) => ({
     default: module.StatisticsPage,
   })),
 )
 const BrowsePage = lazy(() =>
-  import('./features/browse/pages/BrowsePage').then((module) => ({
+  import('./pages/browse').then((module) => ({
     default: module.BrowsePage,
   })),
 )
@@ -96,7 +96,7 @@ const NoteTypeTemplatesPage = lazy(() =>
   import('./features/note-types/pages/NoteTypeTemplatesPage').then((module) => ({ default: module.NoteTypeTemplatesPage })),
 )
 const NoteTypeTemplateMappingPage = lazy(() =>
-  import('./features/note-types/pages/NoteTypeTemplateMappingPage').then((module) => ({ default: module.NoteTypeTemplateMappingPage })),
+  import('./pages/note-type-template-mapping').then((module) => ({ default: module.NoteTypeTemplateMappingPage })),
 )
 const InstalledDecksPage = lazy(() =>
   import('./features/library').then((module) => ({

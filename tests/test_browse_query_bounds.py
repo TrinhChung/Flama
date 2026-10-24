@@ -327,8 +327,8 @@ class BrowseQueryBoundsTests(unittest.TestCase):
     def test_mixed_owned_and_clone_list_without_deck_filter_is_flat(self):
         seed_owned_deck(self.learner_id, count=150)
         ids = seed_clone_install(self.learner_id, count=150, release=True)
-        # Deck name desc: Source child, Source, Owned child, Owned. Both pages
-        # reach every deck, so only the row count differs between them.
+        # Effective names: Owned child, Owned, Installed child, Installed (desc).
+        # Both pages reach every deck, so only the row count differs between them.
         small, small_count = self._list(per_page=230, sort_by='deck', sort_dir='desc')
         large, large_count = self._list(per_page=300, sort_by='deck', sort_dir='desc')
         self.assertEqual((small['total'], len(small['items']), len(large['items'])), (300, 230, 300))

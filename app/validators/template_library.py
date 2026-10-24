@@ -5,18 +5,13 @@ from app.services.template_tokens import TemplateTokenError, extract_variable_na
 from models.field_types import FIELD_TYPES as _FIELD_TYPES
 
 FIELD_TYPES = set(_FIELD_TYPES)
-# An ``array`` input takes a list field, one item per line; the template's own
-# script decides what the items mean (e.g. accepted answers to compare with).
+# An ``array`` input documents the template's expected shape. Bindings may use
+# another field type; the template's own script decides how to handle the value.
 ARRAY_INPUT_TYPE = "array"
 INPUT_TYPES = FIELD_TYPES | {ARRAY_INPUT_TYPE}
 TYPING_OPTION_DEFAULTS = {"show_length": True, "hints": True}
-# Plain text and one-item-per-line fields display and type the same way.
-_TEXT_COMPATIBLE = {"text", ARRAY_INPUT_TYPE}
-
-
 def input_accepts_field_type(input_type, field_type):
-    if input_type in _TEXT_COMPATIBLE:
-        return field_type in _TEXT_COMPATIBLE
+    """Advisory type comparison, never an admission rule for a binding."""
     return input_type == field_type
 
 
@@ -121,8 +116,6 @@ def validate_bindings(schema, bindings, field_defs):
             continue
         if not isinstance(field_id, str) or field_id not in fields:
             raise TemplateLibraryError("FIELD_OUT_OF_SCOPE", "Binding must reference a field of this NoteType.", field=key)
-        if not input_accepts_field_type(inputs[key]["type"], fields[field_id].field_type):
-            raise TemplateLibraryError("INPUT_TYPE_MISMATCH", "Input and field types must match.", field=key)
         result[key] = field_id
     return deepcopy(result)
 

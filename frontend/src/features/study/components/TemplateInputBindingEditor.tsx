@@ -27,10 +27,12 @@ export function TemplateInputBindingEditor({ inputSchema, fieldDefs, value, onCh
   return (
     <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
       {inputSchema.map((input, index) => {
-        const candidates = fieldDefs.filter((field) => field.id && isTypeCompatible(input.type, field.field_type))
+        const candidates = fieldDefs.filter((field) => field.id)
         const target = value[input.key]
         const valid = Boolean(target && candidates.some((field) => field.id === target))
         const stale = staleInputs.includes(input.key)
+        const field = candidates.find((item) => item.id === target)
+        const mismatch = Boolean(field && !isTypeCompatible(input.type, field.field_type))
         const hintId = `${id}-${index}-hint`
         return (
           <div key={input.key} className="min-w-0 space-y-1">
@@ -44,7 +46,7 @@ export function TemplateInputBindingEditor({ inputSchema, fieldDefs, value, onCh
               <span className="ml-auto shrink-0 font-mono text-[10px] font-normal text-muted-foreground">{input.type}</span>
             </label>
             <NativeSelect id={`${id}-${index}`} size="sm" className="w-full" value={valid ? target! : ''} disabled={disabled}
-              aria-describedby={stale ? hintId : undefined}
+              aria-describedby={stale || mismatch ? hintId : undefined}
               onChange={(event) => onChange({ ...value, [input.key]: event.target.value || null })}>
               <NativeSelectOption value="">{t('fields.empty_option')}</NativeSelectOption>
               {candidates.map((field, fieldIndex) => (
@@ -54,6 +56,7 @@ export function TemplateInputBindingEditor({ inputSchema, fieldDefs, value, onCh
               ))}
             </NativeSelect>
             {stale ? <p id={hintId} role="status" className="text-[11px] text-amber-700 dark:text-amber-400">{t('fields.stale')}</p> : null}
+            {!stale && mismatch ? <p id={hintId} role="status" className="text-[11px] text-amber-700 dark:text-amber-400">{t('fields.type_mismatch')}</p> : null}
           </div>
         )
       })}

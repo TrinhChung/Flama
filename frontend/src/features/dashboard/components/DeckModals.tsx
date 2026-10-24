@@ -6,7 +6,6 @@ import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import { toast } from 'sonner'
-import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -22,9 +21,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { LazyDeckWorksheetModal } from '@/features/worksheets'
 import { DeckCardTypesDialog } from './DeckCardTypesDialog'
-import { dashboardQueryKey } from '../api'
+import { useInheritedNoteType } from '../hooks/useInheritedNoteType'
+import { studyOverviewBaseKey } from '@/entities/study-overview'
+import { dashboardApi, dashboardQueryKey } from '../api'
 import {
   getCreateDeckSchema,
   getRenameDeckSchema,
@@ -111,22 +111,20 @@ export function CreateDeckModal({
 
   const noteTypesQuery = useQuery({
     queryKey: ['note-types'],
-    queryFn: () =>
-      appApi.get<{ items: Array<{ id: string; name: string; title?: string }> }>(
-        '/note-types',
-      ),
+    queryFn: () => dashboardApi.listNoteTypes(),
     enabled: opened,
   })
 
   const noteTypesData = noteTypesQuery.data?.items
   const noteTypes = noteTypesData || []
+  const inherited = useInheritedNoteType(selectedDeck, opened)
+  const inheritedNoteTypeId = inherited.noteTypeId
 
   useEffect(() => {
     if (!opened) return
 
     const items = noteTypesData || []
     const suggestedPath = suggestNextDeckPath(selectedDeck, dashboard.decks)
-    const inheritedNoteTypeId = selectedDeck?.note_type_id || ''
     const defaultFallbackNoteTypeId =
       items.find(
         (nt) =>
@@ -143,11 +141,11 @@ export function CreateDeckModal({
       parent_id: '',
       note_type_id: inheritedNoteTypeId || defaultFallbackNoteTypeId,
     })
-  }, [opened, selectedDeck, dashboard.decks, form, noteTypesData])
+  }, [opened, selectedDeck, dashboard.decks, form, noteTypesData, inheritedNoteTypeId])
 
   const mutation = useMutation<unknown, Error, CreateDeckForm>({
     mutationFn: (values) =>
-      appApi.createDeck({
+      dashboardApi.createDeck({
         ...values,
         deck_path: values.name,
         parent_id: values.parent_id || '',
@@ -189,7 +187,7 @@ export function CreateDeckModal({
             <NativeSelect
               id="create-deck-notetype"
               className="w-full"
-              disabled={noteTypesQuery.isPending}
+              disabled={noteTypesQuery.isPending || inherited.isPending}
               {...form.register('note_type_id')}
             >
               {noteTypes.length === 0 ? (
@@ -205,7 +203,7 @@ export function CreateDeckModal({
               )}
             </NativeSelect>
             <p className="text-xs text-muted-foreground">
-              {selectedDeck?.note_type_id
+              {inheritedNoteTypeId
                 ? t('modals.create_deck.notetype_help_inherited')
                 : t('modals.create_deck.notetype_help_default')}
             </p>
@@ -249,13 +247,19 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
     purge?: boolean
   }>({
     mutationFn: ({ type, deckId, values, purge }) => {
-      if (type === 'rename') return appApi.renameDeck(deckId, { name: values.name || '' })
-      if (type === 'move') return appApi.moveDeck(deckId, { parent_id: values.parent_id || '' })
-      if (type === 'delete') return appApi.deleteDeck(deckId, { purge })
-      return appApi.resetDeck(deckId)
+      if (type === 'rename') return dashboardApi.renameDeck(deckId, { name: values.name || '' })
+      if (type === 'move') return dashboardApi.moveDeck(deckId, { parent_id: values.parent_id || '' })
+      if (type === 'delete') return dashboardApi.deleteDeck(deckId, { purge })
+      return dashboardApi.resetDeck(deckId)
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })
+    onSuccess: async (_data, { type }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: dashboardQueryKey }),
+        // Deleting or resetting a deck changes the heatmap's due forecast; rename/move do not.
+        type === 'delete' || type === 'reset'
+          ? queryClient.invalidateQueries({ queryKey: studyOverviewBaseKey })
+          : undefined,
+      ])
       toast.success(t('modals.actions.toast_success'))
       onClose()
     },
@@ -272,16 +276,8 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
   if (!selection) return null
   const { type, deck } = selection
 
-  if (type === 'worksheet') {
-    return (
-      <LazyDeckWorksheetModal
-        open
-        onOpenChange={(open) => !open && onClose()}
-        deckId={deck.id}
-        deckName={deck.name}
-      />
-    )
-  }
+  // The worksheet modal belongs to another feature; the dashboard page renders it.
+  if (type === 'worksheet') return null
 
   if (type === 'card-types') {
     return (

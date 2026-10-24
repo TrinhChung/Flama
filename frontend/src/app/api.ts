@@ -1,3 +1,4 @@
+import type { GenerateStrokesPayload, GenerateStrokesResponse, EstimateBatchStrokesPayload, EstimateBatchStrokesResponse, BatchGenerateStrokesPayload, BatchGenerateStrokesResponse } from '@/entities/stroke'
 import type {
   ForgotPasswordPayload,
   LoginPayload,
@@ -5,29 +6,11 @@ import type {
   ResetPasswordPayload,
 } from '../features/auth/api'
 
-import type {
-  CreateDeckForm,
-  MoveDeckForm,
-  RenameDeckForm,
-} from '@/features/dashboard'
 import { API_BASE_URL, resolveBackendUrl } from '../config/env'
-import type {
-  DashboardOverview,
-  DashboardPayload,
-  DeckNode,
-} from '@/features/dashboard'
-import type {
-  StatisticsConfig,
-  StatisticsFilters,
-  TodayFutureStats,
-  UserStudyTimeFilters,
-  UserStudyTimeResponse,
-} from '@/features/statistics'
 import {
   apiJson,
   apiJsonKeepalive,
   apiRequest,
-  getBrowserTimezone,
   setCsrfToken,
 } from '../shared/api/client'
 import type {
@@ -88,40 +71,6 @@ type RegisterResponse = {
   user: Pick<FrontendUser, 'id' | 'email' | 'username'>
 }
 
-type DashboardRow = {
-  deck_id: number
-  parent_id: number | null
-  move_alias: string
-  move_token?: string
-  parent_move_alias?: string | null
-  parent_move_token?: string | null
-  label: string
-  href?: string
-  depth: number
-  new_count: number
-  learn_count: number
-  due_count: number
-  note_type_id?: string | null
-  children: DashboardRow[]
-}
-
-type DashboardResponse = {
-  items: DashboardRow[]
-  summary: {
-    new: number
-    learning: number
-    due: number
-    total_due: number
-  }
-  admin_mode: boolean
-  stats_initial_year: number
-}
-
-type StatisticsResponse = {
-  decks: Array<{ id: number; name: string; parent_id?: number | null }>
-  selected_deck_id: number | null
-}
-
 function toBootstrap(payload: SessionResponse): FrontendBootstrap {
   const isAdmin = Boolean(payload.user?.is_admin)
   setCsrfToken(payload.csrf_token)
@@ -142,52 +91,6 @@ function toBootstrap(payload: SessionResponse): FrontendBootstrap {
   }
 }
 
-function toDeckNode(row: DashboardRow): DeckNode {
-  return {
-    id: row.deck_id,
-    parent_id: row.parent_id,
-    name: row.label,
-    depth: row.depth,
-    study_url: `/study?deck_id=${row.deck_id}`,
-    note_type_id: row.note_type_id ?? null,
-    counts: {
-      new: row.new_count,
-      learning: row.learn_count,
-      due: row.due_count,
-    },
-    move: {
-      alias: row.move_alias,
-      token: row.move_token ?? '',
-      parent_alias: row.parent_move_alias ?? null,
-      parent_token: row.parent_move_token ?? null,
-    },
-    actions: {
-      rename: `${API_BASE}/decks/${row.deck_id}`,
-      move: `${API_BASE}/decks/${row.deck_id}`,
-      delete: `${API_BASE}/decks/${row.deck_id}`,
-      reset: `${API_BASE}/decks/${row.deck_id}/progress-reset`,
-      share: `/marketplace/decks/publish?deck_id=${row.deck_id}`,
-    },
-    children: row.children.map(toDeckNode),
-  }
-}
-
-function toDashboard(payload: DashboardResponse): DashboardPayload {
-  return {
-    decks: payload.items.map(toDeckNode),
-    totals: {
-      new: payload.summary.new,
-      learning: payload.summary.learning,
-      due: payload.summary.due,
-    },
-    admin_mode: payload.admin_mode,
-    stats_initial_year: payload.stats_initial_year,
-    actions: {
-      create: `${API_BASE}/decks`,
-      move: `${API_BASE}/decks`,
-    },
-  }
-}
 
 export const appApi = {
   async get<T>(
@@ -286,104 +189,6 @@ export const appApi = {
     return { redirect_to: '/' }
   },
 
-  async getDashboard(): Promise<DashboardPayload> {
-    const payload = await apiRequest<DashboardResponse>(
-      `${API_BASE}/dashboard?compact=1`,
-      { includeTimezone: false },
-    )
-    return toDashboard(payload)
-  },
-
-  async getDashboardOverview(year: number): Promise<DashboardOverview> {
-    const query = new URLSearchParams({ year: String(year) })
-    const tz = getBrowserTimezone()
-    if (tz) query.set('timezone', tz)
-    return apiRequest<DashboardOverview>(
-      `${API_BASE}/statistics/overview?${query}`,
-      { includeTimezone: false },
-    )
-  },
-
-  async createDeck(values: CreateDeckForm) {
-    return apiJson(`${API_BASE}/decks`, 'POST', {
-      name: values.name,
-      path: values.deck_path,
-      parent_id: values.parent_id || null,
-      note_type_id: values.note_type_id || null,
-    })
-  },
-
-  async renameDeck(deckId: number, values: RenameDeckForm) {
-    return apiJson(`${API_BASE}/decks/${deckId}`, 'PATCH', values)
-  },
-
-  async moveDeck(deckId: number, values: MoveDeckForm) {
-    return apiJson(`${API_BASE}/decks/${deckId}`, 'PATCH', {
-      parent_id: values.parent_id || null,
-    })
-  },
-
-  async deleteDeck(deckId: number, params?: { purge?: boolean }) {
-    const suffix = params?.purge ? '?purge=true' : ''
-    return apiJson(`${API_BASE}/decks/${deckId}${suffix}`, 'DELETE')
-  },
-
-  async resetDeck(deckId: number) {
-    return apiJson(`${API_BASE}/decks/${deckId}/progress-reset`, 'POST', {})
-  },
-
-  async getStatisticsConfig(): Promise<StatisticsConfig> {
-    const payload = await apiRequest<StatisticsResponse>(
-      `${API_BASE}/statistics`,
-    )
-    return {
-      decks: payload.decks.map(({ id, name }) => ({ id, name })),
-      initial_deck_id: payload.selected_deck_id,
-    }
-  },
-
-  async getTodayFutureStats(
-    filters: StatisticsFilters,
-  ): Promise<TodayFutureStats> {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-    const params = new URLSearchParams({
-      scope: filters.scope,
-      history_range: filters.historyRange,
-      future_range: filters.futureRange,
-      backlog: String(filters.backlog),
-      timezone: tz,
-    })
-    if (filters.deckId !== null) {
-      params.set('deck_id', String(filters.deckId))
-    }
-    return apiRequest<TodayFutureStats>(
-      `${API_BASE}/statistics/today-future?${params.toString()}`,
-    )
-  },
-
-  async getUserStudyTimeStats(
-    filters: UserStudyTimeFilters,
-  ): Promise<UserStudyTimeResponse> {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-    const params = new URLSearchParams({
-      scope: filters.scope,
-      range: filters.range,
-      timezone: tz,
-    })
-    if (filters.deckId !== null) {
-      params.set('deck_id', String(filters.deckId))
-    }
-    if (filters.startDate) {
-      params.set('start_date', filters.startDate)
-    }
-    if (filters.endDate) {
-      params.set('end_date', filters.endDate)
-    }
-    return apiRequest<UserStudyTimeResponse>(
-      `${API_BASE}/statistics/study-time?${params.toString()}`,
-    )
-  },
-
   async generateStrokes(payload: GenerateStrokesPayload): Promise<GenerateStrokesResponse> {
     return apiJson<GenerateStrokesResponse>(`${API_BASE}/strokes/generate`, 'POST', payload)
   },
@@ -397,74 +202,4 @@ export const appApi = {
   },
 }
 
-export type GenerateStrokesPayload = {
-  text: string
-  locale?: string
-  format?: 'html' | 'urls' | 'raw'
-  deduplicate?: boolean
-  max_characters?: number
-}
-
-export type StrokeItem = {
-  char: string
-  hex: string
-  url: string
-  available: boolean
-}
-
-export type GenerateStrokesResponse = {
-  locale: string
-  characters: string[]
-  items: StrokeItem[]
-  output: string
-  missing_count: number
-  missing_characters: string[]
-}
-
-export type EstimateBatchStrokesPayload = {
-  source_field: string
-  target_field: string
-  locale?: string
-  deck_id?: number | null
-  note_ids?: string[]
-  card_ids?: string[]
-  overwrite?: boolean
-  max_characters?: number
-}
-
-export type EstimateBatchStrokesResponse = {
-  total_notes: number
-  notes_to_update: number
-  notes_skipped: number
-  unique_characters: number
-  cached_characters: number
-  new_characters: number
-  estimated_seconds: number
-  estimated_human: string
-  is_heavy_task: boolean
-  friendly_summary: string
-  has_mixed_note_types?: boolean
-  error?: string
-  code?: string
-  note_types?: string[]
-}
-
-export type BatchGenerateStrokesPayload = {
-  source_field: string
-  target_field: string
-  locale?: string
-  deck_id?: number | null
-  note_ids?: string[]
-  card_ids?: string[]
-  format?: 'html' | 'urls' | 'raw'
-  overwrite?: boolean
-  max_characters?: number
-}
-
-export type BatchGenerateStrokesResponse = {
-  total_processed: number
-  updated: number
-  skipped: number
-  missing_characters: string[]
-}
-
+export type { GenerateStrokesPayload, GenerateStrokesResponse, StrokeItem, EstimateBatchStrokesPayload, EstimateBatchStrokesResponse, BatchGenerateStrokesPayload, BatchGenerateStrokesResponse } from '@/entities/stroke'

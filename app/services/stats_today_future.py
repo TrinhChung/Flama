@@ -299,24 +299,22 @@ def _consolidated_due_rows_and_load(
 ) -> tuple[list[tuple[Any, Any, Any, int]], float]:
     """CONSOLIDATED_V1: weighted due rows and daily load at Note grain.
 
-    Preserve per-presentation arithmetic while resolving installed sources
+    Each row weighs one Note under Note-unit counting, else its Cards
+    (``forecast_counts_notes``). Resolve installed sources
     onto their local decks and retaining release-pinned applications. Read
     current Note subjects without entity hydration or subject locks. Scope
     resolution may first check whether the learner has an installation.
     """
 
-    from app.repositories.note_analytics_read_repository import state_interval_days, violation_error
-    from app.services.study_authority_read_service import StudyAuthorityReadError
+    from app.repositories.note_analytics_read_repository import state_interval_days
 
     if scope_deck_ids is not None and not scope_deck_ids:
         return [], 0.0
     rows: list[tuple[Any, Any, Any, int]] = []
     total = 0.0
+    # Raises StudyAuthorityReadError for unreadable evidence in the scope.
     fetched = query_consolidated_forecast_rows(user_id=user_id, scope_deck_ids=scope_deck_ids)
-    error = violation_error(max((int(row[1] or 0) for row in fetched), default=0))
-    if error is not None:
-        raise StudyAuthorityReadError(*error)
-    for _note_id, _violation, queue, due_at, due_day, suspended, state_type, interval, card_count in fetched:
+    for _note_id, queue, due_at, due_day, suspended, state_type, interval, card_count in fetched:
         if suspended:
             continue
         if due_at is not None or due_day is not None:

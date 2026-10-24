@@ -4,6 +4,16 @@ from models.study_application import COMPAT_OCCURRENCE_KEY, StudyApplication
 from models.template import Template
 
 
+def dashboard_totals(payload):
+    """New/learning/due over the dashboard's root decks (each carries its subtree)."""
+    roots = payload["items"]
+    return {
+        "new": sum(row["new_count"] for row in roots),
+        "learning": sum(row["learn_count"] for row in roots),
+        "due": sum(row["due_count"] for row in roots),
+    }
+
+
 def enroll_note_user(session, user):
     """Explicit signup fixture; never infer state for an old unenrolled user."""
     from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority

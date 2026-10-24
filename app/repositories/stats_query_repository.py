@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
-from sqlalchemy import and_, case, func, or_, select, text, union_all
+from sqlalchemy import and_, case, func, literal, or_, select, text, union_all
 
 from models import db
 from models.card import Card
@@ -15,20 +17,53 @@ from app.services.anki_scheduler import _day_index
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 
 UTC = timezone.utc
-MYSQL_FIXED_OFFSET_MINUTES = {
-    "UTC": 0,
-    "ETC/UTC": 0,
-    "GMT": 0,
-    "ASIA/HO_CHI_MINH": 7 * 60,
-    "ASIA/BANGKOK": 7 * 60,
-    "ASIA/JAKARTA": 7 * 60,
-    "ASIA/TOKYO": 9 * 60,
-    "ASIA/SEOUL": 9 * 60,
-    "ASIA/SHANGHAI": 8 * 60,
-    "ASIA/HONG_KONG": 8 * 60,
-    "ASIA/SINGAPORE": 8 * 60,
-    "ASIA/TAIPEI": 8 * 60,
-}
+# Reviews and due dates of this app fall in these years. Sampling the 1st and
+# 15th of every month catches DST and any offset change lasting 16+ days.
+_FIXED_OFFSET_SAMPLE_YEARS = range(2000, 2041)
+
+
+def forecast_counts_notes() -> bool:
+    """Due forecasts count what the learner answers, as the dashboard does.
+
+    With Note-unit counting (D6-04) a Note's Cards share one state and one
+    answer, so each scheduled Note is one item; otherwise each Card counts.
+    """
+    from flask import current_app, has_app_context
+
+    return has_app_context() and bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False))
+
+
+@lru_cache(maxsize=1)
+def _zone_names_by_upper() -> dict[str, str]:
+    return {name.upper(): name for name in available_timezones()}
+
+
+@lru_cache(maxsize=512)
+def fixed_utc_offset_minutes(timezone_name: str | None) -> int | None:
+    """The zone's constant UTC offset in minutes, or None if it ever changes.
+
+    A constant offset lets SQL group local days with plain arithmetic, with
+    no MySQL timezone tables. Decided from the zone's rules rather than a
+    name list, so aliases (Asia/Saigon) and half-hour zones qualify too.
+    Names match case-insensitively, as the former fixed-offset table did.
+    """
+    name = str(timezone_name or "").strip()
+    if not name:
+        return None
+    try:
+        zone = ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        canonical = _zone_names_by_upper().get(name.upper())
+        if canonical is None:
+            return None
+        zone = ZoneInfo(canonical)
+    offsets = {
+        datetime(year, month, day, 12, tzinfo=UTC).astimezone(zone).utcoffset()
+        for year in _FIXED_OFFSET_SAMPLE_YEARS for month in range(1, 13) for day in (1, 15)
+    }
+    if len(offsets) != 1:
+        return None
+    return int(offsets.pop().total_seconds() // 60)
 
 
 def learner_presentation_scope(*, learner_user_id: int, scope_deck_ids: list[int] | None = None):
@@ -63,22 +98,26 @@ def learner_presentation_scope(*, learner_user_id: int, scope_deck_ids: list[int
 
 
 def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] | None, session=None, stream=False):
-    """Current availability/interval once per scoped Note, with Card weight.
+    """Current availability/interval once per scoped Note, with its forecast weight.
 
+    The weight is 1 under :func:`forecast_counts_notes`, else the Card count.
     Multiple installs of the same source presentation contribute once to a
     collection forecast; a scoped local deck still resolves its own install.
-    Subject identity/presence guards share the canonical aggregate contract.
+    The guarded scope raises ``StudyAuthorityReadError`` for unreadable
+    evidence before any row is read.
     """
     from app.repositories.note_analytics_read_repository import note_rows
     from app.repositories.note_analytics_scope_repository import collection_note_scope
 
     session = db.session if session is None else session
-    scope = collection_note_scope(session, learner_user_id=user_id, deck_ids=scope_deck_ids)
+    by_note = forecast_counts_notes()
+    scope = collection_note_scope(session, learner_user_id=user_id, deck_ids=scope_deck_ids,
+                                  presence_only=by_note)
     rows = note_rows(scope, learner_user_id=user_id, include_state=True).subquery("forecast_notes")
     statement = select(
-        rows.c.note_id, rows.c.violation, rows.c.queue, rows.c.due_at,
+        rows.c.note_id, rows.c.queue, rows.c.due_at,
         rows.c.due_day, rows.c.is_suspended, rows.c.state_type,
-        rows.c.interval_token, rows.c.card_count,
+        rows.c.interval_token, literal(1).label("card_count") if by_note else rows.c.card_count,
     ).execution_options(include_retired_cards=True)
     if stream:
         return session.execute(statement.execution_options(yield_per=500))
@@ -90,11 +129,11 @@ def can_use_mysql_local_day_sql(*, timezone_name: str) -> bool:
     bind = db.session.get_bind()
     if bind is None or bind.dialect.name != "mysql":
         return False
-    return str(timezone_name or "").strip().upper() in MYSQL_FIXED_OFFSET_MINUTES
+    return fixed_utc_offset_minutes(timezone_name) is not None
 
 
 def _mysql_local_timestamp(timezone_name: str):
-    offset = MYSQL_FIXED_OFFSET_MINUTES[str(timezone_name or "").strip().upper()]
+    offset = fixed_utc_offset_minutes(timezone_name)
     if offset == 0:
         return ReviewEvent.reviewed_at
     return db.func.date_add(
@@ -132,8 +171,7 @@ def _utc_to_business_day(
     timezone_name: str,
     day_boundary_hour_local: int,
 ) -> date:
-    tz_key = str(timezone_name or "").strip().upper()
-    offset_min = MYSQL_FIXED_OFFSET_MINUTES.get(tz_key)
+    offset_min = fixed_utc_offset_minutes(timezone_name)
     if offset_min is not None:
         naive_moment = moment.replace(tzinfo=None) if moment.tzinfo else moment
         return (naive_moment + timedelta(minutes=offset_min - day_boundary_hour_local * 60)).date()
@@ -183,14 +221,17 @@ def query_canonical_future_due_day_counts_mysql(
     Keep the canonical scope and availability joins: ``live_note_id`` and
     ``logical_note_key`` agree on valid rows, but the database does not enforce
     that identity relationship. Collapsing the joins would change reads of
-    detached or drifted evidence. Sibling Cards each contribute one count.
+    detached or drifted evidence. Sibling Cards each contribute one count
+    unless :func:`forecast_counts_notes`, then each Note does.
+    The guarded scope fails closed exactly like the Python path.
     """
     from app.repositories import note_analytics_read_repository as note_reads
 
-    offset = MYSQL_FIXED_OFFSET_MINUTES[str(timezone_name or "").strip().upper()]
+    offset = fixed_utc_offset_minutes(timezone_name)
     shift = int(offset) - int(day_boundary_hour_local) * 60
+    by_note = forecast_counts_notes()
     scope = note_reads.learner_note_scope(
-        learner_user_id=user_id, storage_profile=storage_profile
+        learner_user_id=user_id, storage_profile=storage_profile, presence_only=by_note,
     )
     rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("availability")
     # TO_DAYS has a year-zero origin; Python date ordinals start at 0001-01-01.
@@ -209,7 +250,8 @@ def query_canonical_future_due_day_counts_mysql(
     )
     folded = func.greatest(day, start_local_day.toordinal())
     statement = (
-        select(folded.label("day_index"), func.sum(rows.c.card_count).label("cards"))
+        select(folded.label("day_index"),
+               (func.count() if by_note else func.sum(rows.c.card_count)).label("cards"))
         .select_from(rows)
         .where(
             or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),

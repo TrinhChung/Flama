@@ -114,6 +114,9 @@ def _visible_clone_scope(*, user_id: int, card_obj):
     ``resolve_clone_scope_for_card`` returns a scope only after running the
     same membership query as ``is_card_visible_in_clone_scope``.
     """
+    from app.repositories.browse_note_repository import BrowseNoteReference
+    if isinstance(card_obj, BrowseNoteReference):
+        return card_obj.clone_scope
     from app.services import flashcards_share as share_ctrl
 
     return share_ctrl.resolve_clone_scope_for_card(user_id=user_id, card_obj=card_obj)
@@ -365,7 +368,7 @@ def _load_mode_aware_browse_progress(
         return _authority_progress_view(authority_read)
 
 
-def _join_note_availability(query, *, learner_user_id: int):
+def _join_note_availability(query, *, learner_user_id: int, note_id_column=None):
     """Outer-join each Card's canonical Note availability (ADR P10 §2.7).
 
     Integrity is checked on the returned page only (``page_window_integrity``).
@@ -374,7 +377,7 @@ def _join_note_availability(query, *, learner_user_id: int):
     subject = aliased(StudyProgressSubject)
     query = query.outerjoin(subject, db.and_(
         subject.learner_user_id == int(learner_user_id),
-        subject.logical_note_key == cast(Card.note_id, LargeBinary),
+        subject.logical_note_key == cast(Card.note_id if note_id_column is None else note_id_column, LargeBinary),
     ))
     return query, SimpleNamespace(
         id=case((subject.semantic_state_hash.isnot(None), subject.id), else_=None),
@@ -387,14 +390,8 @@ def _join_note_availability(query, *, learner_user_id: int):
     )
 
 
-def list_browse_cards(
-    *,
-    user_id: int,
-    admin_mode: bool,
-    timezone_name: str,
-    query_args: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Return one preview per visible Note; diagnostic mode exposes occurrences."""
+def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, query_args, notes_only: bool = False, scope_only: bool = False):
+    """Share visibility and effective-value filters; Note reads never expand applications."""
     from app.services import flashcards_share as share_ctrl
 
     deck_id_raw = str(query_args.get("deck_id") or "").strip()
@@ -441,15 +438,8 @@ def list_browse_cards(
             allow_note_authority=True,
         )
 
-    def _empty_result() -> dict[str, Any]:
-        return {
-            "items": [],
-            "page": page,
-            "per_page": per_page,
-            "total": 0,
-            "pages": 0,
-            "has_next": False,
-        }
+    def _empty_result():
+        return None
 
     scoped_decks = vocabulary_ctrl.collect_accessible_browse_decks(
         user_id=user_id,
@@ -474,10 +464,10 @@ def list_browse_cards(
         else:
             selected_ids = {selected_deck_id}
 
-    query = Card.query.join(Note, Card.note_id == Note.id)
+    query = Note.query if notes_only else Card.query.join(Note, Card.note_id == Note.id)
     # Status and due order come from the learner's Note row (verified
     # on the returned page), NULL for pristine Notes.
-    query, progress_alias = _join_note_availability(query, learner_user_id=user_id)
+    query, progress_alias = _join_note_availability(query, learner_user_id=user_id, note_id_column=Note.id if notes_only else Card.note_id)
     clone_scopes = []
     clone_scope_conditions: list[tuple[Any, Any]] = []
     owned_visibility_condition = None
@@ -493,7 +483,11 @@ def list_browse_cards(
         local_scope_ids = set(selected_ids or scoped_ids)
 
         if selected_ids is not None:
-            scope_candidates = sorted(local_scope_ids)
+            if notes_only:
+                from app.repositories.browse_note_repository import installed_scope_candidates
+                scope_candidates = installed_scope_candidates(user_id=user_id, local_deck_ids=local_scope_ids)
+            else:
+                scope_candidates = sorted(local_scope_ids)
         else:
             install_root_rows = (
                 db.session.query(DeckInstall.local_deck_id)
@@ -561,7 +555,7 @@ def list_browse_cards(
                 scope_filters.extend(
                     [
                         Note.created_at <= clone_scope.base_snapshot_at,
-                        Card.created_at <= clone_scope.base_snapshot_at,
+                        *([] if notes_only else [Card.created_at <= clone_scope.base_snapshot_at]),
                     ]
                 )
             scope_condition = db.and_(*scope_filters)
@@ -760,18 +754,70 @@ def list_browse_cards(
                             day_boundary_hour_local=int(runtime_settings.day_boundary_hour_local)),
         )
 
-    query = query.filter(eligible)
+    if not scope_only:
+        query = query.filter(eligible)
+    return SimpleNamespace(
+        include_all_templates=include_all_templates,
+        sort_by=sort_by, sort_dir=sort_dir,
+        query=query,
+        progress_alias=progress_alias,
+        source_to_local_deck_id=source_to_local_deck_id,
+        deck_lookup=deck_lookup,
+        clone_projections=clone_projections,
+        owned_visibility_condition=owned_visibility_condition,
+        normalized_progress_queue=normalized_progress_queue,
+        page=page,
+        per_page=per_page,
+        now=now,
+        runtime_settings=runtime_settings,
+        deck_by_id=deck_by_id,
+        clone_scopes=clone_scopes,
+        clone_scope_conditions=clone_scope_conditions,
+    )
+
+
+def list_browse_cards(
+    *,
+    user_id: int,
+    admin_mode: bool,
+    timezone_name: str,
+    query_args: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compatibility presentation list for existing Card-based consumers."""
+    context = _build_browse_query(user_id=user_id, admin_mode=admin_mode,
+        timezone_name=timezone_name, query_args=query_args)
+    if context is None:
+        return {"items": [], "page": max(1, int(query_args.get("page") or 1)),
+                "per_page": max(1, min(500, int(query_args.get("per_page") or 100))),
+                "total": 0, "pages": 0, "has_next": False}
+    include_all_templates = context.include_all_templates
+    sort_by, sort_dir = context.sort_by, context.sort_dir
+    query = context.query
+    progress_alias = context.progress_alias
+    source_to_local_deck_id = context.source_to_local_deck_id
+    deck_lookup = context.deck_lookup
+    clone_projections = context.clone_projections
+    owned_visibility_condition = context.owned_visibility_condition
+    normalized_progress_queue = context.normalized_progress_queue
+    page = context.page
+    per_page = context.per_page
+    now = context.now
+    runtime_settings = context.runtime_settings
+    deck_by_id = context.deck_by_id
+    clone_scopes = context.clone_scopes
     if not include_all_templates:
         query = browse_card_repository.one_visible_card_per_note(query)
     total = browse_card_repository.count_distinct_cards(query)
     query = query.options(*browse_card_repository.browse_page_load_options())
 
     if sort_by == "deck":
-        query = query.outerjoin(Deck, Note.deck_id == Deck.id)
-        if sort_dir == "desc":
-            query = query.order_by(Deck.name.desc(), Card.updated_at.desc())
-        else:
-            query = query.order_by(Deck.name.asc(), Card.updated_at.desc())
+        query = browse_card_repository.order_browse_cards_by_deck(
+            query,
+            learner_user_id=user_id,
+            sort_dir=sort_dir,
+            source_to_local_deck_id=source_to_local_deck_id,
+            deck_name_lookup=deck_lookup,
+        )
     elif sort_by == "word":
         owned_word_expression = browse_card_repository.owned_note_word_expression()
         if admin_mode:

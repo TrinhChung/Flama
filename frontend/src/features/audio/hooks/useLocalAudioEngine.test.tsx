@@ -4,12 +4,14 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLocalAudioEngine } from './useLocalAudioEngine'
+import { apiRequest } from '@/shared/api/client'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const client = vi.hoisted(() => ({
   getHealth: vi.fn(), getToken: vi.fn(), startPairing: vi.fn(), getPairingStatus: vi.fn(),
   setToken: vi.fn(), getVoices: vi.fn(), installEngine: vi.fn(), launchEngine: vi.fn(),
+  synthesize: vi.fn(),
 }))
 const notifications = vi.hoisted(() => ({ info: vi.fn(), success: vi.fn(), error: vi.fn() }))
 vi.mock('@/lib/flamaAudioClient', () => ({ flamaAudioClient: client }))
@@ -20,8 +22,8 @@ const emptyCards: string[] = []
 const fields = ['Word']
 const audioFields = ['Audio']
 let engine!: ReturnType<typeof useLocalAudioEngine>
-function Harness({ isOpen = true, engineId = 'voicevox' }: { isOpen?: boolean; engineId?: 'voicevox' | 'kokoro' }) {
-  engine = useLocalAudioEngine({ isOpen, engineId, selectedCardIds: emptyCards, availableFieldNames: fields, availableAudioFieldNames: audioFields })
+function Harness({ isOpen = true, engineId = 'voicevox', selectedCardIds = emptyCards, targetKind = 'card' }: { isOpen?: boolean; engineId?: 'voicevox' | 'kokoro'; selectedCardIds?: string[]; targetKind?: 'card' | 'note' }) {
+  engine = useLocalAudioEngine({ isOpen, engineId, selectedCardIds, targetKind, availableFieldNames: fields, availableAudioFieldNames: audioFields })
   return null
 }
 
@@ -39,6 +41,7 @@ describe('local engine polling lifecycle', () => {
     vi.useFakeTimers()
     vi.clearAllMocks()
     Object.values(client).forEach((mock) => mock.mockReset())
+    vi.mocked(apiRequest).mockResolvedValue({ items: [] })
     localStorage.clear()
     client.getHealth.mockRejectedValue(new Error('offline'))
     client.getVoices.mockResolvedValue([])
@@ -54,6 +57,47 @@ describe('local engine polling lifecycle', () => {
     await act(async () => { root.unmount() })
     container.remove()
     vi.useRealTimers()
+  })
+
+  it('loads a selected Browse Note directly without a presentation ID', async () => {
+    await act(async () => { root.render(<Harness selectedCardIds={['note-only']} targetKind="note" />) })
+    expect(apiRequest).toHaveBeenCalledWith('/api/browse/notes/note-only')
+  })
+
+  it('keeps the display word and media permission from a selected Note response', async () => {
+    vi.mocked(apiRequest).mockResolvedValue({
+      row: { note_id: 'note-only', word: '日本語' },
+      note: { id: 'note-only', field_values: { Word: '日本語' } },
+      fields: [{ name: 'Word', field_type: 'text' }, { name: 'Audio', field_type: 'audio' }],
+      can_upload_media: false,
+    })
+    await act(async () => { root.render(<Harness selectedCardIds={['note-only']} targetKind="note" />) })
+    await act(async () => { await engine.handleStartBatch() })
+    expect(engine.items).toMatchObject([{ noteId: 'note-only', word: '日本語', sourceText: '日本語', status: 'skipped' }])
+    expect(client.synthesize).not.toHaveBeenCalled()
+  })
+
+  it('previews the Note display word when the selected source field is empty', async () => {
+    vi.mocked(apiRequest).mockResolvedValue({
+      row: { note_id: 'note-only', word: '日本語' },
+      note: { id: 'note-only', field_values: { Word: '' } },
+    })
+    client.synthesize.mockRejectedValue(new Error('offline'))
+    await act(async () => { root.render(<Harness selectedCardIds={['note-only']} targetKind="note" />) })
+    await act(async () => { await engine.handlePreviewAudio() })
+    expect(client.synthesize).toHaveBeenCalledWith(expect.objectContaining({ text: '日本語' }))
+  })
+
+  it('sends native array source text to synthesis for a selected Note', async () => {
+    vi.mocked(apiRequest).mockResolvedValue({
+      row: { note_id: 'note-only', word: '日本語' },
+      note: { id: 'note-only', field_values: { Word: ['日本語', ['勉強']] } },
+    })
+    client.synthesize.mockRejectedValue(new Error('offline'))
+    await act(async () => { root.render(<Harness selectedCardIds={['note-only']} targetKind="note" />) })
+    await act(async () => { await engine.handleStartBatch() })
+    expect(client.synthesize).toHaveBeenCalledWith(expect.objectContaining({ text: '日本語 勉強' }))
+    expect(engine.items).toMatchObject([{ noteId: 'note-only', word: '日本語', error: 'offline' }])
   })
 
   it('stops installation after 15 empty voice lists and returns to idle', async () => {

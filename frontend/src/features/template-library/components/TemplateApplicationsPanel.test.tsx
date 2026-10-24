@@ -77,13 +77,17 @@ describe('TemplateApplicationsPanel', () => {
     await openActions()
     expect(document.querySelector('a[href="/card-templates/template%2F1"]')?.textContent).toBe('Sửa thiết kế')
   })
-  it('counts current exact type bindings and marks stale IDs, wrong types or unknown keys for repair', async () => {
+  it('counts bindings with advisory type mismatches and marks stale IDs or unknown keys for repair', async () => {
     current.input_schema = [...row.input_schema, { key: 'Audio', label: 'Audio', type: 'audio', required: false }]
     current.input_bindings = { Word: 'field/1', Audio: null }
     await render()
     expect(document.body.textContent).toContain('Đã ánh xạ 1/2 inputs')
     expect(document.body.textContent).toContain('Còn 1 input để trống')
-    const invalidBindings: TemplateBindings[] = [{ Word: 'foreign' }, { Word: 'field/2' }, { Word: 'field/1', Removed: 'field/1' }]
+    current.input_bindings = { Word: 'field/2', Audio: null }
+    await act(async () => { await client.invalidateQueries({ queryKey: ['card-template'] }) }); await flush()
+    expect(document.body.textContent).toContain('Đã ánh xạ 1/2 inputs')
+    expect(document.body.textContent).not.toContain('Cần sửa mapping')
+    const invalidBindings: TemplateBindings[] = [{ Word: 'foreign' }, { Word: 'field/1', Removed: 'field/1' }]
     for (const bindings of invalidBindings) {
       current.input_bindings = bindings
       await act(async () => { await client.invalidateQueries({ queryKey: ['card-template'] }) }); await flush()

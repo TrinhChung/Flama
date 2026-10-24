@@ -232,14 +232,14 @@ class StudyNoteBatchTests(unittest.TestCase):
         batch = self._admit(1, [self._event(1)], final=True)
         with self.app.app_context():
             base = json.loads(db.session.get(StudySession, self.snapshot["session_id"]).config_snapshot_json)
-        for config in (
-            {**base, "storage_profile": "unknown"},
-            {key: value for key, value in base.items() if key != "storage_profile"},
-            {**base, "schema_version": "study-session-config.v2"},
-            {**base, "schema_version": ["study-session-config.v3"]},
-            {**base, "storage_profile": {"unexpected": "object"}},
+        for label, config in (
+            ("unknown_profile", {**base, "storage_profile": "unknown"}),
+            ("missing_profile", {key: value for key, value in base.items() if key != "storage_profile"}),
+            ("downgraded_schema", {**base, "schema_version": "study-session-config.v2"}),
+            ("non_string_schema", {**base, "schema_version": ["study-session-config.v3"]}),
+            ("non_string_profile", {**base, "storage_profile": {"unexpected": "object"}}),
         ):
-            with self.subTest(config=config):
+            with self.subTest(case=label):
                 with self.app.app_context():
                     db.session.get(StudySession, self.snapshot["session_id"]).config_snapshot_json = json.dumps(config)
                     db.session.commit()
@@ -461,8 +461,8 @@ class StudyNoteBatchTests(unittest.TestCase):
             response["updated_cards"] = []
             batch.response_json = json.dumps(response)
             db.session.commit()
-        for batch_id in (first, second):
-            with self.subTest(batch_id=batch_id), self.assertRaises(StudySessionError) as failure:
+        for label, batch_id in (("replay", first), ("continuation", second)):
+            with self.subTest(case=label), self.assertRaises(StudySessionError) as failure:
                 self._process(batch_id)
             self.assertEqual(failure.exception.code, "NOTE_BATCH_EVIDENCE_INVALID")
         self._assert_progress(1)

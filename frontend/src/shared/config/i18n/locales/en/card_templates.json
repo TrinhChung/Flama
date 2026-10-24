@@ -192,7 +192,7 @@
     "issue_unbound_required": "Recommended input is unmapped; template can still be used.",
     "issue_unbound_optional": "This input will render empty.",
     "issue_field_out_of_scope": "Field does not belong to selected note type.",
-    "issue_type_mismatch": "Field type mismatch.",
+    "issue_type_mismatch": "The field type differs from the template hint. Data is still passed through; the template can handle it with JavaScript.",
     "issue_unknown_input": "Input no longer exists in template.",
     "btn_unmap": "Remove mapping"
   },

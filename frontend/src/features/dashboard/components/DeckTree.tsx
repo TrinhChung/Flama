@@ -1,9 +1,12 @@
+import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import { cn } from '@/lib/utils'
 import type { DeckNode, SelectedDeckAction } from '../types'
 import { useDeckTreeDragDrop } from '../hooks/useDeckTreeDragDrop'
 import { useDeckTreeExpanded } from '../hooks/useDeckTreeExpanded'
+import { useWindowedRows } from '../hooks/useWindowedRows'
+import { flattenVisibleDecks } from '../utils/flattenDeckTree'
 import { DeckRow } from './DeckRow'
 
 export type DeckTreeProps = {
@@ -14,8 +17,15 @@ export type DeckTreeProps = {
   onActivate?: (deck: DeckNode) => void
   onAction: (action: SelectedDeckAction) => void
   onMoveDeck?: (deckId: number, targetParentId: number | null) => Promise<void>
-  isExpanded?: (deckId: number) => boolean
-  onToggleExpand?: (deckId: number) => void
+}
+
+// Spacers stand in for unmounted rows; zero borders keep them out of the divider rhythm.
+function RowSpacer({ height, anchorRef, position }: {
+  height: number
+  anchorRef?: React.Ref<HTMLDivElement>
+  position: 'before' | 'after'
+}) {
+  return <div ref={anchorRef} aria-hidden="true" data-virtual-spacer={position} style={{ height, borderWidth: 0 }} />
 }
 
 export function DeckTree({
@@ -26,34 +36,56 @@ export function DeckTree({
   onActivate,
   onAction,
   onMoveDeck,
-  isExpanded,
-  onToggleExpand,
 }: DeckTreeProps) {
   const { t } = useTranslation('dashboard')
-  const expandedState = useDeckTreeExpanded(nodes, selectedDeckId)
-  const activeIsExpanded = isExpanded ?? expandedState.isExpanded
-  const activeToggleExpand = onToggleExpand ?? expandedState.toggleExpand
+  const { expandedDeckIds, toggleExpand } = useDeckTreeExpanded(nodes, selectedDeckId)
+  const rows = useMemo(() => flattenVisibleDecks(nodes, expandedDeckIds), [nodes, expandedDeckIds])
   const {
     draggedDeck,
     dragPos,
+    ghostRef,
     dragOverId,
     isInvalidDrop,
+    isDragActive,
     isDragJustEnded,
     handlePointerDownRow,
-    handleDragStart,
-    handleDragEnd,
-    handleDragOverRow,
-    handleDragEnterRow,
-    handleDropOnRow,
-    handleDragOverRoot,
-    handleDropOnRoot,
   } = useDeckTreeDragDrop(onMoveDeck)
+  const listRef = useRef<HTMLDivElement>(null)
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const rowWindow = useWindowedRows(rows.length, anchorRef, listRef)
+
+  // When the focused row unmounts (scrolled out of the window, or its branch
+  // collapsed) the list holds focus instead of <body>, so Tab continues from the
+  // visible rows; the row takes focus back if it mounts again first.
+  const lostFocusDeckIdRef = useRef<number | null>(null)
+  const handleRowUnmountWhileFocused = useCallback((deckId: number) => {
+    lostFocusDeckIdRef.current = deckId
+    listRef.current?.focus({ preventScroll: true })
+  }, [])
+  const claimRestoredFocus = useCallback((deckId: number) => {
+    if (lostFocusDeckIdRef.current !== deckId || document.activeElement !== listRef.current) return false
+    lostFocusDeckIdRef.current = null
+    return true
+  }, [])
+  const handleListFocus = useCallback((e: React.FocusEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) lostFocusDeckIdRef.current = null
+  }, [])
+  const handleListBlur = useCallback((e: React.FocusEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) lostFocusDeckIdRef.current = null
+  }, [])
 
   return (
-    <div className="deck-list flex flex-col divide-y divide-gray-100 relative">
+    <div
+      ref={listRef}
+      tabIndex={-1}
+      onFocus={handleListFocus}
+      onBlur={handleListBlur}
+      className="deck-list flex flex-col divide-y divide-gray-100 relative focus:outline-none"
+    >
       {/* Floating Ghost Badge preview attached to mouse cursor */}
       {draggedDeck && dragPos ? (
         <div
+          ref={ghostRef}
           className={cn(
             'fixed pointer-events-none z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl shadow-2xl font-bold text-xs sm:text-sm border transition-all duration-75 transform -translate-x-1/2 -translate-y-1/2',
             isInvalidDrop
@@ -93,37 +125,43 @@ export function DeckTree({
               ? 'bg-orange-100 border-orange-500 text-orange-700 shadow-md scale-[1.005]'
               : 'bg-orange-50/60 border-orange-300 text-orange-600 hover:bg-orange-100 hover:border-orange-400',
           )}
-          onDragOver={handleDragOverRoot}
-          onDrop={handleDropOnRoot}
         >
           <span>{t('tree.drag.root_drop_prompt', { name: draggedDeck.name })}</span>
         </div>
       ) : null}
 
-      {nodes.map((node, index) => (
-        <DeckRow
-          key={node.id}
-          node={node}
-          adminMode={adminMode}
-          selectedDeckId={selectedDeckId}
-          dataTour={index === 0 ? 'dash-deck-row-first' : undefined}
-          onSelect={onSelect}
-          onActivate={onActivate}
-          onAction={onAction}
-          draggedDeck={draggedDeck}
-          dragOverId={dragOverId}
-          isInvalidDrop={isInvalidDrop}
-          isDragJustEnded={isDragJustEnded}
-          onPointerDownRow={handlePointerDownRow}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onDragOver={handleDragOverRow}
-          onDragEnter={handleDragEnterRow}
-          onDrop={handleDropOnRow}
-          isExpanded={activeIsExpanded}
-          onToggleExpand={activeToggleExpand}
-        />
-      ))}
+      {rowWindow.enabled ? (
+        <RowSpacer height={rowWindow.paddingTop} anchorRef={anchorRef} position="before" />
+      ) : null}
+
+      {rows.slice(rowWindow.start, rowWindow.end).map((node, offset) => {
+        const index = rowWindow.start + offset
+        return (
+          <DeckRow
+            key={node.id}
+            node={node}
+            adminMode={adminMode}
+            isSelected={selectedDeckId === node.id}
+            expanded={expandedDeckIds.has(node.id)}
+            dataTour={index === 0 ? 'dash-deck-row-first' : undefined}
+            onSelect={onSelect}
+            onActivate={onActivate}
+            onAction={onAction}
+            onToggleExpand={toggleExpand}
+            isDraggingSelf={draggedDeck?.id === node.id}
+            dropHover={dragOverId === node.id ? (isInvalidDrop ? 'invalid' : 'valid') : null}
+            isDragActive={isDragActive}
+            isDragJustEnded={isDragJustEnded}
+            onPointerDownRow={handlePointerDownRow}
+            onUnmountWhileFocused={handleRowUnmountWhileFocused}
+            claimRestoredFocus={claimRestoredFocus}
+          />
+        )
+      })}
+
+      {rowWindow.enabled && rowWindow.paddingBottom > 0 ? (
+        <RowSpacer height={rowWindow.paddingBottom} position="after" />
+      ) : null}
     </div>
   )
 }

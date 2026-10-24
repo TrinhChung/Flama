@@ -1044,10 +1044,14 @@ def generate_worksheet_preview(
                     seen_nids.add(c.note.id)
                     notes.append(c.note)
         elif note_ids and isinstance(note_ids, list):
-            notes = (
-                Note.query.filter(Note.id.in_([str(nid) for nid in note_ids[:max_process_limit]]))
-                .all()
-            )
+            # Explicit Note selections must use the same ownership/release
+            # context as Browse, rather than reading author working values.
+            from app.services import browse_note_service, browse_card_service
+            try:
+                notes = browse_note_service.selected_note_values(user_id=user_id, admin_mode=admin_mode,
+                    timezone_name="UTC", note_ids=[str(nid) for nid in note_ids[:max_process_limit]])
+            except browse_card_service.BrowseApiError as exc:
+                raise WorksheetServiceError(str(exc), code="NOTE_NOT_ACCESSIBLE", status=exc.status) from exc
         else:
             from app.repositories.deck_tree_query import collect_subtree_ids
             subtree_ids = collect_subtree_ids(target_deck_id) or [target_deck_id]

@@ -32,7 +32,7 @@ PROBE_NAME = re.compile(r"^flama_note_analytics_probe_[0-9]+_[a-f0-9]{8}$")
 CASES = (
     "test_note_scope_preserves_original_absent_pairs_and_new_applications",
     "test_note_scope_ignores_aliases_for_a_different_application_note_type",
-    "test_forecast_reads_one_row_for_many_occurrences_and_preserves_card_units",
+    "test_forecast_reads_one_row_for_many_occurrences_in_the_counted_unit",
     "test_collection_unions_disjoint_release_pins_instead_of_max_or_sum",
     "test_collection_deduplicates_owned_and_installed_active_presentations",
     "test_empty_deck_scope_and_notes_without_applications_have_no_weight",

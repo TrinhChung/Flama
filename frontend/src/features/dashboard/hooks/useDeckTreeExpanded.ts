@@ -34,11 +34,6 @@ export function persistExpandedDeckIds(ids: Set<number>): void {
 export function useDeckTreeExpanded(nodes?: DeckNode[], selectedDeckId?: number | null) {
   const [expandedDeckIds, setExpandedDeckIds] = useState<Set<number>>(getInitialExpandedDeckIds)
 
-  const isExpanded = useCallback(
-    (deckId: number) => expandedDeckIds.has(deckId),
-    [expandedDeckIds],
-  )
-
   const toggleExpand = useCallback((deckId: number) => {
     setExpandedDeckIds((prev) => {
       const next = new Set(prev)
@@ -92,7 +87,6 @@ export function useDeckTreeExpanded(nodes?: DeckNode[], selectedDeckId?: number 
   }, [nodes, selectedDeckId])
 
   return {
-    isExpanded,
     toggleExpand,
     expandedDeckIds,
   }

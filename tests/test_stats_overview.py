@@ -181,16 +181,13 @@ class StatsOverviewTests(unittest.TestCase):
             db.session.commit()
 
         self._login()
-        response = self.client.get("/api/stats/overview?year=2026")
+        response = self.client.get("/api/statistics/overview?year=2026")
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(payload["year"], 2026)
         self.assertIn("today", payload)
-        self.assertIn("heatmap", payload)
         self.assertIn("metrics", payload)
-        self.assertIn("day", payload["heatmap"][0])
-        self.assertIn("study_time", payload["heatmap"][0])
-        self.assertIn("source", payload["heatmap"][0])
+        self.assertEqual(set(payload["heatmap"][0]), {"date", "cards", "minutes", "is_future"})
 
     def test_current_year_future_uses_due_without_double_count(self):
         with self.app.app_context():

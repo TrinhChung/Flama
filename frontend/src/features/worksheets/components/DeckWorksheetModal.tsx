@@ -8,6 +8,7 @@ export interface DeckWorksheetModalProps {
   deckId?: number | null
   deckName?: string
   initialCardIds?: (string | number)[]
+  selectionKind?: 'card' | 'note'
   initialStep?: WizardStepId
 }
 

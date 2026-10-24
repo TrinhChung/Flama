@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bootstrapQueryKey, useBootstrap } from './bootstrap'
-import { useBrowseState } from '@/features/browse/hooks/useBrowseState'
+import { useBrowseState } from '@/features/browse'
 import { useAnkiSyncPage } from '@/features/import/hooks/useAnkiSyncPage'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -15,6 +15,23 @@ const mocks = vi.hoisted(() => ({
   bootstrap: vi.fn(), get: vi.fn(), checkConnection: vi.fn(),
 }))
 vi.mock('@/app/api', () => ({ appApi: { getBootstrap: mocks.bootstrap, get: mocks.get } }))
+vi.mock('@/features/browse/api/browseApi', () => ({
+  browseQueryKeys: { noteTypes: ['note-types', 'browse', 'compact'] },
+  browseApi: {
+    fetchDecks: () => mocks.get('/browse/decks'),
+    fetchNoteTypes: () => mocks.get('/note-types', { compact: 1 }),
+    fetchCards: (params: unknown) => mocks.get('/browse/cards', params),
+    fetchCardDetail: (id: string) => mocks.get(`/browse/cards/${id}`),
+    createNote: (body: unknown) => mocks.get('/notes', 'POST', body),
+    updateCard: (id: string, body: unknown) => mocks.get(`/browse/cards/${id}`, 'PATCH', body),
+    deleteNote: (id: string) => mocks.get(`/browse/notes/${id}`, 'DELETE'),
+    deleteNotes: (ids: string[]) => mocks.get('/browse/notes/batch-delete', 'POST', { note_ids: ids }),
+    generateVoiceVox: (body: unknown) => mocks.get('/browse/voicevox/generate', 'POST', body),
+    fetchVoiceVoxProfile: () => mocks.get('/api/tts/providers/voicevox/profile'),
+    saveVoiceVoxProfile: (body: unknown) => mocks.get('/api/tts/providers/voicevox/profile', 'PUT', body),
+    fetchVoiceVoxVoices: (api_key: string) => mocks.get('/api/tts/providers/voicevox/voices', 'POST', { api_key }),
+  },
+}))
 vi.mock('@/lib/ankiConnectClient', () => ({
   ankiConnectClient: { checkConnection: mocks.checkConnection },
 }))

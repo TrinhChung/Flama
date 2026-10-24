@@ -135,6 +135,13 @@ describe('useWorksheetStudio', () => {
     vi.useRealTimers()
   })
 
+  it('sends a Browse selection as Note IDs without converting it to template cards', async () => {
+    const preview = vi.spyOn(worksheetApi, 'generateWorksheetPreview').mockResolvedValue(mockPreviewResponse)
+    renderStudioHook({ scope: 'selected', initialCardIds: ['note-only'], selectionKind: 'note' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+    expect(preview).toHaveBeenCalledWith(expect.objectContaining({ note_ids: ['note-only'], card_ids: undefined }))
+  })
+
   describe('a. Debounce delay', () => {
     it('does not invoke preview before 300ms, and invokes preview at exactly 300ms', async () => {
       const previewSpy = vi

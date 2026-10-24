@@ -21,10 +21,10 @@ import { StudioSidebar } from './studio/StudioSidebar'
  * Contents of the worksheet studio dialog. Rendered inside `WorksheetStudioDialog`,
  * so it only mounts while the dialog is open.
  */
-export function WorksheetStudio({ onOpenChange, deckId, deckName, initialCardIds, initialStep }: DeckWorksheetModalProps) {
+export function WorksheetStudio({ onOpenChange, deckId, deckName, initialCardIds, selectionKind, initialStep }: DeckWorksheetModalProps) {
   // Suspends once, before the first paint, until the namespace is ready.
   useTranslation('worksheets')
-  const session = useWorksheetWizard({ deckId, deckName, initialCardIds, initialStep })
+  const session = useWorksheetWizard({ deckId, deckName, initialCardIds, selectionKind, initialStep })
   const { studio, wizardStep, meta, deckLabel, activeNoteType } = session
   const [activeTab, setActiveTab] = useState<StudioTab>('template')
   const [mobileView, setMobileView] = useState<StudioMobileView>('preview')

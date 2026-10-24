@@ -192,7 +192,7 @@
     "issue_unbound_required": "Input được khuyến nghị chưa ánh xạ; vẫn có thể sử dụng.",
     "issue_unbound_optional": "Input này sẽ hiển thị rỗng.",
     "issue_field_out_of_scope": "Trường không thuộc loại thẻ đã chọn.",
-    "issue_type_mismatch": "Kiểu trường không phù hợp.",
+    "issue_type_mismatch": "Kiểu trường khác kiểu template mong đợi. Dữ liệu vẫn được truyền; template có thể tự xử lý bằng JavaScript.",
     "issue_unknown_input": "Input không còn trong mẫu thẻ.",
     "btn_unmap": "Bỏ ánh xạ"
   },

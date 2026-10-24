@@ -5,24 +5,20 @@ export type MappingInput = TemplateInputSpec
 export type MappingIssue =
   | { kind: 'unbound'; key: string; required: boolean; blocking: false }
   | { kind: 'field_out_of_scope'; key: string; fieldId: string; blocking: true }
-  | { kind: 'type_mismatch'; key: string; fieldId: string; blocking: true }
+  | { kind: 'type_mismatch'; key: string; fieldId: string; blocking: false }
   | { kind: 'unknown_input'; key: string; blocking: true }
 
 const INPUT_TYPES = new Set(['text', 'richtext', 'markdown', 'image', 'audio', 'diagram', 'array'])
-// Plain text and line-per-answer fields display and type the same way.
-const TEXT_COMPATIBLE = new Set(['text', 'array'])
-
 export function isTypeCompatible(inputType: string, fieldType: string): boolean {
-  if (TEXT_COMPATIBLE.has(inputType)) return TEXT_COMPATIBLE.has(fieldType)
   return inputType === fieldType && INPUT_TYPES.has(inputType)
 }
 
 export function suggestBindings(inputs: MappingInput[], fields: MappingField[]): TemplateBindings {
-  return Object.fromEntries(inputs.map((input) => [
-    input.key,
-    fields.find((field) => field.name.trim().toLowerCase() === input.key.trim().toLowerCase()
-      && isTypeCompatible(input.type, field.field_type))?.id ?? null,
-  ]))
+  return Object.fromEntries(inputs.map((input) => {
+    const candidates = fields.filter((field) => field.name.trim().toLowerCase() === input.key.trim().toLowerCase())
+    const target = candidates.find((field) => isTypeCompatible(input.type, field.field_type)) ?? candidates[0]
+    return [input.key, target?.id ?? null]
+  }))
 }
 
 export function validateBindings(
@@ -43,7 +39,7 @@ export function validateBindings(
     if (!field) {
       issues.push({ kind: 'field_out_of_scope', key: input.key, fieldId, blocking: true })
     } else if (!isTypeCompatible(input.type, field.field_type)) {
-      issues.push({ kind: 'type_mismatch', key: input.key, fieldId, blocking: true })
+      issues.push({ kind: 'type_mismatch', key: input.key, fieldId, blocking: false })
     }
   }
   for (const key of Object.keys(bindings)) {

@@ -114,23 +114,9 @@ class StudySessionRetentionTests(unittest.TestCase):
             row.expires_at = row.expires_at - timedelta(days=days)
             db.session.commit()
 
-    @classmethod
-    def _without_signed_tokens(cls, value):
-        # Deck move tokens (and their MID aliases) are signed with the current
-        # second; they are not learner data and differ between two requests.
-        if isinstance(value, dict):
-            return {
-                key: cls._without_signed_tokens(item)
-                for key, item in value.items()
-                if key not in {"move_token", "parent_move_token", "move_alias", "parent_move_alias"}
-            }
-        if isinstance(value, list):
-            return [cls._without_signed_tokens(item) for item in value]
-        return value
-
     def _learner_view(self):
         stats = self.client.get("/api/statistics/overview?year=2026&timezone=UTC").get_json()
-        dashboard = self._without_signed_tokens(self.client.get("/api/dashboard").get_json())
+        dashboard = self.client.get("/api/dashboard").get_json()
         with self.app.app_context():
             events = sorted(
                 (row.id, row.card_id, row.note_id, row.rating, row.study_session_id)

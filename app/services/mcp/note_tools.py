@@ -29,7 +29,7 @@ from app.services.mcp.base import (
     _resolve_deck_for_user,
     _resolve_note_type_for_user,
 )
-from app.validators.flashcard_input import RequestValidationError, clean_array_fields
+from app.validators.flashcard_input import RequestValidationError, clean_array_fields, validate_note_field_value_shapes
 from app.services.note_value_precondition_service import check_note_write_preconditions, note_revision_payload
 from models import db
 from models.card import Card
@@ -422,6 +422,7 @@ def _create_note(
         ) from exc
 
     fields = note_data.get("fields", {})
+    validate_note_field_value_shapes(fields, note_type.field_defs)
     normalized_fields = clean_array_fields(
         normalize_anki_field_values(fields, tuple(note_type.field_defs)),
         note_type.field_defs,
@@ -569,6 +570,7 @@ def update_note(
         current_fields.update(fields)
         note_type = note.note_type
         if note_type:
+            validate_note_field_value_shapes(fields, note_type.field_defs)
             normalized = normalize_anki_field_values(current_fields, tuple(note_type.field_defs))
             normalized.update(clean_array_fields({name: normalized[name] for name in fields}, note_type.field_defs))
             note.field_values = normalized

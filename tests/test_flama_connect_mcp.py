@@ -569,9 +569,11 @@ class FlamaConnectMcpTests(unittest.TestCase):
                 token=self.api_token_str,
             )
 
-        response = update("to eat\nconsume")
+        response = update(["to eat", "consume"])
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(response.get_json()["result"]["structuredContent"]["fields"]["Meaning"], ["to eat", "consume"])
+        response = update("to eat\nconsume")
+        self.assertEqual(response.status_code, 400, response.get_json())
         response = update([[[["four levels"]]]])
         self.assertEqual(response.status_code, 400, response.get_json())
         with self.app.app_context():

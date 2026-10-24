@@ -184,8 +184,8 @@ def run(arguments):
                     def visible(**_kwargs):
                         return db.session.execute(select(Deck).where(Deck.id.in_(selected))).scalars().all()
                     with patch("app.repositories.deck_tree_query.collect_accessible_decks", side_effect=visible):
-                        return build_dashboard_payload(user, compact=True)
-                return build_dashboard_payload(user, compact=True)
+                        return build_dashboard_payload(user)
+                return build_dashboard_payload(user)
         operations = {"overview": overview, "today_future": today, "study_time_all": study_time}
         if not arguments.history_only:
             operations["dashboard_compact"] = dashboard

@@ -69,10 +69,10 @@ class ArrayInputSchemaTests(unittest.TestCase):
             with self.assertRaises(TemplateLibraryError, msg=schema):
                 validate_input_schema(schema)
 
-    def test_text_and_array_bind_to_each_other_only(self):
-        self.assertTrue(input_accepts_field_type("array", "text"))
+    def test_text_and_array_are_distinct_advisory_types(self):
+        self.assertFalse(input_accepts_field_type("array", "text"))
         self.assertTrue(input_accepts_field_type("array", "array"))
-        self.assertTrue(input_accepts_field_type("text", "array"))
+        self.assertFalse(input_accepts_field_type("text", "array"))
         self.assertFalse(input_accepts_field_type("array", "richtext"))
         self.assertFalse(input_accepts_field_type("array", "image"))
         self.assertFalse(input_accepts_field_type("image", "text"))
@@ -150,7 +150,7 @@ class TypingTemplateArtifactTests(unittest.TestCase):
         self.assertNotIn("typing", template["input_schema"][1])
         response = self._attach(template["id"], {"prompt": self.fields["Meaning"], "answer": self.fields["Word"]})
         self.assertEqual(response.status_code, 201, response.get_json())
-        self.assertEqual(response.get_json()["warnings"], [])
+        self.assertEqual(response.get_json()["warnings"], [{"input_key": "answer", "code": "INPUT_TYPE_MISMATCH", "required": True}])
         note = self.client.post("/api/notes", json={
             "note_type_id": self.note_type["id"],
             "field_values": {"Word": "食べる\nたべる", "Meaning": "ăn"},
@@ -165,11 +165,12 @@ class TypingTemplateArtifactTests(unittest.TestCase):
             content = build_content_artifact(context)
             self.assertEqual(content["field_values"]["answer"], "食べる\nたべる")
 
-    def test_array_input_rejects_incompatible_fields(self):
+    def test_array_input_accepts_other_fields_with_a_warning(self):
         template = self._template(self._typing_schema())
         for field in ("Picture",):
             response = self._attach(template["id"], {"prompt": self.fields["Meaning"], "answer": self.fields[field]})
-            self.assertEqual(response.status_code, 400, response.get_json())
+            self.assertEqual(response.status_code, 201, response.get_json())
+            self.assertEqual(response.get_json()["warnings"][0]["code"], "INPUT_TYPE_MISMATCH")
 
     def test_array_field_type_is_created_saved_and_bound_but_never_switched_bare(self):
         created = self.client.post(f"/api/note-types/{self.note_type['id']}/fields", json={"name": "Accepted", "field_type": "array"})
@@ -177,7 +178,7 @@ class TypingTemplateArtifactTests(unittest.TestCase):
         accepted_id = created.get_json()["id"]
         note = self.client.post("/api/notes", json={
             "note_type_id": self.note_type["id"],
-            "field_values": {"Word": "食べる", "Accepted": "ăn\r\ndùng bữa"},
+            "field_values": {"Word": "食べる", "Accepted": ["ăn", "dùng bữa"]},
         })
         self.assertEqual(note.status_code, 201, note.get_json())
         template = self._template(self._typing_schema())

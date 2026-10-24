@@ -81,18 +81,22 @@ class ForecastMySQLContracts(forecast_fixture.ForecastSnapshotTests):
                 deck_id=None, history_range="12m", future_range="all", backlog=backlog,
                 now_utc=note_fixture.NOW)
 
-        raw = [payload("raw", backlog) for backlog in (False, True)]
-        self.assertTrue(self._prewarm()["published"])
-        self.assertEqual([payload("summary", backlog) for backlog in (False, True)], raw)
-        buckets, minimum, load = service.resolve_forecast_summary(db.session, user_id=1, deck_ids=None,
-            timezone_name="Asia/Tokyo", day_boundary_hour=4, now_utc=note_fixture.NOW,
-            backlog=True, end_offset=None)
-        self.assertEqual(buckets[0]["learning"], 2)
-        self.assertEqual(buckets[1]["review"], 2)
-        self.assertEqual(buckets[1]["relearning"], 2)
-        self.assertEqual(sum(bucket["due_count"] for bucket in buckets.values()), 6)
-        self.assertEqual(load, 0.2)
-        self.assertEqual(minimum, 0)
+        # Card units count both presentations; Note units (D6-04) count each Note once.
+        for by_note, weight in ((False, 2), (True, 1)):
+            with self.subTest(by_note=by_note):
+                self.app.config["STUDY_NOTE_COUNT_ENABLED"] = by_note
+                raw = [payload("raw", backlog) for backlog in (False, True)]
+                self.assertTrue(self._prewarm()["published"])
+                self.assertEqual([payload("summary", backlog) for backlog in (False, True)], raw)
+                buckets, minimum, load = service.resolve_forecast_summary(db.session, user_id=1, deck_ids=None,
+                    timezone_name="Asia/Tokyo", day_boundary_hour=4, now_utc=note_fixture.NOW,
+                    backlog=True, end_offset=None)
+                self.assertEqual(buckets[0]["learning"], weight)
+                self.assertEqual(buckets[1]["review"], weight)
+                self.assertEqual(buckets[1]["relearning"], weight)
+                self.assertEqual(sum(bucket["due_count"] for bucket in buckets.values()), 3 * weight)
+                self.assertAlmostEqual(load, 0.1 * weight)
+                self.assertEqual(minimum, 0)
 
     def test_capture_uses_readonly_repeatable_snapshot_before_publication(self):
         self.fixture.trace.clear()
