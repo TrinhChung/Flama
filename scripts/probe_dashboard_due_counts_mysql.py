@@ -3,7 +3,7 @@
 Runs the SQL and Python paths over the same rows: siblings, publisher-owned
 source Notes, Notes without Cards and date edges for count parity, and one
 learner per evidence defect (detached subject, logical-identity drift) for
-fail-closed parity. Creates/drops only a generated schema; configured
+fail-closed parity through the shared guarded scope. Creates/drops only a generated schema; configured
 application rows are untouched.
 """
 from __future__ import annotations
@@ -150,17 +150,15 @@ def run() -> dict:
                     return error.code
                 return None
 
-            # Both paths must agree. A detached subject leaves its Note outside the
-            # forecast scope (no live state), so neither path fails for it.
+            # Both paths share the guarded scope and must agree. A detached subject
+            # leaves its Note outside the forecast scope (no live state), so
+            # neither path fails for it; identity drift fails both.
+            expected = {"detached": None, "logical_identity_drift": "DETACHED_AUTHORITY_SUBJECT"}
             report["fail_closed"] = {}
-            report["known_gaps"] = []
             for kind, damaged in defects.items():
                 outcome = {"python": read_error(damaged, sql=False), "sql": read_error(damaged, sql=True)}
                 report["fail_closed"][kind] = outcome
-                if outcome["python"] is not None and outcome["sql"] is None:
-                    # Known since 4c1d87fb: the fixed-offset SQL path reads no evidence guard.
-                    report["known_gaps"].append({"defect": kind, **outcome})
-                elif outcome["sql"] != outcome["python"]:
+                if outcome != {"python": expected[kind], "sql": expected[kind]}:
                     report["problems"].append({"defect": kind, "fail_closed_mismatch": outcome})
             report["status"] = "FAIL" if report["problems"] else "PASS"
             return report

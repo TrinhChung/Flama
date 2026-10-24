@@ -401,7 +401,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
                                                        now=NOW, timezone_name='UTC')
         self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
 
-    def test_dashboard_counts_probe_live_pointers_only_when_the_learner_has_drift(self):
+    def test_dashboard_counts_guard_evidence_outside_the_metric_query(self):
         from app.services.deck_aggregation_service import aggregate_deck_study_counts
         from app.services.study_authority_read_service import StudyAuthorityReadError
 
@@ -425,10 +425,12 @@ class NoteQueryRetirementTests(unittest.TestCase):
                 event.remove(db.engine, 'before_cursor_execute', capture)
 
         def aggregate_sql():
-            return next(s for s in statements if 'GROUP BY rows.deck_id' in s)
+            return [s for s in statements if 'GROUP BY rows.deck_id' in s]
 
         self.assertEqual(counts()[self.deck.id], {'total': 2, 'new': 1, 'learn': 0, 'due': 0})
-        self.assertNotIn('EXISTS', aggregate_sql())  # clean learner: no per-Note live probe
+        # Clean learner: one candidate scan, no per-Note probe in the metric query.
+        self.assertEqual(len(aggregate_sql()), 1)
+        self.assertNotIn('EXISTS', aggregate_sql()[0])
 
         subject = StudyProgressSubject.query.filter_by(live_note_id=card.note_id).one()
         subject.logical_note_key = b'noncanonical-key'
@@ -436,7 +438,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
         with self.assertRaises(StudyAuthorityReadError) as caught:
             counts()
         self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
-        self.assertIn('EXISTS', aggregate_sql())
+        self.assertEqual(aggregate_sql(), [])  # the guard failed before the metric query
 
     # Fail-closed contract: what every progress reader does with each evidence
     # defect, so a new or refactored reader cannot silently drop the guard.

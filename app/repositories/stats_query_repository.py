@@ -67,7 +67,8 @@ def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] 
 
     Multiple installs of the same source presentation contribute once to a
     collection forecast; a scoped local deck still resolves its own install.
-    Subject identity/presence guards share the canonical aggregate contract.
+    The guarded scope raises ``StudyAuthorityReadError`` for unreadable
+    evidence before any row is read.
     """
     from app.repositories.note_analytics_read_repository import note_rows
     from app.repositories.note_analytics_scope_repository import collection_note_scope
@@ -76,7 +77,7 @@ def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] 
     scope = collection_note_scope(session, learner_user_id=user_id, deck_ids=scope_deck_ids)
     rows = note_rows(scope, learner_user_id=user_id, include_state=True).subquery("forecast_notes")
     statement = select(
-        rows.c.note_id, rows.c.violation, rows.c.queue, rows.c.due_at,
+        rows.c.note_id, rows.c.queue, rows.c.due_at,
         rows.c.due_day, rows.c.is_suspended, rows.c.state_type,
         rows.c.interval_token, rows.c.card_count,
     ).execution_options(include_retired_cards=True)
@@ -184,6 +185,7 @@ def query_canonical_future_due_day_counts_mysql(
     ``logical_note_key`` agree on valid rows, but the database does not enforce
     that identity relationship. Collapsing the joins would change reads of
     detached or drifted evidence. Sibling Cards each contribute one count.
+    The guarded scope fails closed exactly like the Python path.
     """
     from app.repositories import note_analytics_read_repository as note_reads
 
@@ -192,10 +194,7 @@ def query_canonical_future_due_day_counts_mysql(
     scope = note_reads.learner_note_scope(
         learner_user_id=user_id, storage_profile=storage_profile
     )
-    # This grouping never reads `violation`; leaving it out avoids a per-Note probe.
-    rows = note_reads.note_rows(
-        scope, learner_user_id=user_id, include_violation=False,
-    ).subquery("availability")
+    rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("availability")
     # TO_DAYS has a year-zero origin; Python date ordinals start at 0001-01-01.
     # Review due_day overrides due_at; every other queue uses its UTC timestamp.
     day = case(

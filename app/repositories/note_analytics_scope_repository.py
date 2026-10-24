@@ -4,6 +4,11 @@ Progress belongs to a learner/Note, so expand neither presentation IDs nor
 availability for siblings. Owned membership is counted algebraically from
 active applications and the immutable P11 cutover sets. Installed membership
 retains the canonical release/timestamp predicate, then groups before progress.
+
+``deck_note_scope`` and ``collection_note_scope`` fail closed on unreadable
+progress evidence before returning (``note_analytics_read_repository.
+guard_scope``). The ``*_query`` builders are unguarded; a caller that uses one
+must run that guard on its own final scope.
 """
 
 from sqlalchemy import and_, case, func, not_, null, or_, select, union_all
@@ -15,7 +20,7 @@ from models.note import Note
 from models.study_application import StudyApplication
 
 
-def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False):
+def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False, note_ids=None):
     """One row per owned Note with at least one ACTIVE presentation.
 
     P11 membership: an original Note/original application pair exists only
@@ -23,12 +28,15 @@ def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False)
     applications plus aliases of original active applications. For a new
     Note, count all active applications. Alias counts are scoped to the same
     requested Notes, never a whole-store scan for a small learner/deck.
+    ``note_ids`` narrows the scope (the evidence guard's exact pass).
     """
     notes = select(Note.id, Note.deck_id, Note.note_type_id)
     if not owned_by_any_user:
         notes = notes.where(Note.user_id == int(learner_user_id))
     if deck_ids is not None:
         notes = notes.where(Note.deck_id.in_(deck_ids))
+    if note_ids is not None:
+        notes = notes.where(Note.id.in_(note_ids))
     notes = notes.subquery("analytics_owned_notes")
     application = StudyApplication.__table__
     aliases = PresentationAlias.__table__
@@ -91,7 +99,7 @@ def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False)
     )
 
 
-def _installed_presentations(*, learner_user_id, deck_ids=None):
+def _installed_presentations(*, learner_user_id, deck_ids=None, note_ids=None):
     """Canonical release membership; no progress joins or state hydration."""
     from app.repositories.flashcards_share_repository import clone_source_card_visibility
 
@@ -116,6 +124,8 @@ def _installed_presentations(*, learner_user_id, deck_ids=None):
     )
     if deck_ids is not None:
         statement = statement.where(DeckCloneDeckMap.local_deck_id.in_(deck_ids))
+    if note_ids is not None:
+        statement = statement.where(Card.note_id.in_(note_ids))
     return statement
 
 
@@ -133,11 +143,12 @@ def _combine(owned, installed, *, per_deck):
     )
 
 
-def deck_note_scope(*, learner_user_id, deck_ids, overlay=None, owned_by_any_user=False):
-    """One row per effective deck/Note; duplicate installations count once."""
+def deck_note_scope_query(*, learner_user_id, deck_ids, overlay=None, owned_by_any_user=False,
+                          note_ids=None):
+    """One row per effective deck/Note; duplicate installations count once (unguarded)."""
     owned = owned_note_scope(
         learner_user_id=learner_user_id, deck_ids=deck_ids,
-        owned_by_any_user=owned_by_any_user,
+        owned_by_any_user=owned_by_any_user, note_ids=note_ids,
     )
     if overlay is None:
         return owned
@@ -150,19 +161,36 @@ def deck_note_scope(*, learner_user_id, deck_ids, overlay=None, owned_by_any_use
     installed = overlay.with_only_columns(
         DeckCloneDeckMap.local_deck_id.label("deck_id"), Card.note_id.label("note_id"),
         func.count(func.distinct(Card.application_id)).label("card_count"),
-    ).where(not_(duplicate)).group_by(DeckCloneDeckMap.local_deck_id, Card.note_id)
+    ).where(not_(duplicate))
+    if note_ids is not None:
+        installed = installed.where(Card.note_id.in_(note_ids))
+    installed = installed.group_by(DeckCloneDeckMap.local_deck_id, Card.note_id)
     return _combine(owned, installed, per_deck=True)
 
 
-def collection_note_scope(session, *, learner_user_id, deck_ids=None):
-    """One row per visible Note, with Card multiplicity deduped across installs.
+def deck_note_scope(session, *, learner_user_id, deck_ids, overlay=None, owned_by_any_user=False):
+    """:func:`deck_note_scope_query`, after failing closed on unreadable evidence."""
+    from app.repositories.note_analytics_read_repository import guard_scope
+
+    def build(note_ids=None):
+        return deck_note_scope_query(
+            learner_user_id=learner_user_id, deck_ids=deck_ids, overlay=overlay,
+            owned_by_any_user=owned_by_any_user, note_ids=note_ids,
+        )
+
+    guard_scope(session, learner_user_id=learner_user_id, build=build)
+    return build()
+
+
+def collection_note_scope_query(session, *, learner_user_id, deck_ids=None, note_ids=None):
+    """One row per visible Note, with Card multiplicity deduped across installs (unguarded).
 
     Owned active presentations are present once. Installed applications absent
     from that owned scope (including retired pins) are counted distinctly per
     Note across all selected installations. Different pin subsets therefore
     form a union, rather than a max/sum of each installation's count.
     """
-    owned = owned_note_scope(learner_user_id=learner_user_id, deck_ids=deck_ids)
+    owned = owned_note_scope(learner_user_id=learner_user_id, deck_ids=deck_ids, note_ids=note_ids)
     has_install = session.execute(select(DeckInstall.id).where(
         DeckInstall.user_id == int(learner_user_id),
         DeckInstall.clone_mode == "logical_overlay", DeckInstall.local_deck_id.isnot(None),
@@ -174,9 +202,22 @@ def collection_note_scope(session, *, learner_user_id, deck_ids=None):
     if deck_ids is not None:
         # NULL physical decks are outside any requested deck scope.
         duplicate = and_(duplicate, Note.deck_id.isnot(None), Note.deck_id.in_(deck_ids))
-    installed = _installed_presentations(learner_user_id=learner_user_id, deck_ids=deck_ids)
+    installed = _installed_presentations(learner_user_id=learner_user_id, deck_ids=deck_ids, note_ids=note_ids)
     installed = installed.with_only_columns(
         null().label("deck_id"), Card.note_id.label("note_id"),
         func.count(func.distinct(Card.application_id)).label("card_count"),
     ).where(not_(duplicate)).group_by(Card.note_id)
     return _combine(owned, installed, per_deck=False)
+
+
+def collection_note_scope(session, *, learner_user_id, deck_ids=None):
+    """:func:`collection_note_scope_query`, after failing closed on unreadable evidence."""
+    from app.repositories.note_analytics_read_repository import guard_scope
+
+    def build(note_ids=None):
+        return collection_note_scope_query(
+            session, learner_user_id=learner_user_id, deck_ids=deck_ids, note_ids=note_ids,
+        )
+
+    guard_scope(session, learner_user_id=learner_user_id, build=build)
+    return build()

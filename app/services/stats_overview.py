@@ -7,7 +7,7 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import or_, select
 
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
 from app.repositories.study_authority_repository import read_study_authority_route
@@ -205,35 +205,21 @@ def _canonical_future_due_day_counts(
         )
 
     from app.repositories import note_analytics_read_repository as note_reads
-    from app.services.study_authority_read_service import StudyAuthorityReadError
 
+    # The guarded scope raises StudyAuthorityReadError for unreadable evidence.
     scope = note_reads.learner_note_scope(
         learner_user_id=user_id, storage_profile=storage_profile
     )
     rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("rows")
-    # One pass: every violating Card plus every due, unsuspended Card.
     fetched = db.session.execute(
-        select(rows.c.violation, rows.c.due_at, rows.c.due_day, rows.c.queue, rows.c.card_count).where(
-            or_(
-                rows.c.violation > 0,
-                and_(
-                    or_(rows.c.due_at.isnot(None), rows.c.due_day.isnot(None)),
-                    or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),
-                ),
-            )
+        select(rows.c.due_at, rows.c.due_day, rows.c.queue, rows.c.card_count).where(
+            or_(rows.c.due_at.isnot(None), rows.c.due_day.isnot(None)),
+            or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),
         ).execution_options(include_retired_cards=True)
     ).all()
-    worst = max((int(row[0] or 0) for row in fetched), default=0)
-    if not worst:
-        worst = note_reads.subject_vector_violation(
-            db.session, scope=scope, learner_user_id=user_id, storage_profile=storage_profile
-        )
-    error = note_reads.violation_error(worst)
-    if error is not None:
-        raise StudyAuthorityReadError(*error)
 
     by_day: dict[date, int] = {}
-    for _violation, due_at, due_day, queue_value, card_count in fetched:
+    for due_at, due_day, queue_value, card_count in fetched:
         local_day = _progress_due_local_day(
             due_at=due_at,
             due_day=due_day,

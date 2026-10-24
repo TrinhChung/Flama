@@ -15,7 +15,6 @@ from sqlalchemy import and_, case, func, not_, or_, select
 from sqlalchemy.orm import Session
 
 from app.repositories import note_analytics_read_repository as note_reads
-from app.services.study_authority_read_service import StudyAuthorityReadError
 from models.card import Card
 from models.flashcard import DeckCloneDeckMap, DeckInstall, Note
 
@@ -175,19 +174,13 @@ def aggregate_deck_study_counts(
         )
     )
     from app.repositories.note_analytics_scope_repository import deck_note_scope
-    from app.repositories.study_authority_repository import read_study_storage_profile
 
-    storage_profile = read_study_storage_profile(session)
+    # Raises StudyAuthorityReadError for unreadable evidence in this scope.
     scope = deck_note_scope(
-        learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
+        session, learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
         overlay=overlay, owned_by_any_user=owned_by_any_user,
     )
-    # Only the worst violation is read, so one learner-wide live-pointer scan
-    # replaces the per-Note probe unless it finds drift (then probe exactly).
-    live_drift = note_reads.learner_live_identity_drift(session, learner_user_id=learner_user_id)
-    rows = note_reads.note_rows(
-        scope, learner_user_id=learner_user_id, check_live_identity=live_drift,
-    ).subquery("rows")
+    rows = note_reads.note_rows(scope, learner_user_id=learner_user_id).subquery("rows")
 
     # A Card without progress/state has NULL columns and reads as active NEW.
     is_active = and_(
@@ -221,25 +214,14 @@ def aggregate_deck_study_counts(
             func.sum(case((is_new, weight), else_=0)),
             func.sum(case((is_learn, weight), else_=0)),
             func.sum(case((is_due, weight), else_=0)),
-            func.max(rows.c.violation),
         ).group_by(rows.c.deck_id).execution_options(include_retired_cards=True)
     ).all()
-
-    worst = max((int(row[5] or 0) for row in aggregated), default=0)
-    if not worst:
-        worst = note_reads.subject_vector_violation(
-            session, scope=scope, learner_user_id=learner_user_id,
-            storage_profile=storage_profile,
-        )
-    error = note_reads.violation_error(worst)
-    if error is not None:
-        raise StudyAuthorityReadError(*error)
 
     counts: Dict[int, Dict[str, int]] = {
         int(deck_id): {"total": 0, "new": 0, "learn": 0, "due": 0}
         for deck_id in visible_deck_ids
     }
-    for deck_id, total, new, learn, due, _violation in aggregated:
+    for deck_id, total, new, learn, due in aggregated:
         if deck_id is not None and int(deck_id) in counts:
             counts[int(deck_id)] = {
                 "total": int(total or 0),

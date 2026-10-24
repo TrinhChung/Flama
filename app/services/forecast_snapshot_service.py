@@ -10,14 +10,13 @@ import math
 from flask import current_app
 
 from app.repositories import forecast_snapshot_repository as repository
-from app.repositories.note_analytics_read_repository import state_interval_days, violation_error
+from app.repositories.note_analytics_read_repository import state_interval_days
 from app.repositories.stats_query_repository import _progress_due_local_day, query_consolidated_forecast_rows
 from app.repositories.study_authority_repository import read_study_authority_route
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 from app.services.anki_scheduler import _day_index_to_datetime
 from app.services.deck_count_snapshot_service import _fresh_session, _snapshot
 from app.services.review_analytics_policy import ReviewAnalyticsPolicy, resolve_review_analytics_policy
-from app.services.study_authority_read_service import StudyAuthorityReadError
 from app.services.analytics_summary_readiness import require_ready_summary
 
 
@@ -130,13 +129,11 @@ def prewarm_forecast_summary(*, user_id, deck_ids=None, now_utc=None, session_fa
             return {"ok": True, "user_id": user_id, "cached": True, "published": False,
                     "bucket_count": header["bucket_count"]}
         buckets, load, note_rows = {}, 0.0, 0
+        # Raises StudyAuthorityReadError for unreadable evidence before streaming.
         rows = query_consolidated_forecast_rows(user_id=user_id, scope_deck_ids=deck_ids,
                                                session=session, stream=True)
-        for _note, violation, queue, due_at, due_day, suspended, state_type, interval, weight in rows:
+        for _note, queue, due_at, due_day, suspended, state_type, interval, weight in rows:
             note_rows += 1
-            error = violation_error(int(violation or 0))
-            if error:
-                raise StudyAuthorityReadError(*error)
             if suspended:
                 continue
             if normalize_progress_queue(state_type) == REVIEW_QUEUE:
