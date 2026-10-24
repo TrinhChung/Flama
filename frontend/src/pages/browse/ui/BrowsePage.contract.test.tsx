@@ -6,26 +6,42 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/shared/api/client'
-import { BROWSE_SORT_FIELDS, BROWSE_STATUS_FILTERS, type BrowseCardRow, type BrowseCardsResponse } from '../types'
+import { BROWSE_SORT_FIELDS, BROWSE_STATUS_FILTERS, type BrowseCardRow, type BrowseCardsResponse } from '@/features/browse'
 import { BrowsePage } from './BrowsePage'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), mutate: vi.fn() }))
 
-vi.mock('@/app/api', () => ({ appApi: { get: mocks.get, mutate: mocks.mutate } }))
+vi.mock('@/features/browse/api/browseApi', () => ({
+  browseQueryKeys: { noteTypes: ['note-types', 'browse', 'compact'] },
+  browseApi: {
+    fetchDecks: () => mocks.get('/browse/decks'),
+    fetchNoteTypes: () => mocks.get('/note-types', { compact: 1 }),
+    fetchCards: (params: unknown) => mocks.get('/browse/cards', params),
+    fetchCardDetail: (id: string) => mocks.get(`/browse/cards/${id}`),
+    createNote: (body: unknown) => mocks.mutate('/notes', 'POST', body),
+    updateCard: (id: string, body: unknown) => mocks.mutate(`/browse/cards/${id}`, 'PATCH', body),
+    deleteNote: (id: string) => mocks.mutate(`/browse/notes/${id}`, 'DELETE'),
+    deleteNotes: (ids: string[]) => mocks.mutate('/browse/notes/batch-delete', 'POST', { note_ids: ids }),
+    generateVoiceVox: (body: unknown) => mocks.mutate('/browse/voicevox/generate', 'POST', body),
+    fetchVoiceVoxProfile: () => mocks.get('/api/tts/providers/voicevox/profile'),
+    saveVoiceVoxProfile: (body: unknown) => mocks.mutate('/api/tts/providers/voicevox/profile', 'PUT', body),
+    fetchVoiceVoxVoices: (api_key: string) => mocks.mutate('/api/tts/providers/voicevox/voices', 'POST', { api_key }),
+  },
+}))
 vi.mock('@/shared/api/bootstrap', () => ({
   bootstrapQueryKey: ['bootstrap'],
   useBootstrap: () => ({ data: { user: { id: 1, is_admin: false }, links: { dashboard: '/dashboard' } } }),
 }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }))
-vi.mock('../components/BrowseDeckSidebar', () => ({ BrowseDeckSidebar: () => null }))
-vi.mock('../components/BrowseCardEditor', () => ({ BrowseCardEditor: () => null }))
-vi.mock('../components/BrowseTtsModal', () => ({ BrowseTtsModal: () => null }))
-vi.mock('../components/BrowseStrokeModal', () => ({ BrowseStrokeModal: () => null }))
+vi.mock('@/features/browse/components/BrowseDeckSidebar', () => ({ BrowseDeckSidebar: () => null }))
+vi.mock('@/features/browse/components/BrowseCardEditor', () => ({ BrowseCardEditor: () => null }))
+vi.mock('@/features/browse/components/BrowseTtsModal', () => ({ BrowseTtsModal: () => null }))
+vi.mock('@/features/browse/components/BrowseStrokeModal', () => ({ BrowseStrokeModal: () => null }))
 vi.mock('@/features/worksheets/components/LazyDeckWorksheetModal', () => ({ LazyDeckWorksheetModal: () => null }))
-vi.mock('@/features/audio/components/LocalAudioDialog', () => ({ LocalAudioDialog: () => null }))
-vi.mock('@/features/guide/components/ContextHelpButton', () => ({ ContextHelpButton: () => null }))
+vi.mock('@/features/audio', () => ({ LocalAudioDialog: () => null }))
+vi.mock('@/features/guide', () => ({ ContextHelpButton: () => null }))
 
 type CardsParams = { q: string; deck_id: number | ''; status: string; sort_by: string; sort_dir: string; page: number; per_page: number }
 

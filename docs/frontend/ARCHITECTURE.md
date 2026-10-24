@@ -179,10 +179,13 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
 2. **`flashcard`** (`frontend/src/entities/flashcard/`):
    - Client Renderer: `clientRenderer.ts` (in-memory Mustache compilation, safe DOMPurify sanitization, and native array preservation).
    - Event Hub: Cross-component flashcard content synchronization events (`studyContentSync.ts`).
+   - Headless public entries: `fields.ts` for native-array/editor and write-precondition helpers; `contentUpdates.ts` for content update orchestration, without importing renderer/editor UI. Legacy root helper paths remain re-export shims for unmigrated consumers.
 3. **`deck`** (`frontend/src/entities/deck/`): accessible deck list (`/api/browse/decks`), picker options and `DeckSelectionTreeView`.
 4. **`study-overview`** (`frontend/src/entities/study-overview/`):
    - API: `fetchStudyOverview(year)` for `GET /api/statistics/overview` (browser timezone in the `timezone` query, no `X-Timezone` header) and `useStudyOverviewQuery(year, { keepPreviousYear })`.
    - Query keys: `studyOverviewQueryKey(year)` = `['frontend', 'statistics', 'overview', year]`, shared by Dashboard and Statistics so both read one cache entry. It sits outside `['frontend', 'dashboard']`; study, Anki import and timezone changes refresh it through `['frontend', 'statistics']`, deck delete/reset through `studyOverviewBaseKey`.
+5. **`audio`** (`frontend/src/entities/audio/`): shared TTS text normalization and local audio settings storage, independent of feature dialogs.
+6. **`stroke`** (`frontend/src/entities/stroke/`): shared generation/estimate response and payload types. Browse owns its API orchestration in `features/browse/api/strokeApi.ts`.
 
 ### 5.2 The 25 Feature Slices (`frontend/src/features/`)
 
@@ -191,7 +194,7 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
 | **`admin`** | `features/admin/` | 11 administrative pages: `AdminUsersPage`, `AdminPaymentsPage`, `AdminFeesPage`, `AdminTtsPage`, `AdminPermissionsPage`, `AdminTaxonomyPage`, `AdminMcpTokensPage`. |
 | **`audio`** | `features/audio/` | Flama Audio desktop companion integration, local audio dialog (`LocalAudioDialog.tsx`), connection gate (`FlamaAudioConnectionGate.tsx`), deck scan, batch audio queue monitor (`DeckAudioQueueMonitor.tsx`). |
 | **`auth`** | `features/auth/` | Authentication forms (`LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `ResetPasswordPage`), form hooks (`useLoginForm.ts`, `useRegisterForm.ts`), session auth gating via `useBootstrap()` in `RequireAuth.tsx`. |
-| **`browse`** | `features/browse/` | Vocabulary browse table (`BrowsePage`), virtualized card list, multi-deck tree filter, tag search, bulk edit dialogs. |
+| **`browse`** | `features/browse/` | Card table, deck filter, editor, selection, batch actions and tool dialogs; public entry `index.ts`, local clients in `api/`. `useBrowseState` composes focused hooks. Route composition is in `pages/browse`, which coordinates audio/worksheets/guide through their public APIs. Note creation preloads compact NoteTypes under `['note-types', 'browse', 'compact']`, separate from full responses. |
 | **`dashboard`** | `features/dashboard/` | Deck tree (`DeckTree`, `DeckRow`), deck create/rename/move/delete/reset modals, drag-and-drop moves, `useDashboardPage`; slice-local API in `api/dashboardApi.ts`. The page itself is `pages/dashboard`. |
 | **`deck-collaboration`** | `features/deck-collaboration/` | Community deck contribution: `ChangeRequestInboxPage`, `ChangeRequestDetailPage`, `ReleaseBuilderPage`, `InstalledDeckUpdatePage`. |
 | **`guide`** | `features/guide/` | Interactive knowledge base (`GuidePage`, `GuideArticlePage`), Yomitan, asbplayer, and desktop companion tutorials. |

@@ -1,6 +1,20 @@
+import { useBrowseWorkspaceActions } from '../hooks/useBrowseWorkspaceActions'
+import {
+  useBrowseState,
+  BrowseAudioDropdownMenu,
+  BrowseAudioSelectorModal,
+  BrowseCardEditor,
+  BrowseCardTable,
+  BrowseDeckSidebar,
+  BrowseMobileTabBar,
+  BrowseStrokeModal,
+  BrowseToolbar,
+  BrowseTtsModal,
+} from '@/features/browse'
 import '@/shared/config/i18n'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import {
   ArrowLeft,
   BookOpen,
@@ -12,8 +26,7 @@ import {
   Volume2,
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
-import { LocalAudioDialog } from '@/features/audio/components/LocalAudioDialog'
+import { LocalAudioDialog } from '@/features/audio'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -25,18 +38,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { Brand } from '@/shared/components/Brand'
-import { useBrowseState } from '../hooks/useBrowseState'
-import { BrowseDeckSidebar } from '../components/BrowseDeckSidebar'
-import { BrowseToolbar } from '../components/BrowseToolbar'
-import { BrowseCardTable } from '../components/BrowseCardTable'
-import { BrowseCardEditor } from '../components/BrowseCardEditor'
-import { BrowseTtsModal } from '../components/BrowseTtsModal'
-import { BrowseStrokeModal } from '../components/BrowseStrokeModal'
-import { BrowseAudioSelectorModal } from '../components/BrowseAudioSelectorModal'
-import { BrowseAudioDropdownMenu } from '../components/BrowseAudioDropdownMenu'
-import { BrowseMobileTabBar } from '../components/BrowseMobileTabBar'
 import { LazyDeckWorksheetModal } from '@/features/worksheets'
-import { ContextHelpButton } from '@/features/guide/components/ContextHelpButton'
+import { ContextHelpButton } from '@/features/guide'
 
 export function BrowsePage() {
   const { t } = useTranslation('browse')
@@ -64,54 +67,7 @@ export function BrowsePage() {
     setMobileTab,
   } = browse
 
-  const openWorksheetModal = () => {
-    if (selectedCards.length === 0) {
-      if (!browse.selectedDeckId && !browse.cardsQuery.data?.items[0]?.deck_id) {
-        toast.info(t('toasts.deck_or_cards_required'))
-        return
-      }
-      if (browse.selectedDeck?.has_mixed_note_types) {
-        toast.error(t('toasts.mixed_note_types_error'))
-        return
-      }
-    }
-    const firstDeckId = browse.cardsQuery.data?.items[0]?.deck_id
-    const targetDeckId = browse.selectedDeckId || firstDeckId || 1
-    browse.setWorksheetTargetDeckId(targetDeckId)
-    browse.setWorksheetTargetCardIds(selectedCards.length > 0 ? selectedCards : undefined)
-    browse.setIsWorksheetModalOpen(true)
-  }
-
-  const openBatchStrokeModal = () => {
-    if (selectedCards.length === 0) {
-      if (!browse.selectedDeckId) {
-        toast.info(t('toasts.deck_or_cards_required'))
-        return
-      }
-      if (browse.selectedDeck?.has_mixed_note_types) {
-        toast.error(t('toasts.mixed_note_types_error'))
-        return
-      }
-    }
-    browse.setStrokeModalMode('batch')
-    browse.setIsStrokeModalOpen(true)
-  }
-
-  const worksheetTitle = selectedCards.length === 0
-    ? browse.selectedDeck
-      ? t('header.worksheet_deck_tooltip', {
-          name: browse.selectedDeck.name,
-          count: browse.selectedDeck.counts?.total ?? 0,
-        })
-      : t('header.worksheet_generic_tooltip')
-    : t('header.worksheet_selected_tooltip', { count: selectedCards.length })
-
-  const strokeTitle = selectedCards.length === 0 && browse.selectedDeck
-    ? t('header.svg_stroke_deck_tooltip', {
-        name: browse.selectedDeck.name,
-        count: browse.selectedDeck.counts?.total ?? 0,
-      })
-    : undefined
+  const { openWorksheetModal, openBatchStrokeModal, worksheetTitle, strokeTitle } = useBrowseWorkspaceActions(browse)
 
   return (
     <div className="flex flex-col h-screen h-[100dvh] w-full overflow-hidden bg-background text-foreground">

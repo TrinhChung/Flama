@@ -10,7 +10,7 @@ import {
   LoaderCircle,
   Sparkles,
 } from 'lucide-react'
-import type { GenerateStrokesResponse } from '@/app/api'
+import type { GenerateStrokesResponse } from '@/entities/stroke'
 import { resolveBackendUrl } from '@/config/env'
 
 export interface BrowseStrokeSinglePreviewProps {

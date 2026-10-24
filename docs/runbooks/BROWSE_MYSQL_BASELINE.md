@@ -87,4 +87,4 @@ try {
 
 Suite tái sử dụng các query-bounds fixtures hiện có nhưng chạy trên MySQL; bổ sung local-name ASC/DESC/pagination, giữ source values, added/removed/renamed/disabled fields, nested arrays, nhiều applications, retired/historical missing pairs và baseline context/write guard. Các schema này kiểm ORM/query contract, không kiểm chuỗi Alembic migrations hoặc concurrent reviews.
 
-Các task B01–B07 vẫn thuộc pha tối ưu tiếp theo. HTTP/load metrics và những phân bố dữ liệu lớn hơn cần bổ sung trong pha đó.
+B01 compact NoteType đã hoàn thành và đo lại bằng operation `note_types` với hai cases `compact: false/true`; xem [báo cáo triển khai](../architecture/BROWSE_TECH_DEBT_IMPLEMENTATION_2026-10-24.md). B02–B07, HTTP/load metrics và những phân bố dữ liệu lớn hơn vẫn cần xử lý ở pha tiếp theo.

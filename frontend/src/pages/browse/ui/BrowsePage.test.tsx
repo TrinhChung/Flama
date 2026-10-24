@@ -24,7 +24,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
   }
 })
 
-vi.mock('../hooks/useBrowseState', () => ({
+vi.mock('@/features/browse/hooks/useBrowseState', () => ({
   useBrowseState: () => ({
     urlDeckId: mocks.mockUrlDeckId,
     audioPlayerRef: { current: null },
@@ -58,31 +58,31 @@ vi.mock('../hooks/useBrowseState', () => ({
   }),
 }))
 
-vi.mock('../components/BrowseDeckSidebar', () => ({
+vi.mock('@/features/browse/components/BrowseDeckSidebar', () => ({
   BrowseDeckSidebar: () => <div data-testid="mock-deck-sidebar" />,
 }))
-vi.mock('../components/BrowseToolbar', () => ({
+vi.mock('@/features/browse/components/BrowseToolbar', () => ({
   BrowseToolbar: () => <div data-testid="mock-toolbar" />,
 }))
-vi.mock('../components/BrowseCardTable', () => ({
+vi.mock('@/features/browse/components/BrowseCardTable', () => ({
   BrowseCardTable: () => <div data-testid="mock-card-table" />,
 }))
-vi.mock('../components/BrowseCardEditor', () => ({
+vi.mock('@/features/browse/components/BrowseCardEditor', () => ({
   BrowseCardEditor: () => <div data-testid="mock-card-editor" />,
 }))
-vi.mock('../components/BrowseTtsModal', () => ({
+vi.mock('@/features/browse/components/BrowseTtsModal', () => ({
   BrowseTtsModal: () => null,
 }))
-vi.mock('../components/BrowseStrokeModal', () => ({
+vi.mock('@/features/browse/components/BrowseStrokeModal', () => ({
   BrowseStrokeModal: () => null,
 }))
 vi.mock('@/features/worksheets', () => ({
   LazyDeckWorksheetModal: () => null,
 }))
-vi.mock('@/features/audio/components/LocalAudioDialog', () => ({
+vi.mock('@/features/audio', () => ({
   LocalAudioDialog: () => null,
 }))
-vi.mock('@/features/guide/components/ContextHelpButton', () => ({
+vi.mock('@/features/guide', () => ({
   ContextHelpButton: () => <div data-testid="mock-guide-button" />,
 }))
 vi.mock('@/shared/api/bootstrap', () => ({

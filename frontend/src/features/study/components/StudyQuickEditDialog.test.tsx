@@ -24,6 +24,13 @@ vi.mock('@/app/api', () => ({
   },
 }))
 
+vi.mock('@/features/browse/api/browseApi', () => ({
+  browseApi: { fetchCardDetail: (id: string) => mocks.get(`/browse/cards/${id}`) },
+}))
+vi.mock('@/features/browse/api/strokeApi', () => ({
+  strokeApi: { generateStrokes: mocks.generateStrokes },
+}))
+
 import { StudyQuickEditDialog } from './StudyQuickEditDialog'
 import { inferFieldType } from '../hooks/useStudyQuickEditForm'
 import type { StudyContentArtifact, StudyTemplateArtifact } from '../types'

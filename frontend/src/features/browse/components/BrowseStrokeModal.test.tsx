@@ -9,14 +9,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
   IS_REACT_ACT_ENVIRONMENT: boolean
 }).IS_REACT_ACT_ENVIRONMENT = true
 
-vi.mock('@/app/api', () => ({
-  appApi: {
+vi.mock('@/features/browse/api/strokeApi', () => ({
+  strokeApi: {
     get: vi.fn().mockResolvedValue({}),
     generateStrokes: vi.fn().mockResolvedValue({ characters: [], items: [], output: '' }),
     estimateBatchStrokes: vi.fn().mockResolvedValue({}),
     batchGenerateStrokes: vi.fn().mockResolvedValue({ updated: 0, skipped: 0 }),
   },
 }))
+
+vi.mock('@/features/browse/api/browseApi', () => ({ browseApi: { fetchCardDetail: () => Promise.resolve({}) } }))
 
 import { BrowseStrokeModal } from './BrowseStrokeModal'
 

@@ -1,8 +1,20 @@
 # Browse — pha xử lý nợ kỹ thuật
 
-Ngày: 2026-10-24. Phạm vi được chọn theo yêu cầu làm nợ kỹ thuật trước, tối ưu hiệu năng sau: B00 (công cụ baseline/contract) và B08 (sort tên deck local). B01–B07 được giữ cho pha tiếp theo.
+Ngày: 2026-10-24. Pha đầu xử lý B00 (công cụ baseline/contract) và B08 (sort tên deck local). Theo yêu cầu tiếp theo, đã tách Browse frontend theo FSD và hoàn thành B01 compact NoteType. B02–B07 còn lại cho pha tiếp theo.
 
 ## Thay đổi đã thực hiện
+
+### Browse frontend và B01
+
+- Chuyển route composition sang `frontend/src/pages/browse/`; page phối hợp Browse, local audio, worksheet và guide qua public APIs. Helper audio dùng chung chuyển xuống `entities/audio`, giữ re-export ở đường dẫn cũ cho caller chưa migrate.
+- `useBrowseState.ts` từ hơn 1.100 dòng còn 31 dòng điều phối; tách filters/data, selection, editor, batch actions, dialog state, TTS và TTS settings. Logic SVG dialog chuyển sang `useBrowseStrokeModal`.
+- Browse dùng `api/browseApi.ts` và `api/strokeApi.ts` qua shared HTTP client; giữ URLs, CSRF/cookies, revision preconditions, native arrays và invalidation. GET queries truyền AbortSignal. Các helper field và stroke DTO dùng chung nằm ở entity với public entries không tải UI.
+- `GET /api/note-types?compact=1` có cache key `['note-types', 'browse', 'compact']`, không ghi đè full response; invalidation theo prefix `['note-types']` vẫn cập nhật Browse. Giữ preload để form mở như trước.
+- Kiểm chứng: **119 tests / 17 suites đạt** trong lượt focused Browse/page, bootstrap, array, audio và Study quick edit, trên cả worktree và checkout chính; gồm cache isolation/invalidation, compact transport, array create/edit, draft trong lúc save/refetch, revisions và selection xuyên trang. TypeScript, lint các thư mục thay đổi và Vite production build đạt. Modular runner đã cập nhật đường dẫn page và bổ sung API/hook/dialog suites.
+- Chrome profile riêng, API fixtures giống nhau trước/sau: form create/edit ở 1440×1000 và 390×844 trùng ảnh hoàn toàn (0 pixel khác biệt cho cả 4 cặp). Browser xác nhận URL compact, không có page error. Artifacts local: `output/playwright/browse-fsd-b01/`; fonts của worktree dùng dependency junction được phục vụ từ Vite baseline để so sánh cùng font.
+- Đo service đọc trên MySQL 8.0.40 bằng `benchmark_browse_mysql.py`, cùng tài khoản local, 1 warmup và 3 samples/case: 6 NoteType; full **60 SQL / 180.463 bytes**, compact **3 SQL / 16.349 bytes**. Payload mỗi case ổn định cả 3 samples. Artifacts local: `note-types-cases.json`, `note-types-mysql.json` trong thư mục trên. Đây không phải HTTP/load benchmark; không thay đổi backend/schema.
+
+Các shim ở root helpers/audio vẫn phục vụ caller cũ. Hai import legacy từ Study vào Browse (detail DTO và SVG dialog) chưa migrate trong task Browse này; cần xử lý khi tách composition của Study, không coi toàn bộ frontend đã sạch FSD.
 
 ### B00: đưa phép đo khỏi script tạm
 
@@ -40,4 +52,4 @@ Không đổi count, visibility, đại diện một Note, word/due sort, API re
 
 ## Công việc để lại cho pha tối ưu
 
-B01 compact/lazy NoteType; B02 count/preview; B03 clone search expressions; B04 scope batching; B05 sidebar aggregate/cache; B06 authority reader; B07 hydrate/DTO. Dùng baseline/contract mới để đánh giá các thay đổi này, không tự gộp vào bản sửa nợ kỹ thuật.
+B02 count/preview; B03 clone search expressions; B04 scope batching; B05 sidebar aggregate/cache; B06 authority reader; B07 hydrate/DTO. B01 đã dùng compact; lazy load là tùy chọn chưa áp dụng. Dùng baseline/contract để đánh giá các thay đổi tiếp theo.

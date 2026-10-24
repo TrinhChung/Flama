@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, ArrowUpDown, RotateCcw } from 'lucide-react'
-import { isValidArrayJson } from '@/lib/arrayField'
+import { isValidArrayJson } from '@/entities/flashcard/fields'
 import type { BrowseCardRow, BrowseSortBy, BrowseSortDir } from '../types'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import { BrowsePagination, type BrowsePaginationProps } from './BrowsePagination'

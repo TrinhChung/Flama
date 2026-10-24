@@ -19,7 +19,7 @@ import {
   Volume2,
 } from 'lucide-react'
 
-import { loadStoredLocalAudioSettings } from '@/features/audio/services/localAudioStorage'
+import { loadStoredLocalAudioSettings } from '@/entities/audio'
 import { loadStoredBrowseTtsSettings } from '../services/ttsSettingsStorage'
 
 export interface BrowseAudioSelectorModalProps {

@@ -13,7 +13,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { serializeArrayFieldValues } from '@/lib/arrayField'
+import { serializeArrayFieldValues } from '@/entities/flashcard/fields'
 import { NoteFieldEditor } from '@/entities/flashcard'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import type { useBrowseState } from '../hooks/useBrowseState'

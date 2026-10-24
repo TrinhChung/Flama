@@ -63,7 +63,7 @@ const StatisticsPage = lazy(() =>
   })),
 )
 const BrowsePage = lazy(() =>
-  import('./features/browse/pages/BrowsePage').then((module) => ({
+  import('./pages/browse').then((module) => ({
     default: module.BrowsePage,
   })),
 )

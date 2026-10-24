@@ -2,7 +2,7 @@
 
 Ngày: 2026-10-24. Căn cứ: [báo cáo điều tra](../architecture/BROWSE_PERFORMANCE_DATA_REVIEW_2026-10-24.md) và [evidence MySQL local](../architecture/BROWSE_PERFORMANCE_DATA_REVIEW_2026-10-24.evidence.json).
 
-Cập nhật phạm vi: người dùng yêu cầu làm nợ kỹ thuật trước, tối ưu sau. Đã triển khai công cụ service baseline/MySQL contract của B00 và bản sửa ordering B08; kết quả kiểm chứng ghi tại [báo cáo pha nợ kỹ thuật](../architecture/BROWSE_TECH_DEBT_IMPLEMENTATION_2026-10-24.md). B01–B07 chưa triển khai. HTTP/load measurements của B00 dành cho pha tối ưu, không được coi đã đo trong lần này.
+Cập nhật phạm vi: đã triển khai công cụ service baseline/MySQL contract của B00, sửa ordering B08, tách Browse frontend theo FSD và hoàn thành B01 compact NoteType với cache riêng. Kết quả kiểm chứng ghi tại [báo cáo triển khai](../architecture/BROWSE_TECH_DEBT_IMPLEMENTATION_2026-10-24.md). B02–B07 chưa triển khai. HTTP/load measurements của B00 vẫn cần thực hiện ở pha tối ưu.
 
 Các số đo là mẫu service local một lần/case, không phải HTTP production hoặc p95. Ngưỡng 5 giây là giới hạn do probe đặt. Phần “vì sao cách cũ như vậy” phân biệt hành vi/lịch sử đã kiểm chứng với lý do kỹ thuật suy luận từ code; không khẳng định động cơ của người viết nếu Git không ghi rõ.
 
@@ -40,7 +40,9 @@ Phạm vi: `tests/test_browse_query_bounds.py`, các test Browse/NOTE hiện có
 
 ## B01 — Tải NoteType gọn và đúng lúc
 
-**Vì sao cần:** Browse gọi `/note-types` full ngay khi mount, lấy template HTML/CSS, marketplace/taxonomy mà form tạo Note không đọc. Mẫu A: full 66 statements/247.402 bytes; compact 3 statements/17.523 bytes, cùng 6 note types.
+**Trạng thái:** Hoàn thành ngày 2026-10-24. Browse gọi `GET /api/note-types?compact=1`, key `['note-types', 'browse', 'compact']`; giữ preload khi mount để không thêm thời gian chờ lúc mở form. Mẫu đo lại trên MySQL local: cùng 6 NoteType, full 60 statements/180.463 bytes, compact 3 statements/16.349 bytes (3 samples sau 1 warmup). Đây là số đo service, không phải HTTP hoặc production latency.
+
+**Vì sao cần:** Trước thay đổi, Browse gọi `/note-types` full ngay khi mount, lấy template HTML/CSS, marketplace/taxonomy mà form tạo Note không đọc. Mẫu điều tra ban đầu A: full 66 statements/247.402 bytes; compact 3 statements/17.523 bytes, cùng 6 note types; dữ liệu local đã thay đổi giữa hai lần đo.
 
 **Vì sao trước đây làm như vậy:** Code dùng endpoint đầy đủ và query key chung `['note-types']`. Suy luận kỹ thuật: reuse dữ liệu của màn quản lý và có sẵn schema ngay khi người dùng mở form giúp giảm code/độ trễ tương tác lúc tạo Note. Không có bằng chứng cần HTML/CSS template cho Browse form hiện tại.
 
@@ -52,7 +54,7 @@ Phạm vi: `tests/test_browse_query_bounds.py`, các test Browse/NOTE hiện có
 
 **Hoàn thành khi:** Form tạo Note đủ fields/array types; màn khác không bị cache shape sai; payload và query count được đo lại. Giao diện và hành vi tạo Note giữ nguyên; chạy focused Vitest/typecheck cho phần chạm.
 
-Phạm vi: `frontend/src/features/browse/hooks/useBrowseState.ts`, API/public entry của slice và focused tests. Endpoint compact hiện có ở `app/api/v1/flashcards/note_types.py`, service `app/services/flashcard_content_service.py`.
+Phạm vi triển khai: `frontend/src/features/browse/hooks/useBrowseData.ts`, `api/browseApi.ts`, public entry của slice, `frontend/src/pages/browse/` và focused tests. Endpoint compact hiện có ở `app/api/v1/flashcards/note_types.py`, service `app/services/flashcard_content_service.py`; không thay đổi backend/schema.
 
 ## B02 — Count theo Note và chọn preview hiệu quả hơn
 
