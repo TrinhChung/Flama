@@ -17,16 +17,9 @@ from app.services.anki_scheduler import (
 from app.services import mcp_access_token_service
 from app.services import support_donation_service
 from app.services import tts_provider_service
-from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services.support_checkout_service import (
     SupportCheckoutError,
     prepare_support_checkout,
-)
-from app.services.stats_overview import build_stats_overview
-from app.services.study_authority_read_service import StudyAuthorityReadError
-from app.services.stats_today_future import (
-    build_today_future_stats,
-    build_user_study_time_stats,
 )
 from app.utils.permissions import is_admin_user
 from app.validators import RequestValidationError
@@ -249,99 +242,6 @@ def revoke_mcp_token(token_id: int):
 def statistics_page():
     from app.spa import serve_react_spa
     return serve_react_spa()
-
-
-@main_bp.route("/api/stats/overview", methods=["GET"])
-@login_required
-def stats_overview():
-    year_raw = (request.args.get("year") or "").strip()
-    year: int | None = None
-    if year_raw:
-        try:
-            year = int(year_raw)
-        except ValueError:
-            return jsonify({"error": "VALIDATION_ERROR", "message": "year must be an integer."}), 400
-        if year < 1970 or year > 2100:
-            return jsonify({"error": "VALIDATION_ERROR", "message": "year must be between 1970 and 2100."}), 400
-
-    try:
-        payload = build_stats_overview(
-            user_id=current_user.id,
-            year=year,
-            timezone_name=getattr(current_user, "timezone", "UTC"),
-        )
-    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
-        return jsonify({"error": str(exc.code), "message": str(exc)}), 409
-    return jsonify(payload)
-
-
-@main_bp.route("/api/stats/today-future", methods=["GET"])
-@login_required
-def stats_today_future():
-    scope = (request.args.get("scope") or "deck").strip().lower()
-    history_range = (request.args.get("history_range") or "12m").strip().lower()
-    future_range = (request.args.get("future_range") or "30").strip().lower()
-    backlog = (request.args.get("backlog") or "false").strip().lower()
-
-    deck_id_raw = (request.args.get("deck_id") or "").strip()
-    deck_id = None
-    if deck_id_raw:
-        try:
-            deck_id = int(deck_id_raw)
-        except ValueError:
-            return jsonify({"error": "VALIDATION_ERROR", "message": "deck_id must be an integer."}), 400
-
-    if scope not in {"deck", "collection"}:
-        return jsonify({"error": "VALIDATION_ERROR", "message": "scope must be deck or collection."}), 400
-    if history_range not in {"12m", "all"}:
-        return jsonify({"error": "VALIDATION_ERROR", "message": "history_range must be 12m or all."}), 400
-    if future_range not in {"30", "90", "365", "all"}:
-        return jsonify({"error": "VALIDATION_ERROR", "message": "future_range must be 30, 90, 365, or all."}), 400
-    if backlog not in {"0", "1", "true", "false", "yes", "no", "on", "off"}:
-        return jsonify({"error": "VALIDATION_ERROR", "message": "backlog must be a boolean-like value."}), 400
-
-    try:
-        payload = build_today_future_stats(
-            user_id=current_user.id,
-            timezone_name=getattr(current_user, "timezone", "UTC"),
-            scope=scope,
-            deck_id=deck_id,
-            history_range=history_range,
-            future_range=future_range,
-            backlog=backlog,
-        )
-    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
-        return jsonify({"error": str(exc.code), "message": str(exc)}), 409
-    return jsonify(payload)
-
-
-@main_bp.route("/api/stats/study-time", methods=["GET"])
-@login_required
-def stats_study_time():
-    scope = (request.args.get("scope") or "deck").strip().lower()
-    range_preset = (request.args.get("range") or "30d").strip().lower()
-    start_date = request.args.get("start_date")
-    end_date = request.args.get("end_date")
-    deck_id_raw = (request.args.get("deck_id") or "").strip()
-    deck_id = None
-    if deck_id_raw:
-        try:
-            deck_id = int(deck_id_raw)
-        except (TypeError, ValueError):
-            deck_id = None
-
-    payload = build_user_study_time_stats(
-        user_id=current_user.id,
-        timezone_name=getattr(current_user, "timezone", "UTC"),
-        scope=scope,
-        deck_id=deck_id,
-        range_preset=range_preset,
-        start_date_str=start_date,
-        end_date_str=end_date,
-    )
-    return jsonify(payload)
 
 
 def _parse_boolean(value: object) -> bool:
