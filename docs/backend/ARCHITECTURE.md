@@ -191,7 +191,7 @@ A foundational design decision in Flama is that the physical `cards` table has b
   ).select_from(_pair_join).subquery("card_presentations")
   ```
 - **Composite Key**: `<note_id>.<application_id>`. This composite identity remains completely stable across template edits and never duplicates rows when templates are modified or reordered.
-- Wire compatibility is preserved via the `card_presentation_aliases` table.
+- Wire compatibility is preserved via the `card_presentation_aliases` table: old random Card IDs (still named by 98% of `review_events`, older study sessions and every Flama Connect source ref) resolve to their pair. Aliases no longer decide membership: since 2026-10-24 every Note is shown through every ACTIVE application of its NoteType. The `card_presentation_cutover_*` tables are an archive no read depends on; the cutover archived a Card for every original pair (111,743 of 111,743, and production still matched), and a derived Card cannot drift from Note x application.
 
 ### 4.2 Study Progress & Authority Decoupling (ADR P10)
 Study progress is decoupled from card presentation records:
@@ -265,7 +265,7 @@ Study intervals are computed based on day ordinals rather than timestamps to pre
   Sessions between midnight and 04:00 AM count towards the previous calendar day's streak and review counts.
 - `_day_index_to_datetime(day_index, boundary_hour, timezone_name)` (line 709):
   Converts an integer day ordinal back to UTC datetime corresponding to 04:00 AM local time.
-- Statistics group local days in SQL when `stats_query_repository.fixed_utc_offset_minutes(timezone_name)` returns an offset: the zone's UTC offset is constant on the 1st and 15th of every month from 2000 to 2040 (aliases such as `Asia/Saigon` and half-hour zones qualify). Zones with DST or offset changes use the Python path. Both paths share the guarded scopes; `scripts/probe_dashboard_due_counts_mysql.py` checks their parity on MySQL.
+- Statistics group local days in SQL when `stats_query_repository.fixed_utc_offset_minutes(timezone_name)` returns an offset: the zone's UTC offset is constant on the 1st and 15th of every month from 2000 to 2040 (aliases such as `Asia/Saigon` and half-hour zones qualify). Zones with DST or offset changes use the Python path. Both paths share the same scopes; `scripts/probe_dashboard_due_counts_mysql.py` checks their parity on MySQL.
 
 ---
 

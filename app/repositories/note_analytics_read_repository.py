@@ -185,21 +185,19 @@ def note_rows(scope, *, learner_user_id: int, include_state: bool = False):
     ))
 
 
-def learner_note_scope(*, learner_user_id: int, storage_profile: str | None = None,
-                       presence_only: bool = False):
+def learner_note_scope(*, learner_user_id: int, storage_profile: str | None = None):
     """Visible owned/install Notes whose live Note holds current state.
 
     The shared scope preserves release-pinned retired applications and local
     added Notes. An outer ORM statement embedding this scope must retain
     ``include_retired_cards=True``; its owned branch explicitly selects ACTIVE
     applications, while the overlay branch enforces its release pin.
-    ``presence_only`` is for readers that weigh each Note once.
     """
 
     from models import db
     from app.repositories.note_analytics_scope_repository import collection_note_scope
 
-    scope = collection_note_scope(db.session, learner_user_id=learner_user_id, presence_only=presence_only)
+    scope = collection_note_scope(db.session, learner_user_id=learner_user_id)
     # A bounded scalar presence probe has the same semantics as EXISTS. It
     # prevents MySQL's semijoin rewrite from placing application counts before
     # the Note join (measured 31 x 39k intermediate rows on the production set).

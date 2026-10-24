@@ -30,8 +30,8 @@ from tests import test_note_stats_retirement as fixture
 
 PROBE_NAME = re.compile(r"^flama_note_analytics_probe_[0-9]+_[a-f0-9]{8}$")
 CASES = (
-    "test_note_scope_preserves_original_absent_pairs_and_new_applications",
-    "test_note_scope_ignores_aliases_for_a_different_application_note_type",
+    "test_note_scope_counts_every_active_application_whatever_the_cutover_archive",
+    "test_note_scope_ignores_aliases_of_another_note_type",
     "test_forecast_reads_one_row_for_many_occurrences_in_the_counted_unit",
     "test_collection_unions_disjoint_release_pins_instead_of_max_or_sum",
     "test_collection_deduplicates_owned_and_installed_active_presentations",

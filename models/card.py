@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable
 
-from sqlalchemy import UniqueConstraint, and_, case, event, false, literal, or_, select, tuple_
+from sqlalchemy import UniqueConstraint, and_, case, event, false, literal, select, tuple_
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, foreign, relationship, with_loader_criteria
 from sqlalchemy.sql.functions import GenericFunction
@@ -52,8 +52,9 @@ class PresentationAlias(db.Model):
     )
 
 
-# Original entity sets preserve absent pairs (including partial deletion).
-# Imported Notes may retain historical timestamps, so time is not membership.
+# Archived by the P11 cutover; no read depends on them. A derived Card cannot
+# drift from Note x application, and the cutover archived a Card for every
+# original pair (111,743 of 111,743; production still matched on 2026-10-24).
 cutover_notes = db.Table(
     "card_presentation_cutover_notes",
     db.Column("note_id", db.String(36), primary_key=True),
@@ -178,13 +179,6 @@ _presentations = (
              else_=greatest(_notes.c.created_at, _applications.c.created_at)).label("updated_at"),
     )
     .select_from(_pair_join)
-    .where(or_(
-        _aliases.c.id.isnot(None),
-        ~select(cutover_notes.c.note_id).where(cutover_notes.c.note_id == _notes.c.id).exists(),
-        ~select(cutover_applications.c.application_id).where(
-            cutover_applications.c.application_id == _applications.c.id,
-        ).exists(),
-    ))
     .subquery("card_presentations")
 )
 

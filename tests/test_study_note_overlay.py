@@ -320,12 +320,14 @@ class StudyNoteOverlayTests(unittest.TestCase):
             self.assertEqual(all_listing["total"], 2)
             self.assertEqual(len(all_listing["items"]), 2)
 
-    def test_browse_keeps_note_when_default_presentation_was_absent_at_cutover(self):
+    def test_browse_shows_the_default_presentation_whatever_the_cutover_archive(self):
         self._install_overlay()
         with self.app.app_context():
             cards = Card.query.filter_by(note_id=self.source_note_id).all()
             survivor = next(card for card in cards
                 if not db.session.get(StudyApplication, card.application_id).is_default)
+            default = next(card for card in cards
+                if db.session.get(StudyApplication, card.application_id).is_default)
             archive_wire_alias(db.session, survivor, str(uuid4()))
             db.session.execute(cutover_notes.insert().values(note_id=self.source_note_id))
             db.session.execute(cutover_applications.insert(), [
@@ -334,7 +336,7 @@ class StudyNoteOverlayTests(unittest.TestCase):
             listing = browse_card_service.list_browse_cards(user_id=self.user_id, admin_mode=False,
                 timezone_name="UTC", query_args={"deck_id": str(self.local_deck_id)})
             self.assertEqual(listing["total"], 1)
-            self.assertEqual(listing["items"][0]["card_id"], survivor.id)
+            self.assertEqual(listing["items"][0]["card_id"], default.id)
             self.assertEqual(listing["items"][0]["word"], "共有")
 
     def test_browse_chooses_preview_inside_legacy_clone_snapshot(self):

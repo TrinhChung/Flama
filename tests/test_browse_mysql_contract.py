@@ -244,7 +244,7 @@ class BrowseMySQLContractTests(fixtures.BrowseQueryBoundsTests):
             self.assertEqual(set(names), {"A own source", "Z own source"})
             self.assertEqual(names, sorted(names, reverse=direction == "desc"))
 
-    def test_historical_preview_keeps_missing_occurrence_absent(self):
+    def test_cutover_archive_hides_no_occurrence(self):
         from sqlalchemy import insert
         from models.card import Card, cutover_applications, cutover_notes
         from models.note_type import NoteType
@@ -267,17 +267,18 @@ class BrowseMySQLContractTests(fixtures.BrowseQueryBoundsTests):
             {"application_id": original_application_id}, {"application_id": default_id},
         ])
         db.session.commit()
+        # The archived Note still shows through the new default template.
         page, _ = self._list(deck_id=root_id)
         historical = next(row for row in page["items"] if row["note_id"] == note_id)
         self.assertEqual(page["total"], 6)
-        self.assertTrue(historical["card_id"].endswith("." + original_application_id))
+        self.assertTrue(historical["card_id"].endswith("." + default_id))
         expanded, _ = self._list(deck_id=root_id, all_templates=1)
-        self.assertEqual(expanded["total"], 11)
+        self.assertEqual(expanded["total"], 12)
         db.session.get(StudyApplication, original_application_id).status_code = "RETIRED"
         db.session.commit()
         retired, _ = self._list(deck_id=root_id)
-        self.assertEqual(retired["total"], 5)
-        self.assertNotIn(note_id, {row["note_id"] for row in retired["items"]})
+        self.assertEqual(retired["total"], 6)
+        self.assertIn(note_id, {row["note_id"] for row in retired["items"]})
 
 
 if __name__ == "__main__":

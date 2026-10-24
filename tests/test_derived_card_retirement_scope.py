@@ -108,10 +108,11 @@ class DerivedCardRetirementScopeTests(unittest.TestCase):
         self.assertEqual(canonical_card_ids(db.session, ["old-wire-1"]), {"old-wire-1": pair})
         self.assertFalse(db.session.dirty)
 
-    def test_original_absent_pairs_are_not_regenerated(self):
+    def test_every_active_application_presents_every_note(self):
+        # Only a1 has archived aliases; the archive maps old IDs and hides no pair.
         self.assertEqual({(c.note_id, c.application_id) for c in Card.query.all()},
-                         {("qualification-n1", "qualification-a1"), ("qualification-n2", "qualification-a1")})
-        self.assertIsNone(get_card(db.session, "qualification-n1.qualification-a2"))
+                         {(f"qualification-n{n}", f"qualification-a{a}") for n in (1, 2) for a in (1, 2)})
+        self.assertIsNotNone(get_card(db.session, "qualification-n1.qualification-a2"))
 
     def test_exact_per_note_card_creation_times_preserve_legacy_clone_cutoff(self):
         visible = query_clone_scope_cards(self._scope()).all()
@@ -127,7 +128,8 @@ class DerivedCardRetirementScopeTests(unittest.TestCase):
         db.session.connection().execute(sa.update(aliases).where(aliases.c.note_id == "qualification-n2")
                                         .values(id="a-old-card", created_at=OLD))
         db.session.commit()
-        cards = Card.query.order_by(Card.created_at, Card.order_key).all()
+        cards = Card.query.filter_by(application_id="qualification-a1").order_by(
+            Card.created_at, Card.order_key).all()
         self.assertEqual([card.note_id for card in cards], ["qualification-n2", "qualification-n1"])
         self.assertEqual([card.order_key for card in cards], ["a-old-card", "z-old-card"])
         self.assertTrue(all("." in card.id for card in cards))
@@ -166,7 +168,7 @@ class DerivedCardRetirementScopeTests(unittest.TestCase):
              patch("app.services.flashcards_share_service.release_note_membership_filter", return_value=None):
             visible = query_clone_scope_cards(self._scope(release, cutoff=None)).all()
         self.assertEqual(len(visible), 2)
-        self.assertEqual(Card.query.count(), 0)
+        self.assertEqual(Card.query.filter_by(application_id="qualification-a1").count(), 0)
         self.assertEqual(get_card(db.session, "old-wire-1").id, "old-wire-1")
 
     def test_initialized_empty_release_manifest_exposes_no_source_cards(self):

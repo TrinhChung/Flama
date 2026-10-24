@@ -208,9 +208,7 @@ def _canonical_future_due_day_counts(
     from app.repositories import note_analytics_read_repository as note_reads
 
     by_note = forecast_counts_notes()
-    scope = note_reads.learner_note_scope(
-        learner_user_id=user_id, storage_profile=storage_profile, presence_only=by_note,
-    )
+    scope = note_reads.learner_note_scope(learner_user_id=user_id, storage_profile=storage_profile)
     rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("rows")
     weight = literal(1).label("card_count") if by_note else rows.c.card_count
     fetched = db.session.execute(

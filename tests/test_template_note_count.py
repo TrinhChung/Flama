@@ -94,8 +94,8 @@ class TemplateNoteCountTests(unittest.TestCase):
             db.session.add_all([n1, n2, n3])
             db.session.flush()
 
-            # Explicit pre-cutover evidence preserves historical missing pairs:
-            # all three Notes had T1, while only n1 had T2.
+            # Archived pre-cutover evidence does not hide pairs: although only
+            # n1 had a T2 alias, every Note shows through every ACTIVE template.
             from models.card import cutover_notes, cutover_applications
             from tests.study_note_fixtures import archive_wire_alias
             pairs = [(n1, t1), (n2, t1), (n3, t1), (n1, t2)]
@@ -117,7 +117,7 @@ class TemplateNoteCountTests(unittest.TestCase):
         self.assertEqual(items[0]["id"], t1_id)
         self.assertEqual(items[0]["note_count"], 3)
         self.assertEqual(items[1]["id"], t2_id)
-        self.assertEqual(items[1]["note_count"], 1)
+        self.assertEqual(items[1]["note_count"], 3)
 
     def test_template_without_cards_is_zero(self):
         with self.app.app_context():
