@@ -7,7 +7,6 @@ JSON-serializable payloads without moving business logic into API routes.
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any
 
 from flask import url_for
@@ -80,35 +79,26 @@ def build_session_payload(user) -> dict[str, Any]:
     }
 
 
-def build_dashboard_payload(user, *, compact: bool = False) -> dict[str, Any]:
-    rows, total_new, total_learn, total_due, admin_mode = build_dashboard_data(
-        user, include_move_tokens=not compact
-    )
+def build_dashboard_payload(user) -> dict[str, Any]:
+    rows, admin_mode = build_dashboard_data(user)
 
-    def compact_node(row):
-        return {
+    def node(row):
+        item = {
             "deck_id": row.deck_id,
             "parent_id": row.parent_id,
-            "move_alias": row.move_alias,
             "label": row.label,
             "depth": row.depth,
             "new_count": row.new_count,
             "learn_count": row.learn_count,
             "due_count": row.due_count,
             "note_type_id": row.note_type_id,
-            "children": [compact_node(child) for child in row.children],
+            "children": [node(child) for child in row.children],
         }
+        if row.move_alias:
+            item["move_alias"] = row.move_alias
+        return item
 
-    return {
-        "items": [compact_node(row) if compact else asdict(row) for row in rows],
-        "summary": {
-            "new": int(total_new),
-            "learning": int(total_learn),
-            "due": int(total_due),
-            "total_due": int(total_new) + int(total_learn) + int(total_due),
-        },
-        "admin_mode": bool(admin_mode),
-    }
+    return {"items": [node(row) for row in rows], "admin_mode": bool(admin_mode)}
 
 
 def build_statistics_bootstrap_payload(

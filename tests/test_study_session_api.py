@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from app import create_app
 from app.repositories import template_library_repository
-from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent, archive_wire_alias
+from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent, archive_wire_alias, dashboard_totals
 from tests.note_progress_fixtures import stage_note_state
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services.anki_scheduler import _day_index, applyAnswer
@@ -1481,10 +1481,7 @@ class StudySessionApiTests(unittest.TestCase):
         response = self.client.get("/api/dashboard")
         self.assertEqual(response.status_code, 200, response.get_json())
         payload = response.get_json()
-        self.assertEqual(payload["summary"]["new"], 1)
-        self.assertEqual(payload["summary"]["learning"], 0)
-        self.assertEqual(payload["summary"]["due"], 0)
-        self.assertEqual(payload["summary"]["total_due"], 1)
+        self.assertEqual(dashboard_totals(payload), {"new": 1, "learning": 0, "due": 0})
 
     def test_statistics_note_future_due_bypasses_legacy_progress_query(self):
         self._enable_existing_state_note_authority(epoch=15)

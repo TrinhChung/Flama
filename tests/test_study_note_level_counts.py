@@ -62,7 +62,8 @@ class StudyNoteLevelCountTests(unittest.TestCase):
         with self.app.test_request_context():
             with self.app.app_context():
                 user = db.session.get(User, self.user_id)
-                rows, total_new, _learn, _due, _admin = build_dashboard_data(user)
+                rows, _admin = build_dashboard_data(user)
+                total_new = sum(row.new_count for row in rows)
         return total_new
 
     def _tree_counts(self):

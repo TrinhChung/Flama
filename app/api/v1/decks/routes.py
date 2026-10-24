@@ -83,7 +83,6 @@ def update_deck(deck_id: int):
         result = deck_api_service.update_deck(
             deck_id=deck_id,
             payload=payload,
-            user_id=current_user.id,
         )
     except deck_api_service.DeckApiError as exc:
         return _service_error(exc)

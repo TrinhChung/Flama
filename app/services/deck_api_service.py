@@ -10,7 +10,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.repositories import flashcards_share_repository, vocabulary_repository
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services import deck_management_service, flashcards_share_service
-from app.utils.deck_move_token import parse_deck_move_token
 from models import db
 from models.deck import Deck
 
@@ -152,7 +151,6 @@ def update_deck(
     *,
     deck_id: int,
     payload: dict[str, Any],
-    user_id: int | None = None,
 ) -> DeckUpdateResult:
     deck = db.session.get(Deck, deck_id)
     if deck is None or deck.deleted_at is not None:
@@ -187,24 +185,8 @@ def update_deck(
             deck.name = new_name
             changed = True
 
-    if "parent_id" in payload or "parent_token" in payload:
-        parent_token_raw = str(payload.get("parent_token") or "").strip()
-        if parent_token_raw:
-            new_parent_id = parse_deck_move_token(
-                parent_token_raw,
-                user_id=user_id,
-            )
-            if new_parent_id is None:
-                raise DeckApiError(
-                    "VALIDATION_ERROR",
-                    "Parent move token is invalid or expired.",
-                    status=400,
-                    field="parent_token",
-                )
-        elif "parent_id" in payload:
-            new_parent_id = _parse_parent_id(payload.get("parent_id"))
-        else:
-            new_parent_id = None
+    if "parent_id" in payload:
+        new_parent_id = _parse_parent_id(payload.get("parent_id"))
         new_parent = (
             db.session.get(Deck, new_parent_id) if new_parent_id else None
         )

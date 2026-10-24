@@ -21,6 +21,7 @@ from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_subject import StudyProgressSubject
 from tests import test_study_direct_note_replay as fixtures
+from tests.study_note_fixtures import dashboard_totals
 from tests import test_study_algorithm_switch as switch_tests
 from tests import test_study_note_batch as batch_tests
 from tests import test_study_note_overlay as overlay_tests
@@ -196,7 +197,7 @@ class StudyConsolidatedProgressTests(unittest.TestCase):
         for count_by_note, learning in ((False, 2), (True, 1)):
             with self.subTest(count_by_note=count_by_note):
                 self.app.config["STUDY_NOTE_COUNT_ENABLED"] = count_by_note
-                summary = self.client.get("/api/dashboard").get_json()["summary"]
+                summary = dashboard_totals(self.client.get("/api/dashboard").get_json())
                 self.assertEqual((summary["new"], summary["learning"], summary["due"]), (0, learning, 0))
         self.app.config["STUDY_NOTE_COUNT_ENABLED"] = False
 

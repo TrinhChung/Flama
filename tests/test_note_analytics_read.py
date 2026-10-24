@@ -26,7 +26,7 @@ from models.note_type import NoteType
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 from models.user import User
-from tests.study_note_fixtures import attach_template
+from tests.study_note_fixtures import attach_template, dashboard_totals
 
 
 def _now():
@@ -118,14 +118,6 @@ class NoteAnalyticsReadTests(unittest.TestCase):
         self.assertEqual(response.status_code, expected, response.get_json())
         return response.get_json()
 
-    def _stable_dashboard(self):
-        # Deck move tokens are signed with a per-second timestamp; drop them.
-        def strip(row):
-            return {**{key: value for key, value in row.items() if "move_" not in key},
-                "children": [strip(child) for child in row["children"]]}
-        body = self._dashboard()
-        return {**body, "items": [strip(row) for row in body["items"]]}
-
     def _overview(self, expected=200):
         response = self.client.get("/api/statistics/overview", query_string={"year": _now().year})
         self.assertEqual(response.status_code, expected, response.get_json())
@@ -137,21 +129,21 @@ class NoteAnalyticsReadTests(unittest.TestCase):
 
     def test_counts_follow_the_row_and_only_the_audit_rederives_them(self):
         self._answer("again")
-        before = self._dashboard()["summary"]
+        before = dashboard_totals(self._dashboard())
         self.assertEqual((before["new"], before["learning"], before["due"]), (0, 2, 0))
         self.assertEqual(self._audit().exit_code, 0)
         with self.app.app_context():
             # Availability drift without a state change: only the read audit sees it (K1).
             StudyProgressSubject.query.filter_by(learner_user_id=self.user_id).one().normalized_queue = "new"
             db.session.commit()
-        after = self._dashboard()["summary"]
+        after = dashboard_totals(self._dashboard())
         self.assertEqual((after["new"], after["learning"]), (2, 0))
         audit = self._audit()
         self.assertNotEqual(audit.exit_code, 0, audit.output)
 
     def test_pristine_note_presentations_never_require_a_progress_fallback(self):
         self._answer("easy")
-        before = (self._dashboard()["summary"], self._overview()["heatmap"])
+        before = (dashboard_totals(self._dashboard()), self._overview()["heatmap"])
         with self.app.app_context():
             note = Note.query.filter_by(user_id=self.user_id).one()
             other = Note(user_id=self.user_id, note_type_id=note.note_type_id, deck_id=self.deck_id,
@@ -161,7 +153,7 @@ class NoteAnalyticsReadTests(unittest.TestCase):
             self.assertEqual(Card.query.filter_by(note_id=other.id).count(), 2)
             self.assertNotIn('card_progress', db.metadata.tables)
             db.session.commit()
-        summary, heatmap = self._dashboard()["summary"], self._overview()["heatmap"]
+        summary, heatmap = dashboard_totals(self._dashboard()), self._overview()["heatmap"]
         # The new pristine Note reads NEW; nothing else moves.
         self.assertEqual(summary["new"], before[0]["new"] + 2)
         self.assertEqual((summary["learning"], summary["due"]), (before[0]["learning"], before[0]["due"]))
@@ -206,7 +198,7 @@ class NoteAnalyticsReadTests(unittest.TestCase):
             "rating": "again", "operation_key": str(uuid4()), "duration_ms": 400,
             "scope": "deck", "scope_id": self.local_deck_id})
         self.assertEqual(response.status_code, 200, response.get_json())
-        dashboard = self._stable_dashboard()
+        dashboard = self._dashboard()
         installed = [row for row in dashboard["items"] if row["deck_id"] == self.local_deck_id]
         self.assertEqual([row["learn_count"] for row in installed], [2], dashboard["items"])
         self._overview()

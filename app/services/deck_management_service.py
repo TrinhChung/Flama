@@ -25,7 +25,6 @@ from models.deck import Deck
 from models.card import card_key_pairs, forget_card_identities, legacy_card_ids, note_card_ids
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note
 from models.study_progress_subject import StudyProgressSubject
-from app.utils.deck_move_token import parse_deck_move_token
 
 UTC = timezone.utc
 

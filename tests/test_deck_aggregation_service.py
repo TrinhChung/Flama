@@ -402,7 +402,9 @@ class DeckAggregationServiceTests(unittest.TestCase):
             db.session.commit()
 
             with self.app.test_request_context():
-                rows, total_new, total_learn, total_due, admin_mode = build_dashboard_data(user)
+                rows, admin_mode = build_dashboard_data(user)
+                total_new = sum(row.new_count for row in rows)
+                total_due = sum(row.due_count for row in rows)
 
             self.assertFalse(admin_mode)
             owned_node = next((n for n in rows if n.deck_id == self.owned_deck_id), None)
@@ -523,7 +525,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             learner_user = db.session.get(User, self.learner_id)
             with self.app.test_request_context():
-                nodes, total_new, total_learn, total_due, _ = build_dashboard_data(learner_user)
+                nodes, _ = build_dashboard_data(learner_user)
 
             node_a = next(n for n in nodes if n.deck_id == local_a.id)
             node_b = next(n for n in nodes if n.deck_id == local_b.id)
@@ -671,7 +673,8 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             with self.app.test_request_context():
                 with patch("app.services.dashboard_service._utcnow", return_value=now_utc):
-                    rows, total_new, total_learn, total_due, _ = build_dashboard_data(user)
+                    rows, _ = build_dashboard_data(user)
+                    total_due = sum(row.due_count for row in rows)
                     # Should be due on today's study day because due_at is before tomorrow's 6 AM boundary!
                     self.assertEqual(total_due, 1)
 

@@ -1053,7 +1053,6 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/rest_api_service.py",
             "app/utils/__init__.py",
             "app/utils/db.py",
-            "app/utils/deck_move_token.py",
             "app/utils/logging_redactor.py",
             "app/utils/permissions.py",
             "app/utils/redirects.py",

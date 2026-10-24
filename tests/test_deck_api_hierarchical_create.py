@@ -179,6 +179,8 @@ class HierarchicalDeckCreateTests(unittest.TestCase):
         found = next((item for item in data["items"] if item["deck_id"] == deck_id), None)
         self.assertIsNotNone(found)
         self.assertEqual(found.get("note_type_id"), nt_id)
+        # Only the admin row menu copies move aliases.
+        self.assertNotIn("move_alias", found)
 
         own = self.client.get(f"/api/decks/{deck_id}/note-type")
         self.assertEqual(own.status_code, 200)

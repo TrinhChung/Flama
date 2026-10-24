@@ -36,7 +36,7 @@ describe('Dashboard transport regression coverage', () => {
     expect(init).not.toHaveProperty('includeTimezone')
   })
 
-  it('maps compact nested decks while preserving copy aliases, URLs and counts', async () => {
+  it('maps nested decks while preserving copy aliases, URLs and counts', async () => {
     const child = {
       deck_id: 11, parent_id: 10, move_alias: 'MID-CHILD', label: 'Child', depth: 1,
       new_count: 2, learn_count: 1, due_count: 3, note_type_id: null, children: [],
@@ -46,7 +46,7 @@ describe('Dashboard transport regression coverage', () => {
       admin_mode: true,
     })
     const result = await dashboardApi.getDashboard()
-    expect(fetchMock.mock.calls[0][0]).toContain('/dashboard?compact=1')
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/dashboard$/)
     expect(fetchMock.mock.calls[0][1].headers.has('X-Timezone')).toBe(false)
     expect(result.decks[0].children[0]).toMatchObject({
       id: 11, parent_id: 10, study_url: '/study?deck_id=11',

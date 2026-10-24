@@ -54,7 +54,7 @@ function toDashboard(payload: DashboardResponse): DashboardPayload {
 export const dashboardApi = {
   async getDashboard(): Promise<DashboardPayload> {
     const payload = await apiRequest<DashboardResponse>(
-      `${API_BASE}/dashboard?compact=1`,
+      `${API_BASE}/dashboard`,
       { includeTimezone: false },
     )
     return toDashboard(payload)

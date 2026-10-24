@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 import unittest
 
 from app import create_app
-from app.utils.deck_move_token import create_deck_move_token
 from models import db
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note, NoteType, Template
 from models.user import User
@@ -143,33 +142,6 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             moved_parent = Deck.query.get(parent_id)
             self.assertIsNotNone(moved_parent)
             self.assertIsNone(moved_parent.parent_id)
-
-    def test_move_deck_accepts_temporary_tokens(self):
-        with self.app.app_context():
-            parent_a = Deck(name="Parent A", parent_id=None, position=1)
-            parent_b = Deck(name="Parent B", parent_id=None, position=2)
-            db.session.add_all([parent_a, parent_b])
-            db.session.flush()
-            moving = Deck(name="Deck Move", parent_id=parent_a.id, position=1)
-            db.session.add(moving)
-            db.session.commit()
-
-            moving_id = moving.id
-            target_parent_id = parent_b.id
-            moving_token = create_deck_move_token(moving_id, self.admin_id)
-            target_parent_token = create_deck_move_token(target_parent_id, self.admin_id)
-
-        self._login_admin()
-        response = self.client.patch(
-            f"/api/decks/{moving_id}",
-            json={"parent_token": target_parent_token},
-        )
-        self.assertEqual(response.status_code, 200)
-
-        with self.app.app_context():
-            moved = Deck.query.get(moving_id)
-            self.assertIsNotNone(moved)
-            self.assertEqual(moved.parent_id, target_parent_id)
 
     def test_reset_deck_only_clears_current_user_progress(self):
         with self.app.app_context():
