@@ -35,7 +35,9 @@ from models import db
 from models.forecast_snapshot import StudyForecastSnapshot
 from models.study_progress_subject import StudyProgressSubject
 from models.user import User
-from scripts.mysql_probe_db import _connection_settings, _database_uri, _source_database_collation
+from scripts.mysql_probe_db import (
+    _connection_settings, _database_uri, _source_database_collation, reuse_generated_schema,
+)
 from tests import test_forecast_snapshots as forecast_fixture
 from tests import test_note_stats_retirement as note_fixture
 
@@ -154,10 +156,11 @@ def run(env_file=ROOT / ".env"):
         cases = unittest.defaultTestLoader.getTestCaseNames(forecast_fixture.ForecastSnapshotTests)
         suite = unittest.TestSuite(forecast_fixture.ForecastSnapshotTests(case) for case in cases)
         suite.addTests(ForecastMySQLContracts(case) for case in EXTRA_CASES)
-        with patch.object(note_fixture, "create_audit_app", side_effect=factory):
+        with reuse_generated_schema(name) as schema_reuse, \
+                patch.object(note_fixture, "create_audit_app", side_effect=factory):
             result = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0).run(suite)
         report.update(tests_run=result.testsRun, failures=len(result.failures), errors=len(result.errors),
-                      fixture_cases=cases, mysql_specific_cases=list(EXTRA_CASES),
+                      fixture_cases=cases, mysql_specific_cases=list(EXTRA_CASES), schema_reuse=schema_reuse,
                       status="PASS" if result.wasSuccessful() else "FAIL")
         if not result.wasSuccessful():
             report["failed_cases"] = [test.id() for test, _ in result.failures + result.errors]

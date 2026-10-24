@@ -372,6 +372,19 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p5_concurrency_mysql.py --learners 4 --notes 24 --rounds 2 --answers 8 --signups 6 --creates 8
 
+      # The probes below build their generated schema once and empty it
+      # between tests (scripts/mysql_probe_db.py reuse_generated_schema).
+      # Prove the reset first: rows gone, ids restart, changed DDL rebuilds.
+      - name: Verify probe schema reuse on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+          FLAMA_MYSQL_PROBE_TESTS: '1'
+        run: python scripts/run_tests.py --file tests/test_mysql_probe_schema_reuse.py --backend-only
+
       # These six probes each create, guard and drop their own generated
       # schema and share no server state, so they run two at a time, longest
       # first (plan 6.3.1). Concurrency probes and probes that use the ci

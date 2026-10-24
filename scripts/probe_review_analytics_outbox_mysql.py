@@ -35,7 +35,9 @@ from models import db
 from models.review_analytics import ReviewAnalyticsHead
 from models.review_analytics_outbox import ReviewAnalyticsOutbox
 from models.review_event import ReviewEvent
-from scripts.mysql_probe_db import _connection_settings, _database_uri, _source_database_collation
+from scripts.mysql_probe_db import (
+    _connection_settings, _database_uri, _source_database_collation, reuse_generated_schema,
+)
 from tests import test_review_analytics_outbox as fixtures
 from tests import test_review_analytics_projection as projection_fixture
 
@@ -203,10 +205,12 @@ def run(env_file=ROOT / ".env", *, selected_cases=None):
         extra_cases = [case for case in EXTRA_CASES if not selected_cases or case in selected_cases]
         suite = unittest.TestSuite(fixtures.ReviewAnalyticsOutboxTests(case) for case in cases)
         suite.addTests(OutboxMySQLContracts(case) for case in extra_cases)
-        with patch.object(projection_fixture, "create_audit_app", side_effect=factory):
+        with reuse_generated_schema(name) as schema_reuse, \
+                patch.object(projection_fixture, "create_audit_app", side_effect=factory):
             result = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0).run(suite)
         report.update(tests_run=result.testsRun, failures=len(result.failures), errors=len(result.errors),
-            fixture_cases=cases, mysql_specific_cases=extra_cases, fairness_index_evidence=dict(FAIRNESS_EVIDENCE), status="PASS" if result.wasSuccessful() else "FAIL")
+            fixture_cases=cases, mysql_specific_cases=extra_cases, fairness_index_evidence=dict(FAIRNESS_EVIDENCE),
+            schema_reuse=schema_reuse, status="PASS" if result.wasSuccessful() else "FAIL")
         if not result.wasSuccessful():
             report["failed_cases"] = [test.id() for test, _ in result.failures + result.errors]
             report["failure_summaries"] = [next((line[:200] for line in trace.splitlines()
