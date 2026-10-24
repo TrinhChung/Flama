@@ -253,7 +253,11 @@ class RestApiV1Tests(unittest.TestCase):
                 self.assertEqual(compact, repeated.get_json())
                 self.assertEqual(compact["summary"], legacy["summary"])
                 self.assertEqual(compact["summary"]["new"], expected_new)
-                self.assertEqual(compact["items"][0]["children"][0]["note_type_id"], note_type_id)
+                # The child deck has no type of its own; its Note's type is read on demand.
+                self.assertIsNone(compact["items"][0]["children"][0]["note_type_id"])
+                fallback = self.client.get(f"/api/decks/{self.child_deck_id}/note-type")
+                self.assertEqual(fallback.status_code, 200)
+                self.assertEqual(fallback.get_json(), {"note_type_id": note_type_id})
 
                 omitted = {"move_token", "parent_move_token", "parent_move_alias", "href"}
                 aliases = []

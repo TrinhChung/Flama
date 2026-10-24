@@ -16,6 +16,7 @@ vi.mock('../api/dashboardApi', () => ({
     renameDeck: vi.fn().mockResolvedValue({}),
     deleteDeck: vi.fn().mockResolvedValue({}),
     resetDeck: vi.fn().mockResolvedValue({}),
+    getDeckNoteType: vi.fn().mockResolvedValue({ note_type_id: 'nt-kanji' }),
     listNoteTypes: vi.fn().mockResolvedValue({
       items: [
         { id: 'nt-default', name: 'Từ vựng Flama' },
@@ -162,6 +163,38 @@ describe('CreateDeckModal', () => {
 
     // Ensure parent select is not rendered
     expect(document.querySelector('#create-deck-parent')).toBeNull()
+  })
+
+  it('asks the server which note type a deck without its own type passes on', async () => {
+    const untypedDeck: DeckNode = { ...parentDeck, id: 7, note_type_id: null, children: [] }
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <CreateDeckModal opened={true} onClose={vi.fn()} dashboard={dummyDashboard} selectedDeck={untypedDeck} />
+        </QueryClientProvider>,
+      )
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+
+    expect(dashboardApi.getDeckNoteType).toHaveBeenCalledExactlyOnceWith(7)
+    expect(document.querySelector<HTMLSelectElement>('#create-deck-notetype')?.value).toBe('nt-kanji')
+  })
+
+  it('does not ask the server when the selected deck has its own note type', async () => {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <CreateDeckModal opened={true} onClose={vi.fn()} dashboard={dummyDashboard} selectedDeck={childDeck} />
+        </QueryClientProvider>,
+      )
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+
+    expect(dashboardApi.getDeckNoteType).not.toHaveBeenCalled()
   })
 })
 

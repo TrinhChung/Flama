@@ -14,7 +14,7 @@ from models.deck import Deck
 from app.repositories.study_authority_repository import read_study_authority_route
 from app.repositories.study_repository import _today_day_index
 from app.services.anki_scheduler import _day_index_to_datetime
-from app.services.deck_aggregation_service import aggregate_deck_study_counts, deck_note_type_metadata
+from app.services.deck_aggregation_service import aggregate_deck_study_counts
 from app.services.deck_count_snapshot_service import resolve_cached_owned_deck_counts
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.services.stats_overview import get_effective_timezone_name
@@ -79,24 +79,19 @@ def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> T
         count_by_note=count_by_note, now_utc=now,
         authority_route=authority_route,
     )
-    metadata_ids = [int(deck.id) for deck in decks if not deck.note_type_id]
-    card_counts_by_deck, deck_note_types = aggregate_deck_study_counts(
+    # Only the deck's own note type is sent; the derived fallback is read on
+    # demand (GET /api/decks/<id>/note-type) when a sub-deck is created.
+    card_counts_by_deck, _ = aggregate_deck_study_counts(
         db.session,
         learner_user_id=int(current_user.id),
         visible_deck_ids=dirty_ids,
-        note_type_deck_ids=metadata_ids,
-        include_note_types=not bool(cached_counts),
+        include_note_types=False,
         today_day_index=today_day_index,
         day_cutoff_utc=day_cutoff_utc,
         admin_mode=admin_mode,
         count_by_note=count_by_note,
     )
     card_counts_by_deck.update(cached_counts)
-    if cached_counts and metadata_ids:
-        deck_note_types = deck_note_type_metadata(
-            db.session, learner_user_id=int(current_user.id), deck_ids=metadata_ids,
-            admin_mode=admin_mode,
-        )
 
     by_parent: Dict[int, List[Deck]] = {}
     for deck in decks:
@@ -167,11 +162,7 @@ def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> T
             deck_new = int(card_counts["new"])
             deck_learn = int(card_counts["learn"])
             deck_due = int(card_counts["due"])
-            deck_nt_id = (
-                str(deck.note_type_id)
-                if deck.note_type_id
-                else deck_note_types.get(deck.id)
-            )
+            deck_nt_id = str(deck.note_type_id) if deck.note_type_id else None
             nodes.append(
                 DeckNode(
                     deck_id=deck.id,

@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { DeckCardTypesDialog } from './DeckCardTypesDialog'
+import { useInheritedNoteType } from '../hooks/useInheritedNoteType'
 import { studyOverviewBaseKey } from '@/entities/study-overview'
 import { dashboardApi, dashboardQueryKey } from '../api'
 import {
@@ -116,13 +117,14 @@ export function CreateDeckModal({
 
   const noteTypesData = noteTypesQuery.data?.items
   const noteTypes = noteTypesData || []
+  const inherited = useInheritedNoteType(selectedDeck, opened)
+  const inheritedNoteTypeId = inherited.noteTypeId
 
   useEffect(() => {
     if (!opened) return
 
     const items = noteTypesData || []
     const suggestedPath = suggestNextDeckPath(selectedDeck, dashboard.decks)
-    const inheritedNoteTypeId = selectedDeck?.note_type_id || ''
     const defaultFallbackNoteTypeId =
       items.find(
         (nt) =>
@@ -139,7 +141,7 @@ export function CreateDeckModal({
       parent_id: '',
       note_type_id: inheritedNoteTypeId || defaultFallbackNoteTypeId,
     })
-  }, [opened, selectedDeck, dashboard.decks, form, noteTypesData])
+  }, [opened, selectedDeck, dashboard.decks, form, noteTypesData, inheritedNoteTypeId])
 
   const mutation = useMutation<unknown, Error, CreateDeckForm>({
     mutationFn: (values) =>
@@ -185,7 +187,7 @@ export function CreateDeckModal({
             <NativeSelect
               id="create-deck-notetype"
               className="w-full"
-              disabled={noteTypesQuery.isPending}
+              disabled={noteTypesQuery.isPending || inherited.isPending}
               {...form.register('note_type_id')}
             >
               {noteTypes.length === 0 ? (
@@ -201,7 +203,7 @@ export function CreateDeckModal({
               )}
             </NativeSelect>
             <p className="text-xs text-muted-foreground">
-              {selectedDeck?.note_type_id
+              {inheritedNoteTypeId
                 ? t('modals.create_deck.notetype_help_inherited')
                 : t('modals.create_deck.notetype_help_default')}
             </p>

@@ -144,7 +144,6 @@ def aggregate_deck_study_counts(
     count_by_note: bool = False,
     owned_by_any_user: bool = False,
     include_note_types: bool = True,
-    note_type_deck_ids: list[int] | None = None,
 ) -> Tuple[Dict[int, Dict[str, int]], Dict[int, str]]:
     """Count total/new/learn/due per visible deck (subtrees are summed by the caller).
 
@@ -154,9 +153,8 @@ def aggregate_deck_study_counts(
     all its Cards share one state, so a Note with two Templates is one due item.
     ``owned_by_any_user`` (admin-wide Browse) counts every Note in the visible
     decks with the learner's own state, not only the learner's Notes.
-    Metadata is optional: counts-only callers set ``include_note_types=False``.
-    ``note_type_deck_ids`` restricts fallback metadata to visible decks that
-    need it, without changing the counted scope or oldest-Note precedence.
+    Metadata is optional: counts-only callers set ``include_note_types=False``
+    (one deck's fallback alone is ``deck_note_type_metadata``).
     Raises ``StudyAuthorityReadError`` when a NOTE learner's evidence diverges.
     """
 
@@ -230,13 +228,10 @@ def aggregate_deck_study_counts(
                 "learn": int(learn or 0),
                 "due": int(due or 0),
             }
-    metadata_deck_ids = visible_deck_ids if note_type_deck_ids is None else [
-        deck_id for deck_id in note_type_deck_ids if deck_id in counts
-    ]
     note_types = _deck_note_types(
         session,
         learner_user_id=learner_user_id,
-        visible_deck_ids=metadata_deck_ids,
+        visible_deck_ids=visible_deck_ids,
         overlay_types=overlay_types,
     ) if include_note_types else {}
     return counts, note_types

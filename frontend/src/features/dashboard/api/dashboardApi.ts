@@ -93,6 +93,10 @@ export const dashboardApi = {
     return apiRequest<{ items: NoteTypeOption[] }>(`${API_BASE}/note-types`)
   },
 
+  async getDeckNoteType(deckId: number): Promise<{ note_type_id: string | null }> {
+    return apiRequest<{ note_type_id: string | null }>(`${API_BASE}/decks/${deckId}/note-type`)
+  },
+
   async createDeck(values: CreateDeckForm) {
     return apiJson(`${API_BASE}/decks`, 'POST', {
       name: values.name,

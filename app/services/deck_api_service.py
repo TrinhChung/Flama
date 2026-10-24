@@ -337,6 +337,27 @@ def reset_deck_progress(
         ) from exc
 
 
+def default_note_type_id(*, deck_id: int, user_id: int, admin_mode: bool) -> str | None:
+    """Note type a new sub-deck of ``deck_id`` inherits, as the dashboard chose it.
+
+    The deck's own note type, else the type of its oldest owned Note, else its
+    logical-overlay install's source type (not for admins). Read on demand by
+    the create-deck dialog instead of for every deck on each dashboard load.
+    """
+    from app.repositories.deck_tree_query import collect_accessible_decks
+    from app.services.deck_aggregation_service import deck_note_type_metadata
+
+    deck = next((item for item in collect_accessible_decks(user_id=user_id, admin_mode=admin_mode)
+                 if item.id == deck_id), None)
+    if deck is None:
+        raise DeckApiError("NOT_FOUND", "Deck not found.", status=404)
+    if deck.note_type_id:
+        return str(deck.note_type_id)
+    return deck_note_type_metadata(
+        db.session, learner_user_id=user_id, deck_ids=[deck_id], admin_mode=admin_mode,
+    ).get(deck_id)
+
+
 def _parse_parent_id(raw_parent_id: Any) -> int | None:
     if raw_parent_id in (None, ""):
         return None
