@@ -1,6 +1,6 @@
 # Đường đọc của số đếm dashboard/heatmap — tạm hoãn
 
-> Ngày 2026-10-24. Trạng thái: **tạm hoãn** theo quyết định của chủ sản phẩm. Đã làm xong trước đó: gỡ guard quét tiến độ (`7b73a2cb`) và quy tắc chọn Card của P11 (`ac6ee32a`).
+> Ngày 2026-10-24. Trạng thái: **tạm hoãn** theo quyết định của chủ sản phẩm (vấn đề 1, 3, 4). Đã làm xong: gỡ guard quét tiến độ (`7b73a2cb`), quy tắc chọn Card của P11 (`ac6ee32a`), **vấn đề 2** ngày 2026-10-25 (`82afc733`, heatmap 535 → 307 ms) và bỏ câu đọc toàn bộ lịch sử ngày học khi streak nằm trong năm (`50016b6c`, −75 ms).
 
 Số đo trên bản dump production, user 1 (39.338 Note, 1.469 deck, đếm theo Note như production). Sau hai thay đổi trên: số đếm dashboard khoảng 0,6 s, phần tương lai của heatmap khoảng 0,8 s.
 
