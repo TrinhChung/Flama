@@ -203,6 +203,7 @@ Study progress is decoupled from card presentation records:
 - **`StudyAuthorityCommandReceipt`**: Idempotency token preventing duplicate review execution during network retries.
 - **`ReviewEvent` (`models/review_event.py`)**: Append-only immutable historical audit log of every answer rating.
 - **Review Analytics (`models/review_analytics.py`)**: Pre-aggregated daily review statistics tables (`DailyReviewCount`, `ReviewAnalyticsHead`, `ReviewAnalyticsGeneration`), supported by outbox event logging (`ReviewAnalyticsOutbox`).
+- **Analytics evidence guard (fail closed)**: progress readers obtain their Note scope from `deck_note_scope`, `collection_note_scope` (`app/repositories/note_analytics_scope_repository.py`) or `learner_note_scope` (`app/repositories/note_analytics_read_repository.py`). These builders run `guard_scope()` before returning: one scan of the learner's subject rows lists candidate Notes (usually none); if any, the same scope is rebuilt for them and `subject_integrity_violation()` decides, raising `StudyAuthorityReadError` (`DETACHED_AUTHORITY_SUBJECT`, `INCOMPLETE_AUTHORITY_COVERAGE`). Outcomes depend on the scope: the overview scope only holds Notes whose live Note has state, so a detached subject does not fail it; a tombstone of a deleted Note is in no scope. Metric queries (`note_rows()`) carry no integrity column. Study queue counts and Browse pages keep their own checks (`study_repository.query_study_queue_counts`, `browse_card_repository.page_window_integrity`). The contract is pinned by `tests/test_note_query_retirement.py` (`test_progress_readers_contract_*`) and, for the MySQL overview path, `scripts/probe_dashboard_due_counts_mysql.py`. State-hash drift is detected by the offline audit, not at read time.
 
 ### 4.3 Logical Overlay Clone Model (Marketplace)
 To prevent database bloat when users install community decks, Flama implements a **Logical Overlay** model:
@@ -264,6 +265,7 @@ Study intervals are computed based on day ordinals rather than timestamps to pre
   Sessions between midnight and 04:00 AM count towards the previous calendar day's streak and review counts.
 - `_day_index_to_datetime(day_index, boundary_hour, timezone_name)` (line 709):
   Converts an integer day ordinal back to UTC datetime corresponding to 04:00 AM local time.
+- Statistics group local days in SQL when `stats_query_repository.fixed_utc_offset_minutes(timezone_name)` returns an offset: the zone's UTC offset is constant on the 1st and 15th of every month from 2000 to 2040 (aliases such as `Asia/Saigon` and half-hour zones qualify). Zones with DST or offset changes use the Python path. Both paths share the guarded scopes; `scripts/probe_dashboard_due_counts_mysql.py` checks their parity on MySQL.
 
 ---
 
