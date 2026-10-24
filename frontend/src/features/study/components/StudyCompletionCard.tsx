@@ -291,7 +291,7 @@ export function StudyCompletionCard({
                   size="lg"
                   className="w-full sm:w-auto h-10 sm:h-11 px-3 sm:px-6 rounded-xl font-semibold text-xs sm:text-sm gap-2 shadow-xs"
                 >
-                  <Link to="/vocabulary">
+                  <Link to="/browse">
                     <span className="truncate">{t('completion.study_another_deck')}</span>
                     <ArrowRight className="size-4 shrink-0" />
                   </Link>
