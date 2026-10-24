@@ -1,0 +1,1475 @@
+{
+  "date": "2026-10-24",
+  "scope": "B00 service tooling and B08 correctness; no performance rollout",
+  "tests": {
+    "complete": true,
+    "success": true,
+    "tests_run": 18
+  },
+  "mysql_contract_tests": 13,
+  "tool_tests": 5,
+  "generated_browse_schemas_remaining": 0,
+  "red_before_fix": {
+    "mysql_tests_run": 8,
+    "failed_sort_subcases": 4
+  },
+  "cli_baseline": {
+    "version": 1,
+    "as_of_utc": "2026-10-24T00:00:00Z",
+    "scope": "local service; not HTTP or browser",
+    "phases": "inclusive spans; do not add nested durations",
+    "warmup": 1,
+    "max_statement_ms": 5000,
+    "cases": [
+      {
+        "name": "owned-selected",
+        "input_sha256": "55b46930ff0d80c83a8e8bf7dc985ad6026ac129620f5e6284f7b80f8321752d",
+        "samples": [
+          {
+            "payload_sha256": "93ec8bb295d23f052a8f1e572a0bad10a1859e7af239ab9145c2b8359c8bd89a",
+            "payload_bytes": 11582,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 533.191,
+            "statements": 24,
+            "cursor_execute_ms": 342.22,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 265.685
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 37.063
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 110.79
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 35.794
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.325
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 186.345,
+                "sql_chars": 125,
+                "failed": false,
+                "count_distinct": false,
+                "window": false,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "notes",
+                      "access": "ref",
+                      "key": "ix_notes_user_id",
+                      "plan_nodes": 1
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 0,
+                    "using_temporary_table": 1
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 41.226,
+                "sql_chars": 509,
+                "failed": false,
+                "count_distinct": false,
+                "window": false,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "decks",
+                      "access": "ref",
+                      "key": "ix_decks_owner_user_id",
+                      "plan_nodes": 1
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 0,
+                    "using_temporary_table": 0
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 39.032,
+                "sql_chars": 6231,
+                "failed": false,
+                "count_distinct": false,
+                "window": true,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "browse_note_previews",
+                      "access": "ALL",
+                      "key": null,
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "ref",
+                      "key": "ix_notes_deck_id",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 3
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "ref",
+                      "key": "uq_study_applications_note_type_template_occurrence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "study_progress_subjects_1",
+                      "access": "eq_ref",
+                      "key": "uq_sp_subject_user_note",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_aliases",
+                      "access": "eq_ref",
+                      "key": "uq_presentation_alias_note_application",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 2,
+                    "using_temporary_table": 4
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "payload_sha256": "93ec8bb295d23f052a8f1e572a0bad10a1859e7af239ab9145c2b8359c8bd89a",
+            "payload_bytes": 11582,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 575.033,
+            "statements": 24,
+            "cursor_execute_ms": 439.371,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 375.43
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 30.434
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 65.08
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 24.887
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.2
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 260.851,
+                "sql_chars": 125,
+                "failed": false,
+                "count_distinct": false,
+                "window": false,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "notes",
+                      "access": "ref",
+                      "key": "ix_notes_user_id",
+                      "plan_nodes": 1
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 0,
+                    "using_temporary_table": 1
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 66.476,
+                "sql_chars": 509,
+                "failed": false,
+                "count_distinct": false,
+                "window": false,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "decks",
+                      "access": "ref",
+                      "key": "ix_decks_owner_user_id",
+                      "plan_nodes": 1
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 0,
+                    "using_temporary_table": 0
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 48.707,
+                "sql_chars": 6231,
+                "failed": false,
+                "count_distinct": false,
+                "window": true,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "browse_note_previews",
+                      "access": "ALL",
+                      "key": null,
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "ref",
+                      "key": "ix_notes_deck_id",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 3
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "ref",
+                      "key": "uq_study_applications_note_type_template_occurrence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "study_progress_subjects_1",
+                      "access": "eq_ref",
+                      "key": "uq_sp_subject_user_note",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_aliases",
+                      "access": "eq_ref",
+                      "key": "uq_presentation_alias_note_application",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 2,
+                    "using_temporary_table": 4
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "payload_sha256": "93ec8bb295d23f052a8f1e572a0bad10a1859e7af239ab9145c2b8359c8bd89a",
+            "payload_bytes": 11582,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 406.748,
+            "statements": 24,
+            "cursor_execute_ms": 300.49,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 264.642
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 26.092
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 42.941
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 18.59
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.25
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 173.081,
+                "sql_chars": 125,
+                "failed": false,
+                "count_distinct": false,
+                "window": false,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "notes",
+                      "access": "ref",
+                      "key": "ix_notes_user_id",
+                      "plan_nodes": 1
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 0,
+                    "using_temporary_table": 1
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 48.675,
+                "sql_chars": 509,
+                "failed": false,
+                "count_distinct": false,
+                "window": false,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "decks",
+                      "access": "ref",
+                      "key": "ix_decks_owner_user_id",
+                      "plan_nodes": 1
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 0,
+                    "using_temporary_table": 0
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 28.479,
+                "sql_chars": 6231,
+                "failed": false,
+                "count_distinct": false,
+                "window": true,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "browse_note_previews",
+                      "access": "ALL",
+                      "key": null,
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "ref",
+                      "key": "ix_notes_deck_id",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 3
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "ref",
+                      "key": "uq_study_applications_note_type_template_occurrence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "study_progress_subjects_1",
+                      "access": "eq_ref",
+                      "key": "uq_sp_subject_user_note",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_aliases",
+                      "access": "eq_ref",
+                      "key": "uq_presentation_alias_note_application",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 2,
+                    "using_temporary_table": 4
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "elapsed_ms": {
+          "min": 406.748,
+          "median": 533.191,
+          "p95_sample": 575.033
+        },
+        "stable_payload": true
+      },
+      {
+        "name": "clone-selected",
+        "input_sha256": "00790630349a26e58e5bb09b6cf7dd314a6f5535a4a036f4ed7c1238d2049010",
+        "samples": [
+          {
+            "payload_sha256": "9afcc6b5d750d0307c2c4d16b27a2ac7d39a8e49167df5dc26a87cc7322c4a72",
+            "payload_bytes": 10943,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 386.835,
+            "statements": 36,
+            "cursor_execute_ms": 193.448,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 34.234
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 49.448
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 96.956
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 19.754
+              },
+              "overrides": {
+                "calls": 1,
+                "elapsed_ms": 3.97
+              },
+              "release_values": {
+                "calls": 1,
+                "elapsed_ms": 63.736
+              },
+              "overlay_format": {
+                "calls": 20,
+                "elapsed_ms": 58.408
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.271
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 46.565,
+                "sql_chars": 5998,
+                "failed": false,
+                "count_distinct": true,
+                "window": true,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "browse_note_previews",
+                      "access": "ALL",
+                      "key": null,
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "range",
+                      "key": "ix_notes_deck_id",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "deck_release_entity_memberships",
+                      "access": "ref",
+                      "key": "uq_deck_release_memberships_item_entity_start",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 3
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "ref",
+                      "key": "uq_study_applications_note_type_template_occurrence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "study_progress_subjects_1",
+                      "access": "eq_ref",
+                      "key": "uq_sp_subject_user_note",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_aliases",
+                      "access": "eq_ref",
+                      "key": "uq_presentation_alias_note_application",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 1,
+                    "using_temporary_table": 3
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 32.235,
+                "sql_chars": 7349,
+                "failed": false,
+                "count_distinct": false,
+                "window": true,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "browse_note_previews",
+                      "access": "ALL",
+                      "key": null,
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "range",
+                      "key": "ix_notes_deck_id",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "deck_release_entity_memberships",
+                      "access": "ref",
+                      "key": "uq_deck_release_memberships_item_entity_start",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 3
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "ref",
+                      "key": "uq_study_applications_note_type_template_occurrence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "study_progress_subjects_1",
+                      "access": "eq_ref",
+                      "key": "uq_sp_subject_user_note",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_aliases",
+                      "access": "eq_ref",
+                      "key": "uq_presentation_alias_note_application",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 2,
+                    "using_temporary_table": 4
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 24.471,
+                "sql_chars": 1639,
+                "failed": false,
+                "count_distinct": false,
+                "window": false,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "deck_releases",
+                      "access": "ref",
+                      "key": "uq_deck_releases_item_sequence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "deck_release_changes",
+                      "access": "ref",
+                      "key": "uq_deck_release_changes_release_key",
+                      "plan_nodes": 1
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 1,
+                    "using_temporary_table": 1
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "payload_sha256": "9afcc6b5d750d0307c2c4d16b27a2ac7d39a8e49167df5dc26a87cc7322c4a72",
+            "payload_bytes": 10943,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 256.772,
+            "statements": 36,
+            "cursor_execute_ms": 167.636,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 50.448
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 29.304
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 47.306
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 18.765
+              },
+              "overrides": {
+                "calls": 1,
+                "elapsed_ms": 2.606
+              },
+              "release_values": {
+                "calls": 1,
+                "elapsed_ms": 35.254
+              },
+              "overlay_format": {
+                "calls": 20,
+                "elapsed_ms": 27.656
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.181
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 31.397,
+                "sql_chars": 7349,
+                "failed": false,
+                "count_distinct": false,
+                "window": true,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "browse_note_previews",
+                      "access": "ALL",
+                      "key": null,
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "range",
+                      "key": "ix_notes_deck_id",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "deck_release_entity_memberships",
+                      "access": "ref",
+                      "key": "uq_deck_release_memberships_item_entity_start",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 3
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "ref",
+                      "key": "uq_study_applications_note_type_template_occurrence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "study_progress_subjects_1",
+                      "access": "eq_ref",
+                      "key": "uq_sp_subject_user_note",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_aliases",
+                      "access": "eq_ref",
+                      "key": "uq_presentation_alias_note_application",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 2,
+                    "using_temporary_table": 4
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 29.375,
+                "sql_chars": 620,
+                "failed": false,
+                "count_distinct": false,
+                "window": false,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "decks",
+                      "access": "range",
+                      "key": "ix_decks_parent_id",
+                      "plan_nodes": 1
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 0,
+                    "using_temporary_table": 0
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 26.338,
+                "sql_chars": 5998,
+                "failed": false,
+                "count_distinct": true,
+                "window": true,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "browse_note_previews",
+                      "access": "ALL",
+                      "key": null,
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "range",
+                      "key": "ix_notes_deck_id",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "deck_release_entity_memberships",
+                      "access": "ref",
+                      "key": "uq_deck_release_memberships_item_entity_start",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 3
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "ref",
+                      "key": "uq_study_applications_note_type_template_occurrence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "study_progress_subjects_1",
+                      "access": "eq_ref",
+                      "key": "uq_sp_subject_user_note",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_aliases",
+                      "access": "eq_ref",
+                      "key": "uq_presentation_alias_note_application",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 1,
+                    "using_temporary_table": 3
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "payload_sha256": "9afcc6b5d750d0307c2c4d16b27a2ac7d39a8e49167df5dc26a87cc7322c4a72",
+            "payload_bytes": 10943,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 233.35,
+            "statements": 36,
+            "cursor_execute_ms": 148.094,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 28.736
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 27.622
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 49.448
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 17.057
+              },
+              "overrides": {
+                "calls": 1,
+                "elapsed_ms": 2.861
+              },
+              "release_values": {
+                "calls": 1,
+                "elapsed_ms": 36.473
+              },
+              "overlay_format": {
+                "calls": 20,
+                "elapsed_ms": 32.538
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.164
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 31.424,
+                "sql_chars": 7349,
+                "failed": false,
+                "count_distinct": false,
+                "window": true,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "browse_note_previews",
+                      "access": "ALL",
+                      "key": null,
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "range",
+                      "key": "ix_notes_deck_id",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "deck_release_entity_memberships",
+                      "access": "ref",
+                      "key": "uq_deck_release_memberships_item_entity_start",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 3
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "ref",
+                      "key": "uq_study_applications_note_type_template_occurrence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "study_progress_subjects_1",
+                      "access": "eq_ref",
+                      "key": "uq_sp_subject_user_note",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_aliases",
+                      "access": "eq_ref",
+                      "key": "uq_presentation_alias_note_application",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 2,
+                    "using_temporary_table": 4
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 24.415,
+                "sql_chars": 5998,
+                "failed": false,
+                "count_distinct": true,
+                "window": true,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "browse_note_previews",
+                      "access": "ALL",
+                      "key": null,
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "notes",
+                      "access": "range",
+                      "key": "ix_notes_deck_id",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "deck_release_entity_memberships",
+                      "access": "ref",
+                      "key": "uq_deck_release_memberships_item_entity_start",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 3
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "ref",
+                      "key": "uq_study_applications_note_type_template_occurrence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "study_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "study_progress_subjects_1",
+                      "access": "eq_ref",
+                      "key": "uq_sp_subject_user_note",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_aliases",
+                      "access": "eq_ref",
+                      "key": "uq_presentation_alias_note_application",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_applications",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    },
+                    {
+                      "table": "card_presentation_cutover_notes",
+                      "access": "eq_ref",
+                      "key": "PRIMARY",
+                      "plan_nodes": 2
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 1,
+                    "using_temporary_table": 3
+                  }
+                }
+              },
+              {
+                "cursor_execute_ms": 17.163,
+                "sql_chars": 1639,
+                "failed": false,
+                "count_distinct": false,
+                "window": false,
+                "plan": {
+                  "table_access_nodes": [
+                    {
+                      "table": "deck_releases",
+                      "access": "ref",
+                      "key": "uq_deck_releases_item_sequence",
+                      "plan_nodes": 1
+                    },
+                    {
+                      "table": "deck_release_changes",
+                      "access": "ref",
+                      "key": "uq_deck_release_changes_release_key",
+                      "plan_nodes": 1
+                    }
+                  ],
+                  "flags": {
+                    "using_filesort": 1,
+                    "using_temporary_table": 1
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "elapsed_ms": {
+          "min": 233.35,
+          "median": 256.772,
+          "p95_sample": 386.835
+        },
+        "stable_payload": true
+      }
+    ],
+    "mysql_version": "8.0.40",
+    "migration_heads": [
+      "20261020_000071"
+    ]
+  },
+  "cli_repeated_comparison": {
+    "version": 1,
+    "as_of_utc": "2026-10-24T00:00:00Z",
+    "scope": "local service; not HTTP or browser",
+    "phases": "inclusive spans; do not add nested durations",
+    "warmup": 0,
+    "max_statement_ms": 5000,
+    "redis_configured": true,
+    "cases": [
+      {
+        "name": "owned-selected",
+        "input_sha256": "55b46930ff0d80c83a8e8bf7dc985ad6026ac129620f5e6284f7b80f8321752d",
+        "samples": [
+          {
+            "payload_sha256": "93ec8bb295d23f052a8f1e572a0bad10a1859e7af239ab9145c2b8359c8bd89a",
+            "payload_bytes": 11582,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 1617.141,
+            "statements": 24,
+            "cursor_execute_ms": 702.329,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 766.071
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 86.802
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 74.098
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 29.72
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.285
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 526.829,
+                "sql_chars": 125,
+                "failed": false,
+                "count_distinct": false,
+                "window": false
+              },
+              {
+                "cursor_execute_ms": 61.943,
+                "sql_chars": 4880,
+                "failed": false,
+                "count_distinct": true,
+                "window": true
+              },
+              {
+                "cursor_execute_ms": 36.229,
+                "sql_chars": 509,
+                "failed": false,
+                "count_distinct": false,
+                "window": false
+              }
+            ]
+          },
+          {
+            "payload_sha256": "93ec8bb295d23f052a8f1e572a0bad10a1859e7af239ab9145c2b8359c8bd89a",
+            "payload_bytes": 11582,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 475.815,
+            "statements": 24,
+            "cursor_execute_ms": 358.211,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 258.621
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 41.34
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 69.9
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 30.133
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.279
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 195.039,
+                "sql_chars": 125,
+                "failed": false,
+                "count_distinct": false,
+                "window": false
+              },
+              {
+                "cursor_execute_ms": 38.28,
+                "sql_chars": 4880,
+                "failed": false,
+                "count_distinct": true,
+                "window": true
+              },
+              {
+                "cursor_execute_ms": 37.774,
+                "sql_chars": 6231,
+                "failed": false,
+                "count_distinct": false,
+                "window": true
+              }
+            ]
+          }
+        ],
+        "elapsed_ms": {
+          "min": 475.815,
+          "median": 1046.478,
+          "p95_sample": 1617.141
+        },
+        "stable_payload": true
+      },
+      {
+        "name": "clone-selected",
+        "input_sha256": "00790630349a26e58e5bb09b6cf7dd314a6f5535a4a036f4ed7c1238d2049010",
+        "samples": [
+          {
+            "payload_sha256": "9afcc6b5d750d0307c2c4d16b27a2ac7d39a8e49167df5dc26a87cc7322c4a72",
+            "payload_bytes": 10943,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 384.732,
+            "statements": 36,
+            "cursor_execute_ms": 207.147,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 36.131
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 60.408
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 71.296
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 23.873
+              },
+              "overrides": {
+                "calls": 1,
+                "elapsed_ms": 8.033
+              },
+              "release_values": {
+                "calls": 1,
+                "elapsed_ms": 74.254
+              },
+              "overlay_format": {
+                "calls": 20,
+                "elapsed_ms": 54.883
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.245
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 38.442,
+                "sql_chars": 7349,
+                "failed": false,
+                "count_distinct": false,
+                "window": true
+              },
+              {
+                "cursor_execute_ms": 35.613,
+                "sql_chars": 5998,
+                "failed": false,
+                "count_distinct": true,
+                "window": true
+              },
+              {
+                "cursor_execute_ms": 28.415,
+                "sql_chars": 1639,
+                "failed": false,
+                "count_distinct": false,
+                "window": false
+              }
+            ]
+          },
+          {
+            "payload_sha256": "9afcc6b5d750d0307c2c4d16b27a2ac7d39a8e49167df5dc26a87cc7322c4a72",
+            "payload_bytes": 10943,
+            "returned": 20,
+            "total": 118,
+            "page": 1,
+            "pages": 6,
+            "has_next": true,
+            "elapsed_ms": 393.094,
+            "statements": 36,
+            "cursor_execute_ms": 227.276,
+            "locking_statements": 8,
+            "phases": {
+              "scope": {
+                "calls": 1,
+                "elapsed_ms": 34.198
+              },
+              "count": {
+                "calls": 1,
+                "elapsed_ms": 41.102
+              },
+              "page_and_hydrate": {
+                "calls": 1,
+                "elapsed_ms": 97.528
+              },
+              "authority": {
+                "calls": 1,
+                "elapsed_ms": 29.923
+              },
+              "overrides": {
+                "calls": 1,
+                "elapsed_ms": 4.538
+              },
+              "release_values": {
+                "calls": 1,
+                "elapsed_ms": 72.528
+              },
+              "overlay_format": {
+                "calls": 20,
+                "elapsed_ms": 50.538
+              },
+              "serialization": {
+                "calls": 1,
+                "elapsed_ms": 0.378
+              }
+            },
+            "slowest": [
+              {
+                "cursor_execute_ms": 39.385,
+                "sql_chars": 7349,
+                "failed": false,
+                "count_distinct": false,
+                "window": true
+              },
+              {
+                "cursor_execute_ms": 38.678,
+                "sql_chars": 1639,
+                "failed": false,
+                "count_distinct": false,
+                "window": false
+              },
+              {
+                "cursor_execute_ms": 37.037,
+                "sql_chars": 5998,
+                "failed": false,
+                "count_distinct": true,
+                "window": true
+              }
+            ]
+          }
+        ],
+        "elapsed_ms": {
+          "min": 384.732,
+          "median": 388.913,
+          "p95_sample": 393.094
+        },
+        "stable_payload": true
+      }
+    ],
+    "mysql_version": "8.0.40",
+    "migration_heads": [
+      "20261020_000071"
+    ],
+    "comparison": {
+      "equivalent": true,
+      "mismatched_or_incomplete_cases": []
+    }
+  },
+  "limits": [
+    "Local MySQL only; service not HTTP/browser",
+    "No latency-improvement claim",
+    "Tests use generated schemas from ORM metadata, not migration rehearsal",
+    "Concurrency/load and B01-B07 deferred"
+  ]
+}

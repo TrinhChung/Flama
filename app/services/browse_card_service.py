@@ -767,11 +767,13 @@ def list_browse_cards(
     query = query.options(*browse_card_repository.browse_page_load_options())
 
     if sort_by == "deck":
-        query = query.outerjoin(Deck, Note.deck_id == Deck.id)
-        if sort_dir == "desc":
-            query = query.order_by(Deck.name.desc(), Card.updated_at.desc())
-        else:
-            query = query.order_by(Deck.name.asc(), Card.updated_at.desc())
+        query = browse_card_repository.order_browse_cards_by_deck(
+            query,
+            learner_user_id=user_id,
+            sort_dir=sort_dir,
+            source_to_local_deck_id=source_to_local_deck_id,
+            deck_name_lookup=deck_lookup,
+        )
     elif sort_by == "word":
         owned_word_expression = browse_card_repository.owned_note_word_expression()
         if admin_mode:

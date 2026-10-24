@@ -6,6 +6,7 @@ Welcome to the central documentation portal for **Flama** (Nihongo Flashcard Lea
 
 ## 🏛️ Master Architecture & Codebase Reality Audit
 
+- [Browse data and performance review](architecture/BROWSE_PERFORMANCE_DATA_REVIEW_2026-10-24.md): table/query inventory, historical over-fetch fixes, current bottlenecks and read-only local MySQL measurements. [Task breakdown](plans/BROWSE_PERFORMANCE_TASKS_2026-10-24.md) explains rationale, historical constraints, trade-offs and acceptance criteria; [technical-debt phase](architecture/BROWSE_TECH_DEBT_IMPLEMENTATION_2026-10-24.md) records the baseline tooling and local deck-name ordering fix.
 - [Deck, Note Type and Template stability](architecture/deck-notetype-template-stability-design.md): immutable releases, pinned presentation, receipt parity, asynchronous subscriber delivery and rollout checks.
 - [Marketplace bundle completeness review](architecture/marketplace-bundle-completeness-review-2026-10-21.md): five findings fixed and verified locally, with test evidence and production limits.
 - [Marketplace local rollout rehearsal](runbooks/MARKETPLACE_BUNDLE_LOCAL_ROLLOUT_20261021.md): reviewed publication plans, local results, verification and rollback.
