@@ -30,7 +30,7 @@ if str(ROOT_DIR) not in sys.path:
 from app import create_app
 from models import db
 from scripts.mysql_probe_db import (
-    _connection_settings, _database_uri, _source_database_collation,
+    _connection_settings, _database_uri, _source_database_collation, reuse_generated_schema,
 )
 from tests.test_study_direct_note_replay import StudyDirectNoteReplayTests
 from tests.test_study_note_batch import StudyNoteBatchTests
@@ -352,9 +352,11 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
             if not suite.countTestCases():
                 raise ValueError("No probe scenarios match --test-name.")
             report["test_name_filter"] = test_name
-        result = unittest.TextTestRunner(verbosity=2).run(suite)
+        with reuse_generated_schema(name) as schema_reuse:
+            result = unittest.TextTestRunner(verbosity=2).run(suite)
         report.update({"tests_run": result.testsRun, "failures": len(result.failures),
-            "errors": len(result.errors), "status": "PASS" if result.wasSuccessful() else "FAIL"})
+            "errors": len(result.errors), "schema_reuse": schema_reuse,
+            "status": "PASS" if result.wasSuccessful() else "FAIL"})
         return report
     finally:
         try:

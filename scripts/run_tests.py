@@ -1140,6 +1140,10 @@ REDIS_CONTRACT_SOURCE_PATTERNS = (
 
 MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "scripts/run_mysql_probes.py",
+    # Every schema-owning probe resets its schema through this helper.
+    "scripts/mysql_probe_db.py",
+    "tests/test_mysql_probe_schema_reuse.py",
+    "scripts/probe_review_analytics_outbox_mysql.py",
     "scripts/archive_retired_tables.py",
     "scripts/bootstrap_historical_schema.py",
     "scripts/prepare_retirement_mysql_rehearsal.py",
