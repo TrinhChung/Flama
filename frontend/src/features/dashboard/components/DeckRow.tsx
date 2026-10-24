@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { memo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
@@ -37,16 +37,11 @@ export interface DeckRowProps {
   isInvalidDrop: boolean
   isDragJustEnded: () => boolean
   onPointerDownRow: (e: React.PointerEvent, node: DeckNode) => void
-  onDragStart: (e: React.DragEvent, node: DeckNode) => void
-  onDragEnd: (e: React.DragEvent) => void
-  onDragOver: (e: React.DragEvent, node: DeckNode) => void
-  onDragEnter: (e: React.DragEvent, node: DeckNode) => void
-  onDrop: (e: React.DragEvent, node: DeckNode) => void
   isExpanded?: (deckId: number) => boolean
   onToggleExpand?: (deckId: number) => void
 }
 
-export function DeckRow({
+function DeckRowComponent({
   node,
   adminMode,
   selectedDeckId,
@@ -59,11 +54,6 @@ export function DeckRow({
   isInvalidDrop,
   isDragJustEnded,
   onPointerDownRow,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDragEnter,
-  onDrop,
   isExpanded,
   onToggleExpand,
 }: DeckRowProps) {
@@ -345,11 +335,6 @@ export function DeckRow({
               isInvalidDrop={isInvalidDrop}
               isDragJustEnded={isDragJustEnded}
               onPointerDownRow={onPointerDownRow}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-              onDragOver={onDragOver}
-              onDragEnter={onDragEnter}
-              onDrop={onDrop}
               isExpanded={isExpanded}
               onToggleExpand={onToggleExpand}
             />
@@ -358,3 +343,8 @@ export function DeckRow({
     </>
   )
 }
+
+// Memoized so a parent re-render (e.g. the heatmap query settling) does not
+// re-render every mounted row; callers pass stable callbacks. Child rows render
+// through this memoized binding too.
+export const DeckRow = memo(DeckRowComponent)

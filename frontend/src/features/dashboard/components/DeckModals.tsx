@@ -23,7 +23,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { LazyDeckWorksheetModal } from '@/features/worksheets'
 import { DeckCardTypesDialog } from './DeckCardTypesDialog'
-import { dashboardApi, dashboardQueryKey } from '../api'
+import { dashboardApi, dashboardQueryKey, studyOverviewBaseKey } from '../api'
 import {
   getCreateDeckSchema,
   getRenameDeckSchema,
@@ -250,8 +250,14 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
       if (type === 'delete') return dashboardApi.deleteDeck(deckId, { purge })
       return dashboardApi.resetDeck(deckId)
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })
+    onSuccess: async (_data, { type }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: dashboardQueryKey }),
+        // Deleting or resetting a deck changes the heatmap's due forecast; rename/move do not.
+        type === 'delete' || type === 'reset'
+          ? queryClient.invalidateQueries({ queryKey: studyOverviewBaseKey })
+          : undefined,
+      ])
       toast.success(t('modals.actions.toast_success'))
       onClose()
     },

@@ -408,6 +408,64 @@ describe('DeckTree interactions', () => {
     vi.useRealTimers()
   })
 
+  it('moves the drag ghost with the mouse in place and drops a child deck on the root zone', () => {
+    const onMoveDeck = vi.fn().mockResolvedValue(undefined)
+    const child: DeckNode = { ...deck, id: 43, parent_id: 42, name: 'N3 Lesson 1', depth: 1 }
+    const parent: DeckNode = { ...deck, children: [child] }
+    const elementFromPointDescriptor = Object.getOwnPropertyDescriptor(document, 'elementFromPoint')
+    let hitTarget: Element | null = null
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => hitTarget,
+    })
+    localStorage.setItem('flama_dashboard_expanded_deck_ids', JSON.stringify([42]))
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <DeckTree nodes={[parent]} adminMode={false} onAction={vi.fn()} onMoveDeck={onMoveDeck} />
+        </MemoryRouter>,
+      )
+    })
+
+    const childRow = container.querySelector<HTMLElement>('[data-node-id="43"]')
+    const pointer = (type: string, x: number, y: number) =>
+      Object.assign(new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y }), {
+        pointerType: 'mouse',
+        pointerId: 7,
+      })
+
+    act(() => {
+      childRow?.dispatchEvent(pointer('pointerdown', 10, 10))
+    })
+    act(() => {
+      window.dispatchEvent(pointer('pointermove', 30, 10))
+    })
+    const ghost = container.querySelector<HTMLElement>('.fixed.pointer-events-none')
+    expect(ghost?.style.left).toBe('30px')
+
+    hitTarget = container.querySelector('[data-root-drop="true"]')
+    act(() => {
+      window.dispatchEvent(pointer('pointermove', 80, 140))
+    })
+    expect(container.querySelector('.fixed.pointer-events-none')).toBe(ghost)
+    expect(ghost?.style.left).toBe('80px')
+    expect(ghost?.style.top).toBe('140px')
+
+    act(() => {
+      window.dispatchEvent(pointer('pointerup', 80, 140))
+    })
+    expect(onMoveDeck).toHaveBeenCalledWith(43, null)
+    expect(container.querySelector('.fixed.pointer-events-none')).toBeNull()
+
+    if (elementFromPointDescriptor) {
+      Object.defineProperty(document, 'elementFromPoint', elementFromPointDescriptor)
+    } else {
+      delete (document as Partial<Document>).elementFromPoint
+    }
+    localStorage.clear()
+  })
+
   it('activates study on the second touch tap when the deck is already selected', () => {
     const onSelect = vi.fn()
     const onActivate = vi.fn()

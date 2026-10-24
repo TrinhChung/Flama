@@ -331,7 +331,12 @@ export function StudyHeatmap({
           <Skeleton className="h-28 w-full bg-muted" />
         </div>
       ) : (
-        <>
+        // Previous data stays visible (dimmed) while a refetch with data in hand is
+        // loading, e.g. after switching year, so the card does not collapse.
+        <div
+          aria-busy={loading}
+          className={cn('transition-opacity duration-200', loading && 'opacity-60')}
+        >
           {/* Summary Text */}
           {showSummary && (
             <p className="stats-summary text-center text-sm sm:text-xl font-semibold text-primary tabular-nums mb-2 sm:mb-3 leading-tight">
@@ -471,7 +476,7 @@ export function StudyHeatmap({
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
     </section>
   )

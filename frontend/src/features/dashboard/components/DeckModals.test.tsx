@@ -6,13 +6,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { dashboardApi } from '../api/dashboardApi'
 import type { DashboardPayload, DeckNode } from '../types'
-import { CreateDeckModal } from './DeckModals'
+import { CreateDeckModal, DeckActionModal } from './DeckModals'
 
 vi.mock('@/app/api', () => ({ appApi: {} }))
 
 vi.mock('../api/dashboardApi', () => ({
   dashboardApi: {
     createDeck: vi.fn().mockResolvedValue({ id: 99, name: 'New Deck' }),
+    renameDeck: vi.fn().mockResolvedValue({}),
+    deleteDeck: vi.fn().mockResolvedValue({}),
+    resetDeck: vi.fn().mockResolvedValue({}),
     listNoteTypes: vi.fn().mockResolvedValue({
       items: [
         { id: 'nt-default', name: 'Từ vựng Flama' },
@@ -159,5 +162,65 @@ describe('CreateDeckModal', () => {
 
     // Ensure parent select is not rendered
     expect(document.querySelector('#create-deck-parent')).toBeNull()
+  })
+})
+
+describe('DeckActionModal cache invalidation', () => {
+  let container: HTMLDivElement
+  let root: Root
+  let queryClient: QueryClient
+
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  async function runAction(type: 'rename' | 'delete' | 'reset') {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const onClose = vi.fn()
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <DeckActionModal
+            selection={{ type, deck: parentDeck }}
+            onClose={onClose}
+            dashboard={dummyDashboard}
+          />
+        </QueryClientProvider>,
+      )
+    })
+    await act(async () => {
+      if (type === 'rename') {
+        document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      } else {
+        const footerButtons = document.querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button')
+        footerButtons[footerButtons.length - 1]?.click()
+      }
+    })
+    await act(async () => {
+      await vi.waitFor(() => expect(onClose).toHaveBeenCalled())
+    })
+    return invalidate.mock.calls.map(([filters]) => filters?.queryKey)
+  }
+
+  it('refreshes only the deck tree after a rename', async () => {
+    const keys = await runAction('rename')
+    expect(dashboardApi.renameDeck).toHaveBeenCalledWith(2, { name: 'N1 Master' })
+    expect(keys).toEqual([['frontend', 'dashboard']])
+  })
+
+  it.each(['delete', 'reset'] as const)('also refreshes the heatmap overview after %s', async (type) => {
+    const keys = await runAction(type)
+    expect(keys).toEqual([['frontend', 'dashboard'], ['frontend', 'statistics', 'overview']])
   })
 })

@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DashboardOverview, DashboardPayload } from '../types'
-import { dashboardQueryKey } from '../api'
+import { dashboardQueryKey, studyOverviewQueryKey } from '../api'
 import { DashboardPage } from '../pages/DashboardPage'
 
 ;(globalThis as typeof globalThis & {
@@ -34,12 +34,15 @@ vi.mock('@/shared/api/bootstrap', () => ({
 // Keep real Dashboard queries and deck rendering; expose the heatmap's public
 // loading/data props without mounting hundreds of unrelated calendar cells.
 vi.mock('@/shared/components/StudyHeatmap', () => ({
-  StudyHeatmap: ({ overview, loading }: {
+  StudyHeatmap: ({ overview, loading, year, onYearChange }: {
     overview?: DashboardOverview
     loading: boolean
+    year: number
+    onYearChange: (year: number) => void
   }) => (
     <div data-testid="heatmap" data-loading={String(loading)}>
       {overview ? `Heatmap ${overview.year}` : 'Heatmap pending'}
+      <button type="button" data-testid="prev-year" onClick={() => onYearChange(year - 1)} />
     </div>
   ),
 }))
@@ -84,13 +87,13 @@ describe('Dashboard query scheduling', () => {
   let root: Root
   let queryClient: QueryClient
   let year: number
-  let overviewKey: readonly ['frontend', 'dashboard', 'overview', number]
+  let overviewKey: ReturnType<typeof studyOverviewQueryKey>
 
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
     year = new Date().getFullYear()
-    overviewKey = ['frontend', 'dashboard', 'overview', year]
+    overviewKey = studyOverviewQueryKey(year)
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false, staleTime: 30_000, refetchOnWindowFocus: false },
@@ -128,7 +131,7 @@ describe('Dashboard query scheduling', () => {
     })
   }
 
-  it('fetches the deck tree first and renders it while the heatmap is still pending', async () => {
+  it('starts the deck tree and heatmap requests together and renders the tree without waiting for the heatmap', async () => {
     const deckRequest = deferred<DashboardPayload>()
     const overviewRequest = deferred<DashboardOverview>()
     api.getDashboard.mockReturnValue(deckRequest.promise)
@@ -137,13 +140,12 @@ describe('Dashboard query scheduling', () => {
     await renderPage()
 
     expect(api.getDashboard).toHaveBeenCalledTimes(1)
-    expect(api.getDashboardOverview).not.toHaveBeenCalled()
+    expect(api.getDashboardOverview).toHaveBeenCalledExactlyOnceWith(year)
     expect(container.querySelector('[data-node-id="42"]')).toBeNull()
 
     await act(async () => deckRequest.resolve(dashboard()))
     await waitForDeck('Vocabulary')
 
-    expect(api.getDashboardOverview).toHaveBeenCalledExactlyOnceWith(year)
     expect(container.querySelector('[data-testid="heatmap"]')?.getAttribute('data-loading')).toBe('true')
     expect(container.querySelector('.deck-board')).not.toBeNull()
 
@@ -168,7 +170,24 @@ describe('Dashboard query scheduling', () => {
     expect(api.getDashboardOverview).not.toHaveBeenCalled()
   })
 
-  it('keeps stale cached content visible and postpones heatmap refresh until deck refresh completes', async () => {
+  it('shows a heatmap that finished first as soon as the deck tree arrives', async () => {
+    const deckRequest = deferred<DashboardPayload>()
+    api.getDashboard.mockReturnValue(deckRequest.promise)
+    api.getDashboardOverview.mockResolvedValue({ year, heatmap: [] })
+
+    await renderPage()
+    await act(async () => {
+      await vi.waitFor(() => expect(queryClient.getQueryState(overviewKey)?.status).toBe('success'))
+    })
+
+    await act(async () => deckRequest.resolve(dashboard()))
+    await waitForDeck('Vocabulary')
+
+    expect(container.querySelector('[data-testid="heatmap"]')?.textContent).toBe(`Heatmap ${year}`)
+    expect(container.querySelector('[data-testid="heatmap"]')?.getAttribute('data-loading')).toBe('false')
+  })
+
+  it('keeps stale cached content visible while both requests refresh in parallel', async () => {
     const deckRequest = deferred<DashboardPayload>()
     const overviewRequest = deferred<DashboardOverview>()
     api.getDashboard.mockReturnValue(deckRequest.promise)
@@ -181,23 +200,62 @@ describe('Dashboard query scheduling', () => {
     await waitForDeck('Cached vocabulary')
 
     expect(api.getDashboard).toHaveBeenCalledTimes(1)
-    expect(api.getDashboardOverview).not.toHaveBeenCalled()
+    expect(api.getDashboardOverview).toHaveBeenCalledExactlyOnceWith(year)
     expect(container.querySelector('[data-testid="heatmap"]')?.textContent).toBe(`Heatmap ${year}`)
     expect(container.querySelector('[data-testid="heatmap"]')?.getAttribute('data-loading')).toBe('false')
 
     await act(async () => deckRequest.resolve(dashboard('Refreshed vocabulary')))
     await waitForDeck('Refreshed vocabulary')
-
-    expect(api.getDashboardOverview).toHaveBeenCalledExactlyOnceWith(year)
-    expect(queryClient.getQueryState(overviewKey)?.fetchStatus).toBe('fetching')
-    expect(container.querySelector('[data-testid="heatmap"]')?.getAttribute('data-loading')).toBe('false')
-
     await act(async () => overviewRequest.resolve({ year, heatmap: [] }))
   })
 
-  it('does not run a heatmap request when the initial deck request fails', async () => {
+  it('refetches only the deck tree when deck queries are invalidated', async () => {
+    queryClient.setQueryData(dashboardQueryKey, dashboard('Cached vocabulary'))
+    queryClient.setQueryData(overviewKey, { year, heatmap: [] })
+    api.getDashboard.mockResolvedValue(dashboard('Moved vocabulary'))
+
+    await renderPage()
+    await waitForDeck('Cached vocabulary')
+
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })
+    })
+    await waitForDeck('Moved vocabulary')
+
+    expect(api.getDashboard).toHaveBeenCalledTimes(1)
+    expect(api.getDashboardOverview).not.toHaveBeenCalled()
+  })
+
+  it('keeps the previous year on screen, marked loading, until the new year arrives', async () => {
+    queryClient.setQueryData(dashboardQueryKey, dashboard())
+    queryClient.setQueryData(overviewKey, { year, heatmap: [] })
+    const previousYearRequest = deferred<DashboardOverview>()
+    api.getDashboardOverview.mockReturnValue(previousYearRequest.promise)
+
+    await renderPage()
+    await waitForDeck('Vocabulary')
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="prev-year"]')?.click()
+    })
+
+    expect(api.getDashboardOverview).toHaveBeenCalledExactlyOnceWith(year - 1)
+    const heatmap = container.querySelector('[data-testid="heatmap"]')
+    expect(heatmap?.textContent).toBe(`Heatmap ${year}`)
+    expect(heatmap?.getAttribute('data-loading')).toBe('true')
+
+    await act(async () => previousYearRequest.resolve({ year: year - 1, heatmap: [] }))
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(container.querySelector('[data-testid="heatmap"]')?.textContent).toBe(`Heatmap ${year - 1}`)
+      })
+    })
+    expect(container.querySelector('[data-testid="heatmap"]')?.getAttribute('data-loading')).toBe('false')
+  })
+
+  it('shows the deck error even though the heatmap request ran alongside it', async () => {
     const deckRequest = deferred<DashboardPayload>()
     api.getDashboard.mockReturnValue(deckRequest.promise)
+    api.getDashboardOverview.mockResolvedValue({ year, heatmap: [] })
 
     await renderPage()
     await act(async () => deckRequest.reject(new Error('Dashboard unavailable')))
@@ -207,7 +265,7 @@ describe('Dashboard query scheduling', () => {
       })
     })
 
-    expect(api.getDashboardOverview).not.toHaveBeenCalled()
     expect(container.querySelector('[data-node-id="42"]')).toBeNull()
+    expect(container.querySelector('[data-testid="heatmap"]')).toBeNull()
   })
 })

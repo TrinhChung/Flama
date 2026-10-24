@@ -369,11 +369,6 @@ describe('DeckCardTypesDialog', () => {
         isInvalidDrop={false}
         isDragJustEnded={() => false}
         onPointerDownRow={vi.fn()}
-        onDragStart={vi.fn()}
-        onDragEnd={vi.fn()}
-        onDragOver={vi.fn()}
-        onDragEnter={vi.fn()}
-        onDrop={vi.fn()}
       />,
     )
     await flushAsync()

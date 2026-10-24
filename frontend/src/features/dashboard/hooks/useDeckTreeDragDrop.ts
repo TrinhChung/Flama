@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeckNode } from '../types'
 
 export const TOUCH_LONG_PRESS_DELAY_MS = 450
@@ -19,9 +19,12 @@ export function isDescendant(parent: DeckNode, targetId: number): boolean {
 
 export function useDeckTreeDragDrop(onMoveDeck?: (deckId: number, targetParentId: number | null) => Promise<void>) {
   const [draggedDeck, setDraggedDeck] = useState<DeckNode | null>(null)
+  // Where the ghost badge first appears. Later pointer moves reposition it through
+  // ghostRef directly, so dragging does not re-render the whole deck tree per move.
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null)
   const [dragOverId, setDragOverId] = useState<number | 'root' | null>(null)
   const [isInvalidDrop, setIsInvalidDrop] = useState(false)
+  const ghostRef = useRef<HTMLDivElement | null>(null)
 
   const draggedDeckRef = useRef(draggedDeck)
   draggedDeckRef.current = draggedDeck
@@ -66,9 +69,10 @@ export function useDeckTreeDragDrop(onMoveDeck?: (deckId: number, targetParentId
     setDragPos({ x: pending.currentX, y: pending.currentY })
   }
 
-  const isDragJustEnded = () => isJustDraggedRef.current
+  // Stable identities let memoized DeckRows skip renders; both only touch refs and setters.
+  const isDragJustEnded = useCallback(() => isJustDraggedRef.current, [])
 
-  const handlePointerDownRow = (e: React.PointerEvent, node: DeckNode) => {
+  const handlePointerDownRow = useCallback((e: React.PointerEvent, node: DeckNode) => {
     if (e.button !== 0) return // Only primary click / primary touch
     clearLongPressTimer()
 
@@ -99,7 +103,8 @@ export function useDeckTreeDragDrop(onMoveDeck?: (deckId: number, targetParentId
         }
       }, TOUCH_LONG_PRESS_DELAY_MS)
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- helpers only use refs and state setters
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -156,7 +161,11 @@ export function useDeckTreeDragDrop(onMoveDeck?: (deckId: number, targetParentId
       }
 
       if (pending.active) {
-        setDragPos({ x: e.clientX, y: e.clientY })
+        const ghost = ghostRef.current
+        if (ghost) {
+          ghost.style.left = `${e.clientX}px`
+          ghost.style.top = `${e.clientY}px`
+        }
 
         // Element collision detection under cursor
         const hit = document.elementFromPoint(e.clientX, e.clientY)
@@ -275,99 +284,13 @@ export function useDeckTreeDragDrop(onMoveDeck?: (deckId: number, targetParentId
     }
   }, [])
 
-  // HTML5 Drag Fallbacks
-  const handleDragStart = (e: React.DragEvent, node: DeckNode) => {
-    clearLongPressTimer()
-    e.stopPropagation()
-    e.dataTransfer.setData('text/plain', String(node.id))
-    e.dataTransfer.effectAllowed = 'move'
-    setDraggedDeck(node)
-    setDragPos({ x: e.clientX, y: e.clientY })
-  }
-
-  const handleDragEnd = () => {
-    clearLongPressTimer()
-    pendingRef.current = null
-    setDraggedDeck(null)
-    setDragPos(null)
-    setDragOverId(null)
-    setIsInvalidDrop(false)
-  }
-
-  const handleDragOverRow = (e: React.DragEvent, targetNode: DeckNode) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!draggedDeck) return
-
-    setDragPos({ x: e.clientX, y: e.clientY })
-    if (draggedDeck.id === targetNode.id || isDescendant(draggedDeck, targetNode.id)) {
-      setIsInvalidDrop(true)
-      e.dataTransfer.dropEffect = 'none'
-    } else {
-      setIsInvalidDrop(false)
-      e.dataTransfer.dropEffect = 'move'
-    }
-    setDragOverId(targetNode.id)
-  }
-
-  const handleDragEnterRow = (e: React.DragEvent, targetNode: DeckNode) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragOverId(targetNode.id)
-  }
-
-  const handleDropOnRow = (e: React.DragEvent, targetNode: DeckNode) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!draggedDeck) return
-
-    if (draggedDeck.id === targetNode.id || isDescendant(draggedDeck, targetNode.id)) {
-      handleDragEnd()
-      return
-    }
-
-    const deckToMove = draggedDeck
-    const targetParentId = targetNode.id
-    handleDragEnd()
-
-    if (deckToMove.parent_id !== targetParentId) {
-      void onMoveDeck?.(deckToMove.id, targetParentId)
-    }
-  }
-
-  const handleDragOverRoot = (e: React.DragEvent) => {
-    e.preventDefault()
-    if (!draggedDeck) return
-    setDragPos({ x: e.clientX, y: e.clientY })
-    setIsInvalidDrop(false)
-    e.dataTransfer.dropEffect = 'move'
-    setDragOverId('root')
-  }
-
-  const handleDropOnRoot = (e: React.DragEvent) => {
-    e.preventDefault()
-    if (!draggedDeck) return
-    const deckToMove = draggedDeck
-    handleDragEnd()
-
-    if (deckToMove.parent_id !== null) {
-      void onMoveDeck?.(deckToMove.id, null)
-    }
-  }
-
   return {
     draggedDeck,
     dragPos,
+    ghostRef,
     dragOverId,
     isInvalidDrop,
     isDragJustEnded,
     handlePointerDownRow,
-    handleDragStart,
-    handleDragEnd,
-    handleDragOverRow,
-    handleDragEnterRow,
-    handleDropOnRow,
-    handleDragOverRoot,
-    handleDropOnRoot,
   }
 }

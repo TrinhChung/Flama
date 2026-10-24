@@ -36,17 +36,11 @@ export function DeckTree({
   const {
     draggedDeck,
     dragPos,
+    ghostRef,
     dragOverId,
     isInvalidDrop,
     isDragJustEnded,
     handlePointerDownRow,
-    handleDragStart,
-    handleDragEnd,
-    handleDragOverRow,
-    handleDragEnterRow,
-    handleDropOnRow,
-    handleDragOverRoot,
-    handleDropOnRoot,
   } = useDeckTreeDragDrop(onMoveDeck)
 
   return (
@@ -54,6 +48,7 @@ export function DeckTree({
       {/* Floating Ghost Badge preview attached to mouse cursor */}
       {draggedDeck && dragPos ? (
         <div
+          ref={ghostRef}
           className={cn(
             'fixed pointer-events-none z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl shadow-2xl font-bold text-xs sm:text-sm border transition-all duration-75 transform -translate-x-1/2 -translate-y-1/2',
             isInvalidDrop
@@ -93,8 +88,6 @@ export function DeckTree({
               ? 'bg-orange-100 border-orange-500 text-orange-700 shadow-md scale-[1.005]'
               : 'bg-orange-50/60 border-orange-300 text-orange-600 hover:bg-orange-100 hover:border-orange-400',
           )}
-          onDragOver={handleDragOverRoot}
-          onDrop={handleDropOnRoot}
         >
           <span>{t('tree.drag.root_drop_prompt', { name: draggedDeck.name })}</span>
         </div>
@@ -115,11 +108,6 @@ export function DeckTree({
           isInvalidDrop={isInvalidDrop}
           isDragJustEnded={isDragJustEnded}
           onPointerDownRow={handlePointerDownRow}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onDragOver={handleDragOverRow}
-          onDragEnter={handleDragEnterRow}
-          onDrop={handleDropOnRow}
           isExpanded={activeIsExpanded}
           onToggleExpand={activeToggleExpand}
         />

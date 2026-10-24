@@ -223,7 +223,7 @@ export function DashboardPage() {
       {/* Heatmap & Activity Statistics Section */}
       <StudyHeatmap
         overview={overviewQuery.data}
-        loading={overviewQuery.isPending}
+        loading={overviewQuery.isPending || overviewQuery.isPlaceholderData}
         year={year}
         onYearChange={setYear}
       />

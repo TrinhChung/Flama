@@ -25,9 +25,11 @@ export function useDashboardPage() {
   const bootstrapQuery = useBootstrap()
   const dashboardQuery = useDashboard()
   const [year, setYear] = useState(() => new Date().getFullYear())
-  const overviewQuery = useDashboardOverview(year, {
-    enabled: Boolean(dashboardQuery.data) && !dashboardQuery.isFetching,
-  })
+  // Fetched in parallel with the deck tree; the page only blocks on the tree and
+  // the heatmap keeps its own skeleton. A deck-first gate (2026-10-04) measured
+  // ~0.1 s faster for the tree but held the heatmap back by a whole deck request
+  // (~1 s then, 3-5 s in the 2026-10-13 production audit).
+  const overviewQuery = useDashboardOverview(year)
 
   const [createOpened, setCreateOpened] = useState(false)
   const [selection, setSelection] = useState<SelectedDeckAction | null>(null)
