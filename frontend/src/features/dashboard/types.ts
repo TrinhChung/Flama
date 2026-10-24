@@ -34,7 +34,6 @@ export type DashboardPayload = {
     due: number
   }
   admin_mode: boolean
-  stats_initial_year: number
   actions: {
     create: string
     move: string

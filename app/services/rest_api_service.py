@@ -8,7 +8,6 @@ JSON-serializable payloads without moving business logic into API routes.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime, timezone
 from typing import Any
 
 from flask import url_for
@@ -22,8 +21,6 @@ from app.validators.support_donation import (
     MAX_DONATION_AMOUNT_MINOR,
     MIN_DONATION_AMOUNT_MINOR,
 )
-
-UTC = timezone.utc
 
 
 def serialize_user(user) -> dict[str, Any] | None:
@@ -111,7 +108,6 @@ def build_dashboard_payload(user, *, compact: bool = False) -> dict[str, Any]:
             "total_due": int(total_new) + int(total_learn) + int(total_due),
         },
         "admin_mode": bool(admin_mode),
-        "stats_initial_year": datetime.now(UTC).year,
     }
 
 

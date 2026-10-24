@@ -6,7 +6,6 @@ import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import { toast } from 'sonner'
-import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -24,7 +23,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { LazyDeckWorksheetModal } from '@/features/worksheets'
 import { DeckCardTypesDialog } from './DeckCardTypesDialog'
-import { dashboardQueryKey } from '../api'
+import { dashboardApi, dashboardQueryKey } from '../api'
 import {
   getCreateDeckSchema,
   getRenameDeckSchema,
@@ -111,10 +110,7 @@ export function CreateDeckModal({
 
   const noteTypesQuery = useQuery({
     queryKey: ['note-types'],
-    queryFn: () =>
-      appApi.get<{ items: Array<{ id: string; name: string; title?: string }> }>(
-        '/note-types',
-      ),
+    queryFn: () => dashboardApi.listNoteTypes(),
     enabled: opened,
   })
 
@@ -147,7 +143,7 @@ export function CreateDeckModal({
 
   const mutation = useMutation<unknown, Error, CreateDeckForm>({
     mutationFn: (values) =>
-      appApi.createDeck({
+      dashboardApi.createDeck({
         ...values,
         deck_path: values.name,
         parent_id: values.parent_id || '',
@@ -249,10 +245,10 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
     purge?: boolean
   }>({
     mutationFn: ({ type, deckId, values, purge }) => {
-      if (type === 'rename') return appApi.renameDeck(deckId, { name: values.name || '' })
-      if (type === 'move') return appApi.moveDeck(deckId, { parent_id: values.parent_id || '' })
-      if (type === 'delete') return appApi.deleteDeck(deckId, { purge })
-      return appApi.resetDeck(deckId)
+      if (type === 'rename') return dashboardApi.renameDeck(deckId, { name: values.name || '' })
+      if (type === 'move') return dashboardApi.moveDeck(deckId, { parent_id: values.parent_id || '' })
+      if (type === 'delete') return dashboardApi.deleteDeck(deckId, { purge })
+      return dashboardApi.resetDeck(deckId)
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })

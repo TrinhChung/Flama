@@ -18,7 +18,8 @@ const api = vi.hoisted(() => ({
   getDashboardOverview: vi.fn(),
 }))
 
-vi.mock('@/app/api', () => ({ appApi: api }))
+vi.mock('@/app/api', () => ({ appApi: { getDashboardOverview: api.getDashboardOverview } }))
+vi.mock('../api/dashboardApi', () => ({ dashboardApi: { getDashboard: api.getDashboard } }))
 
 vi.mock('@/shared/api/bootstrap', () => ({
   useBootstrap: () => ({
@@ -74,7 +75,6 @@ function dashboard(name = 'Vocabulary'): DashboardPayload {
     }],
     totals: { new: 10, learning: 2, due: 3 },
     admin_mode: false,
-    stats_initial_year: new Date().getFullYear(),
     actions: { create: '/api/decks', move: '/api/decks/move' },
   }
 }

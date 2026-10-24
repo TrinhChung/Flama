@@ -30,7 +30,6 @@ const dummyDashboard: DashboardPayload = {
   decks: [sampleDeck],
   totals: { new: 10, learning: 2, due: 3 },
   admin_mode: false,
-  stats_initial_year: 2026,
   actions: { create: '/api/decks', move: '/api/decks/move' },
 }
 

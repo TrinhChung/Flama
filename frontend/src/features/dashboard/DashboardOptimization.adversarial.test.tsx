@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { appApi } from '@/app/api'
+import { dashboardApi } from './api/dashboardApi'
 import { apiRequest, setCsrfToken } from '@/shared/api/client'
 
 function mockJson(payload: unknown) {
@@ -42,9 +43,9 @@ describe('Dashboard transport regression coverage', () => {
     const fetchMock = mockJson({
       items: [{ ...child, deck_id: 10, parent_id: null, move_alias: 'MID-ROOT', label: 'Root', depth: 0, children: [child] }],
       summary: { new: 2, learning: 1, due: 3, total_due: 6 },
-      admin_mode: true, stats_initial_year: 2026,
+      admin_mode: true,
     })
-    const result = await appApi.getDashboard()
+    const result = await dashboardApi.getDashboard()
     expect(fetchMock.mock.calls[0][0]).toContain('/dashboard?compact=1')
     expect(fetchMock.mock.calls[0][1].headers.has('X-Timezone')).toBe(false)
     expect(result.decks[0].children[0]).toMatchObject({

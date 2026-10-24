@@ -4,10 +4,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import { toast } from 'sonner'
-import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
 import { Button } from '@/components/ui/button'
-import { dashboardQueryKey, useDashboard, useDashboardOverview } from '../api'
+import { dashboardApi, dashboardQueryKey, useDashboard, useDashboardOverview } from '../api'
 import type { DeckNode, SelectedDeckAction } from '../types'
 
 export function findDeck(nodes: DeckNode[], deckId: number | null): DeckNode | null {
@@ -36,7 +35,7 @@ export function useDashboardPage() {
 
   const moveMutation = useMutation({
     mutationFn: ({ deckId, parentId }: { deckId: number; parentId: number | null }) =>
-      appApi.moveDeck(deckId, { parent_id: parentId === null ? '' : String(parentId) }),
+      dashboardApi.moveDeck(deckId, { parent_id: parentId === null ? '' : String(parentId) }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })
     },

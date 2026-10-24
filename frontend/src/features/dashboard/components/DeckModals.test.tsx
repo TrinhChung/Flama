@@ -4,14 +4,16 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { appApi } from '@/app/api'
+import { dashboardApi } from '../api/dashboardApi'
 import type { DashboardPayload, DeckNode } from '../types'
 import { CreateDeckModal } from './DeckModals'
 
-vi.mock('@/app/api', () => ({
-  appApi: {
+vi.mock('@/app/api', () => ({ appApi: {} }))
+
+vi.mock('../api/dashboardApi', () => ({
+  dashboardApi: {
     createDeck: vi.fn().mockResolvedValue({ id: 99, name: 'New Deck' }),
-    get: vi.fn().mockResolvedValue({
+    listNoteTypes: vi.fn().mockResolvedValue({
       items: [
         { id: 'nt-default', name: 'Từ vựng Flama' },
         { id: 'nt-kanji', name: 'Mẫu Kanji N2' },
@@ -66,7 +68,6 @@ const dummyDashboard: DashboardPayload = {
   decks: [parentDeck],
   totals: { new: 15, learning: 3, due: 5 },
   admin_mode: false,
-  stats_initial_year: 2026,
   actions: { create: '/api/decks', move: '/api/decks/move' },
 }
 
@@ -122,7 +123,7 @@ describe('CreateDeckModal', () => {
       form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
 
-    expect(appApi.createDeck).toHaveBeenCalledWith({
+    expect(dashboardApi.createDeck).toHaveBeenCalledWith({
       name: 'N1 Master::N1:Bài 2',
       deck_path: 'N1 Master::N1:Bài 2',
       parent_id: '',
