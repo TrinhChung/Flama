@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { updateCardFieldValues } from '@/entities/flashcard/contentUpdates'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
 import { apiRequest } from '@/shared/api/client'
+import { fetchBrowseAudioDetail } from '../api/browseAudioApi'
 import {
   uploadNoteMediaBlob,
   uploadNoteMediaBatch,
@@ -355,11 +356,7 @@ export function useLocalAudioEngine(options: {
   useEffect(() => {
     if (isOpen && targetCardIds.length > 0) {
       const cardId = targetCardIds[0]
-      apiRequest<{
-        card: { word: string }
-        fields?: Array<{ name: string; field_type?: string }>
-        note?: { note_type_name?: string; field_values?: Record<string, string> }
-      }>(`/api/browse/${targetKind === 'note' ? 'notes' : 'cards'}/${encodeURIComponent(cardId)}`)
+      fetchBrowseAudioDetail(cardId, targetKind)
         .then((res) => {
           if (res.note?.note_type_name) {
             setDiscoveredNoteTypeName(res.note.note_type_name)
@@ -817,10 +814,7 @@ export function useLocalAudioEngine(options: {
       let sampleText = isKokoro ? 'Hello, welcome to Flama Audio!' : 'こんにちは'
       if (targetCardIds.length > 0) {
         try {
-          const detail = await apiRequest<{
-            card: { word: string }
-            note: { field_values?: Record<string, unknown> }
-          }>(`/api/browse/${targetKind === 'note' ? 'notes' : 'cards'}/${encodeURIComponent(targetCardIds[0])}`)
+          const detail = await fetchBrowseAudioDetail(targetCardIds[0], targetKind)
           const raw = fieldValueEditorText(detail.note?.field_values?.[sourceField]) || detail.card.word || sampleText
           sampleText = cleanTextForTts(raw, engineId) || sampleText
         } catch {}
@@ -883,17 +877,13 @@ export function useLocalAudioEngine(options: {
         chunk.map(async (cardId, chunkIdx) => {
           const globalIdx = i + chunkIdx
           try {
-            const detail = await apiRequest<{
-              card: { word: string }
-              note: { id: string; field_values?: Record<string, string> }
-              can_upload_media?: boolean
-            }>(`/api/browse/${targetKind === 'note' ? 'notes' : 'cards'}/${encodeURIComponent(cardId)}`)
+            const detail = await fetchBrowseAudioDetail(cardId, targetKind)
 
             const noteValues = detail.note.field_values || {}
             const rawText =
-              noteValues[sourceField] ||
-              noteValues['Reading'] ||
-              noteValues['reading'] ||
+              fieldValueEditorText(noteValues[sourceField]) ||
+              fieldValueEditorText(noteValues['Reading']) ||
+              fieldValueEditorText(noteValues['reading']) ||
               detail.card.word ||
               ''
             const wordText = cleanTextForTts(rawText, engineId)

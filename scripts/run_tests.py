@@ -280,11 +280,13 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/presenters/vocabulary_presenter.py",
             "app/routes/vocabulary.py",
             "app/validators/browse_note.py",
+            "scripts/benchmark_browse_mysql.py",
             "frontend/src/features/browse/**",
             "frontend/src/pages/browse/**",
         ],
         "backend_tests": [
             "tests/test_browse_query_bounds.py",
+            "tests/test_browse_baseline_tool.py",
             "tests/test_browse_notes_mysql.py",
             "tests/test_flashcard_api_integration.py",
             "tests/test_flashcard_validation_security.py",

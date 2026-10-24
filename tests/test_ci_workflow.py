@@ -183,6 +183,8 @@ class CiWorkflowTests(unittest.TestCase):
             "scripts/probe_field_value_consumers_mysql.py --output output/field-value-consumers-mysql-ci.json",
             "scripts/probe_p7_session_retention_mysql.py",
             "scripts/probe_p5_analytics_mysql.py",
+            "scripts/probe_note_analytics_mysql.py",
+            "scripts/probe_dashboard_due_counts_mysql.py",
         ])
         self.assertEqual(parallel[0]["env"]["DB_HOST"], "127.0.0.1")
         # Concurrency probes and probes that use the ci schema stay sequential.

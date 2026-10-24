@@ -150,19 +150,19 @@ class FieldArrayConversionTests(unittest.TestCase):
         self.assertEqual(self._meaning(self.note_ids[0]), ["<b>ăn</b>"])
         self.assertEqual(self._field_type(), "array")
 
-    def test_array_note_edit_takes_lines_or_a_list_as_sent(self):
+    def test_array_note_edit_preserves_native_lists_and_rejects_text(self):
         source = self.client.get(self._url()).get_json()
         self.assertEqual(self.client.post(self._url(), json=self._payload(source)).status_code, 200)
         url = f"/api/notes/{self.note_ids[0]}"
-        # Text is split into lines only; text that looks like JSON stays one item.
-        for sent, stored in (('["a", "b"]', ['["a", "b"]']), ([[["three"]]], [[["three"]]]), ([["a", "b"], ["c"]], [["a", "b"], ["c"]])):
+        # Direct writes preserve native lists; import/conversion handles text.
+        for sent, stored in ((['["a", "b"]'], ['["a", "b"]']), ([[["three"]]], [[["three"]]]), ([["a", "b"], ["c"]], [["a", "b"], ["c"]])):
             response = self.client.patch(url, json={"field_values": {"Word": "食べる", "Meaning": sent}})
             self.assertEqual(response.status_code, 200, response.get_json())
             self.assertEqual(self._meaning(self.note_ids[0]), stored)
         response = self.client.patch(url, json={"field_values": {"Word": "食べる2"}})
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(self._meaning(self.note_ids[0]), [["a", "b"], ["c"]])
-        for bad in (["a", {"b": 1}], [[[["four levels"]]]], ["x" * 3000, "y" * 3000], [""] * 6000):
+        for bad in ('["a", "b"]', 'a\nb', ["a", {"b": 1}], [[[["four levels"]]]], ["x" * 3000, "y" * 3000], [""] * 6000):
             response = self.client.patch(url, json={"field_values": {"Word": "食べる", "Meaning": bad}})
             self.assertEqual(response.status_code, 400, (bad, response.get_json()))
         self.assertEqual(self._meaning(self.note_ids[0]), [["a", "b"], ["c"]])
@@ -175,7 +175,7 @@ class FieldArrayConversionTests(unittest.TestCase):
         response = self.client.post(self._url(), json=payload)
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(self._meaning(self.note_ids[0]), expected_array)
-        response = self.client.patch(f"/api/notes/{self.note_ids[0]}", json={"field_values": {"Word": "食べる", "Meaning": repeated}})
+        response = self.client.patch(f"/api/notes/{self.note_ids[0]}", json={"field_values": {"Word": "食べる", "Meaning": expected_array}})
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(self._meaning(self.note_ids[0]), expected_array)
 

@@ -1,6 +1,5 @@
 import '@/shared/config/i18n'
-import { useEffect, useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { MoreHorizontal, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -10,83 +9,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import {
-  attachLibraryTemplate, cardTemplateQueryKeys, deleteNoteTypeTemplate, fetchTemplateApplications, retireTemplateApplication, updateTemplateApplication,
   validateBindings, type MappingField, type TemplateApplication,
 } from '@/entities/card-template'
-import { apiRequest } from '@/shared/api/client'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 
-export type TemplateApplicationsPanelProps = {
-  noteTypeId: string
-  fields?: MappingField[]
-  onChanged?: () => void
-}
+import { useTemplateApplications } from '../hooks/useTemplateApplications'
+import type { TemplateApplicationsPanelProps } from '../model/templateApplications'
+export type { TemplateApplicationsPanelProps } from '../model/templateApplications'
 
-type ApplicationMutation = 'default' | 'retire' | 'reattach' | 'delete'
-
-function useTemplateApplications({ noteTypeId, fields, onChanged }: TemplateApplicationsPanelProps) {
-  const { t } = useTranslation('card_templates')
-  const queryClient = useQueryClient()
-  const mounted = useRef(true)
-  const submitting = useRef(false)
-  const [pendingId, setPendingId] = useState<string | null>(null)
-  const [error, setError] = useState<Error | null>(null)
-  useEffect(() => {
-    mounted.current = true
-    return () => { mounted.current = false }
-  }, [])
-  const applications = useQuery({
-    queryKey: cardTemplateQueryKeys.applications(noteTypeId, true),
-    queryFn: ({ signal }) => fetchTemplateApplications(noteTypeId, true, signal),
-  })
-  const detail = useQuery({
-    queryKey: ['note-type-detail', noteTypeId, 'attachment-fields'],
-    queryFn: ({ signal }) => apiRequest<{ field_defs: MappingField[] }>(`/api/note-types/${encodeURIComponent(noteTypeId)}`, { signal }),
-    enabled: fields === undefined,
-  })
-  const execute = async (kind: ApplicationMutation, application: TemplateApplication): Promise<boolean> => {
-    if (submitting.current) return false
-    submitting.current = true
-    setPendingId(application.id)
-    setError(null)
-    try {
-      if (kind === 'delete') {
-        await deleteNoteTypeTemplate(noteTypeId, application.template_id)
-      } else {
-        const result = kind === 'retire'
-          ? await retireTemplateApplication(noteTypeId, application.id)
-          : kind === 'default'
-            ? await updateTemplateApplication(noteTypeId, application.id, { is_default: true })
-            : await attachLibraryTemplate(noteTypeId, {
-              template_id: application.template_id,
-              occurrence_key: application.occurrence_key,
-              input_bindings: application.input_bindings,
-              display_name: application.display_name,
-              position: application.position,
-              is_default: application.is_default,
-            })
-        if (result.id !== application.id || result.template_id !== application.template_id) {
-          throw new Error(t('applications_panel.error_mismatch'))
-        }
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['card-template'] }),
-        queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] }),
-        queryClient.invalidateQueries({ queryKey: ['note-types'] }),
-      ])
-      if (!mounted.current) return false
-      onChanged?.()
-      return true
-    } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause : new Error(t('applications_panel.error_failed')))
-      return false
-    } finally {
-      submitting.current = false
-      if (mounted.current) setPendingId(null)
-    }
-  }
-  return { applications, detail, fields: fields ?? detail.data?.field_defs ?? [], pendingId, error, setError, execute }
-}
 
 function ApplicationRow({ application, noteTypeId, fields, fieldsUnavailable, pending, onDefault, onRetire, onReattach, onDelete }: {
   application: TemplateApplication
@@ -104,7 +34,7 @@ function ApplicationRow({ application, noteTypeId, fields, fieldsUnavailable, pe
   const name = application.display_name || application.template.name
   const mappingPath = `/flashcards/note-types/${encodeURIComponent(noteTypeId)}/templates/${encodeURIComponent(application.id)}`
   const issues = validateBindings(application.input_schema, fields, application.input_bindings)
-  const invalidKeys = new Set(issues.map((issue) => issue.key))
+  const invalidKeys = new Set(issues.filter((issue) => issue.blocking || issue.kind === 'unbound').map((issue) => issue.key))
   const mapped = application.input_schema.filter((input) => !invalidKeys.has(input.key)).length
   const emptyCount = issues.filter((issue) => issue.kind === 'unbound').length
   const needsRepair = issues.some((issue) => issue.blocking)
