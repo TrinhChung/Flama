@@ -391,6 +391,8 @@ jobs:
           --probe "scripts/probe_field_value_consumers_mysql.py --output output/field-value-consumers-mysql-ci.json"
           --probe "scripts/probe_p7_session_retention_mysql.py"
           --probe "scripts/probe_p5_analytics_mysql.py"
+          --probe "scripts/probe_note_analytics_mysql.py"
+          --probe "scripts/probe_dashboard_due_counts_mysql.py"
 
       - name: Qualify complete retirement chain on a generated MySQL schema
         env:
