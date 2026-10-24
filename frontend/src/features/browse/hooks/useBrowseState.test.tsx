@@ -147,6 +147,22 @@ describe('Browse field editing and persistence', () => {
     expect(browse.noteTypesQuery.data?.items[0].field_defs?.[1].field_type).toBe('array')
   })
 
+  it('reuses the editor detail when opening a tool for the same Note', async () => {
+    const previousGet = mocks.get.getMockImplementation()!
+    mocks.get.mockImplementation(async (path: string, ...args: unknown[]) => {
+      if (path === '/api/tts/providers/voicevox/profile') return { profile: {} }
+      return previousGet(path, ...args)
+    })
+    const requestsBefore = mocks.get.mock.calls.filter(([path]) => path === '/browse/cards/A').length
+    await act(async () => {
+      browse.setActiveCardId(null)
+      browse.setIsTtsModalOpen(true)
+    })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)) })
+    expect(mocks.get.mock.calls.filter(([path]) => path === '/browse/cards/A')).toHaveLength(requestsBefore)
+    expect(queryClient.getQueryData(['browse', 'card-detail', 'A'])).toBeDefined()
+  })
+
   it('sends only changed fields and retains an untouched native nested list', async () => {
     await act(async () => browse.setEditFieldValues((previous) => ({ ...previous, Word: '犬' })))
     await act(async () => button('Lưu').click())

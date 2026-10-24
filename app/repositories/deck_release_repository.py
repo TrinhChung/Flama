@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from sqlalchemy import func, or_
+from sqlalchemy.orm import load_only
 
 from app.repositories.deck_tree_query import collect_subtree_ids
 from models import db
@@ -182,6 +183,7 @@ def list_release_history_changes(
     deck_item_id: str,
     through_sequence: int,
     entity_kinds: Iterable[str] | None = None,
+    content_only: bool = False,
 ) -> list[DeckReleaseChange]:
     query = (
         DeckReleaseChange.query.join(
@@ -197,6 +199,13 @@ def list_release_history_changes(
     normalized_kinds = [str(value) for value in (entity_kinds or []) if value]
     if normalized_kinds:
         query = query.filter(DeckReleaseChange.entity_kind.in_(normalized_kinds))
+    if content_only:
+        query = query.options(load_only(
+            DeckReleaseChange.id, DeckReleaseChange.release_sequence_no,
+            DeckReleaseChange.entity_kind, DeckReleaseChange.entity_id,
+            DeckReleaseChange.field_def_id, DeckReleaseChange.property_key,
+            DeckReleaseChange.operation, DeckReleaseChange.after_value,
+        ))
     return query.order_by(
         DeckReleaseChange.release_sequence_no.asc(),
         DeckReleaseChange.id.asc(),
@@ -256,12 +265,16 @@ def list_note_checkpoints_for_ids(
     deck_item_id: str,
     through_sequence: int,
     note_ids: Iterable[str],
+    content_only: bool = False,
 ) -> list[DeckReleaseNoteCheckpoint]:
     normalized_ids = sorted({str(note_id) for note_id in note_ids if note_id})
     if not normalized_ids:
         return []
     return (
-        DeckReleaseNoteCheckpoint.query.join(
+        DeckReleaseNoteCheckpoint.query.options(*([load_only(
+            DeckReleaseNoteCheckpoint.id, DeckReleaseNoteCheckpoint.source_note_id,
+            DeckReleaseNoteCheckpoint.release_sequence_no, DeckReleaseNoteCheckpoint.field_values,
+        )] if content_only else [])).join(
             DeckRelease,
             DeckRelease.id == DeckReleaseNoteCheckpoint.release_id,
         )
@@ -284,12 +297,17 @@ def list_note_field_history_for_ids(
     deck_item_id: str,
     through_sequence: int,
     note_ids: Iterable[str],
+    content_only: bool = False,
 ) -> list[DeckReleaseChange]:
     normalized_ids = sorted({str(note_id) for note_id in note_ids if note_id})
     if not normalized_ids:
         return []
     return (
-        DeckReleaseChange.query.join(
+        DeckReleaseChange.query.options(*([load_only(
+            DeckReleaseChange.id, DeckReleaseChange.release_sequence_no,
+            DeckReleaseChange.entity_id, DeckReleaseChange.field_def_id,
+            DeckReleaseChange.operation, DeckReleaseChange.after_value,
+        )] if content_only else [])).join(
             DeckRelease,
             DeckRelease.id == DeckReleaseChange.release_id,
         )

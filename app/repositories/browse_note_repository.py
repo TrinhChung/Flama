@@ -1,9 +1,10 @@
 """Note-grain Browse reads. No presentation, application or template expansion."""
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import and_, case, func, literal, not_, or_, select, union_all
+from sqlalchemy import and_, case, func, literal, not_, or_, select, true, union_all
 from sqlalchemy.orm import load_only, selectinload
 
 from models import db
@@ -41,22 +42,24 @@ class BrowseNoteReference:
         return self.note.updated_at
 
 
-def load_note(note_id):
-    return Note.query.options(
-        selectinload(Note.note_type).selectinload(NoteType.field_defs),
-        selectinload(Note.media_assets),
-    ).filter(Note.id == note_id).first()
+def load_note(note_id, *, include_media=True):
+    query = Note.query.options(selectinload(Note.note_type).options(
+        load_only(NoteType.id, NoteType.user_id, NoteType.name, NoteType.field_schema_revision),
+        selectinload(NoteType.field_defs)))
+    if include_media:
+        query = query.options(selectinload(Note.media_assets))
+    return query.filter(Note.id == note_id).first()
 
 
-def load_note_reference(note_id):
-    note = load_note(note_id)
+def load_note_reference(note_id, *, include_media=True):
+    note = load_note(note_id, include_media=include_media)
     if note is not None:
         return note
     # Resolve an old bookmark's identity without loading a presentation or its
     # template. Authorization is always checked on the resulting Note.
     from models.card import card_key_pairs
     pair = card_key_pairs(db.session, [note_id]).get(str(note_id))
-    return load_note(pair[0]) if pair else None
+    return load_note(pair[0], include_media=include_media) if pair else None
 
 
 def installed_scope_candidates(*, user_id, local_deck_ids):
@@ -70,6 +73,60 @@ def installed_scope_candidates(*, user_id, local_deck_ids):
         DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id).where(*filters,
         DeckCloneDeckMap.local_deck_id.in_(local_deck_ids))
     return sorted(int(row[0]) for row in db.session.execute(roots.union(mapped)) if row[0] is not None)
+
+
+def selected_owned_decks(*, user_id, deck_id, include_subdecks):
+    """Fast path for an entirely owned subtree; mixed visibility uses the normal resolver."""
+    root = db.session.get(Deck, deck_id)
+    if root is None or root.deleted_at is not None or root.owner_user_id != user_id:
+        return None
+    decks = {int(root.id): root}
+    frontier = [int(root.id)] if include_subdecks else []
+    while frontier:
+        children = Deck.query.filter(Deck.parent_id.in_(frontier), Deck.deleted_at.is_(None)).all()
+        if any(child.owner_user_id != user_id for child in children):
+            return None
+        frontier = []
+        for child in children:
+            if int(child.id) not in decks:
+                decks[int(child.id)] = child
+                frontier.append(int(child.id))
+    return list(decks.values())
+
+
+def clone_scope_roots_for_note(*, user_id, source_deck_id):
+    """Keep the existing root precedence, resolving only matching maps or unmapped legacy installs."""
+    from models.deck_install import DeckInstall
+    from models.deck_clone_deck_map import DeckCloneDeckMap
+    filters = (DeckInstall.user_id == user_id, DeckInstall.clone_mode == 'logical_overlay',
+        DeckInstall.local_deck_id.isnot(None))
+    roots = db.session.query(DeckInstall.local_deck_id).filter(*filters).distinct().all()
+    mapped = select(DeckCloneDeckMap.id).where(DeckCloneDeckMap.deck_install_id == DeckInstall.id)
+    matches = set(db.session.execute(select(DeckInstall.local_deck_id).where(*filters,
+        or_(mapped.where(DeckCloneDeckMap.source_deck_id == source_deck_id).exists(), ~mapped.exists()))).scalars())
+    return [int(root) for (root,) in roots if root in matches]
+
+
+def detail_deck_lookup(*, reference):
+    deck_id = (reference.clone_scope.source_to_local_deck_id.get(int(reference.note.deck_id or 0))
+        or reference.clone_scope.install.local_deck_id) if reference.clone_scope else reference.note.deck_id
+    rows = db.session.query(Deck.id, Deck.name).filter(Deck.id == deck_id, Deck.deleted_at.is_(None)).all()
+    return dict(rows)
+
+
+def note_matches_clone_scope(*, note_id, scope):
+    """Authorize one Note with the same release/snapshot predicate as the list."""
+    from app.services import flashcards_share
+
+    filters = [Note.id == note_id, Note.deck_id.in_(scope.source_deck_ids)]
+    if scope.source_owner_user_id is not None:
+        filters.append(Note.user_id == scope.source_owner_user_id)
+    membership = flashcards_share.release_note_membership_filter(scope.install, Note.id)
+    if membership is not None:
+        filters.append(membership)
+    elif scope.base_snapshot_at is not None:
+        filters.append(Note.created_at <= scope.base_snapshot_at)
+    return db.session.query(Note.id).filter(*filters).first() is not None
 
 
 def load_voicevox_notes(ids, *, user_id, admin_mode, note_only, include_media=False):
@@ -101,6 +158,34 @@ def note_page(query, *, page, per_page, install_id, user_id, pinned_installs):
     pagination = query.with_entities(Note.id, Note.user_id, install_id).paginate(
         page=page, per_page=per_page, error_out=False, count=False,
     )
+    return _hydrate_page(pagination, user_id=user_id, pinned_installs=pinned_installs)
+
+
+def search_note_page(context, *, install_id, user_id, pinned_installs):
+    """Evaluate matching identities once for both exact total and page.
+
+    The ranked CTE stores identities/order only. Its aggregate LEFT JOIN page
+    also returns the total for an empty or out-of-range page, without a second
+    search or fetching all matching IDs into Python.
+    """
+    query = context.query.with_entities(Note.id.label('note_id'), Note.user_id, install_id)
+    ranked = order_notes(context, user_id=user_id, query=query, with_rank=True).cte()
+    totals = select(func.count().label('total')).select_from(ranked).subquery()
+    start = (context.page - 1) * context.per_page
+    page = select(ranked.c.note_id, ranked.c.user_id, ranked.c.browse_install_id,
+        ranked.c.browse_rank).where(ranked.c.browse_rank > start,
+            ranked.c.browse_rank <= start + context.per_page).subquery()
+    rows = db.session.execute(select(page.c.note_id, page.c.user_id, page.c.browse_install_id,
+        totals.c.total).select_from(totals.outerjoin(page, true())).order_by(page.c.browse_rank)).all()
+    total = int(rows[0].total)
+    pagination = SimpleNamespace(items=[tuple(row[:3]) for row in rows if row.note_id is not None],
+        total=total, page=context.page, per_page=context.per_page,
+        pages=(total + context.per_page - 1) // context.per_page,
+        has_next=context.page * context.per_page < total)
+    return _hydrate_page(pagination, user_id=user_id, pinned_installs=pinned_installs)
+
+
+def _hydrate_page(pagination, *, user_id, pinned_installs):
     pinned_ids = [note_id for note_id, owner_id, scope in pagination.items
                   if owner_id != user_id and scope in pinned_installs]
     live_ids = [note_id for note_id, _owner_id, _scope in pagination.items if note_id not in pinned_ids]
@@ -122,8 +207,9 @@ def note_page(query, *, page, per_page, install_id, user_id, pinned_installs):
     return pagination
 
 
-def order_notes(context, *, user_id):
-    query = context.query
+def order_notes(context, *, user_id, query=None, with_rank=False):
+    query = context.query if query is None else query
+    order = []
     descending = context.sort_dir == "desc"
     if context.sort_by == "deck":
         names = [(db.and_(Note.user_id != user_id, condition, Note.deck_id == source), literal(context.deck_lookup[local]))
@@ -131,7 +217,7 @@ def order_notes(context, *, user_id):
             for source, local in sorted(scope.source_to_local_deck_id.items()) if local in context.deck_lookup]
         query = query.outerjoin(Deck, Note.deck_id == Deck.id)
         expression = case(*names, else_=Deck.name) if names else Deck.name
-        query = query.order_by(expression.desc() if descending else expression.asc())
+        order.append(expression.desc() if descending else expression.asc())
     elif context.sort_by == "word":
         from app.repositories.browse_card_repository import owned_note_word_expression
         own = owned_note_word_expression()
@@ -140,13 +226,16 @@ def order_notes(context, *, user_id):
             values.append((context.owned_visibility_condition, own))
         values.extend((projection["condition"], projection["word"]) for projection in context.clone_projections)
         expression = func.lower(func.coalesce(case(*values, else_=own) if values else own, ""))
-        query = query.order_by(expression.desc() if descending else expression.asc())
+        order.append(expression.desc() if descending else expression.asc())
     else:
         day = case((context.normalized_progress_queue == "review", context.progress_alias.due_day), else_=None)
         due = context.progress_alias.due_at
-        query = query.order_by(day.is_(None), day.desc() if descending else day.asc(),
-                               due.is_(None), due.desc() if descending else due.asc())
-    return query.order_by(Note.updated_at.desc(), Note.id.asc())
+        order.extend((day.is_(None), day.desc() if descending else day.asc(),
+                      due.is_(None), due.desc() if descending else due.asc()))
+    order.extend((Note.updated_at.desc(), Note.id.asc()))
+    if with_rank:
+        return query.add_columns(func.row_number().over(order_by=order).label('browse_rank'))
+    return query.order_by(*order)
 
 
 def deck_counts(context, *, user_id, admin_mode, today_day_index, day_cutoff_utc):
@@ -165,7 +254,9 @@ def deck_counts(context, *, user_id, admin_mode, today_day_index, day_cutoff_utc
     members = union_all(*branches).subquery("browse_note_members") if len(branches) > 1 else branches[0].subquery("browse_note_members")
 
     def build(note_ids=None):
-        query = select(members.c.note_id, members.c.deck_id, literal(1).label("card_count")).distinct()
+        query = select(members.c.note_id, members.c.deck_id, literal(1).label("card_count"))
+        if len(branches) > 1:
+            query = query.distinct()
         if note_ids is not None:
             query = query.where(members.c.note_id.in_(note_ids))
         return query.subquery("browse_note_scope")

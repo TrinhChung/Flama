@@ -1,0 +1,4283 @@
+{
+  "base_commit": "83face76",
+  "mysql_version": "8.0.40",
+  "scope": "Read-only local service inspection, one instrumented sample per case; not HTTP/load latency",
+  "as_of_utc": "2026-10-24T10:30:00Z",
+  "method": "One instrumented sample per case. DB value bytes sum UTF-8 values in buffered DBAPI rows; excludes protocol overhead. No SQL text, bound parameters or application content are stored.",
+  "cases": [
+    {
+      "name": "notes-all",
+      "payload_bytes": 22904,
+      "returned": 100,
+      "total": 39338,
+      "payload_keys": [
+        "items",
+        "page",
+        "per_page",
+        "total",
+        "pages",
+        "has_next"
+      ],
+      "elapsed_ms": 2696.528,
+      "statements": 37,
+      "locking_statements": 8,
+      "execute_ms": 2349.284,
+      "db_value_bytes": 346775,
+      "phases": {
+        "deck-scope": {
+          "calls": 1,
+          "ms": 368.56
+        },
+        "build-query": {
+          "calls": 1,
+          "ms": 422.739
+        },
+        "count": {
+          "calls": 1,
+          "ms": 1621.401
+        },
+        "page-hydration": {
+          "calls": 1,
+          "ms": 466.22
+        },
+        "authority": {
+          "calls": 1,
+          "ms": 48.444
+        }
+      },
+      "live_note_decodes": {
+        "other": 100
+      },
+      "tables_accessed": [
+        "deck_clone_deck_maps",
+        "deck_installs",
+        "decks",
+        "field_defs",
+        "note_types",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 8,
+          "phase": "count",
+          "execute_ms": 1607.385,
+          "sql_chars": 30112,
+          "bind_count": 1536,
+          "tables": [
+            "notes",
+            "study_progress_subjects"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": true,
+          "failed": false,
+          "returned_rows": 1,
+          "value_bytes": 5,
+          "columns": {
+            "count_1": 5
+          },
+          "shape_sha256": "5274bed8c1821475d74842acedf3fc6b042f55f77cd82f8e21fbb5b9bed40f71",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 9,
+          "phase": "page-hydration",
+          "execute_ms": 419.594,
+          "sql_chars": 30590,
+          "bind_count": 1540,
+          "tables": [
+            "notes",
+            "study_progress_subjects"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 100,
+          "value_bytes": 3700,
+          "columns": {
+            "notes_id": 3600,
+            "notes_user_id": 100,
+            "browse_install_id": 0
+          },
+          "shape_sha256": "6c0085134bcafa9caf1ab9ed86298ee6065fd7ba40a1ee7f50d06db1ce12a3c8",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 4,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 122.26,
+          "sql_chars": 125,
+          "bind_count": 1,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1469,
+          "value_bytes": 5700,
+          "columns": {
+            "notes_deck_id": 5700
+          },
+          "shape_sha256": "348dd2f222f86c7048b024fbecf023ca516af3ae76778a9e886aebfa78c2c929",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 10,
+          "phase": "page-hydration",
+          "execute_ms": 6.902,
+          "sql_chars": 1773,
+          "bind_count": 100,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 100,
+          "value_bytes": 131650,
+          "columns": {
+            "notes_id": 3600,
+            "notes_note_type_id": 3600,
+            "notes_user_id": 100,
+            "notes_deck_id": 400,
+            "notes_field_values_by_id": 118550,
+            "notes_field_values_codec": 1100,
+            "notes_field_values_extras": 200,
+            "notes_content_revision": 100,
+            "notes_tags": 200,
+            "notes_created_at": 1900,
+            "notes_updated_at": 1900
+          },
+          "shape_sha256": "939ec3214cc742ed32031b7343a87795acb8fa3d8ad6995818d1895bedda0641"
+        },
+        {
+          "index": 3,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 28.689,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1534,
+          "value_bytes": 107733,
+          "columns": {
+            "decks_id": 5953,
+            "decks_parent_id": 5885,
+            "decks_owner_user_id": 1534,
+            "decks_note_type_id": 11016,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 21978,
+            "decks_description": 285,
+            "decks_position": 2790,
+            "decks_deleted_at": 0,
+            "decks_created_at": 29146,
+            "decks_updated_at": 29146
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8"
+        },
+        {
+          "index": 18,
+          "phase": "authority",
+          "execute_ms": 6.979,
+          "sql_chars": 4223,
+          "bind_count": 101,
+          "tables": [
+            "study_progress_subjects"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": true,
+          "count": false,
+          "failed": false,
+          "returned_rows": 100,
+          "value_bytes": 86192,
+          "columns": {
+            "id": 500,
+            "learner_user_id": 100,
+            "logical_note_key": 3600,
+            "live_note_id": 3600,
+            "subject_generation": 100,
+            "mirror_revision": 100,
+            "status_code": 1500,
+            "contributor_count": 100,
+            "authority_vector_hash": 3200,
+            "lineage_vector_hash": 3200,
+            "mapper_version": 2800,
+            "last_mirrored_at": 2600,
+            "algorithm_key": 1100,
+            "algorithm_version": 500,
+            "state_schema_version": 1800,
+            "storage_codec": 2900,
+            "state_payload": 38792,
+            "state_payload_size": 300,
+            "algorithm_state_hash": 3200,
+            "semantic_state_hash": 3200,
+            "authority_revision": 100,
+            "projection_version": 2200,
+            "normalized_queue": 600,
+            "due_at": 1900,
+            "due_day": 600,
+            "is_suspended": 100,
+            "is_buried": 100,
+            "buried_until_day": 0,
+            "history_completeness_code": 1500,
+            "current_provenance_code": 1400,
+            "created_at": 2600,
+            "updated_at": 1900
+          },
+          "shape_sha256": "9a2bf30fe6fadb0558f7c1c511b2747e199d5a42080a9c3df284732578e72d6e"
+        }
+      ]
+    },
+    {
+      "name": "notes-owned-selected",
+      "payload_bytes": 4262,
+      "returned": 20,
+      "total": 118,
+      "payload_keys": [
+        "items",
+        "page",
+        "per_page",
+        "total",
+        "pages",
+        "has_next"
+      ],
+      "elapsed_ms": 268.938,
+      "statements": 21,
+      "locking_statements": 8,
+      "execute_ms": 189.51,
+      "db_value_bytes": 157508,
+      "phases": {
+        "deck-scope": {
+          "calls": 1,
+          "ms": 190.457
+        },
+        "build-query": {
+          "calls": 1,
+          "ms": 210.102
+        },
+        "count": {
+          "calls": 1,
+          "ms": 4.661
+        },
+        "page-hydration": {
+          "calls": 1,
+          "ms": 14.489
+        },
+        "authority": {
+          "calls": 1,
+          "ms": 18.016
+        }
+      },
+      "live_note_decodes": {
+        "other": 20
+      },
+      "tables_accessed": [
+        "deck_clone_deck_maps",
+        "deck_installs",
+        "decks",
+        "field_defs",
+        "note_types",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 4,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 131.107,
+          "sql_chars": 125,
+          "bind_count": 1,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1469,
+          "value_bytes": 5700,
+          "columns": {
+            "notes_deck_id": 5700
+          },
+          "shape_sha256": "348dd2f222f86c7048b024fbecf023ca516af3ae76778a9e886aebfa78c2c929",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 3,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 27.746,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1534,
+          "value_bytes": 107733,
+          "columns": {
+            "decks_id": 5953,
+            "decks_parent_id": 5885,
+            "decks_owner_user_id": 1534,
+            "decks_note_type_id": 11016,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 21978,
+            "decks_description": 285,
+            "decks_position": 2790,
+            "decks_deleted_at": 0,
+            "decks_created_at": 29146,
+            "decks_updated_at": 29146
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "decks": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_decks_owner_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 13,
+          "phase": "other",
+          "execute_ms": 4.712,
+          "sql_chars": 3213,
+          "bind_count": 32,
+          "tables": [
+            "study_progress_subjects",
+            "notes"
+          ],
+          "joins": 1,
+          "selects": 2,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1,
+          "value_bytes": 1,
+          "columns": {
+            "max_1": 1
+          },
+          "shape_sha256": "b3c6d833290328034a64c39ea45f50ec16f3bd10c555f64dcdb9417147c5ec67",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "range"
+                ],
+                "keys": [
+                  "PRIMARY"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 2,
+                "access": [
+                  "eq_ref",
+                  "ref"
+                ],
+                "keys": [
+                  "ix_sp_subject_live_note",
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 3,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 27.746,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1534,
+          "value_bytes": 107733,
+          "columns": {
+            "decks_id": 5953,
+            "decks_parent_id": 5885,
+            "decks_owner_user_id": 1534,
+            "decks_note_type_id": 11016,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 21978,
+            "decks_description": 285,
+            "decks_position": 2790,
+            "decks_deleted_at": 0,
+            "decks_created_at": 29146,
+            "decks_updated_at": 29146
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "decks": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_decks_owner_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 10,
+          "phase": "page-hydration",
+          "execute_ms": 2.101,
+          "sql_chars": 732,
+          "bind_count": 20,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 20,
+          "value_bytes": 21344,
+          "columns": {
+            "notes_id": 720,
+            "notes_note_type_id": 720,
+            "notes_user_id": 20,
+            "notes_deck_id": 80,
+            "notes_field_values_by_id": 18724,
+            "notes_field_values_codec": 220,
+            "notes_field_values_extras": 40,
+            "notes_content_revision": 20,
+            "notes_tags": 40,
+            "notes_created_at": 380,
+            "notes_updated_at": 380
+          },
+          "shape_sha256": "e2be169f68d706e31f942e4e172af7e56d06d149da0fdc9d8615f2fc7995bbab"
+        },
+        {
+          "index": 18,
+          "phase": "authority",
+          "execute_ms": 2.511,
+          "sql_chars": 2062,
+          "bind_count": 21,
+          "tables": [
+            "study_progress_subjects"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": true,
+          "count": false,
+          "failed": false,
+          "returned_rows": 20,
+          "value_bytes": 17233,
+          "columns": {
+            "id": 100,
+            "learner_user_id": 20,
+            "logical_note_key": 720,
+            "live_note_id": 720,
+            "subject_generation": 20,
+            "mirror_revision": 20,
+            "status_code": 300,
+            "contributor_count": 20,
+            "authority_vector_hash": 640,
+            "lineage_vector_hash": 640,
+            "mapper_version": 560,
+            "last_mirrored_at": 520,
+            "algorithm_key": 220,
+            "algorithm_version": 100,
+            "state_schema_version": 360,
+            "storage_codec": 580,
+            "state_payload": 7753,
+            "state_payload_size": 60,
+            "algorithm_state_hash": 640,
+            "semantic_state_hash": 640,
+            "authority_revision": 20,
+            "projection_version": 440,
+            "normalized_queue": 120,
+            "due_at": 380,
+            "due_day": 120,
+            "is_suspended": 20,
+            "is_buried": 20,
+            "buried_until_day": 0,
+            "history_completeness_code": 300,
+            "current_provenance_code": 280,
+            "created_at": 520,
+            "updated_at": 380
+          },
+          "shape_sha256": "2ae18020071c79ef8f90ddd57d62602a5b879d6154fc3bac14f7323935ab9e49"
+        }
+      ]
+    },
+    {
+      "name": "notes-clone-selected",
+      "payload_bytes": 4021,
+      "returned": 20,
+      "total": 118,
+      "payload_keys": [
+        "items",
+        "page",
+        "per_page",
+        "total",
+        "pages",
+        "has_next"
+      ],
+      "elapsed_ms": 393.872,
+      "statements": 37,
+      "locking_statements": 8,
+      "execute_ms": 285.25,
+      "db_value_bytes": 154106,
+      "phases": {
+        "deck-scope": {
+          "calls": 1,
+          "ms": 28.358
+        },
+        "install-scope": {
+          "calls": 1,
+          "ms": 13.377
+        },
+        "build-query": {
+          "calls": 1,
+          "ms": 70.015
+        },
+        "count": {
+          "calls": 1,
+          "ms": 66.821
+        },
+        "page-hydration": {
+          "calls": 1,
+          "ms": 28.019
+        },
+        "authority": {
+          "calls": 1,
+          "ms": 17.963
+        },
+        "release-values": {
+          "calls": 1,
+          "ms": 120.967
+        },
+        "clone-schema": {
+          "calls": 1,
+          "ms": 61.071
+        },
+        "overlay": {
+          "calls": 20,
+          "ms": 66.186
+        }
+      },
+      "live_note_decodes": {},
+      "tables_accessed": [
+        "deck_clone_added_field_defs",
+        "deck_clone_deck_maps",
+        "deck_clone_field_def_overrides",
+        "deck_clone_field_order_overrides",
+        "deck_clone_note_field_overrides",
+        "deck_installs",
+        "deck_release_changes",
+        "deck_release_entity_memberships",
+        "deck_release_note_checkpoints",
+        "deck_releases",
+        "decks",
+        "field_defs",
+        "note_types",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 15,
+          "phase": "count",
+          "execute_ms": 63.221,
+          "sql_chars": 1115,
+          "bind_count": 9,
+          "tables": [
+            "notes",
+            "study_progress_subjects",
+            "deck_release_entity_memberships"
+          ],
+          "joins": 1,
+          "selects": 2,
+          "locking": false,
+          "count": true,
+          "failed": false,
+          "returned_rows": 1,
+          "value_bytes": 3,
+          "columns": {
+            "count_1": 3
+          },
+          "shape_sha256": "a4d8644d7a9d253ef2306d7bb2fe542439f349be7d1da0643906e45c6a8fc830",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "range"
+                ],
+                "keys": [
+                  "ix_notes_deck_id"
+                ]
+              },
+              "deck_release_entity_memberships": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_memberships_item_entity_start"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 27,
+          "phase": "release-values",
+          "execute_ms": 56.798,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 80,
+          "value_bytes": 29437,
+          "columns": {
+            "deck_release_changes_id": 480,
+            "deck_release_changes_release_id": 2880,
+            "deck_release_changes_release_sequence_no": 80,
+            "deck_release_changes_change_key": 4448,
+            "deck_release_changes_entity_kind": 720,
+            "deck_release_changes_entity_id": 2880,
+            "deck_release_changes_field_def_id": 2880,
+            "deck_release_changes_property_key": 688,
+            "deck_release_changes_operation": 240,
+            "deck_release_changes_before_value": 320,
+            "deck_release_changes_after_value": 493,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 5120,
+            "deck_release_changes_source_deck_id": 320,
+            "deck_release_changes_sort_key": 6368,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1520
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_changes_release_key"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 29,
+          "phase": "release-values",
+          "execute_ms": 27.476,
+          "sql_chars": 1830,
+          "bind_count": 23,
+          "tables": [
+            "deck_release_note_checkpoints",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 20,
+          "value_bytes": 14873,
+          "columns": {
+            "deck_release_note_checkpoints_id": 100,
+            "deck_release_note_checkpoints_release_id": 720,
+            "deck_release_note_checkpoints_release_sequence_no": 20,
+            "deck_release_note_checkpoints_source_note_id": 720,
+            "deck_release_note_checkpoints_source_deck_id": 80,
+            "deck_release_note_checkpoints_note_type_id": 720,
+            "deck_release_note_checkpoints_field_values": 10813,
+            "deck_release_note_checkpoints_tags": 40,
+            "deck_release_note_checkpoints_content_hash": 1280,
+            "deck_release_note_checkpoints_created_at": 380
+          },
+          "shape_sha256": "5f97df20bb48fec9ca0257835a94c6db5735de33912cca56bfd6793fd1639daa",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_note_checkpoints": {
+                "nodes": 1,
+                "access": [
+                  "range"
+                ],
+                "keys": [
+                  "ix_deck_release_note_checkpoints_note_sequence"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 27,
+          "phase": "release-values",
+          "execute_ms": 56.798,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 80,
+          "value_bytes": 29437,
+          "columns": {
+            "deck_release_changes_id": 480,
+            "deck_release_changes_release_id": 2880,
+            "deck_release_changes_release_sequence_no": 80,
+            "deck_release_changes_change_key": 4448,
+            "deck_release_changes_entity_kind": 720,
+            "deck_release_changes_entity_id": 2880,
+            "deck_release_changes_field_def_id": 2880,
+            "deck_release_changes_property_key": 688,
+            "deck_release_changes_operation": 240,
+            "deck_release_changes_before_value": 320,
+            "deck_release_changes_after_value": 493,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 5120,
+            "deck_release_changes_source_deck_id": 320,
+            "deck_release_changes_sort_key": 6368,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1520
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_changes_release_key"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 32,
+          "phase": "overlay>clone-schema",
+          "execute_ms": 20.106,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 80,
+          "value_bytes": 29437,
+          "columns": {
+            "deck_release_changes_id": 480,
+            "deck_release_changes_release_id": 2880,
+            "deck_release_changes_release_sequence_no": 80,
+            "deck_release_changes_change_key": 4448,
+            "deck_release_changes_entity_kind": 720,
+            "deck_release_changes_entity_id": 2880,
+            "deck_release_changes_field_def_id": 2880,
+            "deck_release_changes_property_key": 688,
+            "deck_release_changes_operation": 240,
+            "deck_release_changes_before_value": 320,
+            "deck_release_changes_after_value": 493,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 5120,
+            "deck_release_changes_source_deck_id": 320,
+            "deck_release_changes_sort_key": 6368,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1520
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db"
+        },
+        {
+          "index": 3,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 7.479,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 290,
+          "value_bytes": 25634,
+          "columns": {
+            "decks_id": 1160,
+            "decks_parent_id": 1132,
+            "decks_owner_user_id": 580,
+            "decks_note_type_id": 8964,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 2206,
+            "decks_description": 0,
+            "decks_position": 572,
+            "decks_deleted_at": 0,
+            "decks_created_at": 5510,
+            "decks_updated_at": 5510
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8"
+        }
+      ]
+    },
+    {
+      "name": "notes-all-installs",
+      "payload_bytes": 21782,
+      "returned": 100,
+      "total": 14835,
+      "payload_keys": [
+        "items",
+        "page",
+        "per_page",
+        "total",
+        "pages",
+        "has_next"
+      ],
+      "elapsed_ms": 1749.349,
+      "statements": 104,
+      "locking_statements": 8,
+      "execute_ms": 1481.98,
+      "db_value_bytes": 1131464,
+      "phases": {
+        "deck-scope": {
+          "calls": 1,
+          "ms": 32.317
+        },
+        "install-scope": {
+          "calls": 7,
+          "ms": 152.84
+        },
+        "build-query": {
+          "calls": 1,
+          "ms": 221.596
+        },
+        "count": {
+          "calls": 1,
+          "ms": 501.017
+        },
+        "page-hydration": {
+          "calls": 1,
+          "ms": 454.848
+        },
+        "authority": {
+          "calls": 1,
+          "ms": 38.235
+        },
+        "release-values": {
+          "calls": 4,
+          "ms": 387.788
+        },
+        "clone-schema": {
+          "calls": 4,
+          "ms": 104.442
+        },
+        "overlay": {
+          "calls": 100,
+          "ms": 113.967
+        }
+      },
+      "live_note_decodes": {},
+      "tables_accessed": [
+        "deck_clone_added_field_defs",
+        "deck_clone_deck_maps",
+        "deck_clone_field_def_overrides",
+        "deck_clone_field_order_overrides",
+        "deck_clone_note_field_overrides",
+        "deck_installs",
+        "deck_release_changes",
+        "deck_release_entity_memberships",
+        "deck_release_note_checkpoints",
+        "deck_releases",
+        "decks",
+        "field_defs",
+        "note_types",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 52,
+          "phase": "count",
+          "execute_ms": 490.246,
+          "sql_chars": 14954,
+          "bind_count": 617,
+          "tables": [
+            "notes",
+            "study_progress_subjects",
+            "deck_release_entity_memberships"
+          ],
+          "joins": 1,
+          "selects": 8,
+          "locking": false,
+          "count": true,
+          "failed": false,
+          "returned_rows": 1,
+          "value_bytes": 5,
+          "columns": {
+            "count_1": 5
+          },
+          "shape_sha256": "e4f4a79b95441d6d04ae2313797a419edf3fdcb7d6b0ea589ff9547f354ae3f8",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ALL"
+                ],
+                "keys": [
+                  "None"
+                ]
+              },
+              "deck_release_entity_memberships": {
+                "nodes": 7,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_memberships_item_entity_start"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 53,
+          "phase": "page-hydration",
+          "execute_ms": 426.079,
+          "sql_chars": 24587,
+          "bind_count": 627,
+          "tables": [
+            "deck_release_entity_memberships",
+            "notes",
+            "study_progress_subjects"
+          ],
+          "joins": 1,
+          "selects": 15,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 100,
+          "value_bytes": 7300,
+          "columns": {
+            "notes_id": 3600,
+            "notes_user_id": 100,
+            "browse_install_id": 3600
+          },
+          "shape_sha256": "81fe4d1b67874c45ae5e8782d868fe77e1f9e55e37d3a31f7007a79b98212b5d",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ALL"
+                ],
+                "keys": [
+                  "None"
+                ]
+              },
+              "deck_release_entity_memberships": {
+                "nodes": 14,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_memberships_item_entity_start"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 82,
+          "phase": "release-values",
+          "execute_ms": 147.222,
+          "sql_chars": 3124,
+          "bind_count": 77,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1168,
+          "value_bytes": 561784,
+          "columns": {
+            "deck_release_changes_id": 7008,
+            "deck_release_changes_release_id": 42048,
+            "deck_release_changes_release_sequence_no": 1168,
+            "deck_release_changes_change_key": 98112,
+            "deck_release_changes_entity_kind": 11680,
+            "deck_release_changes_entity_id": 42048,
+            "deck_release_changes_field_def_id": 42048,
+            "deck_release_changes_property_key": 49056,
+            "deck_release_changes_operation": 3504,
+            "deck_release_changes_before_value": 4672,
+            "deck_release_changes_after_value": 35016,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 74752,
+            "deck_release_changes_source_deck_id": 3504,
+            "deck_release_changes_sort_key": 124976,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 22192
+          },
+          "shape_sha256": "a61f1e017c13c63c7931b0401bbb9652ea49d4961e7dd2544e6546d7485fb6ac",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "range"
+                ],
+                "keys": [
+                  "ix_deck_release_changes_entity_history"
+                ]
+              },
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "PRIMARY"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 82,
+          "phase": "release-values",
+          "execute_ms": 147.222,
+          "sql_chars": 3124,
+          "bind_count": 77,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1168,
+          "value_bytes": 561784,
+          "columns": {
+            "deck_release_changes_id": 7008,
+            "deck_release_changes_release_id": 42048,
+            "deck_release_changes_release_sequence_no": 1168,
+            "deck_release_changes_change_key": 98112,
+            "deck_release_changes_entity_kind": 11680,
+            "deck_release_changes_entity_id": 42048,
+            "deck_release_changes_field_def_id": 42048,
+            "deck_release_changes_property_key": 49056,
+            "deck_release_changes_operation": 3504,
+            "deck_release_changes_before_value": 4672,
+            "deck_release_changes_after_value": 35016,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 74752,
+            "deck_release_changes_source_deck_id": 3504,
+            "deck_release_changes_sort_key": 124976,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 22192
+          },
+          "shape_sha256": "a61f1e017c13c63c7931b0401bbb9652ea49d4961e7dd2544e6546d7485fb6ac",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "range"
+                ],
+                "keys": [
+                  "ix_deck_release_changes_entity_history"
+                ]
+              },
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "PRIMARY"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 62,
+          "phase": "authority",
+          "execute_ms": 5.454,
+          "sql_chars": 4223,
+          "bind_count": 101,
+          "tables": [
+            "study_progress_subjects"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": true,
+          "count": false,
+          "failed": false,
+          "returned_rows": 100,
+          "value_bytes": 75255,
+          "columns": {
+            "id": 500,
+            "learner_user_id": 200,
+            "logical_note_key": 3600,
+            "live_note_id": 3600,
+            "subject_generation": 100,
+            "mirror_revision": 105,
+            "status_code": 1950,
+            "contributor_count": 100,
+            "authority_vector_hash": 0,
+            "lineage_vector_hash": 0,
+            "mapper_version": 0,
+            "last_mirrored_at": 0,
+            "algorithm_key": 1100,
+            "algorithm_version": 500,
+            "state_schema_version": 1800,
+            "storage_codec": 2900,
+            "state_payload": 38997,
+            "state_payload_size": 300,
+            "algorithm_state_hash": 3200,
+            "semantic_state_hash": 3200,
+            "authority_revision": 103,
+            "projection_version": 2200,
+            "normalized_queue": 600,
+            "due_at": 1900,
+            "due_day": 600,
+            "is_suspended": 100,
+            "is_buried": 100,
+            "buried_until_day": 0,
+            "history_completeness_code": 2300,
+            "current_provenance_code": 1400,
+            "created_at": 1900,
+            "updated_at": 1900
+          },
+          "shape_sha256": "9a2bf30fe6fadb0558f7c1c511b2747e199d5a42080a9c3df284732578e72d6e"
+        },
+        {
+          "index": 81,
+          "phase": "release-values",
+          "execute_ms": 46.426,
+          "sql_chars": 3155,
+          "bind_count": 76,
+          "tables": [
+            "deck_release_note_checkpoints",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 73,
+          "value_bytes": 68377,
+          "columns": {
+            "deck_release_note_checkpoints_id": 365,
+            "deck_release_note_checkpoints_release_id": 2628,
+            "deck_release_note_checkpoints_release_sequence_no": 73,
+            "deck_release_note_checkpoints_source_note_id": 2628,
+            "deck_release_note_checkpoints_source_deck_id": 219,
+            "deck_release_note_checkpoints_note_type_id": 2628,
+            "deck_release_note_checkpoints_field_values": 53631,
+            "deck_release_note_checkpoints_tags": 146,
+            "deck_release_note_checkpoints_content_hash": 4672,
+            "deck_release_note_checkpoints_created_at": 1387
+          },
+          "shape_sha256": "7477f1be1f3eb4c752ed177670cf73fd02faa1541278380eb747d4a6a26a95f3"
+        }
+      ]
+    },
+    {
+      "name": "sidebar-owned",
+      "payload_bytes": 597091,
+      "returned": 1534,
+      "total": null,
+      "payload_keys": [
+        "decks"
+      ],
+      "elapsed_ms": 1050.088,
+      "statements": 13,
+      "locking_statements": 3,
+      "execute_ms": 789.973,
+      "db_value_bytes": 185551,
+      "phases": {
+        "deck-scope": {
+          "calls": 2,
+          "ms": 334.635
+        },
+        "build-query": {
+          "calls": 1,
+          "ms": 350.431
+        },
+        "tree-metadata": {
+          "calls": 1,
+          "ms": 94.352
+        },
+        "deck-counts": {
+          "calls": 1,
+          "ms": 592.221
+        }
+      },
+      "live_note_decodes": {},
+      "tables_accessed": [
+        "deck_installs",
+        "decks",
+        "note_types",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 12,
+          "phase": "deck-counts",
+          "execute_ms": 445.965,
+          "sql_chars": 32339,
+          "bind_count": 1554,
+          "tables": [
+            "notes",
+            "study_progress_subjects"
+          ],
+          "joins": 1,
+          "selects": 4,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1469,
+          "value_bytes": 13206,
+          "columns": {
+            "deck_id": 5700,
+            "count_1": 2278,
+            "sum_1": 1977,
+            "sum_2": 1552,
+            "sum_3": 1699
+          },
+          "shape_sha256": "679112a6aebb2c75bf13bea18929841022ba303d8d73f07b35a9da8ffebe5236",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 3
+            },
+            "tables": {
+              "browse_note_scope": {
+                "nodes": 1,
+                "access": [
+                  "ALL"
+                ],
+                "keys": [
+                  "None"
+                ]
+              },
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 4,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 125.347,
+          "sql_chars": 125,
+          "bind_count": 1,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1469,
+          "value_bytes": 5700,
+          "columns": {
+            "notes_deck_id": 5700
+          },
+          "shape_sha256": "348dd2f222f86c7048b024fbecf023ca516af3ae76778a9e886aebfa78c2c929",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 11,
+          "phase": "deck-counts",
+          "execute_ms": 119.876,
+          "sql_chars": 2335,
+          "bind_count": 5,
+          "tables": [
+            "study_progress_subjects"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 0,
+          "value_bytes": 0,
+          "columns": {
+            "logical_note_key": 0,
+            "live_note_id": 0
+          },
+          "shape_sha256": "1dd4251e98efe647843626143bc5c3580365cb95d7374c5ebc2ee3a7ec1f8198",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 3,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 31.987,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1534,
+          "value_bytes": 107733,
+          "columns": {
+            "decks_id": 5953,
+            "decks_parent_id": 5885,
+            "decks_owner_user_id": 1534,
+            "decks_note_type_id": 11016,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 21978,
+            "decks_description": 285,
+            "decks_position": 2790,
+            "decks_deleted_at": 0,
+            "decks_created_at": 29146,
+            "decks_updated_at": 29146
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8"
+        },
+        {
+          "index": 9,
+          "phase": "tree-metadata",
+          "execute_ms": 60.255,
+          "sql_chars": 29698,
+          "bind_count": 1534,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1469,
+          "value_bytes": 58584,
+          "columns": {
+            "notes_deck_id": 5700,
+            "notes_note_type_id": 52884
+          },
+          "shape_sha256": "985521629d87e09b87d198af7108c35e793b3ff253192798cf5fa4067af925c4"
+        },
+        {
+          "index": 12,
+          "phase": "deck-counts",
+          "execute_ms": 445.965,
+          "sql_chars": 32339,
+          "bind_count": 1554,
+          "tables": [
+            "notes",
+            "study_progress_subjects"
+          ],
+          "joins": 1,
+          "selects": 4,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1469,
+          "value_bytes": 13206,
+          "columns": {
+            "deck_id": 5700,
+            "count_1": 2278,
+            "sum_1": 1977,
+            "sum_2": 1552,
+            "sum_3": 1699
+          },
+          "shape_sha256": "679112a6aebb2c75bf13bea18929841022ba303d8d73f07b35a9da8ffebe5236",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 3
+            },
+            "tables": {
+              "browse_note_scope": {
+                "nodes": 1,
+                "access": [
+                  "ALL"
+                ],
+                "keys": [
+                  "None"
+                ]
+              },
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "sidebar-installs",
+      "payload_bytes": 113595,
+      "returned": 290,
+      "total": null,
+      "payload_keys": [
+        "decks"
+      ],
+      "elapsed_ms": 528.039,
+      "statements": 58,
+      "locking_statements": 3,
+      "execute_ms": 393.74,
+      "db_value_bytes": 117621,
+      "phases": {
+        "deck-scope": {
+          "calls": 2,
+          "ms": 22.561
+        },
+        "install-scope": {
+          "calls": 7,
+          "ms": 84.742
+        },
+        "build-query": {
+          "calls": 1,
+          "ms": 134.172
+        },
+        "tree-metadata": {
+          "calls": 1,
+          "ms": 21.443
+        },
+        "deck-counts": {
+          "calls": 1,
+          "ms": 370.352
+        }
+      },
+      "live_note_decodes": {},
+      "tables_accessed": [
+        "deck_clone_deck_maps",
+        "deck_installs",
+        "deck_release_entity_memberships",
+        "deck_releases",
+        "decks",
+        "note_types",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 57,
+          "phase": "deck-counts",
+          "execute_ms": 307.914,
+          "sql_chars": 34957,
+          "bind_count": 1222,
+          "tables": [
+            "notes",
+            "deck_release_entity_memberships",
+            "study_progress_subjects"
+          ],
+          "joins": 1,
+          "selects": 18,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 278,
+          "value_bytes": 2747,
+          "columns": {
+            "deck_id": 1112,
+            "count_1": 539,
+            "sum_1": 538,
+            "sum_2": 278,
+            "sum_3": 280
+          },
+          "shape_sha256": "7e63667d2ff6bdace484a005e36fb1dda73a86a901b1d00b3e59e52a68051612",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 7
+            },
+            "tables": {
+              "browse_note_scope": {
+                "nodes": 1,
+                "access": [
+                  "ALL"
+                ],
+                "keys": [
+                  "None"
+                ]
+              },
+              "browse_note_members": {
+                "nodes": 1,
+                "access": [
+                  "ALL"
+                ],
+                "keys": [
+                  "None"
+                ]
+              },
+              "notes": {
+                "nodes": 8,
+                "access": [
+                  "eq_ref",
+                  "ref"
+                ],
+                "keys": [
+                  "PRIMARY",
+                  "ix_notes_user_id"
+                ]
+              },
+              "deck_release_entity_memberships": {
+                "nodes": 7,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_deck_release_entity_memberships_deck_item_id",
+                  "uq_deck_release_memberships_item_entity_start"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 56,
+          "phase": "deck-counts",
+          "execute_ms": 11.255,
+          "sql_chars": 2335,
+          "bind_count": 5,
+          "tables": [
+            "study_progress_subjects"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 0,
+          "value_bytes": 0,
+          "columns": {
+            "logical_note_key": 0,
+            "live_note_id": 0
+          },
+          "shape_sha256": "1dd4251e98efe647843626143bc5c3580365cb95d7374c5ebc2ee3a7ec1f8198",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 32,
+          "phase": "build-query>install-scope",
+          "execute_ms": 5.503,
+          "sql_chars": 4747,
+          "bind_count": 172,
+          "tables": [
+            "deck_clone_deck_maps"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 171,
+          "value_bytes": 16758,
+          "columns": {
+            "deck_clone_deck_maps_id": 6156,
+            "deck_clone_deck_maps_deck_install_id": 6156,
+            "deck_clone_deck_maps_local_deck_id": 684,
+            "deck_clone_deck_maps_source_deck_id": 513,
+            "deck_clone_deck_maps_created_at": 3249
+          },
+          "shape_sha256": "1c2b95a642808b7f6302196122afdad995292ab6945c139d29fe09ca3687a640",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "deck_clone_deck_maps": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_clone_map_install_source"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 53,
+          "phase": "tree-metadata",
+          "execute_ms": 5.005,
+          "sql_chars": 603,
+          "bind_count": 7,
+          "tables": [
+            "deck_clone_deck_maps"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 290,
+          "value_bytes": 28537,
+          "columns": {
+            "deck_clone_deck_maps_id": 10440,
+            "deck_clone_deck_maps_deck_install_id": 10440,
+            "deck_clone_deck_maps_local_deck_id": 1160,
+            "deck_clone_deck_maps_source_deck_id": 987,
+            "deck_clone_deck_maps_created_at": 5510
+          },
+          "shape_sha256": "4f81429e4b8d46134b7e4802f858f55bb2427dd207fa2d01c8f789634cf056e8"
+        },
+        {
+          "index": 3,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 4.89,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 290,
+          "value_bytes": 25634,
+          "columns": {
+            "decks_id": 1160,
+            "decks_parent_id": 1132,
+            "decks_owner_user_id": 580,
+            "decks_note_type_id": 8964,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 2206,
+            "decks_description": 0,
+            "decks_position": 572,
+            "decks_deleted_at": 0,
+            "decks_created_at": 5510,
+            "decks_updated_at": 5510
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8"
+        },
+        {
+          "index": 6,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 5.325,
+          "sql_chars": 620,
+          "bind_count": 7,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 272,
+          "value_bytes": 23989,
+          "columns": {
+            "decks_id": 1088,
+            "decks_parent_id": 1088,
+            "decks_owner_user_id": 544,
+            "decks_note_type_id": 8316,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 2063,
+            "decks_description": 0,
+            "decks_position": 554,
+            "decks_deleted_at": 0,
+            "decks_created_at": 5168,
+            "decks_updated_at": 5168
+          },
+          "shape_sha256": "d93405d1fc51c6c9118c206865a029ca0dd837145feaf24c1b33cd393fe5c8a0"
+        }
+      ]
+    },
+    {
+      "name": "note-types-compact",
+      "payload_bytes": 16164,
+      "returned": 6,
+      "total": null,
+      "payload_keys": [
+        "items"
+      ],
+      "elapsed_ms": 30.854,
+      "statements": 3,
+      "locking_statements": 0,
+      "execute_ms": 15.599,
+      "db_value_bytes": 13494,
+      "phases": {},
+      "live_note_decodes": {},
+      "tables_accessed": [
+        "field_defs",
+        "note_type_installs",
+        "note_types"
+      ],
+      "slowest_queries": [
+        {
+          "index": 0,
+          "phase": "other",
+          "execute_ms": 7.179,
+          "sql_chars": 168,
+          "bind_count": 1,
+          "tables": [
+            "note_type_installs"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 0,
+          "value_bytes": 0,
+          "columns": {
+            "note_type_installs_installed_note_type_id": 0
+          },
+          "shape_sha256": "d36d0a1599afab5a3d63cf52b2347fa8d6cf2a4ec9ffd06c8b9f865c098aabf6",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "note_type_installs": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_note_type_installs_user_installed"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 2,
+          "phase": "other",
+          "execute_ms": 6.078,
+          "sql_chars": 612,
+          "bind_count": 6,
+          "tables": [
+            "field_defs"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 79,
+          "value_bytes": 10151,
+          "columns": {
+            "field_defs_note_type_id": 2844,
+            "field_defs_id": 2844,
+            "field_defs_name": 808,
+            "field_defs_field_type": 435,
+            "field_defs_position": 104,
+            "field_defs_required": 79,
+            "field_defs_identity_role": 35,
+            "field_defs_created_at": 1501,
+            "field_defs_updated_at": 1501
+          },
+          "shape_sha256": "02054dcefb7aa8baee563f192f314e40a86b481f93ad3c1147f80c1b34967ad0",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "field_defs": {
+                "nodes": 1,
+                "access": [
+                  "range"
+                ],
+                "keys": [
+                  "uq_field_defs_note_type_name"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 1,
+          "phase": "other",
+          "execute_ms": 2.342,
+          "sql_chars": 1453,
+          "bind_count": 1,
+          "tables": [
+            "note_types"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 6,
+          "value_bytes": 3343,
+          "columns": {
+            "note_types_id": 216,
+            "note_types_user_id": 6,
+            "note_types_name": 105,
+            "note_types_description": 324,
+            "note_types_primary_category": 53,
+            "note_types_tags": 186,
+            "note_types_taxonomy_metadata": 1700,
+            "note_types_preview_text": 184,
+            "note_types_preview_image_url": 0,
+            "note_types_pricing_mode": 24,
+            "note_types_price_amount_minor": 6,
+            "note_types_version": 30,
+            "note_types_current_release_id": 144,
+            "note_types_field_schema_revision": 6,
+            "note_types_changelog": 0,
+            "note_types_publish_status": 50,
+            "note_types_is_official": 6,
+            "note_types_published_at": 38,
+            "note_types_archived_at": 0,
+            "note_types_install_count": 7,
+            "note_types_active_usage_count": 6,
+            "note_types_rating_avg": 18,
+            "note_types_rating_count": 6,
+            "note_types_created_at": 114,
+            "note_types_updated_at": 114
+          },
+          "shape_sha256": "82b04a528cf461cb1628fa94541fbbd3b9c322cdfc9b7ce7ff970cd371ed425d",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "note_types": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_note_types_user_name"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 2,
+          "phase": "other",
+          "execute_ms": 6.078,
+          "sql_chars": 612,
+          "bind_count": 6,
+          "tables": [
+            "field_defs"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 79,
+          "value_bytes": 10151,
+          "columns": {
+            "field_defs_note_type_id": 2844,
+            "field_defs_id": 2844,
+            "field_defs_name": 808,
+            "field_defs_field_type": 435,
+            "field_defs_position": 104,
+            "field_defs_required": 79,
+            "field_defs_identity_role": 35,
+            "field_defs_created_at": 1501,
+            "field_defs_updated_at": 1501
+          },
+          "shape_sha256": "02054dcefb7aa8baee563f192f314e40a86b481f93ad3c1147f80c1b34967ad0",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "field_defs": {
+                "nodes": 1,
+                "access": [
+                  "range"
+                ],
+                "keys": [
+                  "uq_field_defs_note_type_name"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 1,
+          "phase": "other",
+          "execute_ms": 2.342,
+          "sql_chars": 1453,
+          "bind_count": 1,
+          "tables": [
+            "note_types"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 6,
+          "value_bytes": 3343,
+          "columns": {
+            "note_types_id": 216,
+            "note_types_user_id": 6,
+            "note_types_name": 105,
+            "note_types_description": 324,
+            "note_types_primary_category": 53,
+            "note_types_tags": 186,
+            "note_types_taxonomy_metadata": 1700,
+            "note_types_preview_text": 184,
+            "note_types_preview_image_url": 0,
+            "note_types_pricing_mode": 24,
+            "note_types_price_amount_minor": 6,
+            "note_types_version": 30,
+            "note_types_current_release_id": 144,
+            "note_types_field_schema_revision": 6,
+            "note_types_changelog": 0,
+            "note_types_publish_status": 50,
+            "note_types_is_official": 6,
+            "note_types_published_at": 38,
+            "note_types_archived_at": 0,
+            "note_types_install_count": 7,
+            "note_types_active_usage_count": 6,
+            "note_types_rating_avg": 18,
+            "note_types_rating_count": 6,
+            "note_types_created_at": 114,
+            "note_types_updated_at": 114
+          },
+          "shape_sha256": "82b04a528cf461cb1628fa94541fbbd3b9c322cdfc9b7ce7ff970cd371ed425d",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "note_types": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_note_types_user_name"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 0,
+          "phase": "other",
+          "execute_ms": 7.179,
+          "sql_chars": 168,
+          "bind_count": 1,
+          "tables": [
+            "note_type_installs"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 0,
+          "value_bytes": 0,
+          "columns": {
+            "note_type_installs_installed_note_type_id": 0
+          },
+          "shape_sha256": "d36d0a1599afab5a3d63cf52b2347fa8d6cf2a4ec9ffd06c8b9f865c098aabf6",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "note_type_installs": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_note_type_installs_user_installed"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "detail-owned",
+      "payload_bytes": 5082,
+      "returned": 0,
+      "total": null,
+      "payload_keys": [
+        "note",
+        "fields",
+        "note_type_fields",
+        "media_assets",
+        "can_upload_media",
+        "media_disabled_reason",
+        "row"
+      ],
+      "detail_note_keys": [
+        "id",
+        "note_type_id",
+        "note_type_name",
+        "deck_id",
+        "deck_name",
+        "field_values",
+        "content_revision",
+        "field_schema_revision",
+        "tags",
+        "updated_at"
+      ],
+      "media_count": 1,
+      "field_count": 16,
+      "duplicate_schema_bytes": 2040,
+      "elapsed_ms": 225.758,
+      "statements": 19,
+      "locking_statements": 8,
+      "execute_ms": 165.092,
+      "db_value_bytes": 119551,
+      "phases": {
+        "detail-load": {
+          "calls": 1,
+          "ms": 42.119
+        },
+        "detail-identity": {
+          "calls": 1,
+          "ms": 42.125
+        },
+        "deck-scope": {
+          "calls": 1,
+          "ms": 161.485
+        },
+        "detail-authority": {
+          "calls": 1,
+          "ms": 17.942
+        },
+        "detail-payload": {
+          "calls": 1,
+          "ms": 183.49
+        }
+      },
+      "live_note_decodes": {
+        "detail-payload": 1
+      },
+      "tables_accessed": [
+        "deck_clone_deck_maps",
+        "deck_installs",
+        "decks",
+        "field_defs",
+        "media_assets",
+        "note_types",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 5,
+          "phase": "detail-payload>deck-scope",
+          "execute_ms": 108.626,
+          "sql_chars": 125,
+          "bind_count": 1,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1469,
+          "value_bytes": 5700,
+          "columns": {
+            "notes_deck_id": 5700
+          },
+          "shape_sha256": "348dd2f222f86c7048b024fbecf023ca516af3ae76778a9e886aebfa78c2c929",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 4,
+          "phase": "detail-payload>deck-scope",
+          "execute_ms": 26.362,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1534,
+          "value_bytes": 107733,
+          "columns": {
+            "decks_id": 5953,
+            "decks_parent_id": 5885,
+            "decks_owner_user_id": 1534,
+            "decks_note_type_id": 11016,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 21978,
+            "decks_description": 285,
+            "decks_position": 2790,
+            "decks_deleted_at": 0,
+            "decks_created_at": 29146,
+            "decks_updated_at": 29146
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "decks": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_decks_owner_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 2,
+          "phase": "detail-identity>detail-load",
+          "execute_ms": 14.174,
+          "sql_chars": 636,
+          "bind_count": 1,
+          "tables": [
+            "media_assets"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1,
+          "value_bytes": 371,
+          "columns": {
+            "media_assets_note_id": 36,
+            "media_assets_id": 36,
+            "media_assets_field_name": 10,
+            "media_assets_field_def_id": 0,
+            "media_assets_field_identity_key": 36,
+            "media_assets_filename": 68,
+            "media_assets_mime_type": 10,
+            "media_assets_storage_path": 88,
+            "media_assets_sha256": 64,
+            "media_assets_size_bytes": 4,
+            "media_assets_created_at": 19
+          },
+          "shape_sha256": "d41c308770e79ccfcc1934f50d4851942c7d540d55f874f7edd17e9088d32a0d",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "media_assets": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_media_assets_note_sha_identity"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 4,
+          "phase": "detail-payload>deck-scope",
+          "execute_ms": 26.362,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1534,
+          "value_bytes": 107733,
+          "columns": {
+            "decks_id": 5953,
+            "decks_parent_id": 5885,
+            "decks_owner_user_id": 1534,
+            "decks_note_type_id": 11016,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 21978,
+            "decks_description": 285,
+            "decks_position": 2790,
+            "decks_deleted_at": 0,
+            "decks_created_at": 29146,
+            "decks_updated_at": 29146
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "decks": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_decks_owner_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 5,
+          "phase": "detail-payload>deck-scope",
+          "execute_ms": 108.626,
+          "sql_chars": 125,
+          "bind_count": 1,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1469,
+          "value_bytes": 5700,
+          "columns": {
+            "notes_deck_id": 5700
+          },
+          "shape_sha256": "348dd2f222f86c7048b024fbecf023ca516af3ae76778a9e886aebfa78c2c929",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 3,
+          "phase": "detail-identity>detail-load",
+          "execute_ms": 1.147,
+          "sql_chars": 512,
+          "bind_count": 1,
+          "tables": [
+            "field_defs"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 16,
+          "value_bytes": 2048,
+          "columns": {
+            "field_defs_note_type_id": 576,
+            "field_defs_id": 576,
+            "field_defs_name": 159,
+            "field_defs_field_type": 84,
+            "field_defs_position": 22,
+            "field_defs_required": 16,
+            "field_defs_identity_role": 7,
+            "field_defs_created_at": 304,
+            "field_defs_updated_at": 304
+          },
+          "shape_sha256": "9ca7ffebfa6501259020fe06545b7882353f7f45b93fac00a9f636363f848516"
+        }
+      ]
+    },
+    {
+      "name": "detail-clone",
+      "payload_bytes": 5196,
+      "returned": 0,
+      "total": null,
+      "payload_keys": [
+        "note",
+        "fields",
+        "note_type_fields",
+        "media_assets",
+        "can_upload_media",
+        "media_disabled_reason",
+        "row"
+      ],
+      "detail_note_keys": [
+        "id",
+        "note_type_id",
+        "note_type_name",
+        "deck_id",
+        "deck_name",
+        "field_values",
+        "tags",
+        "updated_at",
+        "deck_install_id",
+        "overlay_revision"
+      ],
+      "media_count": 1,
+      "field_count": 16,
+      "duplicate_schema_bytes": 2056,
+      "elapsed_ms": 227.031,
+      "statements": 81,
+      "locking_statements": 11,
+      "execute_ms": 117.037,
+      "db_value_bytes": 154358,
+      "phases": {
+        "detail-load": {
+          "calls": 1,
+          "ms": 9.045
+        },
+        "detail-identity": {
+          "calls": 1,
+          "ms": 9.048
+        },
+        "deck-scope": {
+          "calls": 2,
+          "ms": 22.9
+        },
+        "install-scope": {
+          "calls": 7,
+          "ms": 77.625
+        },
+        "build-query": {
+          "calls": 1,
+          "ms": 128.45
+        },
+        "detail-authority": {
+          "calls": 1,
+          "ms": 15.54
+        },
+        "detail-payload": {
+          "calls": 1,
+          "ms": 18.258
+        },
+        "clone-schema": {
+          "calls": 1,
+          "ms": 26.673
+        },
+        "release-values": {
+          "calls": 1,
+          "ms": 28.087
+        },
+        "overlay": {
+          "calls": 1,
+          "ms": 58.352
+        }
+      },
+      "live_note_decodes": {
+        "detail-payload": 1
+      },
+      "tables_accessed": [
+        "deck_clone_added_field_defs",
+        "deck_clone_deck_maps",
+        "deck_clone_field_def_overrides",
+        "deck_clone_field_order_overrides",
+        "deck_clone_note_field_overrides",
+        "deck_installs",
+        "deck_release_changes",
+        "deck_release_entity_memberships",
+        "deck_release_note_checkpoints",
+        "deck_releases",
+        "decks",
+        "field_defs",
+        "media_assets",
+        "note_types",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 70,
+          "phase": "overlay>clone-schema",
+          "execute_ms": 15.357,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 80,
+          "value_bytes": 29437,
+          "columns": {
+            "deck_release_changes_id": 480,
+            "deck_release_changes_release_id": 2880,
+            "deck_release_changes_release_sequence_no": 80,
+            "deck_release_changes_change_key": 4448,
+            "deck_release_changes_entity_kind": 720,
+            "deck_release_changes_entity_id": 2880,
+            "deck_release_changes_field_def_id": 2880,
+            "deck_release_changes_property_key": 688,
+            "deck_release_changes_operation": 240,
+            "deck_release_changes_before_value": 320,
+            "deck_release_changes_after_value": 493,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 5120,
+            "deck_release_changes_source_deck_id": 320,
+            "deck_release_changes_sort_key": 6368,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1520
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_changes_release_key"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 75,
+          "phase": "overlay>release-values",
+          "execute_ms": 13.806,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 80,
+          "value_bytes": 29437,
+          "columns": {
+            "deck_release_changes_id": 480,
+            "deck_release_changes_release_id": 2880,
+            "deck_release_changes_release_sequence_no": 80,
+            "deck_release_changes_change_key": 4448,
+            "deck_release_changes_entity_kind": 720,
+            "deck_release_changes_entity_id": 2880,
+            "deck_release_changes_field_def_id": 2880,
+            "deck_release_changes_property_key": 688,
+            "deck_release_changes_operation": 240,
+            "deck_release_changes_before_value": 320,
+            "deck_release_changes_after_value": 493,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 5120,
+            "deck_release_changes_source_deck_id": 320,
+            "deck_release_changes_sort_key": 6368,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1520
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_changes_release_key"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 7,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 7.023,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 290,
+          "value_bytes": 25634,
+          "columns": {
+            "decks_id": 1160,
+            "decks_parent_id": 1132,
+            "decks_owner_user_id": 580,
+            "decks_note_type_id": 8964,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 2206,
+            "decks_description": 0,
+            "decks_position": 572,
+            "decks_deleted_at": 0,
+            "decks_created_at": 5510,
+            "decks_updated_at": 5510
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "decks": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_decks_owner_user_id"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 70,
+          "phase": "overlay>clone-schema",
+          "execute_ms": 15.357,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 80,
+          "value_bytes": 29437,
+          "columns": {
+            "deck_release_changes_id": 480,
+            "deck_release_changes_release_id": 2880,
+            "deck_release_changes_release_sequence_no": 80,
+            "deck_release_changes_change_key": 4448,
+            "deck_release_changes_entity_kind": 720,
+            "deck_release_changes_entity_id": 2880,
+            "deck_release_changes_field_def_id": 2880,
+            "deck_release_changes_property_key": 688,
+            "deck_release_changes_operation": 240,
+            "deck_release_changes_before_value": 320,
+            "deck_release_changes_after_value": 493,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 5120,
+            "deck_release_changes_source_deck_id": 320,
+            "deck_release_changes_sort_key": 6368,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1520
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_changes_release_key"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 75,
+          "phase": "overlay>release-values",
+          "execute_ms": 13.806,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 80,
+          "value_bytes": 29437,
+          "columns": {
+            "deck_release_changes_id": 480,
+            "deck_release_changes_release_id": 2880,
+            "deck_release_changes_release_sequence_no": 80,
+            "deck_release_changes_change_key": 4448,
+            "deck_release_changes_entity_kind": 720,
+            "deck_release_changes_entity_id": 2880,
+            "deck_release_changes_field_def_id": 2880,
+            "deck_release_changes_property_key": 688,
+            "deck_release_changes_operation": 240,
+            "deck_release_changes_before_value": 320,
+            "deck_release_changes_after_value": 493,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 5120,
+            "deck_release_changes_source_deck_id": 320,
+            "deck_release_changes_sort_key": 6368,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1520
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_changes_release_key"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 7,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 7.023,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 290,
+          "value_bytes": 25634,
+          "columns": {
+            "decks_id": 1160,
+            "decks_parent_id": 1132,
+            "decks_owner_user_id": 580,
+            "decks_note_type_id": 8964,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 2206,
+            "decks_description": 0,
+            "decks_position": 572,
+            "decks_deleted_at": 0,
+            "decks_created_at": 5510,
+            "decks_updated_at": 5510
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "decks": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_decks_owner_user_id"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "search-owned-selected",
+      "payload_bytes": 4262,
+      "returned": 20,
+      "total": 118,
+      "payload_keys": [
+        "items",
+        "page",
+        "per_page",
+        "total",
+        "pages",
+        "has_next"
+      ],
+      "elapsed_ms": 383.01,
+      "statements": 21,
+      "locking_statements": 8,
+      "execute_ms": 173.787,
+      "db_value_bytes": 157508,
+      "phases": {
+        "deck-scope": {
+          "calls": 1,
+          "ms": 293.494
+        },
+        "build-query": {
+          "calls": 1,
+          "ms": 313.398
+        },
+        "count": {
+          "calls": 1,
+          "ms": 16.929
+        },
+        "page-hydration": {
+          "calls": 1,
+          "ms": 20.677
+        },
+        "authority": {
+          "calls": 1,
+          "ms": 13.585
+        }
+      },
+      "live_note_decodes": {
+        "other": 20
+      },
+      "tables_accessed": [
+        "JSON_TABLE",
+        "deck_clone_added_field_defs",
+        "deck_clone_added_notes",
+        "deck_clone_deck_maps",
+        "deck_installs",
+        "decks",
+        "field_defs",
+        "note_types",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 4,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 111.89,
+          "sql_chars": 125,
+          "bind_count": 1,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1469,
+          "value_bytes": 5700,
+          "columns": {
+            "notes_deck_id": 5700
+          },
+          "shape_sha256": "348dd2f222f86c7048b024fbecf023ca516af3ae76778a9e886aebfa78c2c929",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "notes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_notes_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 3,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 25.523,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1534,
+          "value_bytes": 107733,
+          "columns": {
+            "decks_id": 5953,
+            "decks_parent_id": 5885,
+            "decks_owner_user_id": 1534,
+            "decks_note_type_id": 11016,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 21978,
+            "decks_description": 285,
+            "decks_position": 2790,
+            "decks_deleted_at": 0,
+            "decks_created_at": 29146,
+            "decks_updated_at": 29146
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "decks": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_decks_owner_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 8,
+          "phase": "count",
+          "execute_ms": 10.76,
+          "sql_chars": 5401,
+          "bind_count": 24,
+          "tables": [
+            "notes",
+            "study_progress_subjects",
+            "field_defs",
+            "JSON_TABLE",
+            "deck_clone_added_field_defs",
+            "deck_clone_added_notes",
+            "deck_clone_deck_maps"
+          ],
+          "joins": 2,
+          "selects": 11,
+          "locking": false,
+          "count": true,
+          "failed": false,
+          "returned_rows": 1,
+          "value_bytes": 3,
+          "columns": {
+            "count_1": 3
+          },
+          "shape_sha256": "8468c8701ed4a85255ea3ac93630c5ed65bcc1362ea74c0007c4e87206c24c2c",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 6
+            },
+            "tables": {
+              "notes": {
+                "nodes": 2,
+                "access": [
+                  "eq_ref",
+                  "ref"
+                ],
+                "keys": [
+                  "PRIMARY",
+                  "ix_notes_deck_id"
+                ]
+              },
+              "fv_leaf": {
+                "nodes": 6,
+                "access": [
+                  "ALL"
+                ],
+                "keys": [
+                  "None"
+                ]
+              },
+              "deck_clone_added_field_defs": {
+                "nodes": 1,
+                "access": [
+                  "index"
+                ],
+                "keys": [
+                  "ix_deck_clone_added_field_defs_deck_install_id"
+                ]
+              },
+              "deck_clone_deck_maps": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_clone_map_local_deck"
+                ]
+              },
+              "deck_clone_added_notes": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "ix_deck_clone_added_notes_note_id"
+                ]
+              },
+              "field_defs": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_field_defs_note_type_id"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 3,
+          "phase": "build-query>deck-scope",
+          "execute_ms": 25.523,
+          "sql_chars": 509,
+          "bind_count": 1,
+          "tables": [
+            "decks"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 1534,
+          "value_bytes": 107733,
+          "columns": {
+            "decks_id": 5953,
+            "decks_parent_id": 5885,
+            "decks_owner_user_id": 1534,
+            "decks_note_type_id": 11016,
+            "decks_scheduler_preset_id": 0,
+            "decks_name": 21978,
+            "decks_description": 285,
+            "decks_position": 2790,
+            "decks_deleted_at": 0,
+            "decks_created_at": 29146,
+            "decks_updated_at": 29146
+          },
+          "shape_sha256": "ffb1556896f7f4063d7da3360c97ef59bcb0dffaa4326be184daa81e1d65e2b8",
+          "explain": {
+            "flags": {
+              "using_filesort": 0,
+              "using_temporary_table": 0
+            },
+            "tables": {
+              "decks": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_decks_owner_user_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 10,
+          "phase": "page-hydration",
+          "execute_ms": 1.811,
+          "sql_chars": 732,
+          "bind_count": 20,
+          "tables": [
+            "notes"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 20,
+          "value_bytes": 21344,
+          "columns": {
+            "notes_id": 720,
+            "notes_note_type_id": 720,
+            "notes_user_id": 20,
+            "notes_deck_id": 80,
+            "notes_field_values_by_id": 18724,
+            "notes_field_values_codec": 220,
+            "notes_field_values_extras": 40,
+            "notes_content_revision": 20,
+            "notes_tags": 40,
+            "notes_created_at": 380,
+            "notes_updated_at": 380
+          },
+          "shape_sha256": "e2be169f68d706e31f942e4e172af7e56d06d149da0fdc9d8615f2fc7995bbab"
+        },
+        {
+          "index": 18,
+          "phase": "authority",
+          "execute_ms": 2.426,
+          "sql_chars": 2062,
+          "bind_count": 21,
+          "tables": [
+            "study_progress_subjects"
+          ],
+          "joins": 0,
+          "selects": 1,
+          "locking": true,
+          "count": false,
+          "failed": false,
+          "returned_rows": 20,
+          "value_bytes": 17233,
+          "columns": {
+            "id": 100,
+            "learner_user_id": 20,
+            "logical_note_key": 720,
+            "live_note_id": 720,
+            "subject_generation": 20,
+            "mirror_revision": 20,
+            "status_code": 300,
+            "contributor_count": 20,
+            "authority_vector_hash": 640,
+            "lineage_vector_hash": 640,
+            "mapper_version": 560,
+            "last_mirrored_at": 520,
+            "algorithm_key": 220,
+            "algorithm_version": 100,
+            "state_schema_version": 360,
+            "storage_codec": 580,
+            "state_payload": 7753,
+            "state_payload_size": 60,
+            "algorithm_state_hash": 640,
+            "semantic_state_hash": 640,
+            "authority_revision": 20,
+            "projection_version": 440,
+            "normalized_queue": 120,
+            "due_at": 380,
+            "due_day": 120,
+            "is_suspended": 20,
+            "is_buried": 20,
+            "buried_until_day": 0,
+            "history_completeness_code": 300,
+            "current_provenance_code": 280,
+            "created_at": 520,
+            "updated_at": 380
+          },
+          "shape_sha256": "2ae18020071c79ef8f90ddd57d62602a5b879d6154fc3bac14f7323935ab9e49"
+        }
+      ]
+    },
+    {
+      "name": "search-all-installs",
+      "error_type": "OperationalError",
+      "mysql_error": 3024,
+      "elapsed_ms": 7697.516,
+      "statements": 102,
+      "locking_statements": 3,
+      "execute_ms": 5295.153,
+      "db_value_bytes": 326089,
+      "phases": {
+        "deck-scope": {
+          "calls": 1,
+          "ms": 23.121
+        },
+        "install-scope": {
+          "calls": 7,
+          "ms": 77.919
+        },
+        "clone-schema": {
+          "calls": 7,
+          "ms": 187.831
+        },
+        "build-query": {
+          "calls": 1,
+          "ms": 1613.261
+        },
+        "count": {
+          "calls": 1,
+          "ms": 6084.23
+        }
+      },
+      "live_note_decodes": {},
+      "tables_accessed": [
+        "deck_clone_added_field_defs",
+        "deck_clone_added_notes",
+        "deck_clone_deck_maps",
+        "deck_clone_field_def_overrides",
+        "deck_clone_field_order_overrides",
+        "deck_clone_note_field_overrides",
+        "deck_installs",
+        "deck_release_changes",
+        "deck_release_entity_memberships",
+        "deck_release_note_checkpoints",
+        "deck_releases",
+        "decks",
+        "field_defs",
+        "notes",
+        "study_authority_enrollments",
+        "study_authority_storage_profile",
+        "study_progress_subjects",
+        "user_scheduler_settings",
+        "users"
+      ],
+      "slowest_queries": [
+        {
+          "index": 101,
+          "phase": "count",
+          "execute_ms": 5071.25,
+          "sql_chars": 490137,
+          "bind_count": 4616,
+          "tables": [
+            "notes",
+            "study_progress_subjects",
+            "deck_release_entity_memberships",
+            "field_defs",
+            "deck_clone_added_field_defs",
+            "deck_clone_added_notes",
+            "deck_clone_deck_maps",
+            "deck_clone_note_field_overrides",
+            "deck_release_changes",
+            "deck_releases",
+            "deck_release_note_checkpoints"
+          ],
+          "joins": 353,
+          "selects": 508,
+          "locking": false,
+          "count": true,
+          "failed": true,
+          "returned_rows": 0,
+          "value_bytes": 0,
+          "columns": {},
+          "shape_sha256": "2c527f38f541282de356db1c3911d192efb3d2fba350a5caeaf8c596bd2261d1",
+          "explain": {
+            "flags": {
+              "using_filesort": 351,
+              "using_temporary_table": 202
+            },
+            "tables": {
+              "notes": {
+                "nodes": 2,
+                "access": [
+                  "ALL",
+                  "eq_ref"
+                ],
+                "keys": [
+                  "None",
+                  "PRIMARY"
+                ]
+              },
+              "deck_releases": {
+                "nodes": 351,
+                "access": [
+                  "eq_ref",
+                  "ref"
+                ],
+                "keys": [
+                  "PRIMARY",
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_note_checkpoints": {
+                "nodes": 234,
+                "access": [
+                  "eq_ref",
+                  "ref"
+                ],
+                "keys": [
+                  "ix_deck_release_note_checkpoints_note_sequence",
+                  "uq_deck_release_note_checkpoints_release_note"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 117,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_deck_release_changes_entity_history"
+                ]
+              },
+              "deck_clone_note_field_overrides": {
+                "nodes": 117,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_clone_note_override_install_note_identity"
+                ]
+              },
+              "deck_release_entity_memberships": {
+                "nodes": 35,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_memberships_item_entity_start"
+                ]
+              },
+              "deck_clone_added_field_defs": {
+                "nodes": 1,
+                "access": [
+                  "index"
+                ],
+                "keys": [
+                  "ix_deck_clone_added_field_defs_deck_install_id"
+                ]
+              },
+              "deck_clone_deck_maps": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_clone_map_local_deck"
+                ]
+              },
+              "deck_clone_added_notes": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "ix_deck_clone_added_notes_note_id"
+                ]
+              },
+              "field_defs": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "ix_field_defs_note_type_id"
+                ]
+              },
+              "study_progress_subjects": {
+                "nodes": 1,
+                "access": [
+                  "eq_ref"
+                ],
+                "keys": [
+                  "uq_sp_subject_user_note"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 72,
+          "phase": "build-query>clone-schema",
+          "execute_ms": 16.132,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 75,
+          "value_bytes": 27638,
+          "columns": {
+            "deck_release_changes_id": 450,
+            "deck_release_changes_release_id": 2700,
+            "deck_release_changes_release_sequence_no": 75,
+            "deck_release_changes_change_key": 4170,
+            "deck_release_changes_entity_kind": 675,
+            "deck_release_changes_entity_id": 2700,
+            "deck_release_changes_field_def_id": 2700,
+            "deck_release_changes_property_key": 645,
+            "deck_release_changes_operation": 225,
+            "deck_release_changes_before_value": 300,
+            "deck_release_changes_after_value": 503,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 4800,
+            "deck_release_changes_source_deck_id": 300,
+            "deck_release_changes_sort_key": 5970,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1425
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_changes_release_key"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "index": 51,
+          "phase": "build-query>clone-schema",
+          "execute_ms": 15.887,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 80,
+          "value_bytes": 29437,
+          "columns": {
+            "deck_release_changes_id": 480,
+            "deck_release_changes_release_id": 2880,
+            "deck_release_changes_release_sequence_no": 80,
+            "deck_release_changes_change_key": 4448,
+            "deck_release_changes_entity_kind": 720,
+            "deck_release_changes_entity_id": 2880,
+            "deck_release_changes_field_def_id": 2880,
+            "deck_release_changes_property_key": 688,
+            "deck_release_changes_operation": 240,
+            "deck_release_changes_before_value": 320,
+            "deck_release_changes_after_value": 493,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 5120,
+            "deck_release_changes_source_deck_id": 320,
+            "deck_release_changes_sort_key": 6368,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1520
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_changes_release_key"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "largest_value_queries": [
+        {
+          "index": 93,
+          "phase": "build-query>clone-schema",
+          "execute_ms": 14.773,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 95,
+          "value_bytes": 34913,
+          "columns": {
+            "deck_release_changes_id": 570,
+            "deck_release_changes_release_id": 3420,
+            "deck_release_changes_release_sequence_no": 95,
+            "deck_release_changes_change_key": 5282,
+            "deck_release_changes_entity_kind": 855,
+            "deck_release_changes_entity_id": 3420,
+            "deck_release_changes_field_def_id": 3420,
+            "deck_release_changes_property_key": 817,
+            "deck_release_changes_operation": 285,
+            "deck_release_changes_before_value": 380,
+            "deck_release_changes_after_value": 542,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 6080,
+            "deck_release_changes_source_deck_id": 380,
+            "deck_release_changes_sort_key": 7562,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1805
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db"
+        },
+        {
+          "index": 58,
+          "phase": "build-query>clone-schema",
+          "execute_ms": 14.538,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 95,
+          "value_bytes": 34818,
+          "columns": {
+            "deck_release_changes_id": 570,
+            "deck_release_changes_release_id": 3420,
+            "deck_release_changes_release_sequence_no": 95,
+            "deck_release_changes_change_key": 5282,
+            "deck_release_changes_entity_kind": 855,
+            "deck_release_changes_entity_id": 3420,
+            "deck_release_changes_field_def_id": 3420,
+            "deck_release_changes_property_key": 817,
+            "deck_release_changes_operation": 285,
+            "deck_release_changes_before_value": 380,
+            "deck_release_changes_after_value": 542,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 6080,
+            "deck_release_changes_source_deck_id": 285,
+            "deck_release_changes_sort_key": 7562,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1805
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db"
+        },
+        {
+          "index": 51,
+          "phase": "build-query>clone-schema",
+          "execute_ms": 15.887,
+          "sql_chars": 1639,
+          "bind_count": 4,
+          "tables": [
+            "deck_release_changes",
+            "deck_releases"
+          ],
+          "joins": 1,
+          "selects": 1,
+          "locking": false,
+          "count": false,
+          "failed": false,
+          "returned_rows": 80,
+          "value_bytes": 29437,
+          "columns": {
+            "deck_release_changes_id": 480,
+            "deck_release_changes_release_id": 2880,
+            "deck_release_changes_release_sequence_no": 80,
+            "deck_release_changes_change_key": 4448,
+            "deck_release_changes_entity_kind": 720,
+            "deck_release_changes_entity_id": 2880,
+            "deck_release_changes_field_def_id": 2880,
+            "deck_release_changes_property_key": 688,
+            "deck_release_changes_operation": 240,
+            "deck_release_changes_before_value": 320,
+            "deck_release_changes_after_value": 493,
+            "deck_release_changes_before_hash": 0,
+            "deck_release_changes_after_hash": 5120,
+            "deck_release_changes_source_deck_id": 320,
+            "deck_release_changes_sort_key": 6368,
+            "deck_release_changes_source_change_request_item_id": 0,
+            "deck_release_changes_created_at": 1520
+          },
+          "shape_sha256": "cecdd17ec9982092f4be34fd6e78f7a2bc762425576a13b6782ad0a8866cd0db",
+          "explain": {
+            "flags": {
+              "using_filesort": 1,
+              "using_temporary_table": 1
+            },
+            "tables": {
+              "deck_releases": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_releases_item_sequence"
+                ]
+              },
+              "deck_release_changes": {
+                "nodes": 1,
+                "access": [
+                  "ref"
+                ],
+                "keys": [
+                  "uq_deck_release_changes_release_key"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "owned_sidebar_distinct_experiment": {
+    "scope": "Read-only SQL substitution inside audit process; DISTINCT removed only for owned unique Note IDs; one warmup plus three alternating samples per variant",
+    "baseline": [
+      {
+        "service_ms": 1120.143,
+        "aggregate_ms": 494.596,
+        "payload_sha256": "661ac31ecc0098123c103bbc322c2d7c7e84aef6925bac2586005a93bc463fc4",
+        "explain": {
+          "table_access_nodes": [
+            {
+              "table": "browse_note_scope",
+              "access": "ALL",
+              "key": null,
+              "plan_nodes": 1
+            },
+            {
+              "table": "notes",
+              "access": "ref",
+              "key": "ix_notes_user_id",
+              "plan_nodes": 1
+            },
+            {
+              "table": "study_progress_subjects_1",
+              "access": "eq_ref",
+              "key": "uq_sp_subject_user_note",
+              "plan_nodes": 1
+            }
+          ],
+          "flags": {
+            "using_filesort": 0,
+            "using_temporary_table": 3
+          }
+        }
+      },
+      {
+        "service_ms": 1011.008,
+        "aggregate_ms": 497.664,
+        "payload_sha256": "661ac31ecc0098123c103bbc322c2d7c7e84aef6925bac2586005a93bc463fc4",
+        "explain": {
+          "table_access_nodes": [
+            {
+              "table": "browse_note_scope",
+              "access": "ALL",
+              "key": null,
+              "plan_nodes": 1
+            },
+            {
+              "table": "notes",
+              "access": "ref",
+              "key": "ix_notes_user_id",
+              "plan_nodes": 1
+            },
+            {
+              "table": "study_progress_subjects_1",
+              "access": "eq_ref",
+              "key": "uq_sp_subject_user_note",
+              "plan_nodes": 1
+            }
+          ],
+          "flags": {
+            "using_filesort": 0,
+            "using_temporary_table": 3
+          }
+        }
+      },
+      {
+        "service_ms": 968.714,
+        "aggregate_ms": 559.161,
+        "payload_sha256": "661ac31ecc0098123c103bbc322c2d7c7e84aef6925bac2586005a93bc463fc4",
+        "explain": {
+          "table_access_nodes": [
+            {
+              "table": "browse_note_scope",
+              "access": "ALL",
+              "key": null,
+              "plan_nodes": 1
+            },
+            {
+              "table": "notes",
+              "access": "ref",
+              "key": "ix_notes_user_id",
+              "plan_nodes": 1
+            },
+            {
+              "table": "study_progress_subjects_1",
+              "access": "eq_ref",
+              "key": "uq_sp_subject_user_note",
+              "plan_nodes": 1
+            }
+          ],
+          "flags": {
+            "using_filesort": 0,
+            "using_temporary_table": 3
+          }
+        }
+      }
+    ],
+    "without_redundant_distinct": [
+      {
+        "service_ms": 900.424,
+        "aggregate_ms": 474.903,
+        "payload_sha256": "661ac31ecc0098123c103bbc322c2d7c7e84aef6925bac2586005a93bc463fc4",
+        "explain": {
+          "table_access_nodes": [
+            {
+              "table": "notes",
+              "access": "ref",
+              "key": "ix_notes_user_id",
+              "plan_nodes": 1
+            },
+            {
+              "table": "study_progress_subjects_1",
+              "access": "eq_ref",
+              "key": "uq_sp_subject_user_note",
+              "plan_nodes": 1
+            }
+          ],
+          "flags": {
+            "using_filesort": 0,
+            "using_temporary_table": 1
+          }
+        }
+      },
+      {
+        "service_ms": 981.496,
+        "aggregate_ms": 386.745,
+        "payload_sha256": "661ac31ecc0098123c103bbc322c2d7c7e84aef6925bac2586005a93bc463fc4",
+        "explain": {
+          "table_access_nodes": [
+            {
+              "table": "notes",
+              "access": "ref",
+              "key": "ix_notes_user_id",
+              "plan_nodes": 1
+            },
+            {
+              "table": "study_progress_subjects_1",
+              "access": "eq_ref",
+              "key": "uq_sp_subject_user_note",
+              "plan_nodes": 1
+            }
+          ],
+          "flags": {
+            "using_filesort": 0,
+            "using_temporary_table": 1
+          }
+        }
+      },
+      {
+        "service_ms": 954.141,
+        "aggregate_ms": 426.243,
+        "payload_sha256": "661ac31ecc0098123c103bbc322c2d7c7e84aef6925bac2586005a93bc463fc4",
+        "explain": {
+          "table_access_nodes": [
+            {
+              "table": "notes",
+              "access": "ref",
+              "key": "ix_notes_user_id",
+              "plan_nodes": 1
+            },
+            {
+              "table": "study_progress_subjects_1",
+              "access": "eq_ref",
+              "key": "uq_sp_subject_user_note",
+              "plan_nodes": 1
+            }
+          ],
+          "flags": {
+            "using_filesort": 0,
+            "using_temporary_table": 1
+          }
+        }
+      }
+    ],
+    "same_payload": true,
+    "baseline_median_ms": {
+      "service_ms": 1011.008,
+      "aggregate_ms": 497.664
+    },
+    "without_redundant_distinct_median_ms": {
+      "service_ms": 954.141,
+      "aggregate_ms": 426.243
+    },
+    "index_inventory": [
+      {
+        "table": "deck_release_changes",
+        "index": "fk_deck_release_changes_request_item",
+        "columns": "source_change_request_item_id"
+      },
+      {
+        "table": "deck_release_changes",
+        "index": "fk_deck_release_changes_source_deck",
+        "columns": "source_deck_id"
+      },
+      {
+        "table": "deck_release_changes",
+        "index": "ix_deck_release_changes_diff_cursor",
+        "columns": "release_id,entity_kind,source_deck_id,sort_key,id"
+      },
+      {
+        "table": "deck_release_changes",
+        "index": "ix_deck_release_changes_entity_history",
+        "columns": "entity_kind,entity_id,property_key,release_sequence_no,id"
+      },
+      {
+        "table": "deck_release_changes",
+        "index": "ix_deck_release_changes_release_id",
+        "columns": "release_id"
+      },
+      {
+        "table": "deck_release_changes",
+        "index": "PRIMARY",
+        "columns": "id"
+      },
+      {
+        "table": "deck_release_changes",
+        "index": "uq_deck_release_changes_release_key",
+        "columns": "release_id,change_key"
+      },
+      {
+        "table": "deck_release_note_checkpoints",
+        "index": "fk_deck_release_note_checkpoints_source_deck",
+        "columns": "source_deck_id"
+      },
+      {
+        "table": "deck_release_note_checkpoints",
+        "index": "ix_deck_release_note_checkpoints_note_sequence",
+        "columns": "source_note_id,release_sequence_no,id"
+      },
+      {
+        "table": "deck_release_note_checkpoints",
+        "index": "ix_deck_release_note_checkpoints_release_deck",
+        "columns": "release_id,source_deck_id,id"
+      },
+      {
+        "table": "deck_release_note_checkpoints",
+        "index": "ix_deck_release_note_checkpoints_release_id",
+        "columns": "release_id"
+      },
+      {
+        "table": "deck_release_note_checkpoints",
+        "index": "PRIMARY",
+        "columns": "id"
+      },
+      {
+        "table": "deck_release_note_checkpoints",
+        "index": "uq_deck_release_note_checkpoints_release_note",
+        "columns": "release_id,source_note_id"
+      },
+      {
+        "table": "notes",
+        "index": "ix_notes_deck_id",
+        "columns": "deck_id"
+      },
+      {
+        "table": "notes",
+        "index": "ix_notes_note_type_id",
+        "columns": "note_type_id"
+      },
+      {
+        "table": "notes",
+        "index": "ix_notes_user_id",
+        "columns": "user_id"
+      },
+      {
+        "table": "notes",
+        "index": "PRIMARY",
+        "columns": "id"
+      }
+    ]
+  }
+}

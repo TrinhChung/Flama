@@ -224,15 +224,15 @@ class NoteStatsRetirementTests(unittest.TestCase):
         self._clone(local_deck=4, duplicate=True)
         counts = _canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
                                                  start_utc=NOW.replace(hour=0), end_utc=NOW + timedelta(days=30),
-                                                 day_boundary_hour_local=0, storage_profile="CONSOLIDATED_V1")
+                                                 day_boundary_hour_local=0)
         self.assertEqual(counts, {date.fromordinal(DAY): 1, date.fromordinal(DAY + 1): 1})
 
-    def test_forecast_identity_drift_fails_closed_and_no_retired_table_is_queried(self):
+    def test_forecast_reads_detached_rows_as_stored_and_no_retired_table_is_queried(self):
+        before = _consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1])
         db.session.execute(sa.update(StudyProgressSubject).values(live_note_id=None))
         db.session.commit()
-        from app.services.study_authority_read_service import StudyAuthorityReadError
-        with self.assertRaises(StudyAuthorityReadError):
-            _consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1])
+        # The forecast joins state by logical key, so a lost live pointer reads the same.
+        self.assertEqual(_consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1]), before)
         self.assertFalse(any("card_progress" in sql.lower() for sql in self.trace))
         self.assertNotIn("cards", set(sa.inspect(db.engine).get_table_names()))
 
@@ -252,14 +252,15 @@ class NoteStatsRetirementTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         return actual
 
-    def test_note_scope_preserves_original_absent_pairs_and_new_applications(self):
+    def test_note_scope_counts_every_active_application_whatever_the_cutover_archive(self):
+        # The P11 archive tables no longer decide membership: a derived Card is
+        # the Note through each ACTIVE application of its NoteType.
         db.session.execute(sa.insert(cutover_notes).values(note_id=self.own_note))
         db.session.execute(sa.insert(cutover_applications).values(application_id=self.own_app))
         db.session.commit()
-        self.assertEqual(self._assert_collection_scope_parity(), {})
-        # An original Note without an alias has no Card in either unit.
-        self.assertEqual(self._aggregate([1])[1]["total"], 0)
-        self.assertEqual(self._aggregate([1], by_note=False)[1]["total"], 0)
+        self.assertEqual(self._assert_collection_scope_parity(), {self.own_note: 1})
+        self.assertEqual(self._aggregate([1])[1]["total"], 1)
+        self.assertEqual(self._aggregate([1], by_note=False)[1]["total"], 1)
 
         self._insert(PresentationAlias.__table__, id=str(uuid4()), note_id=self.own_note,
                      application_id=self.own_app, template_id=self.own_template,
@@ -273,11 +274,11 @@ class NoteStatsRetirementTests(unittest.TestCase):
                      application_id=retired, template_id=template, created_at=NOW, updated_at=NOW)
         db.session.commit()
 
-        self.assertEqual(self._assert_collection_scope_parity([1]), {self.own_note: 2, new_note: 3})
+        self.assertEqual(self._assert_collection_scope_parity([1]), {self.own_note: 3, new_note: 3})
         self.assertEqual(self._aggregate([1])[1], {"total": 2, "new": 1, "learn": 0, "due": 1})
-        self.assertEqual(self._aggregate([1], by_note=False)[1], {"total": 5, "new": 3, "learn": 0, "due": 2})
+        self.assertEqual(self._aggregate([1], by_note=False)[1], {"total": 6, "new": 3, "learn": 0, "due": 3})
 
-    def test_note_scope_ignores_aliases_for_a_different_application_note_type(self):
+    def test_note_scope_ignores_aliases_of_another_note_type(self):
         other_type = str(uuid4())
         self._insert(NoteType, id=other_type, user_id=1, name="Other")
         application, template = self._application(1, other_type)
@@ -288,10 +289,10 @@ class NoteStatsRetirementTests(unittest.TestCase):
         self._insert(PresentationAlias.__table__, id=str(uuid4()), note_id=self.own_note,
                      application_id=application, template_id=template, created_at=NOW, updated_at=NOW)
         db.session.commit()
-        self.assertEqual(self._assert_collection_scope_parity(), {})
-        # An alias of another note type's application proves no membership.
-        self.assertEqual(self._aggregate([1])[1]["total"], 0)
-        self.assertEqual(self._aggregate([1], by_note=False)[1]["total"], 0)
+        # Aliases map old Card IDs only; the Note keeps its own type's Card.
+        self.assertEqual(self._assert_collection_scope_parity(), {self.own_note: 1})
+        self.assertEqual(self._aggregate([1])[1]["total"], 1)
+        self.assertEqual(self._aggregate([1], by_note=False)[1]["total"], 1)
 
     def test_forecast_reads_one_row_for_many_occurrences_in_the_counted_unit(self):
         from app.repositories.stats_query_repository import query_consolidated_forecast_rows
@@ -316,7 +317,7 @@ class NoteStatsRetirementTests(unittest.TestCase):
                 self.assertEqual(by_day[0]["due_count"], weight)
                 due = _canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
                     start_utc=NOW.replace(hour=0), end_utc=NOW + timedelta(days=30),
-                    day_boundary_hour_local=0, storage_profile="CONSOLIDATED_V1")
+                    day_boundary_hour_local=0)
                 self.assertEqual(due, {date.fromordinal(DAY): weight})
 
     def test_collection_unions_disjoint_release_pins_instead_of_max_or_sum(self):

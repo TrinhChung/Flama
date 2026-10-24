@@ -14,6 +14,8 @@ import binascii
 import hashlib
 import json
 from dataclasses import dataclass, field
+from copy import deepcopy
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -518,39 +520,56 @@ def _resolve_published_release(release_or_id: DeckRelease | str) -> DeckRelease:
     return release
 
 
-def get_field_defs_at_release(
-    release_or_id: DeckRelease | str,
-) -> dict[str, dict[str, Any]]:
-    """Return active field-definition properties keyed by stable FieldDef ID."""
+def _release_field_context(release: DeckRelease):
+    """Share immutable release schema reads between values and overlay in one request."""
+    from flask import g, has_request_context
 
-    release = _resolve_published_release(release_or_id)
+    key = (str(release.id), int(release.sequence_no))
+    cache = None
+    if has_request_context():
+        cache = getattr(g, '_release_field_context', None)
+        if cache is None:
+            cache = {}
+            g._release_field_context = cache
+        if key in cache:
+            return cache[key]
     target_sequence = int(release.sequence_no)
     field_changes = deck_release_repository.list_release_history_changes(
         deck_item_id=release.deck_item_id,
         through_sequence=target_sequence,
         entity_kinds=["field_def"],
+        content_only=True,
     )
+    # A clone edit commits before serializing its response. ORM entities in g
+    # would expire on that commit and reload once per schema event. Published
+    # history is immutable: retain plain values for the rest of this request.
+    field_changes = [SimpleNamespace(
+        release_sequence_no=row.release_sequence_no, field_def_id=row.field_def_id,
+        entity_id=row.entity_id, property_key=row.property_key,
+        operation=row.operation, after_value=deepcopy(row.after_value),
+    ) for row in field_changes]
     field_defs = _field_defs_at_sequence(field_changes, target_sequence)
     memberships = deck_release_repository.list_memberships_for_entities(
         deck_item_id=release.deck_item_id,
         entity_kind="field_def",
     )
-    if not memberships:
-        return field_defs
-    active_ids = {
-        str(row.entity_id)
-        for row in memberships
-        if int(row.introduced_sequence) <= target_sequence
-        and (
-            row.removed_sequence is None
-            or int(row.removed_sequence) > target_sequence
-        )
-    }
-    return {
-        field_id: payload
-        for field_id, payload in field_defs.items()
-        if field_id in active_ids
-    }
+    if memberships:
+        active_ids = {str(row.entity_id) for row in memberships
+            if int(row.introduced_sequence) <= target_sequence
+            and (row.removed_sequence is None or int(row.removed_sequence) > target_sequence)}
+        field_defs = {field_id: payload for field_id, payload in field_defs.items() if field_id in active_ids}
+    context = (field_changes, field_defs)
+    if cache is not None:
+        cache[key] = context
+    return context
+
+
+def get_field_defs_at_release(
+    release_or_id: DeckRelease | str,
+) -> dict[str, dict[str, Any]]:
+    """Return active field-definition properties keyed by stable FieldDef ID."""
+    _history, fields = _release_field_context(_resolve_published_release(release_or_id))
+    return deepcopy(fields)
 
 
 def _chunks(values: list[str], size: int = 500):
@@ -574,31 +593,7 @@ def _get_note_field_values_by_id_for_ids_at_release(
         return {}, get_field_defs_at_release(release)
 
     target_sequence = int(release.sequence_no)
-    field_changes = deck_release_repository.list_release_history_changes(
-        deck_item_id=release.deck_item_id,
-        through_sequence=target_sequence,
-        entity_kinds=["field_def"],
-    )
-    target_field_defs = _field_defs_at_sequence(field_changes, target_sequence)
-    active_field_memberships = deck_release_repository.list_memberships_for_entities(
-        deck_item_id=release.deck_item_id,
-        entity_kind="field_def",
-    )
-    if active_field_memberships:
-        active_field_ids = {
-            str(row.entity_id)
-            for row in active_field_memberships
-            if int(row.introduced_sequence) <= target_sequence
-            and (
-                row.removed_sequence is None
-                or int(row.removed_sequence) > target_sequence
-            )
-        }
-        target_field_defs = {
-            field_id: payload
-            for field_id, payload in target_field_defs.items()
-            if field_id in active_field_ids
-        }
+    field_changes, target_field_defs = _release_field_context(release)
 
     checkpoints: list[DeckReleaseNoteCheckpoint] = []
     note_changes: list[DeckReleaseChange] = []
@@ -609,6 +604,7 @@ def _get_note_field_values_by_id_for_ids_at_release(
                 deck_item_id=release.deck_item_id,
                 through_sequence=target_sequence,
                 note_ids=note_id_chunk,
+                content_only=True,
             )
         )
         note_changes.extend(
@@ -616,6 +612,7 @@ def _get_note_field_values_by_id_for_ids_at_release(
                 deck_item_id=release.deck_item_id,
                 through_sequence=target_sequence,
                 note_ids=note_id_chunk,
+                content_only=True,
             )
         )
         note_memberships.extend(

@@ -3,6 +3,7 @@
 import os
 import unittest
 import json
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -83,6 +84,137 @@ class BrowseNotesMySQLTests(unittest.TestCase):
     def test_snapshot_clone_values_and_search_are_pinned(self):
         self._assert_clone_values(release=False)
 
+    def test_clone_search_values_preserve_clears_and_pinned_release_history(self):
+        from app.repositories.browse_card_repository import clone_effective_field_text_expression
+        from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
+        from models.deck_install import DeckInstall
+        from models.deck_release import DeckRelease
+        from models.deck_release_change import DeckReleaseChange
+
+        ids = fixtures.seed_clone_install(self.learner_id, count=9, release=True, override_every=0)
+        install = db.session.get(DeckInstall, ids['install_id'])
+        word_id = ids['word_field_id']
+        releases = []
+        for sequence in (2, 3):
+            release = DeckRelease(deck_item_id=install.deck_item_id, sequence_no=sequence,
+                version_label=f'{sequence}.0.0', status='published', created_by_user_id=install.source_owner_user_id)
+            db.session.add(release)
+            db.session.flush()
+            releases.append(release)
+        install.applied_release_id = releases[0].id
+        changes = [(1, 'set', None), (2, 'set', ''), (3, 'remove', 'ignored'),
+            (4, 'set', [['nested', 'values'], 'last']), (5, 'set', 'release-value'),
+            (6, 'set', 'release-value'), (7, 'set', None), (8, 'set', 'legacy-identity')]
+        for index, operation, value in changes:
+            db.session.add(DeckReleaseChange(release_id=releases[0].id, release_sequence_no=2,
+                change_key=f'note:{index}:word', entity_kind='note_field', entity_id=ids['note_ids'][index],
+                field_def_id=None if index == 8 else word_id, property_key=f'field:{word_id}',
+                operation=operation, after_value=value))
+        # A newer published value must not leak into an install pinned to v2.
+        db.session.add(DeckReleaseChange(release_id=releases[1].id, release_sequence_no=3,
+            change_key='future-word', entity_kind='note_field', entity_id=ids['note_ids'][0],
+            field_def_id=word_id, property_key=f'field:{word_id}', operation='set', after_value='future-value'))
+        for index, operation, value in ((5, 'set', None), (6, 'remove', None), (7, 'set', 'local-value')):
+            db.session.add(DeckCloneNoteFieldOverride(deck_install_id=install.id,
+                source_note_id=ids['note_ids'][index], source_field_def_id=word_id,
+                field_identity_key=word_id, field_name='Word', operation=operation, value=value))
+        db.session.commit()
+        expression = clone_effective_field_text_expression(deck_install_id=install.id,
+            deck_item_id=install.deck_item_id, target_release_sequence=2,
+            source_field_def_id=word_id, checkpoint_field_name='Word', field_identity_key=word_id)
+        values = dict(db.session.query(Note.id, expression).filter(Note.id.in_(ids['note_ids'])).all())
+        self.assertEqual(values[ids['note_ids'][0]], 'pinned-word-000001')
+        for index in (1, 2, 3, 5, 6):
+            self.assertEqual(values[ids['note_ids'][index]], '', f'cleared field {index} fell back to base')
+        self.assertEqual(json.loads(values[ids['note_ids'][4]]), [['nested', 'values'], 'last'])
+        self.assertEqual(values[ids['note_ids'][7]], 'local-value')
+        self.assertEqual(values[ids['note_ids'][8]], 'legacy-identity')
+        for needle in ('pinned-word', 'nested', 'local-value', 'legacy-identity', 'future-value', 'no-match'):
+            expected = {note_id for note_id, value in values.items() if needle in value.lower()}
+            found, _ = self._notes(deck_id=ids['local_root_id'], q=needle, per_page=100)
+            self.assertEqual({row['note_id'] for row in found['items']}, expected, needle)
+
+        snapshot = fixtures.seed_clone_install(self.learner_id, count=4, release=False,
+            override_every=0, prefix='50000000')
+        for index, operation, value in ((1, 'set', None), (2, 'set', ''), (3, 'remove', None)):
+            db.session.add(DeckCloneNoteFieldOverride(deck_install_id=snapshot['install_id'],
+                source_note_id=snapshot['note_ids'][index], source_field_def_id=snapshot['word_field_id'],
+                field_identity_key=snapshot['word_field_id'], field_name='Word', operation=operation, value=value))
+        db.session.commit()
+        expression = clone_effective_field_text_expression(deck_install_id=snapshot['install_id'],
+            deck_item_id=None, target_release_sequence=None, source_field_def_id=snapshot['word_field_id'],
+            checkpoint_field_name='Word', field_identity_key=snapshot['word_field_id'])
+        values = dict(db.session.query(Note.id, expression).filter(Note.id.in_(snapshot['note_ids'])).all())
+        self.assertEqual([values[note_id] for note_id in snapshot['note_ids']], ['w000001', '', '', ''])
+
+    def test_no_search_matches_return_empty_pagination_without_loading_a_page(self):
+        ids = fixtures.seed_clone_install(self.learner_id, count=4, release=True)
+        page, capture = self._notes(deck_id=ids['local_root_id'], q='no-matching-note', page=7, per_page=20)
+        self.assertEqual(page, {'items': [], 'page': 7, 'per_page': 20,
+            'total': 0, 'pages': 0, 'has_next': False})
+        note_page_reads = [sql for sql in capture.statements if 'from notes' in sql.lower()
+            and 'limit' in sql.lower() and not sql.lstrip().lower().startswith('select count(')]
+        self.assertEqual(note_page_reads, [], 'An empty result should not repeat the search to fetch a page')
+        self.assertEqual(sum('browse_search_matches' in sql for sql in capture.statements), 1)
+
+    def test_owned_subtree_and_detail_avoid_whole_collection_scope(self):
+        deck_id = fixtures.seed_owned_deck(self.learner_id, count=4)
+        with patch.object(browse_card_service.vocabulary_ctrl, 'collect_accessible_browse_decks',
+                side_effect=AssertionError('A wholly owned selection needs no collection scan')):
+            page, _ = self._notes(deck_id=deck_id)
+            note_id = page['items'][0]['note_id']
+            with self.app.test_request_context('/api/browse/notes/editor'), fixtures.StatementCounter() as capture:
+                detail = browse_note_service.get_note_detail(user_id=self.learner_id, admin_mode=False,
+                    timezone_name='UTC', note_id=note_id, compact=True)
+        self.assertEqual(page['total'], 4)
+        self.assertEqual(detail['note']['id'], note_id)
+        self.assertNotIn('media_assets', detail)
+        self.assertNotIn('note_type_fields', detail)
+        self.assertFalse(any('from media_assets' in sql.lower() for sql in capture.statements))
+
+        # A foreign folder can be an accessible ancestor of the learner's Note.
+        # Mixed subtrees must preserve that visibility through the normal path.
+        from models.deck import Deck
+        stranger = fixtures.seed_learner(username='mixed-owner')
+        folder = Deck(name='Foreign folder', owner_user_id=stranger, parent_id=deck_id)
+        db.session.add(folder)
+        db.session.flush()
+        child = Deck(name='Owned grandchild', owner_user_id=self.learner_id, parent_id=folder.id)
+        db.session.add(child)
+        db.session.flush()
+        note = db.session.get(Note, note_id)
+        note.deck_id = child.id
+        db.session.commit()
+        mixed, _ = self._notes(deck_id=deck_id)
+        self.assertEqual(mixed['total'], 4)
+        self.assertIn(note_id, {row['note_id'] for row in mixed['items']})
+
+    def test_clone_editor_reuses_release_schema_and_preserves_full_detail_contract(self):
+        from app.repositories import deck_release_repository
+        from app.services import flashcards_share
+        ids = fixtures.seed_clone_install(self.learner_id, count=4, release=True)
+        fixtures.seed_clone_install(self.learner_id, count=2, release=True, prefix='60000000')
+        with self.app.test_request_context('/api/browse/notes/editor'):
+            with patch.object(deck_release_repository, 'list_release_history_changes',
+                    wraps=deck_release_repository.list_release_history_changes) as history, patch.object(
+                    flashcards_share, 'resolve_clone_scope_for_local_deck',
+                    wraps=flashcards_share.resolve_clone_scope_for_local_deck) as scopes, patch.object(
+                    browse_card_service.vocabulary_ctrl, 'collect_accessible_browse_decks',
+                    side_effect=AssertionError('A clone detail needs no whole-collection deck tree')):
+                compact = browse_note_service.get_note_detail(user_id=self.learner_id, admin_mode=False,
+                    timezone_name='UTC', note_id=ids['note_ids'][0], compact=True)
+            self.assertEqual(history.call_count, 1)
+            self.assertEqual(scopes.call_count, 1, 'Unrelated installs must not be resolved for one Note')
+        with self.app.test_request_context('/api/browse/notes/full'):
+            full = browse_note_service.get_note_detail(user_id=self.learner_id, admin_mode=False,
+                timezone_name='UTC', note_id=ids['note_ids'][0])
+        self.assertEqual(compact['note']['field_values'], full['note']['field_values'])
+        self.assertEqual(compact['row'], full['row'])
+        self.assertEqual(compact['fields'], full['fields'])
+        self.assertIn('media_assets', full)
+        self.assertIn('note_type_fields', full)
+        self.assertFalse(compact['can_upload_media'])
+
     def _assert_clone_values(self, *, release):
         ids = fixtures.seed_clone_install(self.learner_id, count=4, release=release, prefix='40000000' if release else '30000000')
         page, _ = self._notes(deck_id=ids['local_root_id'])
@@ -105,7 +237,8 @@ class BrowseNotesMySQLTests(unittest.TestCase):
             source_field_def_id=meaning.id, properties={'name': 'Answers', 'field_type': 'array'}))
         db.session.commit()
         response = browse_note_service.update_note(user_id=self.learner_id, admin_mode=False,
-            timezone_name='UTC', note_id=note_id, payload={'field_values': {'Word': 'local-only', 'Answers': [['one', 'two'], 'three']}})
+            timezone_name='UTC', note_id=note_id, compact_detail=True,
+            payload={'field_values': {'Word': 'local-only', 'Answers': [['one', 'two'], 'three']}})
         self.assertEqual(response['detail']['note']['field_values']['Word'], 'local-only')
         self.assertEqual(response['detail']['note']['field_values']['Answers'], [['one', 'two'], 'three'])
         self.assertEqual(db.session.get(Note, note_id).field_values_by_id, original)
@@ -140,14 +273,20 @@ class BrowseNotesMySQLTests(unittest.TestCase):
         listing = client.get('/api/browse/notes?view=rows').get_json()
         self.assertEqual(listing['total'], 2)
         detail = client.get(f'/api/browse/notes/{note.id}').get_json()
+        editor = client.get(f'/api/browse/notes/{note.id}?view=editor').get_json()
+        self.assertEqual(editor['note']['field_values'], detail['note']['field_values'])
+        self.assertNotIn('media_assets', editor)
         token = client.get('/api/session').get_json()['csrf_token']
         headers = {'X-CSRF-Token': token}
         payload = {'field_values': {'Word': 'from-http'},
             'expected_content_revision': detail['note']['content_revision'],
             'expected_field_schema_revision': detail['note']['field_schema_revision']}
-        saved = client.patch(f'/api/browse/notes/{note.id}?view=rows', json=payload, headers=headers)
+        with patch.object(browse_card_service.vocabulary_ctrl, 'build_browse_card_detail',
+                side_effect=AssertionError('Editor PATCH must serialize the compact response directly')):
+            saved = client.patch(f'/api/browse/notes/{note.id}?view=editor', json=payload, headers=headers)
         self.assertEqual(saved.status_code, 200, saved.get_json())
         self.assertEqual(saved.get_json()['detail']['note']['field_values']['Word'], 'from-http')
+        self.assertNotIn('media_assets', saved.get_json()['detail'])
         stale = client.patch(f'/api/browse/notes/{note.id}?view=rows', json=payload, headers=headers)
         self.assertEqual(stale.status_code, 409, stale.get_json())
 

@@ -143,7 +143,7 @@ def aggregate_deck_study_counts(
     admin_mode: bool = False,
     count_by_note: bool = False,
     owned_by_any_user: bool = False,
-    include_note_types: bool = True,
+    include_note_types: bool = False,
 ) -> Tuple[Dict[int, Dict[str, int]], Dict[int, str]]:
     """Count total/new/learn/due per visible deck (subtrees are summed by the caller).
 
@@ -153,9 +153,8 @@ def aggregate_deck_study_counts(
     all its Cards share one state, so a Note with two Templates is one due item.
     ``owned_by_any_user`` (admin-wide Browse) counts every Note in the visible
     decks with the learner's own state, not only the learner's Notes.
-    Metadata is optional: counts-only callers set ``include_note_types=False``
-    (one deck's fallback alone is ``deck_note_type_metadata``).
-    Raises ``StudyAuthorityReadError`` when a NOTE learner's evidence diverges.
+    Fallback note-type metadata is opt-in (``include_note_types=True``); no
+    production caller needs it, and one deck's alone is ``deck_note_type_metadata``.
     """
 
     if not visible_deck_ids:
@@ -173,11 +172,9 @@ def aggregate_deck_study_counts(
     )
     from app.repositories.note_analytics_scope_repository import deck_note_scope
 
-    # Raises StudyAuthorityReadError for unreadable evidence in this scope.
-    # Note units weigh each Note once, so the scope only proves membership.
     scope = deck_note_scope(
-        session, learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
-        overlay=overlay, owned_by_any_user=owned_by_any_user, presence_only=count_by_note,
+        learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
+        overlay=overlay, owned_by_any_user=owned_by_any_user,
     )
     rows = note_reads.note_rows(scope, learner_user_id=learner_user_id).subquery("rows")
 

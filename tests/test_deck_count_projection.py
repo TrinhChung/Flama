@@ -12,7 +12,7 @@ from app.services.deck_aggregation_service import aggregate_deck_study_counts
 from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts
 from app.services.field_value_identity_service import FieldIdentityError
 from models import db
-from models.card import Card, PresentationAlias, cutover_notes
+from models.card import Card
 from tests.study_note_fixtures import attach_template, dashboard_totals, enroll_note_user
 from tests.note_progress_fixtures import stage_note_state
 from models.deck import Deck
@@ -169,21 +169,6 @@ class DeckCountProjectionTests(unittest.TestCase):
         subject.authority_revision += 1
         db.session.commit()
         self.assertEqual(self._revisions()[1][(self.user_id, self.deck_ids[0])], 2)
-
-    def test_alias_and_cutover_core_membership_changes_invalidate_epoch(self):
-        db.session.execute(PresentationAlias.__table__.insert().values(id="fixture-alias", note_id=self.note_ids[0],
-            template_id=self.template_id,
-            application_id=str(Card.query.filter_by(note_id=self.note_ids[0]).one().application_id),
-            created_at=datetime.utcnow(), updated_at=datetime.utcnow()))
-        db.session.commit()
-        self.assertEqual(self._revisions(), ({0: 1}, {}))
-        db.session.execute(cutover_notes.insert().values(note_id=self.note_ids[0]))
-        db.session.commit()
-        self.assertEqual(self._revisions(), ({0: 2}, {}))
-        db.session.execute(cutover_notes.delete().where(cutover_notes.c.note_id == self.note_ids[0]))
-        db.session.execute(PresentationAlias.__table__.delete().where(PresentationAlias.__table__.c.id == "fixture-alias"))
-        db.session.commit()
-        self.assertEqual(self._revisions(), ({0: 3}, {}))
 
     def test_note_type_change_invalidates_the_note_deck(self):
         other_type = NoteType(name="Target type", user_id=self.user_id)

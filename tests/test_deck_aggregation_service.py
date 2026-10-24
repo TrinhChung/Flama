@@ -197,6 +197,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             counts, note_types = aggregate_deck_study_counts(
                 db.session,
+                include_note_types=True,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[self.owned_deck_id],
                 today_day_index=today_day,
@@ -264,6 +265,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             counts, note_types = aggregate_deck_study_counts(
                 db.session,
+                include_note_types=True,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[self.local_deck_id],
                 today_day_index=today_day,
@@ -285,6 +287,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             counts, note_types = aggregate_deck_study_counts(
                 db.session,
+                include_note_types=True,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[],
                 today_day_index=today_day,
@@ -371,6 +374,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
             try:
                 aggregate_deck_study_counts(
                     db.session,
+                    include_note_types=True,
                     learner_user_id=self.learner_id,
                     visible_deck_ids=[self.owned_deck_id],
                     today_day_index=today_day,
@@ -618,6 +622,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
             # Query empty deck
             counts, note_types = aggregate_deck_study_counts(
                 db.session,
+                include_note_types=True,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[empty_deck.id],
                 today_day_index=today_day,
@@ -629,6 +634,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
             # Query with empty visible_deck_ids list
             empty_res, empty_nt = aggregate_deck_study_counts(
                 db.session,
+                include_note_types=True,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[],
                 today_day_index=today_day,
@@ -923,6 +929,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
             today_day = self._install_overlay_with_source_card()
             counts, note_types = aggregate_deck_study_counts(
                 db.session,
+                include_note_types=True,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[self.local_deck_id],
                 today_day_index=today_day,
@@ -952,6 +959,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
             for _ in range(3):
                 _, note_types = aggregate_deck_study_counts(
                     db.session,
+                    include_note_types=True,
                     learner_user_id=self.learner_id,
                     visible_deck_ids=[self.local_deck_id],
                     today_day_index=today_day,
@@ -991,7 +999,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     today_day_index=today_day, day_cutoff_utc=_next_day_start(today_day),
                     count_by_note=count_by_note,
                 )
-                expected, expected_types = aggregate_deck_study_counts(db.session, **args)
+                expected, expected_types = aggregate_deck_study_counts(db.session, **args, include_note_types=True)
                 self.assertTrue(expected_types)
                 statements = []
                 def capture(_conn, _cursor, statement, *_args):
@@ -1027,7 +1035,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
             )
             db.session.commit()
             _, expected_types = aggregate_deck_study_counts(
-                db.session, learner_user_id=self.learner_id,
+                db.session, include_note_types=True, learner_user_id=self.learner_id,
                 visible_deck_ids=[self.owned_deck_id, self.local_deck_id],
                 today_day_index=today_day, day_cutoff_utc=_next_day_start(today_day),
                 count_by_note=True,

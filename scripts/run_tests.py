@@ -276,6 +276,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/browse_note_service.py",
             "app/repositories/browse_card_repository.py",
             "app/repositories/browse_note_repository.py",
+            "app/repositories/browse_search_repository.py",
             "app/repositories/logical_overlay_scope_repository.py",
             "app/presenters/vocabulary_presenter.py",
             "app/routes/vocabulary.py",

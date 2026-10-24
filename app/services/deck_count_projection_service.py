@@ -15,7 +15,6 @@ from sqlalchemy.orm.util import identity_key
 from app.repositories.deck_count_snapshot_repository import (
     bump_content_revisions, bump_learner_revisions,
 )
-from models.card import PresentationAlias
 from models.note import Note
 from models.study_application import StudyApplication
 from models.study_progress_subject import StudyProgressSubject
@@ -24,12 +23,10 @@ _KEY = "flama.deck_counts.transaction"
 _BULK_TABLES = {
     "notes", "cards", "study_progress_subjects",
     "templates", "note_types", "study_applications", "users", "decks",
-    "card_presentation_aliases", "card_presentation_cutover_notes",
-    "card_presentation_cutover_applications", "deck_release_entity_memberships",
+    "deck_release_entity_memberships",
     "deck_release_template_pins", "deck_releases", "deck_installs", "deck_clone_deck_maps",
 }
-# Availability, interval-derived forecasts and fail-closed integrity all depend
-# on the canonical envelope. An updated_at-only touch does not change counts.
+# Availability and interval-derived forecasts depend on the canonical envelope. An updated_at-only touch does not change counts.
 _SUBJECT_COLUMNS = tuple(column.name for column in StudyProgressSubject.__table__.c
                          if column.name not in {"id", "created_at", "updated_at"})
 _PROGRESS_COLUMNS = (
@@ -126,10 +123,8 @@ def _capture_changes(session, flush_context, instances):
         obj in session.new or _changed(obj, ("status_code", "note_type_id")))]
     cascade = [obj for obj in session.deleted
                if obj.__table__.name in {"templates", "note_types", "study_applications", "users"}]
-    membership = [obj for obj in lifecycle | session.dirty if (
-        isinstance(obj, PresentationAlias)
-        or obj.__table__.name in {"deck_release_entity_memberships", "deck_release_template_pins", "deck_releases"}
-    )]
+    membership = [obj for obj in lifecycle | session.dirty
+                  if obj.__table__.name in {"deck_release_entity_memberships", "deck_release_template_pins", "deck_releases"}]
     if not affected and not cascade and not occurrences and not membership:
         return
     frame = _frame(session)

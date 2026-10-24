@@ -1,0 +1,394 @@
+{
+  "date": "2026-10-25",
+  "scope": "Local MySQL service benchmark and disposable MySQL editor fixture; no HTTP/load/browser p95 claim",
+  "schema_changes": false,
+  "new_indexes": false,
+  "persistent_cache_added": false,
+  "deck_specific_runtime_conditions": false,
+  "before_source_sha256": {
+    "app/repositories/browse_card_repository.py": "548bc2540f001c9503d30960351ec743008d5c221c8588c92722348a5ebef7e7",
+    "app/repositories/browse_note_repository.py": "fe26a0e00ba911f4510d9363f7b5a66a3baa305fe08bf605ca97d474e0f150de",
+    "app/services/browse_card_service.py": "fed328677c08c59d29128c0bb3c20bcdb3918bc17647c682d06908d11fbb2840",
+    "app/services/browse_note_service.py": "b636df765c4e785000429d10178d48cfd5b4ec18081e2ac6af858a403cb3868b",
+    "app/services/share/overlay.py": "06ab6b8a7d402e32901f0127aac525325c24f8d838addafc347a64a70bec9cc0",
+    "app/services/deck_release_service.py": "32c3acdec121b118927d5737d6f41b2870a8b59a2d2140e83ba3aa6227ab57e9"
+  },
+  "benchmark": {
+    "as_of_utc": "2026-10-24T14:36:39.013271Z",
+    "warmup": 1,
+    "comparison": {
+      "equivalent": true,
+      "mismatched_or_incomplete_cases": []
+    },
+    "before_global_max_statement_ms": 60000,
+    "after_max_statement_ms": 15000,
+    "cases": [
+      {
+        "name": "notes-all",
+        "before_samples": 1,
+        "before_median_ms": 1527.408,
+        "after_samples": 3,
+        "after_median_ms": 1198.125,
+        "before_hashes": [
+          "0493a6306605b75de7befe49d50f2b1477250799bf844ce0edfac0234b1d5507"
+        ],
+        "after_hashes": [
+          "0493a6306605b75de7befe49d50f2b1477250799bf844ce0edfac0234b1d5507"
+        ],
+        "after_statements": [
+          37
+        ],
+        "total": 39338
+      },
+      {
+        "name": "notes-sidebar",
+        "before_samples": 1,
+        "before_median_ms": 629.445,
+        "after_samples": 3,
+        "after_median_ms": 809.113,
+        "before_hashes": [
+          "c6209c0d29238b0b53f654199117c227cfb09b29475bf2ac8eee3b39ea4b232b"
+        ],
+        "after_hashes": [
+          "c6209c0d29238b0b53f654199117c227cfb09b29475bf2ac8eee3b39ea4b232b"
+        ],
+        "after_statements": [
+          13
+        ],
+        "total": null
+      },
+      {
+        "name": "owned-selected",
+        "before_samples": 1,
+        "before_median_ms": 60.547,
+        "after_samples": 3,
+        "after_median_ms": 78.151,
+        "before_hashes": [
+          "1e31a4a35cac236b25757c6d6d5bf795c345d6b942aa1d76966e19f4b1b775dc"
+        ],
+        "after_hashes": [
+          "1e31a4a35cac236b25757c6d6d5bf795c345d6b942aa1d76966e19f4b1b775dc"
+        ],
+        "after_statements": [
+          20
+        ],
+        "total": 118
+      },
+      {
+        "name": "clone-search-none",
+        "before_samples": 1,
+        "before_median_ms": 620.479,
+        "after_samples": 3,
+        "after_median_ms": 131.816,
+        "before_hashes": [
+          "aba8a56b2295908c7bcded1a4794f6817caf24952147ccb465e28fc88d311708"
+        ],
+        "after_hashes": [
+          "aba8a56b2295908c7bcded1a4794f6817caf24952147ccb465e28fc88d311708"
+        ],
+        "after_statements": [
+          21
+        ],
+        "total": 0
+      },
+      {
+        "name": "clone-search-common",
+        "before_samples": 1,
+        "before_median_ms": 521.186,
+        "after_samples": 3,
+        "after_median_ms": 206.497,
+        "before_hashes": [
+          "f38d4cc1ea6ffaefee385c3d92bc874db8cfc409c23e665d741cf149836dc708"
+        ],
+        "after_hashes": [
+          "f38d4cc1ea6ffaefee385c3d92bc874db8cfc409c23e665d741cf149836dc708"
+        ],
+        "after_statements": [
+          34
+        ],
+        "total": 116
+      },
+      {
+        "name": "clone-sort-word",
+        "before_samples": 1,
+        "before_median_ms": 540.701,
+        "after_samples": 3,
+        "after_median_ms": 325.448,
+        "before_hashes": [
+          "052aacf4b3537784dee28a4adb209401304da0cea84282f8d671f8cd1ae284f1"
+        ],
+        "after_hashes": [
+          "052aacf4b3537784dee28a4adb209401304da0cea84282f8d671f8cd1ae284f1"
+        ],
+        "after_statements": [
+          35
+        ],
+        "total": 118
+      },
+      {
+        "name": "all-installs-search-none",
+        "before_samples": 3,
+        "before_median_ms": 28230.034,
+        "after_samples": 3,
+        "after_median_ms": 3853.3,
+        "before_hashes": [
+          "aba8a56b2295908c7bcded1a4794f6817caf24952147ccb465e28fc88d311708"
+        ],
+        "after_hashes": [
+          "aba8a56b2295908c7bcded1a4794f6817caf24952147ccb465e28fc88d311708"
+        ],
+        "after_statements": [
+          102
+        ],
+        "total": 0
+      },
+      {
+        "name": "all-installs-search-common",
+        "before_samples": 3,
+        "before_median_ms": 24162.979,
+        "after_samples": 3,
+        "after_median_ms": 3644.712,
+        "before_hashes": [
+          "c7cca1402bebe63f8ef01f0e34535c9c1a8b3f01d2c799e583de910861abc434"
+        ],
+        "after_hashes": [
+          "c7cca1402bebe63f8ef01f0e34535c9c1a8b3f01d2c799e583de910861abc434"
+        ],
+        "after_statements": [
+          121
+        ],
+        "total": 14825
+      }
+    ],
+    "cte_materialization_reuse_references": 22
+  },
+  "editor_fixture": {
+    "scope": "Disposable MySQL fixture; 3 samples after warmup; no development data writes",
+    "cases": [
+      {
+        "mode": "before",
+        "kind": "owned",
+        "operation": "get",
+        "median_ms": 24.885800085030496,
+        "statements": [
+          15
+        ],
+        "writes": [
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          }
+        ]
+      },
+      {
+        "mode": "before",
+        "kind": "owned",
+        "operation": "patch",
+        "median_ms": 49.56740001216531,
+        "statements": [
+          31
+        ],
+        "writes": [
+          {
+            "INSERT": 0,
+            "UPDATE": 1,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 1,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 1,
+            "DELETE": 0
+          }
+        ]
+      },
+      {
+        "mode": "before",
+        "kind": "clone",
+        "operation": "get",
+        "median_ms": 74.93390003219247,
+        "statements": [
+          41
+        ],
+        "writes": [
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          }
+        ]
+      },
+      {
+        "mode": "before",
+        "kind": "clone",
+        "operation": "patch",
+        "median_ms": 123.34150006063282,
+        "statements": [
+          74
+        ],
+        "writes": [
+          {
+            "INSERT": 0,
+            "UPDATE": 2,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 2,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 2,
+            "DELETE": 0
+          }
+        ]
+      },
+      {
+        "mode": "after",
+        "kind": "owned",
+        "operation": "get",
+        "median_ms": 23.36190000642091,
+        "statements": [
+          15
+        ],
+        "writes": [
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          }
+        ]
+      },
+      {
+        "mode": "after",
+        "kind": "owned",
+        "operation": "patch",
+        "median_ms": 45.21730006672442,
+        "statements": [
+          28
+        ],
+        "writes": [
+          {
+            "INSERT": 0,
+            "UPDATE": 1,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 1,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 1,
+            "DELETE": 0
+          }
+        ]
+      },
+      {
+        "mode": "after",
+        "kind": "clone",
+        "operation": "get",
+        "median_ms": 84.75170005112886,
+        "statements": [
+          35
+        ],
+        "writes": [
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 0,
+            "DELETE": 0
+          }
+        ]
+      },
+      {
+        "mode": "after",
+        "kind": "clone",
+        "operation": "patch",
+        "median_ms": 111.47909995634109,
+        "statements": [
+          64
+        ],
+        "writes": [
+          {
+            "INSERT": 0,
+            "UPDATE": 2,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 2,
+            "DELETE": 0
+          },
+          {
+            "INSERT": 0,
+            "UPDATE": 2,
+            "DELETE": 0
+          }
+        ]
+      }
+    ],
+    "notes": "PATCH samples run after warmup with existing override/dirty rows. Fixture field values/revisions evolve; this probe certifies read/write counts, not GET payload hash equivalence or import performance."
+  },
+  "validation": {
+    "note_mysql_cases": 11,
+    "structural_mysql_cases": 5,
+    "legacy_mysql_cases": 13,
+    "benchmark_guard_unit_cases": 5,
+    "additional_release_schema_native_array_recheck": "passed",
+    "main_manifest_success": true,
+    "legacy_manifest_success": true
+  },
+  "limits": [
+    "Large-collection latency measured for default due sorting, not every sort/filter combination.",
+    "Exact search cost still grows with in-scope Notes, fields and history.",
+    "No fixed latency guarantee for unbounded data; local medians are not production p95."
+  ],
+  "source": "https://dev.mysql.com/doc/refman/8.0/en/derived-table-optimization.html"
+}

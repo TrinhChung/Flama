@@ -8,6 +8,7 @@ import { updateCardFieldValues } from '@/entities/flashcard/contentUpdates'
 import { noteWritePreconditions } from '@/entities/flashcard/fields'
 import { NOTE_TAG_MAX_COUNT, NOTE_TAG_MAX_LENGTH, tagDedupeKey } from '@/entities/flashcard'
 import { browseApi } from '../api/browseApi'
+import { browseQueryKeys } from '../api/browseQueryKeys'
 import { parseDeckIdParam } from '../utils/browseParams'
 import type { useBrowseFilters } from './useBrowseFilters'
 import type { useBrowseData } from './useBrowseData'
@@ -86,7 +87,7 @@ export function useBrowseEditor({ urlDeckId, urlCardId, filters, data, selection
 
   // Selected Card Detail Query
   const cardDetailQuery = useQuery({
-    queryKey: ['browse', 'card-detail', activeCardId],
+    queryKey: browseQueryKeys.detail(activeCardId),
     queryFn: ({ signal }) => browseApi.fetchCardDetail(activeCardId!, signal),
     enabled: Boolean(activeCardId),
   })
@@ -97,7 +98,7 @@ export function useBrowseEditor({ urlDeckId, urlCardId, filters, data, selection
     const detail = cardDetailQuery.data
     const noteId = detail?.note.id
     if (!activeCardId || !noteId || detail.card.card_id !== noteId || activeCardId === noteId) return
-    queryClient.setQueryData(['browse', 'card-detail', noteId], detail)
+    queryClient.setQueryData(browseQueryKeys.detail(noteId), detail)
     setActiveCardId(noteId)
   }, [activeCardId, cardDetailQuery.data, queryClient])
 

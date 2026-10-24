@@ -206,6 +206,9 @@ describe('StudyCompletionCard', () => {
     const links = Array.from(container?.querySelectorAll('a') || [])
     const dashboardLink = links.find((a) => a.textContent?.includes('Về Dashboard'))
     expect(dashboardLink?.getAttribute('href')).toBe('/dashboard')
+    // The SPA has no /vocabulary route; another deck is picked from Browse.
+    const anotherDeckLink = links.find((a) => a.textContent?.includes('Học deck khác'))
+    expect(anotherDeckLink?.getAttribute('href')).toBe('/browse')
   })
 
   it('renders worksheet button and opens DeckWorksheetModal when clicked', async () => {

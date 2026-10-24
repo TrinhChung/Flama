@@ -5,12 +5,21 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from flask_migrate import upgrade
 import sqlalchemy as sa
 
 from app import create_audit_app
 from migrations.historical_bootstrap_core import HISTORICAL_BOOTSTRAP_METADATA, bootstrap_empty_schema
 from models import db
+
+
+def _repository_head(migrations):
+    # The single head of the checked-in chain; raises when the chain forks.
+    config = Config()
+    config.set_main_option("script_location", str(migrations))
+    return ScriptDirectory.from_config(config).get_current_head()
 
 
 class RetirementFreshMigrationChainTests(unittest.TestCase):
@@ -56,9 +65,11 @@ class RetirementFreshMigrationChainTests(unittest.TestCase):
                         self.assertEqual(sa.inspect(connection).get_table_names(), [])
                         bootstrap_empty_schema(connection)
                     # Same migration entry point as `flask --app wsgi.py db upgrade`.
-                    upgrade(directory=str(Path(__file__).resolve().parents[1] / "migrations"))
+                    migrations = Path(__file__).resolve().parents[1] / "migrations"
+                    upgrade(directory=str(migrations))
                     tables = set(sa.inspect(db.engine).get_table_names())
-                    self.assertEqual(db.session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one(), "20261020_000071")
+                    self.assertEqual(db.session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one(),
+                                     _repository_head(migrations))
                     self.assertEqual(set(db.metadata.tables) - tables, set())
                     self.assertEqual(tables - set(db.metadata.tables), {"alembic_version"})
                     self.assertFalse(tables & {"cards", "card_progress", "vocabulary_column_preferences",

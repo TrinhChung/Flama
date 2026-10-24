@@ -1,6 +1,8 @@
 # Kế hoạch: guard toàn vẹn tiến độ học nằm trong scope + chọn nhánh SQL theo múi giờ
 
-> Ngày 2026-10-24. Trạng thái: **đã hoàn thành** (commit 1–6, xem mục 6). Chạy trên MySQL local (bản dump production), chưa deploy.
+> Ngày 2026-10-24. Trạng thái: **đã hoàn thành** (commit 1–6, xem mục 6), deploy cùng PR #243.
+>
+> **Cập nhật cuối ngày 2026-10-24: guard ở các API đếm đã được gỡ.** Chủ sản phẩm quyết định các API đếm (dashboard, heatmap, forecast) đọc dòng tiến độ như đang lưu: một dòng hỏng chỉ làm sai số của chính Note đó, thay vì 409 cả trang và tốn 100–160 ms mỗi API. Study và Browse vẫn kiểm tra trên các dòng của mình; phát hiện dữ liệu hỏng dựa vào `study-authority-read-audit` chạy offline. Phần "guard trong 3 hàm dựng scope" dưới đây chỉ còn giá trị lịch sử; hợp đồng hiện hành ở `docs/backend/ARCHITECTURE.md`.
 
 ## 1. Bối cảnh
 

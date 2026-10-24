@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import type { GenerateStrokesResponse } from '@/entities/stroke'
 import { fieldValueEditorText } from '@/entities/flashcard/fields'
 import { browseApi } from '../api/browseApi'
+import { browseQueryKeys } from '../api/browseQueryKeys'
 import { strokeApi } from '../api/strokeApi'
 import { loadStoredStrokeSettings } from '../services/strokeStorage'
 import type { BrowseStrokeModalProps } from '../model/strokeModal'
@@ -45,8 +46,8 @@ export function useBrowseStrokeModal({
 
   // Fetch card detail for target card if not already active in cardDetailQuery
   const targetCardQuery = useQuery({
-    queryKey: ['browse', 'stroke-modal-card-detail', targetCardId],
-    queryFn: () => browseApi.fetchCardDetail(targetCardId),
+    queryKey: browseQueryKeys.detail(targetCardId),
+    queryFn: ({ signal }) => browseApi.fetchCardDetail(targetCardId!, signal),
     enabled: isOpen && Boolean(targetCardId) && cardDetailQuery?.data?.card?.card_id !== targetCardId,
     staleTime: 1000 * 60 * 5,
   })
@@ -320,8 +321,8 @@ export function useBrowseStrokeModal({
           : t('stroke_modal.toasts.completed_check')
       const skippedNote = res.skipped > 0 ? t('stroke_modal.toasts.skipped_suffix', { count: res.skipped }) : ''
       toast.success(`${updatedText}${skippedNote}`)
-      void queryClient.invalidateQueries({ queryKey: ['browse-cards'] })
-      void queryClient.invalidateQueries({ queryKey: ['card-detail'] })
+      void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
+      void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail'] })
       onClose()
     },
     onError: (err: any) => {

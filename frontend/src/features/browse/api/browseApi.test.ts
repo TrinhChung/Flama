@@ -37,7 +37,7 @@ describe('Browse transport', () => {
     const body = { field_values: { Answers: ['one', ['two']] }, expected_content_revision: 3, expected_field_schema_revision: 7 }
     await browseApi.updateCard('card/id', body)
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe('/api/browse/notes/card%2Fid?view=rows')
+    expect(url).toBe('/api/browse/notes/card%2Fid?view=editor')
     expect(init.method).toBe('PATCH')
     expect(JSON.parse(init.body)).toEqual(body)
   })
@@ -56,7 +56,7 @@ describe('Browse transport', () => {
     expect(list.items[0]).toMatchObject({ note_id: 'note-only', card_id: 'note-only' })
     fetchMock.mockResolvedValueOnce(Response.json({ row, note: { id: 'note-only', field_values: { Answers: ['one', ['two']] } }, fields: [] }))
     const detail = await browseApi.fetchCardDetail('note-only')
-    expect(fetchMock.mock.calls[1][0]).toBe('/api/browse/notes/note-only')
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/browse/notes/note-only?view=editor')
     expect(detail.card.card_id).toBe('note-only')
     expect(detail.note.field_values.Answers).toEqual(['one', ['two']])
   })

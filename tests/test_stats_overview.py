@@ -119,7 +119,7 @@ class StatsOverviewTests(unittest.TestCase):
             user_id=self.user_id, timezone_name=timezone_name, timezone_obj=None,
             start_utc=_day_index_to_datetime(start.toordinal(), boundary, timezone_name=timezone_name),
             end_utc=_day_index_to_datetime(end.toordinal(), boundary, timezone_name=timezone_name),
-            day_boundary_hour_local=boundary, storage_profile="CONSOLIDATED_V1",
+            day_boundary_hour_local=boundary,
         )
 
     @staticmethod
@@ -143,6 +143,39 @@ class StatsOverviewTests(unittest.TestCase):
             )
             self.assertEqual(payload["metrics"]["longest_streak_days"], 3)
             self.assertEqual(payload["metrics"]["current_streak_days"], 3)
+
+    def _streak_and_history_reads(self, *, year, now_utc):
+        from app.services import stats_overview as overview
+
+        with patch.object(overview, "query_active_review_days", wraps=overview.query_active_review_days) as history:
+            payload = build_stats_overview(user_id=self.user_id, year=year, timezone_name="UTC", now_utc=now_utc)
+        return payload["metrics"]["current_streak_days"], history.call_count
+
+    def test_current_streak_inside_the_year_needs_no_history_read(self):
+        with self.app.app_context():
+            for day in (1, 2, 3, 7, 8, 9):
+                self._add_event(when_utc=datetime(2026, 1, day, 10, 0, 0), duration_ms=1200)
+            db.session.commit()
+            # Ends yesterday (Jan 9) and starts after Jan 1: the year's days suffice.
+            self.assertEqual(self._streak_and_history_reads(year=2026, now_utc=datetime(2026, 1, 10, 12)), (3, 0))
+
+    def test_current_streak_reaching_the_year_start_reads_history(self):
+        with self.app.app_context():
+            for when in (datetime(2025, 12, 30, 10), datetime(2025, 12, 31, 10),
+                         datetime(2026, 1, 1, 10), datetime(2026, 1, 2, 10)):
+                self._add_event(when_utc=when, duration_ms=1200)
+            db.session.commit()
+            # Jan 2 back to Dec 30: the streak crosses into last year.
+            self.assertEqual(self._streak_and_history_reads(year=2026, now_utc=datetime(2026, 1, 2, 12)), (4, 1))
+            # On Jan 5 the streak broke on Jan 3/4, inside the year: no history read.
+            self.assertEqual(self._streak_and_history_reads(year=2026, now_utc=datetime(2026, 1, 5, 12)), (0, 0))
+
+    def test_current_streak_for_another_year_reads_history(self):
+        with self.app.app_context():
+            for day in (8, 9, 10):
+                self._add_event(when_utc=datetime(2026, 1, day, 10, 0, 0), duration_ms=1200)
+            db.session.commit()
+            self.assertEqual(self._streak_and_history_reads(year=2025, now_utc=datetime(2026, 1, 10, 12)), (3, 1))
 
     def test_percent_active_days(self):
         with self.app.app_context():
@@ -448,14 +481,13 @@ class StatsOverviewTests(unittest.TestCase):
                     start_utc=now_utc,
                     end_utc=datetime(2026, 1, 11, 12),
                     day_boundary_hour_local=4,
-                    storage_profile="CONSOLIDATED_V1",
                 )
                 self.assertEqual(result, {date(2026, 1, 10): 5})
                 mock_can.assert_called_once_with(timezone_name="Asia/Tokyo")
                 mock_query.assert_called_once_with(
                     user_id=self.user_id, timezone_name="Asia/Tokyo",
                     day_boundary_hour_local=4, start_local_day=date(2026, 1, 10),
-                    end_local_day=date(2026, 1, 11), storage_profile="CONSOLIDATED_V1",
+                    end_local_day=date(2026, 1, 11),
                 )
 
     def test_canonical_due_counts_keep_precedence_day_boundary_and_card_units(self):
@@ -487,9 +519,10 @@ class StatsOverviewTests(unittest.TestCase):
             # The scope's live association does not substitute for logical-key availability.
             self._add_canonical_due(due_day=due, logical_key=b"mismatched-logical-key")
             db.session.commit()
-            from app.services.study_authority_read_service import StudyAuthorityReadError
-            with self.assertRaises(StudyAuthorityReadError):
-                self._canonical_day_counts()
+            # The publisher's Notes are not installed and a mismatched key has no
+            # availability; a detached subject still names its Note by logical
+            # key, so it reads as stored, like every other count.
+            self.assertEqual(self._canonical_day_counts(), {date(2026, 1, 11): 1})
 
     def test_canonical_due_dst_timezone_uses_python_business_day_mapping(self):
         with self.app.app_context():

@@ -16,7 +16,10 @@ for target-specific counts, backups and service health.
   Template and timestamps without content foreign keys. Archived aliases are
   immutable through ORM writers and survive content removal.
 - Original Note/application ID sets distinguish pre-cutover missing pairs from
-  new content. An absent old pair is not regenerated. Imported new Notes can
+  new content. An absent old pair is not regenerated. *(Superseded 2026-10-24:
+  the cutover archived a Card for every original pair and production still had
+  none absent, so membership no longer reads these sets; see
+  `docs/backend/ARCHITECTURE.md` §4.1.)* Imported new Notes can
   retain historical timestamps without being mistaken for original Notes.
 - Old wire UUIDs remain exact through `CardWireIdentity.id`; internal pair
   identity is `.key`. Session, event, Connect and receipt IDs are not rewritten.

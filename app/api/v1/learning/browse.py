@@ -205,7 +205,7 @@ def browse_note_detail(note_id: str):
     user_id, admin_mode, timezone_name = _context()
     try:
         return jsonify(browse_note_service.get_note_detail(user_id=user_id, admin_mode=admin_mode,
-            timezone_name=timezone_name, note_id=note_id))
+            timezone_name=timezone_name, note_id=note_id, compact=request.args.get('view') == 'editor'))
     except browse_card_service.BrowseApiError as exc:
         return _browse_error(exc)
 
@@ -244,9 +244,10 @@ def browse_notes_batch_delete():
 def browse_update_note(note_id: str):
     user_id, admin_mode, timezone_name = _context()
     try:
-        if request.args.get("view") == "rows":
+        if request.args.get("view") in {"rows", "editor"}:
             return jsonify(browse_note_service.update_note(user_id=user_id, admin_mode=admin_mode,
-                timezone_name=timezone_name, note_id=note_id, payload=request.get_json(silent=True) or {}))
+                timezone_name=timezone_name, note_id=note_id, payload=request.get_json(silent=True) or {},
+                compact_detail=request.args.get('view') == 'editor'))
         payload = browse_card_service.update_legacy_browse_note(
             user_id=user_id,
             admin_mode=admin_mode,

@@ -401,9 +401,8 @@ class NoteQueryRetirementTests(unittest.TestCase):
                                                        now=NOW, timezone_name='UTC')
         self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
 
-    def test_dashboard_counts_guard_evidence_outside_the_metric_query(self):
+    def test_dashboard_counts_read_damaged_evidence_as_its_own_note(self):
         from app.services.deck_aggregation_service import aggregate_deck_study_counts
-        from app.services.study_authority_read_service import StudyAuthorityReadError
 
         self._add(1)
         card = self._add(2, 'review', due_day=999999)
@@ -427,23 +426,28 @@ class NoteQueryRetirementTests(unittest.TestCase):
         def aggregate_sql():
             return [s for s in statements if 'GROUP BY rows.deck_id' in s]
 
+        def progress_sql():
+            return [s for s in statements if 'study_progress_subjects' in s]
+
         self.assertEqual(counts()[self.deck.id], {'total': 2, 'new': 1, 'learn': 0, 'due': 0})
-        # Clean learner: one candidate scan, no per-Note probe in the metric query.
+        # One metric query reads progress: no evidence scan, no per-Note probe.
+        self.assertEqual(progress_sql(), aggregate_sql())
         self.assertEqual(len(aggregate_sql()), 1)
         self.assertNotIn('EXISTS', aggregate_sql()[0])
 
+        # A damaged row misses its Note's state, so only that Note reads NEW;
+        # the offline audit, not every dashboard load, finds the damage.
         subject = StudyProgressSubject.query.filter_by(live_note_id=card.note_id).one()
         subject.logical_note_key = b'noncanonical-key'
         db.session.commit()
-        with self.assertRaises(StudyAuthorityReadError) as caught:
-            counts()
-        self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
-        self.assertEqual(aggregate_sql(), [])  # the guard failed before the metric query
+        self.assertEqual(counts()[self.deck.id], {'total': 2, 'new': 2, 'learn': 0, 'due': 0})
+        self.assertEqual(progress_sql(), aggregate_sql())
 
-    # Fail-closed contract: what every progress reader does with each evidence
-    # defect, so a new or refactored reader cannot silently drop the guard.
-    # Forecast prewarm: tests/test_forecast_snapshots.py; the fixed-offset SQL
-    # overview path runs on MySQL in scripts/probe_dashboard_due_counts_mysql.py.
+    # Evidence contract per progress reader. Counts (dashboard, overview,
+    # forecast) read rows as stored; the Study queue and the Browse page fail
+    # closed on their own bounded rows. Forecast prewarm:
+    # tests/test_forecast_snapshots.py; the fixed-offset SQL overview path runs
+    # on MySQL in scripts/probe_dashboard_due_counts_mysql.py.
     def _progress_reader_errors(self):
         from app.services.deck_aggregation_service import aggregate_deck_study_counts
         from app.services.stats_overview import _canonical_future_due_day_counts
@@ -458,8 +462,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
                 include_note_types=False),
             'overview_future_due': lambda: _canonical_future_due_day_counts(
                 user_id=self.user.id, timezone_name='UTC', timezone_obj=None, start_utc=NOW,
-                end_utc=NOW + timedelta(days=30), day_boundary_hour_local=4,
-                storage_profile='CONSOLIDATED_V1'),
+                end_utc=NOW + timedelta(days=30), day_boundary_hour_local=4),
             'today_future_rows': lambda: _consolidated_due_rows_and_load(
                 user_id=self.user.id, scope_deck_ids=[self.deck.id]),
             'study_queue_counts': lambda: study_repository.query_study_queue_counts(
@@ -488,21 +491,22 @@ class NoteQueryRetirementTests(unittest.TestCase):
         self.assertEqual(self._progress_reader_errors(), dict.fromkeys(
             ('dashboard_counts', 'overview_future_due', 'today_future_rows', 'study_queue_counts', 'browse_page')))
 
+    _COUNT_READERS = dict.fromkeys(('dashboard_counts', 'overview_future_due', 'today_future_rows'))
+
     def test_progress_readers_contract_logical_identity_drift(self):
         self._subject_of(self._contract_fixture()).logical_note_key = b'noncanonical-key'
         db.session.commit()
-        self.assertEqual(self._progress_reader_errors(), dict.fromkeys(
-            ('dashboard_counts', 'overview_future_due', 'today_future_rows', 'study_queue_counts', 'browse_page'),
-            'DETACHED_AUTHORITY_SUBJECT'))
+        self.assertEqual(self._progress_reader_errors(), {
+            **self._COUNT_READERS,
+            'study_queue_counts': 'DETACHED_AUTHORITY_SUBJECT',
+            'browse_page': 'DETACHED_AUTHORITY_SUBJECT',
+        })
 
     def test_progress_readers_contract_detached_subject(self):
         self._subject_of(self._contract_fixture()).live_note_id = None
         db.session.commit()
         self.assertEqual(self._progress_reader_errors(), {
-            'dashboard_counts': 'DETACHED_AUTHORITY_SUBJECT',
-            # The overview scope only holds Notes whose live Note has state.
-            'overview_future_due': None,
-            'today_future_rows': 'DETACHED_AUTHORITY_SUBJECT',
+            **self._COUNT_READERS,
             'study_queue_counts': 'DETACHED_AUTHORITY_SUBJECT',
             'browse_page': 'DETACHED_AUTHORITY_SUBJECT',
         })
@@ -515,9 +519,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
             status_code='QUARANTINED_CORRUPT_STATE', created_at=NOW, updated_at=NOW))
         db.session.commit()
         self.assertEqual(self._progress_reader_errors(), {
-            'dashboard_counts': 'INCOMPLETE_AUTHORITY_COVERAGE',
-            'overview_future_due': None,
-            'today_future_rows': 'INCOMPLETE_AUTHORITY_COVERAGE',
+            **self._COUNT_READERS,
             'study_queue_counts': 'INCOMPLETE_AUTHORITY_COVERAGE',
             'browse_page': 'INCOMPLETE_AUTHORITY_COVERAGE',
         })
@@ -540,13 +542,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
         self.deck = home
         self._subject_of(elsewhere).logical_note_key = b'noncanonical-key'
         db.session.commit()
-        self.assertEqual(self._progress_reader_errors(), {
-            'dashboard_counts': None,
-            'overview_future_due': 'DETACHED_AUTHORITY_SUBJECT',  # collection-wide scope
-            'today_future_rows': None,
-            'study_queue_counts': None,
-            'browse_page': None,
-        })
+        self.assertEqual(set(self._progress_reader_errors().values()), {None})
 
     def test_browse_page_rejects_empty_nonpristine_envelope(self):
         card = self._add(1)

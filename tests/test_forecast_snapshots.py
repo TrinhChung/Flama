@@ -117,12 +117,12 @@ class ForecastSnapshotTests(unittest.TestCase):
         raw = [self._payload("raw", backlog=value) for value in (False, True)]
         overview = _canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
             start_utc=NOW.replace(hour=4), end_utc=NOW.replace(hour=4) + timedelta(days=30),
-            day_boundary_hour_local=4, storage_profile="CONSOLIDATED_V1", now_utc=NOW)
+            day_boundary_hour_local=4, now_utc=NOW)
         self._prewarm()
         self.assertEqual([self._payload(backlog=value) for value in (False, True)], raw)
         self.assertEqual(_canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
             start_utc=NOW.replace(hour=4), end_utc=NOW.replace(hour=4) + timedelta(days=30),
-            day_boundary_hour_local=4, storage_profile="CONSOLIDATED_V1", now_utc=NOW), overview)
+            day_boundary_hour_local=4, now_utc=NOW), overview)
 
     def test_worker_retry_empty_projection_and_bucket_budget(self):
         self.assertTrue(self._prewarm()["published"])
@@ -150,14 +150,13 @@ class ForecastSnapshotTests(unittest.TestCase):
         self.assertEqual(db.session.execute(sa.select(sa.func.count()).select_from(
             StudyForecastSnapshot)).scalar_one(), 0)
 
-    def test_identity_drift_fails_closed_without_publishing(self):
+    def test_identity_drift_publishes_what_the_raw_forecast_reads(self):
         subject = db.session.execute(sa.select(StudyProgressSubject)).scalar_one()
         subject.logical_note_key = b"damaged-key"
         db.session.commit()
-        with self.assertRaisesRegex(Exception, "detached"):
-            self._prewarm()
-        self.assertEqual(db.session.execute(sa.select(sa.func.count()).select_from(
-            StudyForecastSnapshot)).scalar_one(), 0)
+        raw = self._payload("raw")
+        self.assertTrue(self._prewarm()["published"])
+        self.assertEqual(self._payload(), raw)
 
     def test_nullable_deck_content_lifecycle_invalidates_collection(self):
         self._prewarm()

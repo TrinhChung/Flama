@@ -3,11 +3,11 @@
 Dashboard, overview and queue counts read each Note's availability from its
 ``study_progress_subjects`` row in one consistent snapshot. Nothing here
 locks, writes or materializes state, so these reads may run inside
-``analytics_read_transaction()``. Unreadable evidence fails closed through
-:func:`guard_scope`, which the shared scope builders run before returning a
-scope; metric queries carry no integrity column. The offline audit
-re-derives whole-store availability and hashes from state; Browse validates
-its returned page fully.
+``analytics_read_transaction()``. Counts read rows as stored: a damaged row
+miscounts only its own Note, and the offline audit re-derives whole-store
+availability and hashes from state. Study counts and Browse pages check
+their bounded rows with :func:`subject_integrity_violation`; the Browse Note
+list runs :func:`guard_scope`.
 """
 
 from __future__ import annotations
@@ -165,9 +165,7 @@ def guard_scope(session: Session, *, learner_user_id: int, build) -> None:
 def note_rows(scope, *, learner_user_id: int, include_state: bool = False):
     """Availability once per scoped Note; Card metrics carry a multiplicity.
 
-    ``scope`` must come from a guarded builder (``deck_note_scope``,
-    ``collection_note_scope`` or :func:`learner_note_scope`), which already
-    failed closed on unreadable evidence.
+    ``scope`` comes from ``deck_note_scope`` or ``collection_note_scope``.
     """
     subject = aliased(StudyProgressSubject)
     columns = [
@@ -184,38 +182,6 @@ def note_rows(scope, *, learner_user_id: int, include_state: bool = False):
         subject.learner_user_id == int(learner_user_id),
         subject.logical_note_key == cast(scope.c.note_id, LargeBinary),
     ))
-
-
-def learner_note_scope(*, learner_user_id: int, storage_profile: str | None = None,
-                       presence_only: bool = False):
-    """Visible owned/install Notes whose live Note holds current state (guarded).
-
-    The shared scope preserves release-pinned retired applications and local
-    added Notes. An outer ORM statement embedding this scope must retain
-    ``include_retired_cards=True``; its owned branch explicitly selects ACTIVE
-    applications, while the overlay branch enforces its release pin. The guard
-    covers this state-filtered scope: a detached subject's Note is not in it.
-    ``presence_only`` is for readers that weigh each Note once.
-    """
-
-    from models import db
-    from app.repositories.note_analytics_scope_repository import collection_note_scope_query
-
-    def build(note_ids=None):
-        scope = collection_note_scope_query(db.session, learner_user_id=learner_user_id, note_ids=note_ids,
-                                            presence_only=presence_only)
-        # A bounded scalar presence probe has the same semantics as EXISTS. It
-        # prevents MySQL's semijoin rewrite from placing application counts before
-        # the Note join (measured 31 x 39k intermediate rows on the production set).
-        state = select(literal(1)).where(
-            StudyProgressSubject.learner_user_id == int(learner_user_id),
-            StudyProgressSubject.live_note_id == scope.c.note_id,
-            StudyProgressSubject.semantic_state_hash.isnot(None),
-        ).correlate(scope).limit(1).scalar_subquery().isnot(None)
-        return select(scope.c.deck_id, scope.c.note_id, scope.c.card_count).where(state).subquery("learner_note_scope")
-
-    guard_scope(db.session, learner_user_id=learner_user_id, build=build)
-    return build()
 
 
 def consolidated_card_rows(card_query, *, learner_user_id: int):
