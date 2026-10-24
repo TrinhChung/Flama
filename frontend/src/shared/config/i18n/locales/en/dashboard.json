@@ -143,6 +143,7 @@
   "heatmap": {
     "summary_with_data": "Studied {{cards}} cards today in {{minutes}} minutes ({{seconds}}s/card)",
     "summary_zero": "Studied 0 cards today in 0.00 minutes (0.00s/card)",
+    "error": "Couldn't load your study activity. Your progress data needs a check; please try again later or contact support.",
     "nav": {
       "prev_year_aria": "Previous year",
       "next_year_aria": "Next year",

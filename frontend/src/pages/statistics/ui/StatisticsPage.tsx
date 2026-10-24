@@ -105,6 +105,7 @@ export function StatisticsPage() {
           <StudyHeatmap
             overview={overview}
             loading={overviewQuery.isPending}
+            error={overviewQuery.error}
             year={currentYear}
             onYearChange={(newYear) => setCurrentYear(newYear)}
           />

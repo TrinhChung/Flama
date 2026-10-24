@@ -229,6 +229,7 @@ export function DashboardPage() {
       <StudyHeatmap
         overview={overviewQuery.data}
         loading={overviewQuery.isPending || overviewQuery.isPlaceholderData}
+        error={overviewQuery.error}
         year={year}
         onYearChange={setYear}
       />

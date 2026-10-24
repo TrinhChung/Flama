@@ -1,6 +1,7 @@
 import { memo, useState, useRef, useEffect, useCallback, useMemo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
+import { AlertCircle } from 'lucide-react'
 import { ChevronLeft, ChevronRight } from '@/shared/components/Icons'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -105,6 +106,8 @@ function getDayTitle(
 export type StudyHeatmapProps = {
   overview?: HeatmapOverviewData
   loading?: boolean
+  /** A failed overview request; shown instead of an empty grid when no data is at hand. */
+  error?: unknown
   year: number
   onYearChange: (year: number) => void
   showSummary?: boolean
@@ -216,6 +219,7 @@ const HeatmapGrid = memo(function HeatmapGrid({
 export function StudyHeatmap({
   overview,
   loading = false,
+  error,
   year,
   onYearChange,
   showSummary = true,
@@ -329,6 +333,12 @@ export function StudyHeatmap({
         <div className="space-y-4">
           <Skeleton className="h-6 w-64 mx-auto bg-muted" />
           <Skeleton className="h-28 w-full bg-muted" />
+        </div>
+      ) : error && !overview ? (
+        // An empty grid would read as "nothing studied"; say the data could not be read.
+        <div role="alert" className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+          <AlertCircle className="size-4 shrink-0 text-amber-600" />
+          <span>{t('heatmap.error')}</span>
         </div>
       ) : (
         // Previous data stays visible (dimmed) while a refetch with data in hand is
