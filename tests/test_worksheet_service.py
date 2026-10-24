@@ -30,6 +30,7 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.user import User
+from tests.study_note_fixtures import enroll_note_user
 
 
 class TestWorksheetService(unittest.TestCase):
@@ -54,6 +55,9 @@ class TestWorksheetService(unittest.TestCase):
         other_user.set_password("password")
         db.session.add(other_user)
         db.session.flush()
+
+        enroll_note_user(db.session, user)
+        enroll_note_user(db.session, other_user)
 
         note_type = NoteType(user_id=user.id, name="Vocabulary Standard")
         db.session.add(note_type)
