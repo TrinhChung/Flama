@@ -438,6 +438,114 @@ class NoteQueryRetirementTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
         self.assertIn('EXISTS', aggregate_sql())
 
+    # Fail-closed contract: what every progress reader does with each evidence
+    # defect, so a new or refactored reader cannot silently drop the guard.
+    # Forecast prewarm: tests/test_forecast_snapshots.py; the fixed-offset SQL
+    # overview path runs on MySQL in scripts/probe_dashboard_due_counts_mysql.py.
+    def _progress_reader_errors(self):
+        from app.services.deck_aggregation_service import aggregate_deck_study_counts
+        from app.services.stats_overview import _canonical_future_due_day_counts
+        from app.services.stats_today_future import _consolidated_due_rows_and_load
+        from app.repositories.study_authority_repository import StudyAuthorityFenceError
+        from app.services.study_authority_read_service import StudyAuthorityReadError
+
+        readers = {
+            'dashboard_counts': lambda: aggregate_deck_study_counts(
+                db.session, learner_user_id=self.user.id, visible_deck_ids=[self.deck.id],
+                today_day_index=NOW.date().toordinal(), day_cutoff_utc=NOW + timedelta(days=1),
+                include_note_types=False),
+            'overview_future_due': lambda: _canonical_future_due_day_counts(
+                user_id=self.user.id, timezone_name='UTC', timezone_obj=None, start_utc=NOW,
+                end_utc=NOW + timedelta(days=30), day_boundary_hour_local=4,
+                storage_profile='CONSOLIDATED_V1'),
+            'today_future_rows': lambda: _consolidated_due_rows_and_load(
+                user_id=self.user.id, scope_deck_ids=[self.deck.id]),
+            'study_queue_counts': lambda: study_repository.query_study_queue_counts(
+                self._query(), user_id=self.user.id, now=NOW, timezone_name='UTC'),
+            'browse_page': lambda: self._browse(),
+        }
+        errors = {}
+        for name, read in readers.items():
+            try:
+                read()
+                errors[name] = None
+            except (StudyAuthorityReadError, StudyAuthorityFenceError, browse_card_service.BrowseApiError) as caught:
+                errors[name] = caught.code
+            db.session.rollback()
+        return errors
+
+    def _contract_fixture(self):
+        self._add(1, 'review', due_day=999999)
+        return self._add(2, 'review', due_day=999999)
+
+    def _subject_of(self, card):
+        return StudyProgressSubject.query.filter_by(live_note_id=card.note_id).one()
+
+    def test_progress_readers_contract_clean_evidence(self):
+        self._contract_fixture()
+        self.assertEqual(self._progress_reader_errors(), dict.fromkeys(
+            ('dashboard_counts', 'overview_future_due', 'today_future_rows', 'study_queue_counts', 'browse_page')))
+
+    def test_progress_readers_contract_logical_identity_drift(self):
+        self._subject_of(self._contract_fixture()).logical_note_key = b'noncanonical-key'
+        db.session.commit()
+        self.assertEqual(self._progress_reader_errors(), dict.fromkeys(
+            ('dashboard_counts', 'overview_future_due', 'today_future_rows', 'study_queue_counts', 'browse_page'),
+            'DETACHED_AUTHORITY_SUBJECT'))
+
+    def test_progress_readers_contract_detached_subject(self):
+        self._subject_of(self._contract_fixture()).live_note_id = None
+        db.session.commit()
+        self.assertEqual(self._progress_reader_errors(), {
+            'dashboard_counts': 'DETACHED_AUTHORITY_SUBJECT',
+            # The overview scope only holds Notes whose live Note has state.
+            'overview_future_due': None,
+            'today_future_rows': 'DETACHED_AUTHORITY_SUBJECT',
+            'study_queue_counts': 'DETACHED_AUTHORITY_SUBJECT',
+            'browse_page': 'DETACHED_AUTHORITY_SUBJECT',
+        })
+
+    def test_progress_readers_contract_quarantined_subject_without_state(self):
+        self._add(1, 'review', due_day=999999)
+        card = self._add(2)
+        db.session.add(StudyProgressSubject(learner_user_id=self.user.id,
+            logical_note_key=card.note_id.encode(), live_note_id=card.note_id,
+            status_code='QUARANTINED_CORRUPT_STATE', created_at=NOW, updated_at=NOW))
+        db.session.commit()
+        self.assertEqual(self._progress_reader_errors(), {
+            'dashboard_counts': 'INCOMPLETE_AUTHORITY_COVERAGE',
+            'overview_future_due': None,
+            'today_future_rows': 'INCOMPLETE_AUTHORITY_COVERAGE',
+            'study_queue_counts': 'INCOMPLETE_AUTHORITY_COVERAGE',
+            'browse_page': 'INCOMPLETE_AUTHORITY_COVERAGE',
+        })
+
+    def test_progress_readers_contract_tombstone_of_deleted_note_is_not_a_defect(self):
+        self._contract_fixture()
+        db.session.add(StudyProgressSubject(learner_user_id=self.user.id,
+            logical_note_key=b'10000000-0000-0000-0000-999999999999', live_note_id=None,
+            status_code='TOMBSTONED_SUBJECT_DELETED', created_at=NOW, updated_at=NOW))
+        db.session.commit()
+        self.assertEqual(set(self._progress_reader_errors().values()), {None})
+
+    def test_progress_readers_contract_defect_outside_the_read_scope(self):
+        self._contract_fixture()
+        home, other = self.deck, Deck(name='Elsewhere', owner_user_id=self.user.id)
+        db.session.add(other)
+        db.session.flush()
+        self.deck = other
+        elsewhere = self._add(3, 'review', due_day=999999)
+        self.deck = home
+        self._subject_of(elsewhere).logical_note_key = b'noncanonical-key'
+        db.session.commit()
+        self.assertEqual(self._progress_reader_errors(), {
+            'dashboard_counts': None,
+            'overview_future_due': 'DETACHED_AUTHORITY_SUBJECT',  # collection-wide scope
+            'today_future_rows': None,
+            'study_queue_counts': None,
+            'browse_page': None,
+        })
+
     def test_browse_page_rejects_empty_nonpristine_envelope(self):
         card = self._add(1)
         db.session.add(StudyProgressSubject(learner_user_id=self.user.id,
