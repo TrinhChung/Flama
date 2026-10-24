@@ -144,6 +144,39 @@ class StatsOverviewTests(unittest.TestCase):
             self.assertEqual(payload["metrics"]["longest_streak_days"], 3)
             self.assertEqual(payload["metrics"]["current_streak_days"], 3)
 
+    def _streak_and_history_reads(self, *, year, now_utc):
+        from app.services import stats_overview as overview
+
+        with patch.object(overview, "query_active_review_days", wraps=overview.query_active_review_days) as history:
+            payload = build_stats_overview(user_id=self.user_id, year=year, timezone_name="UTC", now_utc=now_utc)
+        return payload["metrics"]["current_streak_days"], history.call_count
+
+    def test_current_streak_inside_the_year_needs_no_history_read(self):
+        with self.app.app_context():
+            for day in (1, 2, 3, 7, 8, 9):
+                self._add_event(when_utc=datetime(2026, 1, day, 10, 0, 0), duration_ms=1200)
+            db.session.commit()
+            # Ends yesterday (Jan 9) and starts after Jan 1: the year's days suffice.
+            self.assertEqual(self._streak_and_history_reads(year=2026, now_utc=datetime(2026, 1, 10, 12)), (3, 0))
+
+    def test_current_streak_reaching_the_year_start_reads_history(self):
+        with self.app.app_context():
+            for when in (datetime(2025, 12, 30, 10), datetime(2025, 12, 31, 10),
+                         datetime(2026, 1, 1, 10), datetime(2026, 1, 2, 10)):
+                self._add_event(when_utc=when, duration_ms=1200)
+            db.session.commit()
+            # Jan 2 back to Dec 30: the streak crosses into last year.
+            self.assertEqual(self._streak_and_history_reads(year=2026, now_utc=datetime(2026, 1, 2, 12)), (4, 1))
+            # On Jan 5 the streak broke on Jan 3/4, inside the year: no history read.
+            self.assertEqual(self._streak_and_history_reads(year=2026, now_utc=datetime(2026, 1, 5, 12)), (0, 0))
+
+    def test_current_streak_for_another_year_reads_history(self):
+        with self.app.app_context():
+            for day in (8, 9, 10):
+                self._add_event(when_utc=datetime(2026, 1, day, 10, 0, 0), duration_ms=1200)
+            db.session.commit()
+            self.assertEqual(self._streak_and_history_reads(year=2025, now_utc=datetime(2026, 1, 10, 12)), (3, 1))
+
     def test_percent_active_days(self):
         with self.app.app_context():
             for day in (1, 3, 5):

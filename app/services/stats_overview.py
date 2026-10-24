@@ -289,6 +289,17 @@ def _current_streak_from_active_days(*, active_days: set[date], today_local: dat
     return streak
 
 
+def _current_streak_within(*, active_days: set[date], today_local: date, first_day: date) -> int | None:
+    """The current streak from days known since ``first_day``, or None when it may reach earlier."""
+    cursor = today_local if today_local in active_days else today_local - timedelta(days=1)
+    streak = 0
+    while cursor in active_days:
+        streak += 1
+        cursor = cursor - timedelta(days=1)
+    # ``cursor`` is the first inactive day before the streak, unless it predates the known days.
+    return streak if cursor >= first_day else None
+
+
 def record_review_event(
     *,
     user_id: int,
@@ -490,17 +501,27 @@ def build_stats_overview(
         days_learned_percent = 0.0
         longest_streak_days = 0
 
-    all_active_days = query_active_review_days(
-        user_id=user_id,
-        timezone_name=effective_timezone_name,
-        timezone_obj=timezone_obj,
-        end_utc=tomorrow_start_utc,
-        day_boundary_hour_local=day_boundary_hour,
-    )
-    current_streak_days = _current_streak_from_active_days(
-        active_days=all_active_days,
-        today_local=today_local,
-    )
+    # The current year's day map already holds a streak that began this year;
+    # read every active day only when the streak may continue before it.
+    current_streak_days = None
+    if selected_year == today_local.year:
+        current_streak_days = _current_streak_within(
+            active_days={day for day, bucket in day_map.items() if _safe_int(bucket.get("cards")) > 0},
+            today_local=today_local,
+            first_day=year_start,
+        )
+    if current_streak_days is None:
+        all_active_days = query_active_review_days(
+            user_id=user_id,
+            timezone_name=effective_timezone_name,
+            timezone_obj=timezone_obj,
+            end_utc=tomorrow_start_utc,
+            day_boundary_hour_local=day_boundary_hour,
+        )
+        current_streak_days = _current_streak_from_active_days(
+            active_days=all_active_days,
+            today_local=today_local,
+        )
 
     heatmap: list[dict[str, Any]] = []
     for day_value in _iter_days(year_start, year_end):
