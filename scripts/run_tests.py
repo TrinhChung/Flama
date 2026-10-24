@@ -793,6 +793,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "backend_tests": [
             "tests/test_deck_aggregation_service.py",
+            "tests/test_fixed_offset_timezones.py",
             "tests/test_note_analytics_read.py",
             "tests/test_note_stats_retirement.py",
             "tests/test_stats_overview.py",

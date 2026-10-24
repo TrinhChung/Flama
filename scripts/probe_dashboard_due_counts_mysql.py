@@ -25,7 +25,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app import create_audit_app
-from app.repositories.stats_query_repository import MYSQL_FIXED_OFFSET_MINUTES
+from app.repositories.stats_query_repository import fixed_utc_offset_minutes
 from app.services.study_authority_read_service import StudyAuthorityReadError
 from app.services.study_consolidated_progress_service import clear_note_progress
 from models import db
@@ -35,6 +35,13 @@ from scripts.mysql_probe_db import _connection_settings, _database_uri, _source_
 from tests.test_stats_overview import StatsOverviewTests
 
 PROBE_NAME_PATTERN = re.compile(r"^flama_dashboard_due_probe_[0-9]+_[a-f0-9]{8}$")
+# The former fixed-offset table, an alias, half-hour offsets and a negative
+# offset without DST: every one must take the SQL path and match Python.
+SQL_PATH_TIMEZONES = (
+    "UTC", "Etc/UTC", "GMT", "Asia/Ho_Chi_Minh", "Asia/Bangkok", "Asia/Jakarta",
+    "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Hong_Kong", "Asia/Singapore",
+    "Asia/Taipei", "Asia/Saigon", "Asia/Kolkata", "Asia/Kathmandu", "America/Phoenix",
+)
 
 
 def run() -> dict:
@@ -119,7 +126,10 @@ def run() -> dict:
                 (date(2026, 12, 31), date(2027, 1, 1)),
                 (date(2028, 2, 28), date(2028, 3, 1)),
             )
-            for timezone_name in MYSQL_FIXED_OFFSET_MINUTES:
+            for timezone_name in SQL_PATH_TIMEZONES:
+                if fixed_utc_offset_minutes(timezone_name) is None:
+                    report["problems"].append({"timezone": timezone_name, "not_routed_to_sql": True})
+                    continue
                 for boundary in (0, 4, 23):
                     for start, end in windows:
                         args = dict(timezone_name=timezone_name, boundary=boundary, start=start, end=end)
