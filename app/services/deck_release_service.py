@@ -15,6 +15,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from copy import deepcopy
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -539,6 +540,14 @@ def _release_field_context(release: DeckRelease):
         entity_kinds=["field_def"],
         content_only=True,
     )
+    # A clone edit commits before serializing its response. ORM entities in g
+    # would expire on that commit and reload once per schema event. Published
+    # history is immutable: retain plain values for the rest of this request.
+    field_changes = [SimpleNamespace(
+        release_sequence_no=row.release_sequence_no, field_def_id=row.field_def_id,
+        entity_id=row.entity_id, property_key=row.property_key,
+        operation=row.operation, after_value=deepcopy(row.after_value),
+    ) for row in field_changes]
     field_defs = _field_defs_at_sequence(field_changes, target_sequence)
     memberships = deck_release_repository.list_memberships_for_entities(
         deck_item_id=release.deck_item_id,

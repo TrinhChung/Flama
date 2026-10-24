@@ -2,7 +2,41 @@
 
 Ngày: 2026-10-24. Mốc review ban đầu: `83face76`. Phần khảo sát bên dưới ghi lại tình trạng tại mốc này; trạng thái triển khai mới nhất ở phần tiếp theo.
 
-## Cập nhật triển khai
+## Cập nhật 2026-10-25: search, scope một Note và PATCH editor
+
+Đã xử lý tiếp ba phần, áp dụng theo quan hệ dữ liệu; không có ID deck, giới hạn số Note, index mới hay migration mới trong logic.
+
+1. **Search clone:** tạo tập Note IDs đã được giới hạn bởi scope/quyền. Đọc checkpoint và lịch sử đúng tập này; loại các thay đổi đã nằm trong checkpoint trước khi chọn delta mới nhất theo Note/Field ID. Ghép overlay bằng stable identity. CTE chỉ giữ metadata/identities cần thiết; payload được đọc theo ID sau bước chọn. Native arrays, field rename/disable/add, release pin và install precedence được giữ nguyên.
+2. **Count và page:** dùng chung kết quả tìm kiếm/ranking trong một statement, kể cả trang rỗng hoặc ngoài phạm vi. Không đưa toàn bộ IDs về Python để lọc/phân trang. EXPLAIN MySQL ghi nhận 22 tham chiếu dùng lại materialization ở query search nhiều installs.
+3. **Một Note clone:** authorization dùng install roots phù hợp theo đúng thứ tự cũ và cùng predicate owner/release/snapshot, không dựng context của list hoặc cây deck toàn collection.
+4. **PATCH editor:** sau mutation, dựng trực tiếp response editor. Default response của các caller legacy vẫn đầy đủ. Schema release lưu trong cache request dưới dạng giá trị thuần để commit không gây đọc lại từng ORM event. Validation media, revision, source isolation và transaction vẫn đi qua đường ghi hiện có.
+
+Benchmark service trên MySQL local, cùng dữ liệu và clock, một warmup và ba samples mỗi phương án:
+
+| Search toàn collection clone | Median trước | Median sau |
+|---|---:|---:|
+| Không có kết quả | 28.230 ms | 3.853 ms |
+| Keyword phổ biến, trả 20 rows | 24.163 ms | 3.645 ms |
+
+Code trước thay đổi chạy trong tiến trình benchmark riêng từ source snapshot; không đổi checkout hay dữ liệu. Baseline được phép chạy statement tới 60 giây để lấy kết quả thành công thay vì so hai timeout. Bản sau dùng cap 15 giây; cả ba samples thành công. Cả tám case thật giữ cùng payload hash, gồm thứ tự, count, phân trang và nested values.
+
+Probe GET/PATCH riêng trên schema MySQL tạm, ba samples sau warmup:
+
+| Thao tác | Tổng SQL trước → sau | Câu ghi trước → sau |
+|---|---:|---|
+| GET editor clone | 41 → 35 | 0 → 0 |
+| PATCH editor owned | 31 → 28 | 1 UPDATE → 1 UPDATE |
+| PATCH editor clone | 74 → 64 | 2 UPDATE → 2 UPDATE |
+
+Các lượt PATCH đo sau warmup khi override/dirty rows đã tồn tại. Đây không phải benchmark import hay tạo override mới. GET clone trong probe có latency dao động dù giảm SQL; chỉ kết luận giảm lượt đọc, không tuyên bố mọi thao tác đều nhanh hơn. Phần ghi giữ nguyên đường mutation; query/schema/index của các writer không thay đổi trong đợt này.
+
+Validation: 11 tests Note Browse, 5 tests cấu trúc mới, 13 compatibility tests trên MySQL và 5 unit tests cho benchmark guard đều pass; recheck riêng release schema/native arrays sau sửa cache cũng pass. Test cấu trúc cover owned + release + snapshot, due/deck/word sort hai chiều, status, wildcard literal, trang ngoài phạm vi, schema 23 fields với 6.900 initial history rows, delta/rename/disable/field thêm, Note thiếu checkpoint, install parent/child chồng scope, legacy mapping fallback và giới hạn visibility. Đợt này không sửa frontend.
+
+Số đo collection lớn dùng sort mặc định `due`; chưa có latency benchmark cho mọi tổ hợp sort/filter. Search chính xác vẫn tăng chi phí theo lượng Notes, fields và history trong scope. Thay đổi loại bỏ việc tra lại lịch sử theo từng cặp Note/field và chạy lại search cho count/page; không cam kết latency cố định cho dữ liệu tăng không giới hạn.
+
+[Evidence đợt 2026-10-25](BROWSE_QUERY_OPTIMIZATION_2026-10-25.evidence.json). Cơ chế dùng lại CTE và các điều kiện materialization được đối chiếu với [MySQL 8.0 manual](https://dev.mysql.com/doc/refman/8.0/en/derived-table-optimization.html).
+
+## Cập nhật triển khai đợt 2026-10-24
 
 Đã xử lý **Q1, Q2, Q3, Q4, Q6, Q7, Q8**. Giữ API detail đầy đủ cho caller cũ; React Browse dùng `view=editor` để chỉ lấy dữ liệu editor cần. Không thay markup/CSS của màn Browse.
 
@@ -12,7 +46,7 @@ Ngày: 2026-10-24. Mốc review ban đầu: `83face76`. Phần khảo sát bên 
 - **Q6/Q8:** editor bỏ schema trùng và media metadata không dùng, không dựng live content rồi ghi đè cho clone; editor/TTS/SVG dùng chung detail cache key. API cũ vẫn trả payload đầy đủ.
 - **Q7:** thêm index `notes(user_id, deck_id)` qua migration `20261024_000073`. Đã thử upgrade, downgrade, upgrade lặp trên schema MySQL tạm, sau đó upgrade DB local từ `20261020_000071` và xác minh index. DDL dùng `ALGORITHM=INPLACE, LOCK=NONE`, giới hạn chờ metadata lock 15 giây. Khi deploy cần chạy Alembic upgrade theo quy trình hiện hành.
 
-**Q5 còn tồn tại:** search toàn collection nhiều installs vẫn chạm giới hạn statement 5 giây. Đã thử field relation dùng JSON_TABLE, tách nhánh UNION và gom lịch sử bằng window query. Các phương án làm SQL ngắn hơn nhưng chưa đạt hiệu năng đủ tốt trên collection lớn; đã loại toàn bộ code thử nghiệm này khỏi thay đổi cuối. Không thêm bảng search/cache hoặc cơ chế đồng bộ mới chỉ để xử lý case này.
+**Trạng thái Q5 ở cuối đợt 2026-10-24 (đã xử lý tiếp ở phần trên):** search toàn collection nhiều installs còn chạm giới hạn statement 5 giây. Các thử nghiệm lúc đó chưa đạt hiệu năng đủ tốt và đã bị loại khỏi commit đợt đầu. Đợt 2026-10-25 giới hạn scope trước, loại history trước checkpoint trước khi ranking và dùng lại search cho count/page; không thêm bảng search/cache hoặc cơ chế đồng bộ mới.
 
 Đo lại lượng dữ liệu bằng cùng probe DBAPI (một sample có instrumentation, detail mới dùng `view=editor`):
 

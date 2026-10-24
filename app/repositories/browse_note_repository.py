@@ -1,9 +1,10 @@
 """Note-grain Browse reads. No presentation, application or template expansion."""
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import and_, case, func, literal, not_, or_, select, union_all
+from sqlalchemy import and_, case, func, literal, not_, or_, select, true, union_all
 from sqlalchemy.orm import load_only, selectinload
 
 from models import db
@@ -113,6 +114,21 @@ def detail_deck_lookup(*, reference):
     return dict(rows)
 
 
+def note_matches_clone_scope(*, note_id, scope):
+    """Authorize one Note with the same release/snapshot predicate as the list."""
+    from app.services import flashcards_share
+
+    filters = [Note.id == note_id, Note.deck_id.in_(scope.source_deck_ids)]
+    if scope.source_owner_user_id is not None:
+        filters.append(Note.user_id == scope.source_owner_user_id)
+    membership = flashcards_share.release_note_membership_filter(scope.install, Note.id)
+    if membership is not None:
+        filters.append(membership)
+    elif scope.base_snapshot_at is not None:
+        filters.append(Note.created_at <= scope.base_snapshot_at)
+    return db.session.query(Note.id).filter(*filters).first() is not None
+
+
 def load_voicevox_notes(ids, *, user_id, admin_mode, note_only, include_media=False):
     """Legacy Card selectors and explicit Note selectors share owner checks."""
     if note_only:
@@ -142,6 +158,34 @@ def note_page(query, *, page, per_page, install_id, user_id, pinned_installs):
     pagination = query.with_entities(Note.id, Note.user_id, install_id).paginate(
         page=page, per_page=per_page, error_out=False, count=False,
     )
+    return _hydrate_page(pagination, user_id=user_id, pinned_installs=pinned_installs)
+
+
+def search_note_page(context, *, install_id, user_id, pinned_installs):
+    """Evaluate matching identities once for both exact total and page.
+
+    The ranked CTE stores identities/order only. Its aggregate LEFT JOIN page
+    also returns the total for an empty or out-of-range page, without a second
+    search or fetching all matching IDs into Python.
+    """
+    query = context.query.with_entities(Note.id.label('note_id'), Note.user_id, install_id)
+    ranked = order_notes(context, user_id=user_id, query=query, with_rank=True).cte()
+    totals = select(func.count().label('total')).select_from(ranked).subquery()
+    start = (context.page - 1) * context.per_page
+    page = select(ranked.c.note_id, ranked.c.user_id, ranked.c.browse_install_id,
+        ranked.c.browse_rank).where(ranked.c.browse_rank > start,
+            ranked.c.browse_rank <= start + context.per_page).subquery()
+    rows = db.session.execute(select(page.c.note_id, page.c.user_id, page.c.browse_install_id,
+        totals.c.total).select_from(totals.outerjoin(page, true())).order_by(page.c.browse_rank)).all()
+    total = int(rows[0].total)
+    pagination = SimpleNamespace(items=[tuple(row[:3]) for row in rows if row.note_id is not None],
+        total=total, page=context.page, per_page=context.per_page,
+        pages=(total + context.per_page - 1) // context.per_page,
+        has_next=context.page * context.per_page < total)
+    return _hydrate_page(pagination, user_id=user_id, pinned_installs=pinned_installs)
+
+
+def _hydrate_page(pagination, *, user_id, pinned_installs):
     pinned_ids = [note_id for note_id, owner_id, scope in pagination.items
                   if owner_id != user_id and scope in pinned_installs]
     live_ids = [note_id for note_id, _owner_id, _scope in pagination.items if note_id not in pinned_ids]
@@ -163,8 +207,9 @@ def note_page(query, *, page, per_page, install_id, user_id, pinned_installs):
     return pagination
 
 
-def order_notes(context, *, user_id):
-    query = context.query
+def order_notes(context, *, user_id, query=None, with_rank=False):
+    query = context.query if query is None else query
+    order = []
     descending = context.sort_dir == "desc"
     if context.sort_by == "deck":
         names = [(db.and_(Note.user_id != user_id, condition, Note.deck_id == source), literal(context.deck_lookup[local]))
@@ -172,7 +217,7 @@ def order_notes(context, *, user_id):
             for source, local in sorted(scope.source_to_local_deck_id.items()) if local in context.deck_lookup]
         query = query.outerjoin(Deck, Note.deck_id == Deck.id)
         expression = case(*names, else_=Deck.name) if names else Deck.name
-        query = query.order_by(expression.desc() if descending else expression.asc())
+        order.append(expression.desc() if descending else expression.asc())
     elif context.sort_by == "word":
         from app.repositories.browse_card_repository import owned_note_word_expression
         own = owned_note_word_expression()
@@ -181,13 +226,16 @@ def order_notes(context, *, user_id):
             values.append((context.owned_visibility_condition, own))
         values.extend((projection["condition"], projection["word"]) for projection in context.clone_projections)
         expression = func.lower(func.coalesce(case(*values, else_=own) if values else own, ""))
-        query = query.order_by(expression.desc() if descending else expression.asc())
+        order.append(expression.desc() if descending else expression.asc())
     else:
         day = case((context.normalized_progress_queue == "review", context.progress_alias.due_day), else_=None)
         due = context.progress_alias.due_at
-        query = query.order_by(day.is_(None), day.desc() if descending else day.asc(),
-                               due.is_(None), due.desc() if descending else due.asc())
-    return query.order_by(Note.updated_at.desc(), Note.id.asc())
+        order.extend((day.is_(None), day.desc() if descending else day.asc(),
+                      due.is_(None), due.desc() if descending else due.asc()))
+    order.extend((Note.updated_at.desc(), Note.id.asc()))
+    if with_rank:
+        return query.add_columns(func.row_number().over(order_by=order).label('browse_rank'))
+    return query.order_by(*order)
 
 
 def deck_counts(context, *, user_id, admin_mode, today_day_index, day_cutoff_utc):

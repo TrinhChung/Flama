@@ -14,7 +14,9 @@ class BrowseBaselineToolTests(unittest.TestCase):
 
     def test_writer_and_server_side_effect_statements_are_refused(self):
         for statement in ("UPDATE notes SET tags='[]'", "DELETE FROM notes", "CREATE TABLE x (id INT)",
-                          "SELECT 'x' INTO OUTFILE '/tmp/x'", "SELECT GET_LOCK('x', 5)", "CALL writer()"):
+                          "SELECT 'x' INTO OUTFILE '/tmp/x'", "SELECT GET_LOCK('x', 5)", "CALL writer()",
+                          "WITH x AS (SELECT 1) DELETE FROM notes", "WITH x AS (SELECT 1) UPDATE notes SET tags='[]'",
+                          "WITH x AS (SELECT 1) REPLACE INTO notes SELECT * FROM x", "SELECT 1; DELETE FROM notes"):
             with self.subTest(statement=statement), self.assertRaises(RuntimeError):
                 require_read_sql(statement)
 
@@ -22,6 +24,7 @@ class BrowseBaselineToolTests(unittest.TestCase):
         require_read_sql("SELECT id FROM users WHERE id = %s LOCK IN SHARE MODE")
         require_read_sql("SELECT id FROM study_progress_subjects FOR UPDATE")
         require_read_sql("EXPLAIN FORMAT=JSON SELECT id FROM notes")
+        require_read_sql("WITH x AS (SELECT replace(name, %s, %s) FROM decks) SELECT * FROM x")
 
     def test_comparison_preserves_order_and_nested_array_values(self):
         first = {"items": [{"id": "a", "value": [["x", "y"], "z"]}, {"id": "b"}]}

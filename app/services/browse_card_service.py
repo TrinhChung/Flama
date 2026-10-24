@@ -644,6 +644,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
                 deck_install_id=str(install.id)
             )
             all_field_expressions = []
+            field_specs = []
             word_field_expressions = []
             reverse_rename_map = {
                 str(resolved_name): str(source_name)
@@ -677,6 +678,10 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
                     checkpoint_field_name = field_name
                 from app.services.field_value_runtime_service import added_field_identity_key
                 field_identity_key = added_field_identity_key(install.id, field_id) if is_added_field else field_id
+                field_specs.append({'source_field_id': source_field_id,
+                    'checkpoint_name': checkpoint_field_name, 'identity_key': field_identity_key})
+                if notes_only and keyword and sort_by != 'word':
+                    continue
                 field_expression = (
                     browse_card_repository.clone_effective_field_text_expression(
                         deck_install_id=str(install.id),
@@ -697,6 +702,10 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
                 {
                     "condition": exclusive_scope_condition,
                     "all_fields": all_field_expressions,
+                    "field_specs": field_specs,
+                    "install": install,
+                    "deck_item_id": deck_item_id,
+                    "target_sequence": target_sequence,
                     "word": browse_card_repository.first_non_empty_text_expression(
                         word_field_expressions
                     ),
@@ -710,15 +719,25 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
                 note_values_search_condition(keyword_like=keyword_like)
             )
         else:
+            from sqlalchemy import select, union
+            from app.repositories.browse_search_repository import clone_note_search_ids
             effective_search_conditions = []
+            search_branches = []
             if owned_visibility_condition is not None:
-                effective_search_conditions.append(
-                    db.and_(
+                owned_search = db.and_(
                         owned_visibility_condition,
                         note_values_search_condition(keyword_like=keyword_like),
                     )
-                )
+                effective_search_conditions.append(owned_search)
+                if notes_only:
+                    search_branches.append(select(Note.id.label('note_id')).where(owned_search))
             for projection in clone_projections:
+                if notes_only and projection.get('field_specs'):
+                    search_branches.append(clone_note_search_ids(
+                        scope_condition=projection['condition'], field_specs=projection['field_specs'],
+                        deck_install_id=projection['install'].id, deck_item_id=projection['deck_item_id'],
+                        target_sequence=projection['target_sequence'], keyword_like=keyword_like))
+                    continue
                 effective_search_conditions.append(
                     db.and_(
                         projection["condition"],
@@ -728,11 +747,11 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
                         ),
                     )
                 )
-            query = query.filter(
-                db.or_(*effective_search_conditions)
-                if effective_search_conditions
-                else false()
-            )
+            if notes_only and search_branches:
+                matches = (union(*search_branches) if len(search_branches) > 1 else search_branches[0]).subquery('browse_search_matches')
+                query = query.join(matches, matches.c.note_id == Note.id)
+            else:
+                query = query.filter(db.or_(*effective_search_conditions) if effective_search_conditions else false())
     if tag:
         tag_like = f"%{escape_like_pattern(tag.lower())}%"
         query = query.filter(
@@ -767,6 +786,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
         query = query.filter(eligible)
     return SimpleNamespace(
         include_all_templates=include_all_templates,
+        keyword=keyword,
         sort_by=sort_by, sort_dir=sort_dir,
         query=query,
         progress_alias=progress_alias,
@@ -1398,6 +1418,7 @@ def _update_clone_browse_card(
     note_obj,
     clone_scope,
     validated,
+    include_response: bool = True,
 ) -> dict[str, Any]:
     from app.services import flashcards_share as share_ctrl
 
@@ -1441,6 +1462,8 @@ def _update_clone_browse_card(
 
     browse_card_repository.commit_changes()
 
+    if not include_response:
+        return {"success": True}
     detail_payload = _build_browse_detail_payload(
         user_id=user_id,
         admin_mode=False,
@@ -1471,6 +1494,7 @@ def _update_owned_browse_card(
     card_obj,
     note_obj,
     validated,
+    include_response: bool = True,
 ) -> dict[str, Any]:
     from app.services import deck_working_tree_service
 
@@ -1556,6 +1580,8 @@ def _update_owned_browse_card(
 
     browse_card_repository.commit_changes()
 
+    if not include_response:
+        return {"success": True}
     now = _utcnow()
     deck_lookup = browse_card_repository.deck_lookup_for_browse(
         user_id=user_id,

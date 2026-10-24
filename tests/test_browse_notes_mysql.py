@@ -129,6 +129,10 @@ class BrowseNotesMySQLTests(unittest.TestCase):
         self.assertEqual(json.loads(values[ids['note_ids'][4]]), [['nested', 'values'], 'last'])
         self.assertEqual(values[ids['note_ids'][7]], 'local-value')
         self.assertEqual(values[ids['note_ids'][8]], 'legacy-identity')
+        for needle in ('pinned-word', 'nested', 'local-value', 'legacy-identity', 'future-value', 'no-match'):
+            expected = {note_id for note_id, value in values.items() if needle in value.lower()}
+            found, _ = self._notes(deck_id=ids['local_root_id'], q=needle, per_page=100)
+            self.assertEqual({row['note_id'] for row in found['items']}, expected, needle)
 
         snapshot = fixtures.seed_clone_install(self.learner_id, count=4, release=False,
             override_every=0, prefix='50000000')
@@ -151,6 +155,7 @@ class BrowseNotesMySQLTests(unittest.TestCase):
         note_page_reads = [sql for sql in capture.statements if 'from notes' in sql.lower()
             and 'limit' in sql.lower() and not sql.lstrip().lower().startswith('select count(')]
         self.assertEqual(note_page_reads, [], 'An empty result should not repeat the search to fetch a page')
+        self.assertEqual(sum('browse_search_matches' in sql for sql in capture.statements), 1)
 
     def test_owned_subtree_and_detail_avoid_whole_collection_scope(self):
         deck_id = fixtures.seed_owned_deck(self.learner_id, count=4)
@@ -193,7 +198,9 @@ class BrowseNotesMySQLTests(unittest.TestCase):
             with patch.object(deck_release_repository, 'list_release_history_changes',
                     wraps=deck_release_repository.list_release_history_changes) as history, patch.object(
                     flashcards_share, 'resolve_clone_scope_for_local_deck',
-                    wraps=flashcards_share.resolve_clone_scope_for_local_deck) as scopes:
+                    wraps=flashcards_share.resolve_clone_scope_for_local_deck) as scopes, patch.object(
+                    browse_card_service.vocabulary_ctrl, 'collect_accessible_browse_decks',
+                    side_effect=AssertionError('A clone detail needs no whole-collection deck tree')):
                 compact = browse_note_service.get_note_detail(user_id=self.learner_id, admin_mode=False,
                     timezone_name='UTC', note_id=ids['note_ids'][0], compact=True)
             self.assertEqual(history.call_count, 1)
@@ -230,7 +237,8 @@ class BrowseNotesMySQLTests(unittest.TestCase):
             source_field_def_id=meaning.id, properties={'name': 'Answers', 'field_type': 'array'}))
         db.session.commit()
         response = browse_note_service.update_note(user_id=self.learner_id, admin_mode=False,
-            timezone_name='UTC', note_id=note_id, payload={'field_values': {'Word': 'local-only', 'Answers': [['one', 'two'], 'three']}})
+            timezone_name='UTC', note_id=note_id, compact_detail=True,
+            payload={'field_values': {'Word': 'local-only', 'Answers': [['one', 'two'], 'three']}})
         self.assertEqual(response['detail']['note']['field_values']['Word'], 'local-only')
         self.assertEqual(response['detail']['note']['field_values']['Answers'], [['one', 'two'], 'three'])
         self.assertEqual(db.session.get(Note, note_id).field_values_by_id, original)
@@ -273,7 +281,9 @@ class BrowseNotesMySQLTests(unittest.TestCase):
         payload = {'field_values': {'Word': 'from-http'},
             'expected_content_revision': detail['note']['content_revision'],
             'expected_field_schema_revision': detail['note']['field_schema_revision']}
-        saved = client.patch(f'/api/browse/notes/{note.id}?view=editor', json=payload, headers=headers)
+        with patch.object(browse_card_service.vocabulary_ctrl, 'build_browse_card_detail',
+                side_effect=AssertionError('Editor PATCH must serialize the compact response directly')):
+            saved = client.patch(f'/api/browse/notes/{note.id}?view=editor', json=payload, headers=headers)
         self.assertEqual(saved.status_code, 200, saved.get_json())
         self.assertEqual(saved.get_json()['detail']['note']['field_values']['Word'], 'from-http')
         self.assertNotIn('media_assets', saved.get_json()['detail'])
