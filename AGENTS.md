@@ -55,6 +55,11 @@
 - Seeding and CLI: `app/cli.py`, `scripts/reseed_db.*`, `static/seed_data/`
 
 ## Repo-Specific Guardrails
+- **Index phải được trao đổi và duyệt trước**:
+  - Không mặc định thêm index để xử lý query chậm. Ưu tiên sửa nguyên nhân: SELECT/JOIN dư, scope quá rộng, N+1, đọc lặp, cách lọc/sort/pagination. Yêu cầu chung như "tối ưu hiệu năng" không phải là chấp thuận thêm index.
+  - Trước khi thêm hoặc thay đổi index, trình bày query/workload cụ thể, bằng chứng nghẽn (`EXPLAIN`/số đo), các phương án không thêm index đã xem xét, index và thứ tự cột đề xuất, lợi ích dự kiến cùng giới hạn của phép đo.
+  - Bắt buộc phân tích cả mặt hại với dữ liệu Flama thường xuyên thay đổi: tần suất INSERT/DELETE/UPDATE, cột nào được cập nhật và có ảnh hưởng index không; chi phí ghi, dung lượng, bộ nhớ/I/O, ảnh hưởng import/sync/edit/study và các query khác; rủi ro DDL/lock, triển khai và rollback. Một benchmark SELECT nhanh hơn chưa đủ để kết luận có lợi cho toàn workload; thiếu số đo ghi phải nói rõ.
+  - Chờ người dùng đồng ý rõ ràng với index và phạm vi áp dụng trước khi thêm khai báo ORM (`index=True`, `Index`, ...), migration hoặc chạy DDL tạo/đổi index, kể cả trên DB local/schema thử nghiệm. Có thể đọc SQL, kiểm tra index hiện có và chạy phân tích chỉ đọc để chuẩn bị đề xuất.
 - Preserve the overlay-only shared deck model. Do not reintroduce legacy full-copy clone behavior or mutate source notes in clone edit flows.
 - Treat `docs/backend/old/completed-plans/CLONE_CUTOVER_REPORT.md` as required context before changing `DeckInstall`, clone scope resolution, browse edit for cloned cards, or cutover logic.
 - Legacy Level/Topic/Lesson routes in `app/routes/vocabulary.py` intentionally return `410`. Do not revive that structure unless the user explicitly wants it back.
