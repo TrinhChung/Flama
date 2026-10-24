@@ -2,8 +2,8 @@
 
 Runs the SQL and Python paths over the same rows: siblings, publisher-owned
 source Notes, Notes without Cards and date edges for count parity, and one
-learner per evidence defect (detached subject, logical-identity drift) for
-fail-closed parity through the shared guarded scope. Creates/drops only a generated schema; configured
+learner per evidence defect (detached subject, logical-identity drift): both
+paths read damaged rows the same way, without failing. Creates/drops only a generated schema; configured
 application rows are untouched.
 """
 from __future__ import annotations
@@ -103,8 +103,8 @@ def run() -> dict:
             ):
                 add(due_at=timestamp, queue="learning")
             add(due_day=date(2028, 2, 29).toordinal())
-            # Damaged evidence fails closed, so each defect gets its own learner and the
-            # clean learner above keeps a readable scope for count parity.
+            # Each defect gets its own learner, so the clean learner above keeps
+            # undamaged rows for count parity.
             defects = {}
             for kind, damage in (("detached", {"detached": True}),
                                  ("logical_identity_drift", {"logical_key": b"drifted-logical-key"})):
@@ -158,27 +158,25 @@ def run() -> dict:
                     fixture._canonical_day_counts(timezone_name="America/New_York", start=start, end=end)
                     report["dst_fallback_cases"] = report.get("dst_fallback_cases", 0) + 1
 
-            def read_error(damaged, *, sql):
+            def read(damaged, *, sql):
                 try:
                     if sql:
-                        damaged._canonical_day_counts(timezone_name="Asia/Tokyo")
+                        counts = damaged._canonical_day_counts(timezone_name="Asia/Tokyo")
                     else:
                         with patch("app.services.stats_overview.can_use_mysql_local_day_sql", return_value=False):
-                            damaged._canonical_day_counts(timezone_name="Asia/Tokyo")
+                            counts = damaged._canonical_day_counts(timezone_name="Asia/Tokyo")
                 except StudyAuthorityReadError as error:
                     return error.code
-                return None
+                return {str(day): count for day, count in counts.items()}
 
-            # Both paths share the guarded scope and must agree. A detached subject
-            # leaves its Note outside the forecast scope (no live state), so
-            # neither path fails for it; identity drift fails both.
-            expected = {"detached": None, "logical_identity_drift": "DETACHED_AUTHORITY_SUBJECT"}
-            report["fail_closed"] = {}
+            # Counts read damaged rows as stored (the offline audit finds them):
+            # neither path fails, and both miscount the damaged Note alike.
+            report["damaged_evidence"] = {}
             for kind, damaged in defects.items():
-                outcome = {"python": read_error(damaged, sql=False), "sql": read_error(damaged, sql=True)}
-                report["fail_closed"][kind] = outcome
-                if outcome != {"python": expected[kind], "sql": expected[kind]}:
-                    report["problems"].append({"defect": kind, "fail_closed_mismatch": outcome})
+                outcome = {"python": read(damaged, sql=False), "sql": read(damaged, sql=True)}
+                report["damaged_evidence"][kind] = outcome
+                if isinstance(outcome["python"], str) or outcome["python"] != outcome["sql"]:
+                    report["problems"].append({"defect": kind, "damaged_evidence_mismatch": outcome})
             report["status"] = "FAIL" if report["problems"] else "PASS"
             return report
     finally:

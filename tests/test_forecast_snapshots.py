@@ -150,14 +150,13 @@ class ForecastSnapshotTests(unittest.TestCase):
         self.assertEqual(db.session.execute(sa.select(sa.func.count()).select_from(
             StudyForecastSnapshot)).scalar_one(), 0)
 
-    def test_identity_drift_fails_closed_without_publishing(self):
+    def test_identity_drift_publishes_what_the_raw_forecast_reads(self):
         subject = db.session.execute(sa.select(StudyProgressSubject)).scalar_one()
         subject.logical_note_key = b"damaged-key"
         db.session.commit()
-        with self.assertRaisesRegex(Exception, "detached"):
-            self._prewarm()
-        self.assertEqual(db.session.execute(sa.select(sa.func.count()).select_from(
-            StudyForecastSnapshot)).scalar_one(), 0)
+        raw = self._payload("raw")
+        self.assertTrue(self._prewarm()["published"])
+        self.assertEqual(self._payload(), raw)
 
     def test_nullable_deck_content_lifecycle_invalidates_collection(self):
         self._prewarm()

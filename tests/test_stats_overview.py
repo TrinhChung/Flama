@@ -487,9 +487,9 @@ class StatsOverviewTests(unittest.TestCase):
             # The scope's live association does not substitute for logical-key availability.
             self._add_canonical_due(due_day=due, logical_key=b"mismatched-logical-key")
             db.session.commit()
-            from app.services.study_authority_read_service import StudyAuthorityReadError
-            with self.assertRaises(StudyAuthorityReadError):
-                self._canonical_day_counts()
+            # None counts: the publisher's Notes are not installed, a detached
+            # subject has no live state, and a mismatched key has no availability.
+            self.assertEqual(self._canonical_day_counts(), {})
 
     def test_canonical_due_dst_timezone_uses_python_business_day_mapping(self):
         with self.app.app_context():

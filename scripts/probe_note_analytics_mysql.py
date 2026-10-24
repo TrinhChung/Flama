@@ -39,7 +39,7 @@ CASES = (
     "test_pinned_retired_source_and_local_added_note_both_count_in_local_deck",
     "test_multiple_installs_count_per_local_deck_but_collection_forecast_deduplicates",
     "test_overview_includes_pinned_retired_source_once",
-    "test_forecast_identity_drift_fails_closed_and_no_retired_table_is_queried",
+    "test_forecast_reads_detached_rows_as_stored_and_no_retired_table_is_queried",
 )
 
 

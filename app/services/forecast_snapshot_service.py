@@ -129,7 +129,6 @@ def prewarm_forecast_summary(*, user_id, deck_ids=None, now_utc=None, session_fa
             return {"ok": True, "user_id": user_id, "cached": True, "published": False,
                     "bucket_count": header["bucket_count"]}
         buckets, load, note_rows = {}, 0.0, 0
-        # Raises StudyAuthorityReadError for unreadable evidence before streaming.
         rows = query_consolidated_forecast_rows(user_id=user_id, scope_deck_ids=deck_ids,
                                                session=session, stream=True)
         for _note, queue, due_at, due_day, suspended, state_type, interval, weight in rows:

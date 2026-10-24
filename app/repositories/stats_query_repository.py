@@ -103,8 +103,6 @@ def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] 
     The weight is 1 under :func:`forecast_counts_notes`, else the Card count.
     Multiple installs of the same source presentation contribute once to a
     collection forecast; a scoped local deck still resolves its own install.
-    The guarded scope raises ``StudyAuthorityReadError`` for unreadable
-    evidence before any row is read.
     """
     from app.repositories.note_analytics_read_repository import note_rows
     from app.repositories.note_analytics_scope_repository import collection_note_scope
@@ -223,7 +221,6 @@ def query_canonical_future_due_day_counts_mysql(
     that identity relationship. Collapsing the joins would change reads of
     detached or drifted evidence. Sibling Cards each contribute one count
     unless :func:`forecast_counts_notes`, then each Note does.
-    The guarded scope fails closed exactly like the Python path.
     """
     from app.repositories import note_analytics_read_repository as note_reads
 

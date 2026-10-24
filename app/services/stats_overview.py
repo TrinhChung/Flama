@@ -208,7 +208,6 @@ def _canonical_future_due_day_counts(
     from app.repositories import note_analytics_read_repository as note_reads
 
     by_note = forecast_counts_notes()
-    # The guarded scope raises StudyAuthorityReadError for unreadable evidence.
     scope = note_reads.learner_note_scope(
         learner_user_id=user_id, storage_profile=storage_profile, presence_only=by_note,
     )

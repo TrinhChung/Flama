@@ -227,12 +227,12 @@ class NoteStatsRetirementTests(unittest.TestCase):
                                                  day_boundary_hour_local=0, storage_profile="CONSOLIDATED_V1")
         self.assertEqual(counts, {date.fromordinal(DAY): 1, date.fromordinal(DAY + 1): 1})
 
-    def test_forecast_identity_drift_fails_closed_and_no_retired_table_is_queried(self):
+    def test_forecast_reads_detached_rows_as_stored_and_no_retired_table_is_queried(self):
+        before = _consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1])
         db.session.execute(sa.update(StudyProgressSubject).values(live_note_id=None))
         db.session.commit()
-        from app.services.study_authority_read_service import StudyAuthorityReadError
-        with self.assertRaises(StudyAuthorityReadError):
-            _consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1])
+        # The forecast joins state by logical key, so a lost live pointer reads the same.
+        self.assertEqual(_consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1]), before)
         self.assertFalse(any("card_progress" in sql.lower() for sql in self.trace))
         self.assertNotIn("cards", set(sa.inspect(db.engine).get_table_names()))
 

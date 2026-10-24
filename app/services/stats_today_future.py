@@ -312,7 +312,6 @@ def _consolidated_due_rows_and_load(
         return [], 0.0
     rows: list[tuple[Any, Any, Any, int]] = []
     total = 0.0
-    # Raises StudyAuthorityReadError for unreadable evidence in the scope.
     fetched = query_consolidated_forecast_rows(user_id=user_id, scope_deck_ids=scope_deck_ids)
     for _note_id, queue, due_at, due_day, suspended, state_type, interval, card_count in fetched:
         if suspended:
