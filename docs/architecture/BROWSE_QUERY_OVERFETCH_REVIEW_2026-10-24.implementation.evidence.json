@@ -1,0 +1,349 @@
+{
+  "base_commit": "83face76",
+  "date": "2026-10-24",
+  "scope": "Local MySQL service/DBAPI inspection; not HTTP, load or production p95",
+  "accepted": [
+    "Q1",
+    "Q2",
+    "Q3",
+    "Q4",
+    "Q6",
+    "Q7",
+    "Q8"
+  ],
+  "remaining": {
+    "Q5": "Whole-collection clone search still hits 5s statement cap. JSON_TABLE / UNION / window experiments were removed after measurements did not justify the complexity."
+  },
+  "overfetch": [
+    {
+      "name": "notes-all",
+      "before": {
+        "statements": 37,
+        "payload_bytes": 22904,
+        "db_value_bytes": 346775,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 37,
+        "payload_bytes": 22904,
+        "db_value_bytes": 346775,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "notes-owned-selected",
+      "before": {
+        "statements": 21,
+        "payload_bytes": 4262,
+        "db_value_bytes": 157508,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 20,
+        "payload_bytes": 4262,
+        "db_value_bytes": 44167,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "notes-clone-selected",
+      "before": {
+        "statements": 37,
+        "payload_bytes": 4021,
+        "db_value_bytes": 154106,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 33,
+        "payload_bytes": 4021,
+        "db_value_bytes": 48500,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "notes-all-installs",
+      "before": {
+        "statements": 104,
+        "payload_bytes": 21782,
+        "db_value_bytes": 1131464,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 96,
+        "payload_bytes": 21782,
+        "db_value_bytes": 463521,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "sidebar-owned",
+      "before": {
+        "statements": 13,
+        "payload_bytes": 597091,
+        "db_value_bytes": 185551,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 13,
+        "payload_bytes": 597091,
+        "db_value_bytes": 185551,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "sidebar-installs",
+      "before": {
+        "statements": 58,
+        "payload_bytes": 113595,
+        "db_value_bytes": 117621,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 58,
+        "payload_bytes": 113595,
+        "db_value_bytes": 117621,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "note-types-compact",
+      "before": {
+        "statements": 3,
+        "payload_bytes": 16164,
+        "db_value_bytes": 13494,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 3,
+        "payload_bytes": 16164,
+        "db_value_bytes": 13494,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "detail-owned",
+      "before": {
+        "statements": 19,
+        "payload_bytes": 5082,
+        "db_value_bytes": 119551,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 16,
+        "payload_bytes": 2863,
+        "db_value_bytes": 5112,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "detail-clone",
+      "before": {
+        "statements": 81,
+        "payload_bytes": 5196,
+        "db_value_bytes": 154358,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 41,
+        "payload_bytes": 2927,
+        "db_value_bytes": 68519,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "search-owned-selected",
+      "before": {
+        "statements": 21,
+        "payload_bytes": 4262,
+        "db_value_bytes": 157508,
+        "error_type": null,
+        "mysql_error": null
+      },
+      "after": {
+        "statements": 20,
+        "payload_bytes": 4262,
+        "db_value_bytes": 44167,
+        "error_type": null,
+        "mysql_error": null
+      }
+    },
+    {
+      "name": "search-all-installs",
+      "before": {
+        "statements": 102,
+        "payload_bytes": null,
+        "db_value_bytes": 326089,
+        "error_type": "OperationalError",
+        "mysql_error": 3024
+      },
+      "after": {
+        "statements": 102,
+        "payload_bytes": null,
+        "db_value_bytes": 172877,
+        "error_type": "OperationalError",
+        "mysql_error": 3024
+      }
+    }
+  ],
+  "benchmark": {
+    "as_of_utc": "2026-10-24T12:58:52.601307Z",
+    "warmup": 1,
+    "samples_per_case": 3,
+    "cases": [
+      {
+        "name": "notes-all",
+        "before_median_ms": 1494.452,
+        "after_median_ms": 1387.736,
+        "before_payload_hashes": [
+          "d72e595f4885ef045bb3f194829a1b14f7c4973540f39dd8f7e308608333d3cd"
+        ],
+        "after_payload_hashes": [
+          "0493a6306605b75de7befe49d50f2b1477250799bf844ce0edfac0234b1d5507"
+        ],
+        "after_stable": true
+      },
+      {
+        "name": "notes-sidebar",
+        "before_median_ms": 1321.019,
+        "after_median_ms": 1062.199,
+        "before_payload_hashes": [
+          "c6209c0d29238b0b53f654199117c227cfb09b29475bf2ac8eee3b39ea4b232b"
+        ],
+        "after_payload_hashes": [
+          "c6209c0d29238b0b53f654199117c227cfb09b29475bf2ac8eee3b39ea4b232b"
+        ],
+        "after_stable": true
+      },
+      {
+        "name": "owned-selected",
+        "before_median_ms": 365.938,
+        "after_median_ms": 58.712,
+        "before_payload_hashes": [
+          "1e31a4a35cac236b25757c6d6d5bf795c345d6b942aa1d76966e19f4b1b775dc"
+        ],
+        "after_payload_hashes": [
+          "1e31a4a35cac236b25757c6d6d5bf795c345d6b942aa1d76966e19f4b1b775dc"
+        ],
+        "after_stable": true
+      },
+      {
+        "name": "clone-search-none",
+        "before_median_ms": 631.315,
+        "after_median_ms": 647.667,
+        "before_payload_hashes": [
+          "aba8a56b2295908c7bcded1a4794f6817caf24952147ccb465e28fc88d311708"
+        ],
+        "after_payload_hashes": [
+          "aba8a56b2295908c7bcded1a4794f6817caf24952147ccb465e28fc88d311708"
+        ],
+        "after_stable": true
+      },
+      {
+        "name": "clone-search-common",
+        "before_median_ms": 1007.167,
+        "after_median_ms": 844.289,
+        "before_payload_hashes": [
+          "548577fca628bc5998b9b8650224aaeb95ad632bb39b784b14da49b86acbafb8"
+        ],
+        "after_payload_hashes": [
+          "f38d4cc1ea6ffaefee385c3d92bc874db8cfc409c23e665d741cf149836dc708"
+        ],
+        "after_stable": true
+      },
+      {
+        "name": "clone-sort-word",
+        "before_median_ms": 709.119,
+        "after_median_ms": 635.074,
+        "before_payload_hashes": [
+          "052aacf4b3537784dee28a4adb209401304da0cea84282f8d671f8cd1ae284f1"
+        ],
+        "after_payload_hashes": [
+          "052aacf4b3537784dee28a4adb209401304da0cea84282f8d671f8cd1ae284f1"
+        ],
+        "after_stable": true
+      }
+    ],
+    "original_baseline_comparison": {
+      "equivalent": false,
+      "mismatched_or_incomplete_cases": [
+        "notes-all",
+        "clone-search-common"
+      ]
+    },
+    "fresh_head_oracle": {
+      "method": "Load only this task service/repository modules from HEAD in a separate read-only process; same current data, dependencies and local index. No checkout mutation. One sample per case.",
+      "comparison": {
+        "equivalent": true,
+        "mismatched_or_incomplete_cases": []
+      },
+      "cases": [
+        {
+          "name": "notes-all",
+          "payload_hash": "0493a6306605b75de7befe49d50f2b1477250799bf844ce0edfac0234b1d5507"
+        },
+        {
+          "name": "notes-sidebar",
+          "payload_hash": "c6209c0d29238b0b53f654199117c227cfb09b29475bf2ac8eee3b39ea4b232b"
+        },
+        {
+          "name": "owned-selected",
+          "payload_hash": "1e31a4a35cac236b25757c6d6d5bf795c345d6b942aa1d76966e19f4b1b775dc"
+        },
+        {
+          "name": "clone-search-none",
+          "payload_hash": "aba8a56b2295908c7bcded1a4794f6817caf24952147ccb465e28fc88d311708"
+        },
+        {
+          "name": "clone-search-common",
+          "payload_hash": "f38d4cc1ea6ffaefee385c3d92bc874db8cfc409c23e665d741cf149836dc708"
+        },
+        {
+          "name": "clone-sort-word",
+          "payload_hash": "052aacf4b3537784dee28a4adb209401304da0cea84282f8d671f8cd1ae284f1"
+        }
+      ],
+      "head_commit": "24e033c49a1136a9d4b4bfe19c76f0627d5c19df"
+    }
+  },
+  "index": {
+    "name": "ix_notes_user_deck",
+    "columns": [
+      "user_id",
+      "deck_id"
+    ],
+    "migration": "20261024_000073",
+    "local_alembic_head_verified": "20261024_000073",
+    "rehearsal": "passed",
+    "experiment_scope": "Disposable MySQL schema, only identity/user/deck columns; same source distribution, not the full production row layout",
+    "before_median_ms": 113.38965001050383,
+    "after_median_ms": 24.480750027578324,
+    "same_result": true
+  },
+  "validation": {
+    "mysql_note_tests": 11,
+    "mysql_legacy_tests": 13,
+    "additional_targeted_tests": 2,
+    "frontend_tests": 71,
+    "frontend_typecheck": "passed",
+    "frontend_changed_lint": "passed",
+    "frontend_production_build": "passed"
+  }
+}

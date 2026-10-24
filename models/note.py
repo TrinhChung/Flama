@@ -22,6 +22,7 @@ class Note(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     __mapper_args__ = {"version_id_col": content_revision, "version_id_generator": False}
+    __table_args__ = (db.Index('ix_notes_user_deck', 'user_id', 'deck_id'),)
 
     note_type = db.relationship("NoteType", back_populates="notes")
     # Derived presentations (ADR P11): one per ACTIVE application of the NoteType.

@@ -390,7 +390,7 @@ def _join_note_availability(query, *, learner_user_id: int, note_id_column=None)
     )
 
 
-def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, query_args, notes_only: bool = False, scope_only: bool = False):
+def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, query_args, notes_only: bool = False, scope_only: bool = False, scope_note=None):
     """Share visibility and effective-value filters; Note reads never expand applications."""
     from app.services import flashcards_share as share_ctrl
 
@@ -441,20 +441,26 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
     def _empty_result():
         return None
 
-    scoped_decks = vocabulary_ctrl.collect_accessible_browse_decks(
-        user_id=user_id,
-        admin_mode=admin_mode,
-    )
+    selected_deck_id = None
+    if deck_id_raw:
+        try:
+            selected_deck_id = int(deck_id_raw)
+        except (TypeError, ValueError) as exc:
+            raise BrowseApiError("Invalid deck_id") from exc
+    scoped_decks = None
+    if notes_only and not admin_mode and selected_deck_id is not None:
+        from app.repositories.browse_note_repository import selected_owned_decks
+        scoped_decks = selected_owned_decks(user_id=user_id, deck_id=selected_deck_id,
+            include_subdecks=include_subdecks)
+    if scoped_decks is None:
+        scoped_decks = vocabulary_ctrl.collect_accessible_browse_decks(
+            user_id=user_id, admin_mode=admin_mode)
     deck_by_id = {deck.id: deck for deck in scoped_decks}
     deck_lookup = {deck.id: deck.name for deck in scoped_decks}
     children_by_parent = vocabulary_ctrl.deck_children_map(scoped_decks)
     scoped_ids = set(deck_by_id)
     selected_ids: set[int] | None = None
     if deck_id_raw:
-        try:
-            selected_deck_id = int(deck_id_raw)
-        except (TypeError, ValueError) as exc:
-            raise BrowseApiError("Invalid deck_id") from exc
         if selected_deck_id not in scoped_ids:
             raise BrowseApiError("Deck not found", status=404)
         if include_subdecks:
@@ -488,6 +494,9 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
                 scope_candidates = installed_scope_candidates(user_id=user_id, local_deck_ids=local_scope_ids)
             else:
                 scope_candidates = sorted(local_scope_ids)
+        elif notes_only and scope_note is not None:
+            from app.repositories.browse_note_repository import clone_scope_roots_for_note
+            scope_candidates = clone_scope_roots_for_note(user_id=user_id, source_deck_id=scope_note.deck_id)
         else:
             install_root_rows = (
                 db.session.query(DeckInstall.local_deck_id)
@@ -1585,10 +1594,11 @@ def _build_browse_detail_payload(
     timezone_name: str,
     card_obj,
 ) -> dict[str, Any]:
-    deck_lookup = browse_card_repository.deck_lookup_for_browse(
-        user_id=user_id,
-        admin_mode=admin_mode,
-    )
+    from app.repositories.browse_note_repository import BrowseNoteReference, detail_deck_lookup
+    if isinstance(card_obj, BrowseNoteReference):
+        deck_lookup = detail_deck_lookup(reference=card_obj)
+    else:
+        deck_lookup = browse_card_repository.deck_lookup_for_browse(user_id=user_id, admin_mode=admin_mode)
     now = _utcnow()
     progress = _load_mode_aware_browse_progress(
         user_id=user_id,

@@ -41,22 +41,24 @@ class BrowseNoteReference:
         return self.note.updated_at
 
 
-def load_note(note_id):
-    return Note.query.options(
-        selectinload(Note.note_type).selectinload(NoteType.field_defs),
-        selectinload(Note.media_assets),
-    ).filter(Note.id == note_id).first()
+def load_note(note_id, *, include_media=True):
+    query = Note.query.options(selectinload(Note.note_type).options(
+        load_only(NoteType.id, NoteType.user_id, NoteType.name, NoteType.field_schema_revision),
+        selectinload(NoteType.field_defs)))
+    if include_media:
+        query = query.options(selectinload(Note.media_assets))
+    return query.filter(Note.id == note_id).first()
 
 
-def load_note_reference(note_id):
-    note = load_note(note_id)
+def load_note_reference(note_id, *, include_media=True):
+    note = load_note(note_id, include_media=include_media)
     if note is not None:
         return note
     # Resolve an old bookmark's identity without loading a presentation or its
     # template. Authorization is always checked on the resulting Note.
     from models.card import card_key_pairs
     pair = card_key_pairs(db.session, [note_id]).get(str(note_id))
-    return load_note(pair[0]) if pair else None
+    return load_note(pair[0], include_media=include_media) if pair else None
 
 
 def installed_scope_candidates(*, user_id, local_deck_ids):
@@ -70,6 +72,45 @@ def installed_scope_candidates(*, user_id, local_deck_ids):
         DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id).where(*filters,
         DeckCloneDeckMap.local_deck_id.in_(local_deck_ids))
     return sorted(int(row[0]) for row in db.session.execute(roots.union(mapped)) if row[0] is not None)
+
+
+def selected_owned_decks(*, user_id, deck_id, include_subdecks):
+    """Fast path for an entirely owned subtree; mixed visibility uses the normal resolver."""
+    root = db.session.get(Deck, deck_id)
+    if root is None or root.deleted_at is not None or root.owner_user_id != user_id:
+        return None
+    decks = {int(root.id): root}
+    frontier = [int(root.id)] if include_subdecks else []
+    while frontier:
+        children = Deck.query.filter(Deck.parent_id.in_(frontier), Deck.deleted_at.is_(None)).all()
+        if any(child.owner_user_id != user_id for child in children):
+            return None
+        frontier = []
+        for child in children:
+            if int(child.id) not in decks:
+                decks[int(child.id)] = child
+                frontier.append(int(child.id))
+    return list(decks.values())
+
+
+def clone_scope_roots_for_note(*, user_id, source_deck_id):
+    """Keep the existing root precedence, resolving only matching maps or unmapped legacy installs."""
+    from models.deck_install import DeckInstall
+    from models.deck_clone_deck_map import DeckCloneDeckMap
+    filters = (DeckInstall.user_id == user_id, DeckInstall.clone_mode == 'logical_overlay',
+        DeckInstall.local_deck_id.isnot(None))
+    roots = db.session.query(DeckInstall.local_deck_id).filter(*filters).distinct().all()
+    mapped = select(DeckCloneDeckMap.id).where(DeckCloneDeckMap.deck_install_id == DeckInstall.id)
+    matches = set(db.session.execute(select(DeckInstall.local_deck_id).where(*filters,
+        or_(mapped.where(DeckCloneDeckMap.source_deck_id == source_deck_id).exists(), ~mapped.exists()))).scalars())
+    return [int(root) for (root,) in roots if root in matches]
+
+
+def detail_deck_lookup(*, reference):
+    deck_id = (reference.clone_scope.source_to_local_deck_id.get(int(reference.note.deck_id or 0))
+        or reference.clone_scope.install.local_deck_id) if reference.clone_scope else reference.note.deck_id
+    rows = db.session.query(Deck.id, Deck.name).filter(Deck.id == deck_id, Deck.deleted_at.is_(None)).all()
+    return dict(rows)
 
 
 def load_voicevox_notes(ids, *, user_id, admin_mode, note_only, include_media=False):
@@ -165,7 +206,9 @@ def deck_counts(context, *, user_id, admin_mode, today_day_index, day_cutoff_utc
     members = union_all(*branches).subquery("browse_note_members") if len(branches) > 1 else branches[0].subquery("browse_note_members")
 
     def build(note_ids=None):
-        query = select(members.c.note_id, members.c.deck_id, literal(1).label("card_count")).distinct()
+        query = select(members.c.note_id, members.c.deck_id, literal(1).label("card_count"))
+        if len(branches) > 1:
+            query = query.distinct()
         if note_ids is not None:
             query = query.where(members.c.note_id.in_(note_ids))
         return query.subquery("browse_note_scope")

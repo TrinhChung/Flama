@@ -23,9 +23,9 @@ def _detail(payload):
     return payload
 
 
-def _context(*, user_id, admin_mode, timezone_name, query_args, scope_only=False):
+def _context(*, user_id, admin_mode, timezone_name, query_args, scope_only=False, scope_note=None):
     return shared._build_browse_query(user_id=user_id, admin_mode=admin_mode,
-        timezone_name=timezone_name, query_args=query_args, notes_only=True, scope_only=scope_only)
+        timezone_name=timezone_name, query_args=query_args, notes_only=True, scope_only=scope_only, scope_note=scope_note)
 
 
 def list_notes(*, user_id, admin_mode, timezone_name, query_args):
@@ -151,8 +151,8 @@ def selected_note_values(*, user_id, admin_mode, timezone_name, note_ids):
     return result
 
 
-def authorized_note(*, user_id, admin_mode, timezone_name, note_id):
-    note = repository.load_note_reference(note_id)
+def authorized_note(*, user_id, admin_mode, timezone_name, note_id, include_media=True):
+    note = repository.load_note_reference(note_id, include_media=include_media)
     if note is None:
         raise shared.BrowseApiError("Note not found", status=404)
     if admin_mode or note.user_id == user_id:
@@ -160,7 +160,7 @@ def authorized_note(*, user_id, admin_mode, timezone_name, note_id):
         # installed deck again would add unrelated scope queries to each edit.
         return repository.BrowseNoteReference(note), None
     context = _context(user_id=user_id, admin_mode=admin_mode, timezone_name=timezone_name,
-        query_args={}, scope_only=True)
+        query_args={}, scope_only=True, scope_note=note)
     if context is None or not context.query.filter(Note.id == note.id).with_entities(Note.id).first():
         raise shared.BrowseApiError("Note not found", status=404)
     scope = None
@@ -174,9 +174,48 @@ def authorized_note(*, user_id, admin_mode, timezone_name, note_id):
     return repository.BrowseNoteReference(note, scope), context
 
 
-def get_note_detail(*, user_id, admin_mode, timezone_name, note_id):
+def _editor_detail(*, reference, user_id, admin_mode, timezone_name):
+    """Serialize the Note editor directly, without discarded live clone content or media metadata."""
+    note = reference.note
+    overlay = None
+    if reference.clone_scope:
+        overrides, release_values = _page_overlay_values([reference])
+        install = reference.clone_scope.install
+        overlay = shared._clone_overlay_fields(card_obj=reference, clone_scope=reference.clone_scope,
+            base_field_values=release_values.get((str(install.applied_release_id or ''), reference.note_id)),
+            note_override_rows=overrides.get((str(install.id), reference.note_id), []))
+    values = overlay.values if overlay else dict(note.field_values or {})
+    definitions = overlay.ordered_defs if overlay else note.note_type.field_defs
+    fields = [{'id': str(field.id), 'name': field.name, 'field_type': field.field_type,
+        'required': bool(field.required), 'position': int(field.position or 0)} for field in definitions]
+    names = {field['name'] for field in fields}
+    fields.extend({'name': name, 'field_type': 'text', 'required': False, 'position': 9999}
+        for name in values if name not in names)
+    fields.sort(key=lambda field: (field['position'], field['name'].lower()))
+    deck_lookup = repository.detail_deck_lookup(reference=reference)
+    now = shared._utcnow()
+    progress = shared._load_mode_aware_browse_progress(user_id=user_id, admin_mode=admin_mode,
+        timezone_name=timezone_name, card_obj=reference, now_utc=now)
+    row = shared.vocabulary_ctrl.build_browse_row(reference, deck_lookup, now,
+        progress_obj=progress, timezone_name=timezone_name, raw_values=values,
+        display_triplet=overlay.display_triplet if overlay else None)
+    if overlay:
+        shared._apply_clone_card_fields(row, overlay=overlay, deck_lookup=deck_lookup)
+    note_payload = {'id': note.id, 'note_type_id': note.note_type_id, 'note_type_name': note.note_type.name or 'NoteType',
+        'deck_id': row['deck_id'], 'deck_name': row['deck_name'], 'field_values': values, 'tags': note.tags or []}
+    if overlay:
+        note_payload.update(deck_install_id=install.id, overlay_revision=int(install.overlay_revision or 0))
+    else:
+        note_payload.update(content_revision=int(note.content_revision or 0),
+            field_schema_revision=int(note.note_type.field_schema_revision or 0))
+    return {'row': _row(row), 'note': note_payload, 'fields': fields, 'can_upload_media': not bool(overlay)}
+
+
+def get_note_detail(*, user_id, admin_mode, timezone_name, note_id, compact=False):
     ref, context = authorized_note(user_id=user_id, admin_mode=admin_mode,
-        timezone_name=timezone_name, note_id=note_id)
+        timezone_name=timezone_name, note_id=note_id, include_media=not compact)
+    if compact:
+        return _editor_detail(reference=ref, user_id=user_id, admin_mode=admin_mode, timezone_name=timezone_name)
     detail = shared._build_browse_detail_payload(user_id=user_id, admin_mode=admin_mode,
         timezone_name=timezone_name, card_obj=ref)
     if ref.clone_scope:
@@ -185,7 +224,7 @@ def get_note_detail(*, user_id, admin_mode, timezone_name, note_id):
     return _detail(detail)
 
 
-def update_note(*, user_id, admin_mode, timezone_name, note_id, payload):
+def update_note(*, user_id, admin_mode, timezone_name, note_id, payload, compact_detail=False):
     ref, _context = authorized_note(user_id=user_id, admin_mode=admin_mode,
         timezone_name=timezone_name, note_id=note_id)
     note = ref.note
@@ -215,6 +254,9 @@ def update_note(*, user_id, admin_mode, timezone_name, note_id, payload):
         result = shared._update_owned_browse_card(user_id=user_id, admin_mode=admin_mode,
             timezone_name=timezone_name, card_obj=ref, note_obj=note, validated=validated)
     result["detail"] = _detail(result["detail"])
+    if compact_detail:
+        result['detail'] = {key: value for key, value in result['detail'].items()
+            if key in {'row', 'note', 'fields', 'can_upload_media'}}
     if "row" in result:
         result["row"] = _row(result["row"])
     return result

@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { fieldValueEditorText } from '@/entities/flashcard/fields'
 import { cleanTextForTts } from '@/entities/audio'
 import { browseApi } from '../api/browseApi'
+import { browseQueryKeys } from '../api/browseQueryKeys'
 import { useBrowseTtsSettings } from './useBrowseTtsSettings'
 import type { useBrowseData } from './useBrowseData'
 import type { useBrowseEditor } from './useBrowseEditor'
@@ -31,7 +32,7 @@ export function useBrowseTts({ data, editor, selection, dialogs }: BrowseTtsOpti
   // Sample card detail query when no card is actively selected but modal is open
   const sampleCardId = activeCardId || (cards.length > 0 ? String(cards[0].card_id) : null)
   const deckSampleQuery = useQuery({
-    queryKey: ['browse', 'card-detail-sample', sampleCardId],
+    queryKey: browseQueryKeys.detail(sampleCardId),
     queryFn: ({ signal }) => browseApi.fetchCardDetail(sampleCardId!, signal),
     enabled: Boolean(!activeCardId && sampleCardId && (isTtsModalOpen || isLocalAudioModalOpen)),
     staleTime: 5 * 60 * 1000,

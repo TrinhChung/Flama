@@ -23,8 +23,7 @@ type VoiceVoxGenerate = {
 }
 type VoiceVoxPreview = { text: string; character_id?: string; api_key?: string; use_opus?: boolean; settings?: Record<string, number> }
 
-/** Separate response shape, while retaining broad ['note-types'] invalidation. */
-export const browseQueryKeys = { noteTypes: ['note-types', 'browse', 'compact'] as const }
+export { browseQueryKeys } from './browseQueryKeys'
 
 export const browseApi = {
   fetchDecks: (signal?: AbortSignal) => apiRequest<{ decks: BrowseDeck[] }>(`${API_BASE_URL}/browse/decks?view=notes`, { signal }),
@@ -36,10 +35,10 @@ export const browseApi = {
     const result = await apiRequest<Omit<BrowseCardsResponse, 'items'> & { items: NoteRow[] }>(`${API_BASE_URL}/browse/notes?${query}`, { signal })
     return { ...result, items: result.items.map(editorRow) }
   },
-  fetchCardDetail: async (id: string, signal?: AbortSignal) => editorDetail(await apiRequest<NoteDetail>(`${API_BASE_URL}/browse/notes/${encodeURIComponent(id)}`, { signal })),
+  fetchCardDetail: async (id: string, signal?: AbortSignal) => editorDetail(await apiRequest<NoteDetail>(`${API_BASE_URL}/browse/notes/${encodeURIComponent(id)}?view=editor`, { signal })),
   createNote: (body: BrowseNoteCreate) => apiJson<{ id: string; card_ids?: Array<string | number>; first_card_id?: string | number }>(`${API_BASE_URL}/notes`, 'POST', body),
   async updateCard(id: string, body: BrowseNoteUpdate) {
-    const result = await apiJson<{ detail: NoteDetail }>(`${API_BASE_URL}/browse/notes/${encodeURIComponent(id)}?view=rows`, 'PATCH', body)
+    const result = await apiJson<{ detail: NoteDetail }>(`${API_BASE_URL}/browse/notes/${encodeURIComponent(id)}?view=editor`, 'PATCH', body)
     return { ...result, detail: editorDetail(result.detail) }
   },
   deleteNote: (id: string) => apiJson(`${API_BASE_URL}/browse/notes/${encodeURIComponent(id)}`, 'DELETE'),

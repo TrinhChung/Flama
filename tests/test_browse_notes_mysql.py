@@ -3,6 +3,7 @@
 import os
 import unittest
 import json
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -151,6 +152,62 @@ class BrowseNotesMySQLTests(unittest.TestCase):
             and 'limit' in sql.lower() and not sql.lstrip().lower().startswith('select count(')]
         self.assertEqual(note_page_reads, [], 'An empty result should not repeat the search to fetch a page')
 
+    def test_owned_subtree_and_detail_avoid_whole_collection_scope(self):
+        deck_id = fixtures.seed_owned_deck(self.learner_id, count=4)
+        with patch.object(browse_card_service.vocabulary_ctrl, 'collect_accessible_browse_decks',
+                side_effect=AssertionError('A wholly owned selection needs no collection scan')):
+            page, _ = self._notes(deck_id=deck_id)
+            note_id = page['items'][0]['note_id']
+            with self.app.test_request_context('/api/browse/notes/editor'), fixtures.StatementCounter() as capture:
+                detail = browse_note_service.get_note_detail(user_id=self.learner_id, admin_mode=False,
+                    timezone_name='UTC', note_id=note_id, compact=True)
+        self.assertEqual(page['total'], 4)
+        self.assertEqual(detail['note']['id'], note_id)
+        self.assertNotIn('media_assets', detail)
+        self.assertNotIn('note_type_fields', detail)
+        self.assertFalse(any('from media_assets' in sql.lower() for sql in capture.statements))
+
+        # A foreign folder can be an accessible ancestor of the learner's Note.
+        # Mixed subtrees must preserve that visibility through the normal path.
+        from models.deck import Deck
+        stranger = fixtures.seed_learner(username='mixed-owner')
+        folder = Deck(name='Foreign folder', owner_user_id=stranger, parent_id=deck_id)
+        db.session.add(folder)
+        db.session.flush()
+        child = Deck(name='Owned grandchild', owner_user_id=self.learner_id, parent_id=folder.id)
+        db.session.add(child)
+        db.session.flush()
+        note = db.session.get(Note, note_id)
+        note.deck_id = child.id
+        db.session.commit()
+        mixed, _ = self._notes(deck_id=deck_id)
+        self.assertEqual(mixed['total'], 4)
+        self.assertIn(note_id, {row['note_id'] for row in mixed['items']})
+
+    def test_clone_editor_reuses_release_schema_and_preserves_full_detail_contract(self):
+        from app.repositories import deck_release_repository
+        from app.services import flashcards_share
+        ids = fixtures.seed_clone_install(self.learner_id, count=4, release=True)
+        fixtures.seed_clone_install(self.learner_id, count=2, release=True, prefix='60000000')
+        with self.app.test_request_context('/api/browse/notes/editor'):
+            with patch.object(deck_release_repository, 'list_release_history_changes',
+                    wraps=deck_release_repository.list_release_history_changes) as history, patch.object(
+                    flashcards_share, 'resolve_clone_scope_for_local_deck',
+                    wraps=flashcards_share.resolve_clone_scope_for_local_deck) as scopes:
+                compact = browse_note_service.get_note_detail(user_id=self.learner_id, admin_mode=False,
+                    timezone_name='UTC', note_id=ids['note_ids'][0], compact=True)
+            self.assertEqual(history.call_count, 1)
+            self.assertEqual(scopes.call_count, 1, 'Unrelated installs must not be resolved for one Note')
+        with self.app.test_request_context('/api/browse/notes/full'):
+            full = browse_note_service.get_note_detail(user_id=self.learner_id, admin_mode=False,
+                timezone_name='UTC', note_id=ids['note_ids'][0])
+        self.assertEqual(compact['note']['field_values'], full['note']['field_values'])
+        self.assertEqual(compact['row'], full['row'])
+        self.assertEqual(compact['fields'], full['fields'])
+        self.assertIn('media_assets', full)
+        self.assertIn('note_type_fields', full)
+        self.assertFalse(compact['can_upload_media'])
+
     def _assert_clone_values(self, *, release):
         ids = fixtures.seed_clone_install(self.learner_id, count=4, release=release, prefix='40000000' if release else '30000000')
         page, _ = self._notes(deck_id=ids['local_root_id'])
@@ -208,14 +265,18 @@ class BrowseNotesMySQLTests(unittest.TestCase):
         listing = client.get('/api/browse/notes?view=rows').get_json()
         self.assertEqual(listing['total'], 2)
         detail = client.get(f'/api/browse/notes/{note.id}').get_json()
+        editor = client.get(f'/api/browse/notes/{note.id}?view=editor').get_json()
+        self.assertEqual(editor['note']['field_values'], detail['note']['field_values'])
+        self.assertNotIn('media_assets', editor)
         token = client.get('/api/session').get_json()['csrf_token']
         headers = {'X-CSRF-Token': token}
         payload = {'field_values': {'Word': 'from-http'},
             'expected_content_revision': detail['note']['content_revision'],
             'expected_field_schema_revision': detail['note']['field_schema_revision']}
-        saved = client.patch(f'/api/browse/notes/{note.id}?view=rows', json=payload, headers=headers)
+        saved = client.patch(f'/api/browse/notes/{note.id}?view=editor', json=payload, headers=headers)
         self.assertEqual(saved.status_code, 200, saved.get_json())
         self.assertEqual(saved.get_json()['detail']['note']['field_values']['Word'], 'from-http')
+        self.assertNotIn('media_assets', saved.get_json()['detail'])
         stale = client.patch(f'/api/browse/notes/{note.id}?view=rows', json=payload, headers=headers)
         self.assertEqual(stale.status_code, 409, stale.get_json())
 
