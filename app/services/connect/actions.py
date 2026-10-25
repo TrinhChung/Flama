@@ -32,6 +32,7 @@ from app.services import (
     flashcards_share,
     flashcards_share_service,
     flama_connect_media_service,
+    quota_service,
     study_service,
 )
 from app.services.anki_content_normalizer import (
@@ -420,6 +421,9 @@ def _add_note(user_id: int, raw_note: object, *, standard, uow, scopes) -> int:
             check_quota(user_id, max(inline_bytes, extra_bytes))
         except flama_connect_media_service.ConnectMediaError as exc:
             raise ConnectError(str(exc)) from exc
+        quota = quota_service.consume_media(user_id, inline_bytes)
+        if not quota.allowed:
+            raise ConnectError(quota.message)
     identities = NoteIdentityLookup(user_id)
     if not standard and not prepared.allow_duplicate and _is_duplicate(user_id, prepared, lookup=identities):
         existing_note = _find_existing_note(user_id, prepared, lookup=identities)

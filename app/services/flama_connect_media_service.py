@@ -17,6 +17,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.datastructures import FileStorage
 
+from app.services import quota_service
 from app.validators.flashcard_input import (
     RequestValidationError,
     resolve_safe_storage_path,
@@ -204,6 +205,9 @@ def stage_import_media(
     max_items = _config_int("CONNECT_IMPORT_MEDIA_MAX_ITEMS", 20_000)
     if active_count >= max_items:
         raise ConnectMediaError("Phiên đồng bộ đã vượt quá số lượng media cho phép.")
+    quota = quota_service.consume_media(user_id, validated.size_bytes)
+    if not quota.allowed:
+        raise ConnectMediaError(quota.message)
     relative_path = Path("connect_import") / str(user_id) / session.id / validated.storage_filename
     full_path = _safe_path(relative_path)
     full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -328,6 +332,9 @@ def stage_validated_pending(*, user_id, filename, uploaded, uow=None, standard=F
         from app.services.connect.mining_media import check_quota
         check_quota(user_id, validated.size_bytes, incoming_items=1)
 
+    quota = quota_service.consume_media(user_id, validated.size_bytes)
+    if not quota.allowed:
+        raise ConnectMediaError(quota.message)
     relative_path = (
         Path("connect_pending") / str(user_id) / validated.storage_filename
     )

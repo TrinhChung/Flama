@@ -85,7 +85,6 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_student_email_verification.py",
             "tests/test_transactional_email_service.py",
             "tests/test_profile_api.py",
-            "tests/test_daily_rate_limit.py",
         ],
         "frontend_tests": [
             "src/features/profile/schemas.test.ts",
@@ -749,6 +748,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "source_patterns": [
             "app/api/v1/admin/**",
             "app/services/admin_*.py",
+            "app/services/quota_service.py",
+            "app/repositories/quota_repository.py",
+            "models/quota.py",
+            "frontend/src/features/admin/**",
             "app/services/bootstrap_admin*.py",
             "app/services/user_roles.py",
             "app/services/user_management_schema.py",
@@ -763,13 +766,18 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "backend_tests": [
             "tests/test_admin_analytics_api.py",
             "tests/test_admin_fee_config.py",
+            "tests/test_admin_quotas_api.py",
+            "tests/test_quota_service.py",
             "tests/test_admin_payouts_api.py",
             "tests/test_admin_rest_api_v1.py",
             "tests/test_admin_user_roles.py",
             "tests/test_bootstrap_admin_credentials.py",
             "tests/test_bootstrap_admin_sync.py",
         ],
-        "frontend_tests": [],
+        "frontend_tests": [
+            "src/features/admin/pages/__tests__/AdminMcpTokensBaseline.characterization.test.tsx",
+            "src/features/admin/pages/__tests__/AdminQuotasPage.test.tsx",
+        ],
     },
     "analytics": {
         "source_patterns": [
@@ -1060,7 +1068,6 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/routes/spa_routes.py",
             "app/services/__init__.py",
             "app/services/common/**",
-            "app/services/daily_rate_limit_service.py",
             "app/services/rate_limiter_engine.py",
             "app/services/redis_state_service.py",
             "app/services/rest_api_service.py",
@@ -1139,7 +1146,7 @@ SPA_CONTRACT_SOURCE_PATTERNS = (
 REDIS_CONTRACT_SOURCE_PATTERNS = (
     "app/services/redis_state_service.py",
     "app/services/login_rate_limit_service.py",
-    "app/services/daily_rate_limit_service.py",
+    "app/services/quota_service.py",
     "app/api/v1/health.py",
     "requirements.txt",
     "tests/test_shared_state_services.py",

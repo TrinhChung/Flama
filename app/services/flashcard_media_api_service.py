@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.services import deck_working_tree_service
+from app.services import deck_working_tree_service, quota_service
 from app.services.media_field_codec import join_media_field_urls, split_media_field_value
 from app.validators import (
     RequestValidationError,
@@ -152,6 +152,9 @@ def upload_media(
             status=exc.status,
             field=exc.field,
         ) from exc
+    quota = quota_service.consume_media(user_id, validated.size_bytes)
+    if not quota.allowed:
+        raise MediaApiError("MEDIA_QUOTA_EXCEEDED", quota.message, status=429)
     full_path.parent.mkdir(parents=True, exist_ok=True)
     full_path.write_bytes(validated.content)
     asset = MediaAsset(
@@ -374,6 +377,19 @@ def upload_media_batch(
                     "status": "failed",
                     "error": exc.code,
                     "message": str(exc),
+                })
+                failed_count += 1
+                continue
+
+            quota = quota_service.consume_media(user_id, validated.size_bytes)
+            if not quota.allowed:
+                results.append({
+                    "item_id": item_id,
+                    "note_id": raw_note_id,
+                    "field_name": raw_field_name,
+                    "status": "failed",
+                    "error": "MEDIA_QUOTA_EXCEEDED",
+                    "message": quota.message,
                 })
                 failed_count += 1
                 continue

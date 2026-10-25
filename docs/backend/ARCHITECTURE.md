@@ -117,13 +117,14 @@ Over 1,870 lines of administrative commands registered under `@app.cli.command`:
 ### 3.1 Canonical API Architecture (`app/api/v1/`)
 All modern endpoints are consolidated under the `/api` prefix via `api_v1_bp` (`app/api/v1/__init__.py`).
 
-#### Global Middleware & Rate Limiting
-`_enforce_daily_rate_limit()` evaluates daily request quotas per authenticated user tier:
-- **Regular Learner**: 300 requests/day
-- **Creator Tier**: 2,000 requests/day
-- **Enterprise Tier**: 10,000 requests/day
-- Excluded paths: `/health`, `/identity/login`, `/identity/session`, `/study/`, billing webhooks, and media proxies.
-- Rate limit headers attached to every response: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
+#### Usage Quotas
+Web app requests under `/api` are not metered: studying, browsing, the dashboard and settings are free.
+`app/services/quota_service.py` meters three kinds instead:
+- **api**: Flama Connect actions authenticated by a user API token (`app/connect/request_pipeline.py`); a `multi` batch costs one unit per action.
+- **mcp**: `tools/call` on private tools (`app/connect/mcp.py`); `initialize`, `tools/list` and public tools are free.
+- **media**: bytes a user uploads or crawls and the server stores (note media, pasted images, image library uploads, Connect media); limits are in MB.
+
+Limits live in `quota_policies` (per kind: monitor/enforce, day/month/year period, role defaults) and `user_quota_overrides` (per user and kind, optional expiry), both edited on `/admin/quotas`. One Redis script checks the limit and increments the day, month and year counters plus per-period usage and over-limit rankings (kept about 400 days). In monitor mode nothing is blocked; over-limit traffic is only ranked. Limits are cached per worker for 30 seconds. `RATE_LIMIT_DAILY_ENABLED=false` turns metering off, and `RATE_LIMIT_DAILY_TIMEZONE` sets the period boundaries.
 
 #### Canonical Blueprints Matrix
 | Blueprint | Source Path | Base Prefix | Responsibility |

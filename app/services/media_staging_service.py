@@ -16,7 +16,7 @@ from uuid import uuid4
 from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.services import redis_state_service
+from app.services import quota_service, redis_state_service
 from app.services.image_processor import process_image_preset
 from app.services.image_security_service import validate_image_security
 from app.validators import RequestValidationError, resolve_safe_storage_path
@@ -109,6 +109,10 @@ def stage_pasted_image(
         preset_name="note_image",
         usage_type="flashcard_media",
     )
+
+    quota = quota_service.consume_media(user_id, processed.size_bytes)
+    if not quota.allowed:
+        raise RequestValidationError(quota.message, field="image", code="MEDIA_QUOTA_EXCEEDED", status=429)
 
     # 3. Store in temporary staging directory
     root = (upload_root or _upload_root()).resolve()

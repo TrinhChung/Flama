@@ -6,10 +6,7 @@ the public HTTP namespace is intentionally unversioned at ``/api``.
 
 from __future__ import annotations
 
-from flask import Blueprint, g, jsonify, request
-from flask_login import current_user
-
-from app.services import daily_rate_limit_service
+from flask import Blueprint
 
 from .analytics import analytics_bp
 from .admin import admin_bp
@@ -39,78 +36,6 @@ from .worksheets import worksheets_bp
 
 
 api_v1_bp = Blueprint("api_v1", __name__, url_prefix="/api")
-
-
-@api_v1_bp.before_request
-def _enforce_daily_rate_limit():
-    if request.method == "OPTIONS":
-        return None
-
-    path = request.path
-    if path in {"/api/health", "/api/v1/health", "/api/csrf-token"} or path.startswith(
-        (
-            "/api/identity/login",
-            "/api/identity/register",
-            "/api/identity/logout",
-            "/api/auth/login",
-            "/api/auth/register",
-            "/api/auth/forgot-password",
-            "/api/auth/reset-password",
-            "/api/auth/google",
-            "/api/identity/auth/google",
-            "/api/billing/webhook",
-            "/media/proxy",
-            "/api/study/",
-        )
-    ):
-        return None
-
-
-    if not getattr(current_user, "is_authenticated", False):
-        return None
-
-    quota = daily_rate_limit_service.resolve_user_daily_quota(current_user)
-    if quota is None:
-        _, reset_epoch = daily_rate_limit_service.get_current_day_bucket()
-        g.daily_rate_limit_headers = daily_rate_limit_service.build_rate_limit_headers(
-            quota=None, remaining=-1, reset_epoch=reset_epoch
-        )
-        return None
-
-    allowed, count, remaining, reset_epoch = daily_rate_limit_service.consume_daily_quota(
-        int(current_user.id), quota
-    )
-    g.daily_rate_limit_headers = daily_rate_limit_service.build_rate_limit_headers(
-        quota=quota, remaining=remaining, reset_epoch=reset_epoch
-    )
-
-    if not allowed:
-        headers = g.daily_rate_limit_headers
-        response = jsonify(
-            {
-                "error": "RATE_LIMIT_EXCEEDED",
-                "message": (
-                    f"Bạn đã sử dụng hết hạn mức {quota} requests trong ngày. "
-                    "Hạn mức sẽ được làm mới vào ngày mai."
-                ),
-                "limit": quota,
-                "remaining": 0,
-                "reset_at": reset_epoch,
-            }
-        )
-        response.status_code = 429
-        response.headers.update(headers)
-        return response
-
-    return None
-
-
-@api_v1_bp.after_request
-def _attach_rate_limit_headers(response):
-    headers = getattr(g, "daily_rate_limit_headers", None)
-    if headers:
-        response.headers.update(headers)
-    return response
 
 
 api_v1_bp.register_blueprint(health_bp)

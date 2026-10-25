@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
+from app.services import quota_service
 from app.services.image_processor import process_image_preset
 from app.services.image_queue_service import enqueue_image_job
 from app.services.image_security_service import (
@@ -219,6 +220,9 @@ def ingest_image(
         upload_root=root,
         relative_path=relative_path,
     )
+    quota = quota_service.consume_media(user_id, processed.size_bytes)
+    if not quota.allowed:
+        raise RequestValidationError(quota.message, field="image", code="MEDIA_QUOTA_EXCEEDED", status=429)
     managed_path.parent.mkdir(parents=True, exist_ok=True)
     managed_path.write_bytes(processed.content)
 

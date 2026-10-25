@@ -13,7 +13,7 @@ from urllib.parse import urljoin
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.datastructures import FileStorage
 
-from app.services import deck_working_tree_service
+from app.services import deck_working_tree_service, quota_service
 from app.services.image_sanitizer import sanitize_shared_image
 from app.services.remote_image_fetcher import fetch_remote_html, fetch_remote_image
 from app.validators import (
@@ -310,6 +310,9 @@ def crawl_and_save_note_media(
     except RequestValidationError as exc:
         raise ImageCrawlError(exc.code, str(exc), status=exc.status, field=exc.field) from exc
 
+    quota = quota_service.consume_media(user_id, sanitized.size_bytes)
+    if not quota.allowed:
+        raise ImageCrawlError("MEDIA_QUOTA_EXCEEDED", quota.message, status=429)
     full_path.parent.mkdir(parents=True, exist_ok=True)
     full_path.write_bytes(sanitized.content)
 
@@ -542,6 +545,19 @@ def crawl_note_media_batch(
                     "status": "failed",
                     "error": exc.code,
                     "message": str(exc),
+                })
+                failed_count += 1
+                continue
+
+            quota = quota_service.consume_media(user_id, sanitized.size_bytes)
+            if not quota.allowed:
+                results.append({
+                    "item_id": item_id,
+                    "note_id": raw_note_id,
+                    "field_name": raw_field_name,
+                    "status": "failed",
+                    "error": "MEDIA_QUOTA_EXCEEDED",
+                    "message": quota.message,
                 })
                 failed_count += 1
                 continue

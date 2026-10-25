@@ -6,6 +6,7 @@ import {
   ChartNoAxesColumn,
   CreditCard,
   Download,
+  Gauge,
   Headphones,
   Heart,
   HelpCircle,
@@ -104,6 +105,7 @@ export function AppSidebar({
           { title: t('sidebar.item.admin_fees'), url: '/admin/fees', icon: BadgePercent },
         ]
       : [{ title: t('sidebar.item.admin_fees'), url: '/admin/fees', icon: BadgePercent }]),
+    { title: t('sidebar.item.admin_quotas'), url: '/admin/quotas', icon: Gauge },
     ...(bootstrap.links.admin_tts
       ? [{ title: t('sidebar.item.admin_tts'), url: bootstrap.links.admin_tts, icon: AudioLines }]
       : []),
