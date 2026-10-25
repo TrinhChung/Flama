@@ -152,6 +152,8 @@ Sau khi AI sinh danh sách field, bộ input, mapping và mã giao diện, thự
 3. Thử bấm nút loa 🔊 và kiểm tra màu sắc, bố cục đã đúng ý chưa.
 4. Mở **Dữ liệu mẫu** để thay giá trị thử. Các giá trị này chỉ dùng xem trước.
 
+Mỗi input có mẫu đúng kiểu để sửa ngay: text, rich text trực quan (có HTML nâng cao), Markdown, danh sách array và media. Array có thể thêm/xóa/đổi thứ tự item; JSON nâng cao giữ được list lồng và báo dữ liệu sai mà không gửi bản sai sang preview. Ảnh, audio và diagram có mẫu hệ thống; có thể thay URL media hợp lệ để thử nguồn khác. Có thể khôi phục từng mẫu, tất cả mẫu hoặc đặt giá trị rỗng. Sample chỉ nằm trong bộ nhớ của phiên editor: đóng/mở bảng vẫn giữ, tải lại trang sẽ reset; sample không đánh dấu template/mapping chưa lưu và không đi vào DB hay lịch sử phiên bản. Trang mapping có cùng editor mẫu, dùng đúng kiểu của field được gắn.
+
 ### Bước 5: Gắn Template Và Mapping
 1. Tại Note Type, mở tab **Templates** → **Gắn template**.
 2. Chọn thiết kế, ghép các input với field cùng kiểu và xác nhận gắn.

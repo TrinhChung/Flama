@@ -190,6 +190,17 @@ def _media_error(error: str, message: str, *, status: int = 404):
 
 @flashcards_bp.route("/media/proxy/<asset_id>", methods=["GET"])
 def proxy_media(asset_id: str):
+    # Reserved, application-owned samples are available without a MediaAsset.
+    from app.services.template_preview_sample_service import preview_sample_media
+    sample = preview_sample_media(asset_id)
+    if sample is not None:
+        from io import BytesIO
+        data, mime_type, filename = sample
+        response = send_file(BytesIO(data), mimetype=mime_type,
+                             download_name=filename, conditional=True, max_age=86400)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        return response
     asset = MediaAsset.query.filter(MediaAsset.id == asset_id).first()
     if not asset:
         return _media_error("FIELD_NOT_FOUND", "Media asset not found.", status=404)

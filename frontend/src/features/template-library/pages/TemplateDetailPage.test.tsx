@@ -109,9 +109,9 @@ describe('TemplateDetailPage composes editor, sandbox preview, history and usage
     await act(async () => resolveGet(server)); await flush()
     expect(container.querySelector('textarea')?.readOnly).toBe(false); expect(findButton('Lưu thay đổi').disabled).toBe(true)
   })
-  it('renders legal prototype-named sample keys as empty inputs', async () => {
+  it('renders safe defaults for legal prototype-named sample keys', async () => {
     server.input_schema = ['__proto__', 'constructor'].map((key) => ({ key, label: key, type: 'text', required: false }))
-    await render(); await act(async () => findButton('Dữ liệu mẫu').click()); expect(document.querySelector<HTMLInputElement>('#sample-__proto__')?.value).toBe(''); expect(document.querySelector<HTMLInputElement>('#sample-constructor')?.value).toBe('')
+    await render(); await act(async () => findButton('Dữ liệu mẫu').click()); expect(document.querySelector<HTMLInputElement>('#sample-__proto__')?.value).toBe('Sample text'); expect(document.querySelector<HTMLInputElement>('#sample-constructor')?.value).toBe('Sample text')
   })
   it('cancel keeps HTML changes while Apply marks schema dirty and global Save writes the combined draft', async () => {
     await render(); await text(container.querySelector('textarea')!, 'HTML draft')

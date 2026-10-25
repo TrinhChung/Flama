@@ -4,6 +4,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SampleValuesSheet } from './SampleValuesSheet'
 import { inputSchemaPreviewFields } from '../lib/previewFields'
+import { useState } from 'react'
+import type { TemplateSampleValues } from '../model/previewSamples'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -33,7 +35,7 @@ describe('SampleValuesSheet', () => {
     { key: 'Audio', label: 'Phát âm', type: 'audio' },
   ]
 
-  it('uses an input per text item, a textarea for formatted text and a hint for media', async () => {
+  it('shows editable type-specific defaults and playable media instead of placeholders', async () => {
     const onChange = vi.fn()
     await act(async () => root.render(<SampleValuesSheet open onOpenChange={vi.fn()} title="Samples" description="Preview only" idPrefix="sample"
       items={items} values={{ Word: 'neko' }} onChange={onChange} onReset={vi.fn()} />))
@@ -42,26 +44,71 @@ describe('SampleValuesSheet', () => {
     expect(word.value).toBe('neko')
     const meaning = document.querySelector<HTMLTextAreaElement>('#sample-Meaning')!
     expect(meaning.tagName).toBe('TEXTAREA')
-    expect(meaning.placeholder).toBe('Nghĩa mặc định')
-    expect(document.querySelector('#sample-Audio')).toBeNull()
-    expect(document.body.textContent).toContain('Preview dùng mẫu media hệ thống an toàn.')
+    expect(meaning.value).toContain('## Sample heading')
+    expect(document.querySelector<HTMLInputElement>('#sample-Audio')?.value).toBe('/media/proxy/sample-audio')
+    expect(document.querySelector('audio')?.getAttribute('src')).toContain('/media/proxy/sample-audio')
     // Only explicit samples are marked as overrides.
     expect(document.body.textContent?.match(/Mẫu tùy chỉnh/g)).toHaveLength(1)
 
     await type(meaning, 'con mèo')
     expect(onChange).toHaveBeenLastCalledWith('Meaning', 'con mèo')
-    await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'Xem trước giá trị rỗng')!.click())
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Để trống Phát âm"]')!.click())
     expect(onChange).toHaveBeenLastCalledWith('Audio', '')
   })
 
-  it('keeps prototype-named keys empty and resets through the callback', async () => {
+  it('does not mistake inherited values for samples and resets through the callback', async () => {
     const onReset = vi.fn()
     const values = Object.create(null) as Record<string, string>
     await act(async () => root.render(<SampleValuesSheet open onOpenChange={vi.fn()} title="Samples" description="Preview only" idPrefix="mapping-sample"
       items={[{ key: '__proto__', label: '__proto__', type: 'text' }]} values={values} onChange={vi.fn()} onReset={onReset} emptyText="None" />))
-    expect(document.querySelector<HTMLInputElement>('#mapping-sample-__proto__')?.value).toBe('')
+    expect(document.querySelector<HTMLInputElement>('#mapping-sample-__proto__')?.value).toBe('Sample text')
     await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'Dùng mẫu mặc định')!.click())
     expect(onReset).toHaveBeenCalledOnce()
+  })
+
+  it('edits native array items, reorders and clears them, and retains invalid JSON without sending it', async () => {
+    const onChange = vi.fn()
+    function Editor() {
+      const [values, setValues] = useState<TemplateSampleValues>({})
+      return <SampleValuesSheet open onOpenChange={vi.fn()} title="Samples" description="Preview only" idPrefix="sample" items={[{ key: 'options', label: 'Options', type: 'array' }]}
+        values={values} onChange={(key, value) => { onChange(key, value); setValues((old) => ({ ...old, [key]: value })) }} onReset={() => setValues({})} />
+    }
+    await act(async () => root.render(<Editor />))
+    await type(document.querySelector<HTMLInputElement>('#sample-options')!, 'First')
+    expect(onChange).toHaveBeenLastCalledWith('options', ['First', 'Second item', 'Third item'])
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Đưa phần tử 1 xuống"]')!.click())
+    expect(onChange).toHaveBeenLastCalledWith('options', ['Second item', 'First', 'Third item'])
+    await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'JSON nâng cao')!.click())
+    const code = document.querySelector<HTMLTextAreaElement>('#sample-options')!
+    onChange.mockClear()
+    await type(code, '[1]')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('JSON list')
+    await type(code, '["one",["two",""]]')
+    expect(onChange).toHaveBeenLastCalledWith('options', ['one', ['two', '']])
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Để trống Options"]')!.click())
+    expect(onChange).toHaveBeenLastCalledWith('options', [])
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Khôi phục mẫu Options"]')!.click())
+    expect(onChange).toHaveBeenLastCalledWith('options', ['First item', 'Second item', 'Third item'])
+  })
+
+  it('edits rich text visually and strips active markup from the sample', async () => {
+    const onChange = vi.fn()
+    await act(async () => root.render(<SampleValuesSheet open onOpenChange={vi.fn()} title="Samples" description="Preview only" idPrefix="sample"
+      items={[{ key: 'rich', label: 'Rich', type: 'richtext' }]} values={{}} onChange={onChange} onReset={vi.fn()} />))
+    const editor = document.querySelector<HTMLDivElement>('#sample-rich')!
+    expect(editor.getAttribute('contenteditable')).toBe('true')
+    expect(editor.querySelector('strong')?.textContent).toBe('Sample text')
+    await act(async () => {
+      editor.innerHTML = '<p><strong>Safe</strong><img src="x" onerror="alert(1)"></p>'
+      editor.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(onChange).toHaveBeenLastCalledWith('rich', '<p><strong>Safe</strong></p>')
+    expect(editor.querySelector('img')).toBeNull()
+    await act(async () => { editor.innerHTML = '<p><br></p>'; editor.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(onChange).toHaveBeenLastCalledWith('rich', '')
+    await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'HTML nâng cao')!.click())
+    expect(document.querySelector('#sample-rich')?.tagName).toBe('TEXTAREA')
   })
 })
 
