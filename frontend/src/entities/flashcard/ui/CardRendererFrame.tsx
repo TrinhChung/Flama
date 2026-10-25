@@ -1,59 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { resolveBackendUrl } from '@/config/env'
-import { cn } from '@/lib/utils'
+import { useMemo } from 'react'
+import { useCardRendererFrame } from '../hooks/useCardRendererFrame'
+import { cn } from '@/shared/lib'
 import type {
   CardRendererFrameProps,
   CardRendererSlotContext,
 } from '../model/types'
 
-declare global {
-  interface Window {
-    FlamaCardRendererHost?: {
-      createRendererFrameController: (
-        iframeEl: HTMLIFrameElement,
-        options?: Record<string, unknown>,
-      ) => {
-        render: (payload: unknown, options?: Record<string, unknown>) => void
-        reveal: (payload?: Record<string, unknown>) => void
-        destroy: () => void
-      }
-      normalizeRendererSidePayload: (payload: unknown) => {
-        html: string
-        allowed_media_urls: string[]
-        allowed_audio_urls: string[]
-      }
-      createNoticeHtml: (message: string) => string
-    }
-  }
-}
-
-let scriptLoadPromise: Promise<void> | null = null
-const RENDERER_HOST_VERSION = 'renderer-focus-release-v4'
 const EMPTY_FIELD_DEFS: unknown[] = []
 const EMPTY_FIELD_VALUES: Record<string, string> = {}
-
-function ensureRendererScript(): Promise<void> {
-  if (window.FlamaCardRendererHost) {
-    return Promise.resolve()
-  }
-  if (scriptLoadPromise) {
-    return scriptLoadPromise
-  }
-  scriptLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = resolveBackendUrl(
-      `/static/js/card_renderer_host.js?v=${RENDERER_HOST_VERSION}`,
-    )
-    script.async = true
-    script.onload = () => resolve()
-    script.onerror = (err) => {
-      scriptLoadPromise = null
-      reject(err)
-    }
-    document.body.appendChild(script)
-  })
-  return scriptLoadPromise
-}
 
 export function CardRendererFrame({
   cardId,
@@ -67,6 +21,10 @@ export function CardRendererFrame({
   scopeId,
   fieldDefs = EMPTY_FIELD_DEFS,
   fieldValues = EMPTY_FIELD_VALUES,
+  candidateHash,
+  mediaBaseUrl,
+  onDiagnostic,
+  onReady,
   active = true,
   enableLivePatch = false,
   fillHeight = false,
@@ -77,16 +35,11 @@ export function CardRendererFrame({
   toolbarSlot,
   overlaySlot,
 }: CardRendererFrameProps) {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null)
-  const controllerRef = useRef<ReturnType<
-    NonNullable<typeof window.FlamaCardRendererHost>['createRendererFrameController']
-  > | null>(null)
-  const [scriptLoaded, setScriptLoaded] = useState(Boolean(window.FlamaCardRendererHost))
-  const [scriptFailed, setScriptFailed] = useState(false)
-  const activeSide = revealed ? 'back' : 'front'
-  const rawPayload = revealed
-    ? backPayload || backHtml || ''
-    : frontPayload || frontHtml || ''
+  const { iframeRef, scriptFailed, activeSide, rawPayload } = useCardRendererFrame({
+    cardId, noteId, revealed, frontPayload, backPayload, frontHtml, backHtml,
+    scope, scopeId, fieldDefs, fieldValues, active, enableLivePatch, fillHeight,
+    candidateHash, mediaBaseUrl, onDiagnostic, onReady,
+  })
 
   const slotContext: CardRendererSlotContext = useMemo(
     () => ({
@@ -107,112 +60,6 @@ export function CardRendererFrame({
   const activeFooter = slots?.footer ?? footerSlot ?? slots?.bottomToolbar
   const activeToolbar = slots?.toolbar ?? toolbarSlot
   const activeOverlay = slots?.overlay ?? overlaySlot
-
-  useEffect(() => {
-    let mounted = true
-    ensureRendererScript()
-      .then(() => {
-        if (mounted) {
-          setScriptLoaded(true)
-          setScriptFailed(false)
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setScriptLoaded(false)
-          setScriptFailed(true)
-        }
-      })
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!scriptLoaded) return
-    const iframeEl = iframeRef.current
-    if (!iframeEl) return
-    const host = window.FlamaCardRendererHost
-    if (!host) return
-
-    const controller = host.createRendererFrameController(iframeEl, {
-      minHeight: 240,
-      autoHeight: !fillHeight,
-      fillHeight,
-      enableLivePatch,
-      mediaBaseUrl: resolveBackendUrl('/'),
-    })
-    controllerRef.current = controller
-
-    return () => {
-      if (controllerRef.current === controller) {
-        controllerRef.current = null
-      }
-      controller.destroy()
-    }
-  }, [scriptLoaded, enableLivePatch, fillHeight])
-
-  useEffect(() => {
-    if (!active || !scriptLoaded) return
-    const controller = controllerRef.current
-    const host = window.FlamaCardRendererHost
-    if (!controller || !host) return
-    const normalizedPayload = host.normalizeRendererSidePayload(
-      rawPayload || { html: '' },
-    )
-    const payloadForFrame = normalizedPayload.html.trim()
-      ? normalizedPayload
-      : { html: host.createNoticeHtml('Không có nội dung thẻ.') }
-
-    controller.render(payloadForFrame, {
-      padding: fillHeight ? '0' : '12px',
-      background: 'transparent',
-      color: 'initial',
-      config: {
-        mode: scope,
-        side: activeSide,
-        scope,
-        scopeId: scopeId || '',
-      },
-      context: {
-        cardId: cardId || '',
-        noteId: noteId || '',
-        fieldValues,
-        fieldDefs,
-      },
-    })
-  }, [
-    active,
-    scriptLoaded,
-    activeSide,
-    cardId,
-    noteId,
-    rawPayload,
-    scope,
-    scopeId,
-    fieldDefs,
-    fieldValues,
-    enableLivePatch,
-    fillHeight,
-  ])
-
-  useEffect(() => {
-    if (!active || !scriptLoaded) return
-    controllerRef.current?.reveal({
-      side: activeSide,
-      reason: revealed ? 'show_answer' : 'load_card',
-    })
-  }, [
-    active,
-    scriptLoaded,
-    activeSide,
-    revealed,
-    cardId,
-    noteId,
-    rawPayload,
-    fieldDefs,
-    fieldValues,
-  ])
 
   const viewport = (
     <>

@@ -2,11 +2,11 @@ import '@/shared/config/i18n'
 import { useState, type ReactNode } from 'react'
 import { Eye, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Card } from '@/components/ui/card'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { cn } from '@/lib/utils'
-import type { CardRendererSlots } from '../model/types'
+import { Card, NativeSelect, NativeSelectOption } from '@/shared/ui'
+import { cn } from '@/shared/lib'
+import type { CardRendererSlots, RendererDiagnostic, RendererReadyEvent } from '../model/types'
 import { CardDisplay } from './CardDisplay'
+import { usePreviewDiagnostics } from '../hooks/usePreviewDiagnostics'
 import { CardSideToggle, type CardSide } from './CardSideToggle'
 
 export interface CardPreviewTemplateOption {
@@ -28,6 +28,11 @@ export interface CardPreviewPanelProps {
   scope?: string
   scopeId?: string
   fieldDefs?: Array<{ id: string; name: string; field_type: string; position: number }>
+  candidateHash?: string
+  mediaBaseUrl?: string
+  fieldValues?: Record<string, unknown>
+  onDiagnostic?: (diagnostic: RendererDiagnostic) => void
+  onReady?: (event: RendererReadyEvent) => void
   isLoading?: boolean
   error?: string | null
   title?: string
@@ -68,6 +73,11 @@ export function CardPreviewPanel({
   scope = 'note_type_live_preview',
   scopeId,
   fieldDefs,
+  candidateHash,
+  mediaBaseUrl,
+  fieldValues,
+  onDiagnostic,
+  onReady,
   isLoading = false,
   error = null,
   title,
@@ -81,6 +91,9 @@ export function CardPreviewPanel({
   slots,
 }: CardPreviewPanelProps) {
   const { t } = useTranslation('common')
+  const { diagnostics, reportDiagnostic } = usePreviewDiagnostics({
+    cardId, candidateHash, frontPayload, backPayload, frontHtml, backHtml, onDiagnostic,
+  })
   const [internalSide, setInternalSide] = useState<CardSide>('front')
   const activeSide = controlledSide ?? internalSide
   const displayTitle = title ?? t('card_preview.title')
@@ -153,6 +166,11 @@ export function CardPreviewPanel({
               scope={scope}
               scopeId={scopeId}
               fieldDefs={fieldDefs}
+              fieldValues={fieldValues}
+              candidateHash={candidateHash}
+              mediaBaseUrl={mediaBaseUrl}
+              onDiagnostic={reportDiagnostic}
+              onReady={onReady}
               slots={slots}
             />
           ) : (
@@ -162,6 +180,16 @@ export function CardPreviewPanel({
           )}
         </div>
       </div>
+      {diagnostics.length > 0 && (
+        <div role="status" aria-live="polite" className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          <p className="font-semibold">{t('card_preview.runtime_errors', { defaultValue: 'Lỗi khi chạy bản xem trước' })}</p>
+          <ul className="mt-1 space-y-1 break-words">
+            {diagnostics.map((diagnostic, index) => (
+              <li key={index}>{diagnostic.side === 'back' ? t('card_preview.back') : t('card_preview.front')} · {diagnostic.code}: {diagnostic.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Card>
   )
 }

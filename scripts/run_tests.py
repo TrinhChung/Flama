@@ -646,6 +646,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
     },
     "connect_mcp": {
         "source_patterns": [
+            "app/services/template_authoring_service.py",
+            "app/validators/mcp_template_preview.py",
             "scripts/flama_mcp_server.py",
             "scripts/probe_connect_protocol_mysql.py",
             "connect_wsgi.py",
@@ -671,6 +673,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "frontend/src/lib/ankiSync*",
         ],
         "backend_tests": [
+            "tests/test_template_authoring.py",
             "tests/test_anki_content_normalizer.py",
             "tests/test_anki_connect_origin_adversarial.py",
             "tests/test_flama_connect.py",

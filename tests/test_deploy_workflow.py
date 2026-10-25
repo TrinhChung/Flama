@@ -50,15 +50,17 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertIn("  workflow_dispatch:\n", workflow)
         self.assertNotIn("  push:\n", workflow)
 
-    def test_vps_release_does_not_build_or_package_frontend(self):
+    def test_release_packages_only_mcp_ui_and_never_builds_spa_on_vps(self):
         workflow = deployment_source()
-
-        self.assertNotIn("actions/setup-node", workflow)
-        self.assertNotIn("npm run build", workflow)
+        activation = ACTIVATION_PATH.read_text(encoding="utf-8")
+        self.assertNotIn("npm", activation)
+        self.assertIn("npm run build:mcp", workflow)
+        self.assertNotIn("npm run build:ci", workflow)
         self.assertNotIn(
-            "tar --append --file=\"$release_tar\" frontend/dist",
+            "tar --append --file=\"$release_tar\" frontend/dist\n",
             workflow,
         )
+        self.assertIn('tar --append --file="$release_tar" frontend/dist-mcp/index.html', workflow)
         self.assertIn("-- . ':(exclude)frontend'", workflow)
 
     def test_database_migration_runs_before_data_bootstrap_and_activation(self):

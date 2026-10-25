@@ -225,6 +225,7 @@ export type TemplateLibraryPreview = {
   back_html: string
   front_renderer_payload: unknown
   back_renderer_payload: unknown
+  study_preview?: unknown
 }
 
 export type TemplateBindingWarning = {

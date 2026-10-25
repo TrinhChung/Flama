@@ -79,4 +79,18 @@ describe('CardPreviewPanel', () => {
     await act(async () => { select.value = 't1'; select.dispatchEvent(new Event('change', { bubbles: true })) })
     expect(onSelectTemplate).toHaveBeenCalledWith('t1')
   })
+
+  it('shows runtime diagnostics as bounded text, rejects stale candidates, and resets for a new candidate', async () => {
+    const onDiagnostic = vi.fn()
+    await act(async () => root.render(<CardPreviewPanel cardId="preview" candidateHash="candidate-1" frontHtml="front" onDiagnostic={onDiagnostic} />))
+    const report = display.mock.lastCall![0].onDiagnostic
+    await act(async () => report({ code: 'SANDBOX_RUNTIME_ERROR', stage: 'runtime', message: 'stale', side: 'front', cardId: 'preview', candidateHash: 'old' }))
+    expect(container.querySelector('[role="status"]')).toBeNull()
+    await act(async () => report({ code: 'SANDBOX_RUNTIME_ERROR', stage: 'runtime', message: '<img src=x onerror=alert(1)>', side: 'back', cardId: 'preview', candidateHash: 'candidate-1' }))
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('<img src=x onerror=alert(1)>')
+    expect(container.querySelector('[role="status"] img')).toBeNull()
+    expect(onDiagnostic).toHaveBeenCalledTimes(1)
+    await act(async () => root.render(<CardPreviewPanel cardId="preview" candidateHash="candidate-2" frontHtml="front" onDiagnostic={onDiagnostic} />))
+    expect(container.querySelector('[role="status"]')).toBeNull()
+  })
 })

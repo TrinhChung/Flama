@@ -7,7 +7,9 @@ anti-scraping sample preview limits (strictly 3-5 cards max), and pagination bou
 from __future__ import annotations
 
 import logging
+import json
 import re
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import or_
@@ -36,6 +38,78 @@ MAX_PREVIEW_SAMPLES = 5  # Anti-scraping hard limit: strictly 3 to 5 sample card
 DEFAULT_PREVIEW_SAMPLES = 3
 
 FLAMA_DOCUMENTATION_TOPICS: dict[str, dict[str, str]] = {
+    "template-authoring": {
+        "title": "Card Template Authoring Contract v1 (2026-10-26)",
+        "markdown": """# Card Template Authoring v1 — 2026-10-26
+
+Use preview_note_type_template before applying a candidate. It returns diagnostics,
+Study client artifacts, candidate_hash, and explicit check stages. A passed server
+render does not mean browser or interaction passed: those are initially not_run.
+An MCP App can display the sandbox and, after user action, send a bounded report
+to chat. The model cannot automatically click or inspect the preview DOM.
+
+## Syntax and arrays
+- Mustache sections: {{#options}}<li>{{.}}</li>{{/options}}.
+- Inverted sections: {{^explanation}}No explanation provided.{{/explanation}}.
+- Indexed access: {{options.0}} and {{correct_answers.0}} use zero-based lookup.
+- {{options}} prints comma-joined text. Native array storage is JSON lists of
+  strings or nested lists. Numeric/object items are rejected. Legacy newline
+  strings are still readable but are not automatically converted to lists.
+- {{@index}}, {{index}} item methods, Handlebars #each/#if and external partials
+  are unsupported. To number options, iterate rendered DOM nodes with index + 1.
+- Text {{field}} is escaped; {{{field}}} is sanitized rich markup. Richtext,
+  Markdown and typed media use their normal renderer preparation.
+- {{FrontSide}} on back includes the rendered front without its scripts; it is
+  empty on front. Use a separate back initializer if interactions are required.
+
+## Context and script lifecycle
+HTML and inline <style> participate in Mustache interpolation. shared_css is
+static and never interpolates note values. Study extracts template-authored
+inline scripts before interpolation; {{tokens}} in those scripts remain literal.
+Field content never gains script provenance. Read rendered DOM or
+FlamaCard.getContext().fieldValues instead of inserting raw values into scripts.
+
+Scripts run only in the existing opaque-origin iframe sandbox="allow-scripts".
+Reactivating an unchanged face retains its document and local interaction state.
+A new card, source or context causes a render or patch; script initialization
+runs when a fresh document is rendered, rather than on every reactivation.
+Initialize from DOM after markup and use FlamaCard.onReveal(callback) for every
+show. Also available: FlamaCard.getConfig(), FlamaCard.getContext(),
+FlamaCard.notifyHeight(), and FlamaCard.playAudio(ref) when needed.
+Do not request allow-same-origin or external scripts. Media remains constrained
+by renderer CSP and the existing proxy/allowlist model.
+
+## Preview targets
+Raw: input_schema [{key,type,required}], front_html, back_html and sample_values
+are explicit. Samples are ephemeral. Attached: note_type_id + application_id
+select a directly owned occurrence and its actual field bindings. Samples then
+use source field names. template_id alone is ambiguous and unsupported. Installed
+or another author's pinned contexts must use a separately resolved/exported raw
+candidate; this tool does not substitute an author's live draft for a release.
+
+Apply still uses preview_note_type_update then update_note_type with existing
+confirmation/token semantics. Candidate hashes identify evidence, not permission.
+""",
+    },
+    "quiz-template": {
+        "title": "Sandbox Quiz Recipe v1 (2026-10-26)",
+        "markdown": """# Sandbox Quiz Recipe v1 — 2026-10-26
+
+Inputs: question (Markdown), options (array), correct_answers (array), explanation
+(optional Markdown). correct_answers contains unique 1-based string positions,
+e.g. ["1", "3"]. Use profile="quiz" in preview to validate nonempty flat options,
+nonempty unique answers and range. Generic arrays have no quiz-specific rules.
+Reordering options requires updating answer positions at the same time.
+
+The recipe shows Select N answers, waits for exactly N selected, then grades.
+Changing selections recalculates feedback. Revealing the back shows correct
+answers and explanation, with an explicit missing-explanation fallback. This
+feedback does not submit scheduler ratings or modify progress.
+
+The JSON below is a candidate for preview_note_type_template, not instructions
+to mutate a NoteType. Browser fixture checks are separate from server analysis.
+""",
+    },
     "overview": {
         "title": "Flama Platform Overview",
         "markdown": """# Flama Platform Overview (Flama.vn)
@@ -133,6 +207,10 @@ A: Flama implements strict anti-scraping guardrails to protect community deck cr
 }
 
 TOPIC_ALIASES: dict[str, str] = {
+    "template-authoring": "template-authoring",
+    "template_authoring": "template-authoring",
+    "quiz-template": "quiz-template",
+    "quiz_template": "quiz-template",
     "overview": "overview",
     "general": "overview",
     "srs": "srs",
@@ -571,7 +649,7 @@ def get_flama_documentation(
     return {
         "topic": resolved_key,
         "title": doc_info["title"],
-        "content": doc_info["markdown"],
+        "content": _documentation_markdown(resolved_key, doc_info),
         "canonical_url": f"https://flama.vn/docs/{resolved_key}",
         "available_topics": list(FLAMA_DOCUMENTATION_TOPICS.keys()),
     }
@@ -580,6 +658,16 @@ def get_flama_documentation(
 # ===========================================================================
 # MCP Resources Helpers (flama://docs/...)
 # ===========================================================================
+
+def _documentation_markdown(topic, doc_info):
+    if topic == "quiz-template":
+        # Fixed packaged recipe only: never map a caller-supplied URI to disk.
+        recipe_path = Path(__file__).resolve().parent / "recipes" / "quiz.json"
+        if recipe_path.is_file():
+            recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
+            return doc_info["markdown"] + "\n```json\n" + json.dumps(recipe, ensure_ascii=False, indent=2) + "\n```\n"
+    return doc_info["markdown"]
+
 
 def list_documentation_resources() -> list[dict[str, Any]]:
     """Return catalog of public flama://docs/... documentation resources."""
@@ -608,7 +696,7 @@ def read_documentation_resource(uri: str) -> dict[str, Any] | None:
     return {
         "uri": cleaned_uri,
         "mimeType": "text/markdown",
-        "text": doc_info["markdown"],
+        "text": _documentation_markdown(resolved_topic, doc_info),
     }
 
 

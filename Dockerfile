@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir gunicorn
 
 COPY . .
 COPY --from=frontend-build /frontend/dist ./frontend/dist
+COPY --from=frontend-build /frontend/dist-mcp ./frontend/dist-mcp
 
 EXPOSE 4789 4790
 

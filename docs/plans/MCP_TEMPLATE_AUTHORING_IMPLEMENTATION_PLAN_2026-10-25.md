@@ -1,8 +1,8 @@
 # Kế hoạch bổ sung khả năng thiết kế và kiểm chứng Card Template qua MCP
 
-Ngày: 2026-10-25 (Asia/Tokyo). Trạng thái: **đề xuất để review, chưa triển khai**.
+Ngày lập: 2026-10-25 (Asia/Tokyo). Cập nhật triển khai: **2026-10-26, đã có v1 và kiểm chứng local; chưa deploy hoặc xác minh ChatGPT host thật**.
 
-Nguồn yêu cầu: [#248 — interactive quiz authoring gaps](https://github.com/TrinhChung/Flama/issues/248), kết hợp [#116 — MCP App template preview](https://github.com/TrinhChung/Flama/issues/116). Đối chiếu source tại checkout có HEAD `d4da3c7d`; kết quả dưới đây là đọc mã, chưa phải kết quả chạy trình duyệt hoặc kiểm thử production.
+Nguồn yêu cầu: [#248 — interactive quiz authoring gaps](https://github.com/TrinhChung/Flama/issues/248), kết hợp [#116 — MCP App template preview](https://github.com/TrinhChung/Flama/issues/116). Khảo sát ban đầu dùng HEAD `d4da3c7d`; phần kế hoạch giữ lại mốc đó. Kết quả triển khai và giới hạn mới nằm ở mục 10.
 
 ## 1. Mục tiêu và quyết định đề xuất
 
@@ -302,4 +302,32 @@ Chạy test hẹp theo file thay đổi trước, sau đó các module `connect_
 - [MCP ToolAnnotations schema](https://modelcontextprotocol.io/specification/2025-06-18/schema#toolannotations): tên chuẩn `readOnlyHint`; annotation là hint, quyền truy cập vẫn do server kiểm tra.
 - [MCP Apps SDK documentation](https://apps.extensions.modelcontextprotocol.io/): SDK và bridge cho UI host. Khả năng của host mục tiêu vẫn cần kiểm tra thực tế.
 
-Lần lập kế hoạch này chỉ đọc issue/source và bổ sung tài liệu. Chưa chạy tests, browser, MCP candidate preview hay thay đổi application/data.
+Mốc lập kế hoạch 2026-10-25 chỉ đọc issue/source. Kết quả triển khai sau đó được ghi riêng bên dưới.
+
+## 10. Kết quả triển khai v1 — 2026-10-26
+
+| Hạng mục | Đã có | Giới hạn |
+|---|---|---|
+| T01/T02 | Analyzer dùng token/parser hiện có, diagnostics có stage/code/hint; chặn syntax/helper sai trong create/update, bổ sung impact preview; sửa lookup Python trả method `index` | Unknown input và `@index` là warning để không chặn hàng loạt template cũ. Chưa kết luận nguyên nhân JavaScript ban đầu của deck production #248 |
+| T03 | `preview_note_type_template`, sample bắt buộc và có giới hạn, native array, hash/ABI, stages, artifact từ `study_artifact_service`; web editor/mapping cũng render artifact qua `renderCardSide` | V1 raw hoặc application thuộc NoteType của mình; chưa có note_id, installed/pinned context hay browser chạy từ tool |
+| T04 | Lỗi runtime/host, timeout 8 giây, correlation candidate/card/side, giới hạn 20 lỗi × 1000 ký tự; preview hiển thị text | Thu error/rejection, không thu toàn bộ console. Template tự báo không phải bằng chứng tương tác pass |
+| T05 | Recipe quiz và Playwright dùng compiler/renderer/sandbox thật; 1/2/3 đáp án, số options thay đổi, sai/đúng/đổi lựa chọn, bàn phím, mobile, reveal, explanation trống, runtime error, sandbox boundary | Harness MCP là host simulator. Smoke Study route thật kiểm chứng 1 đáp án, không sửa deck production |
+| T06 | MCP tool `_meta`, UI resource registry giữ docs cũ, React App/bridge, Front/Back, gửi report về context/chat, single-file HTML gồm renderer host | Chưa chứng minh host ChatGPT thật hoặc authenticated media trong cross-origin embed; flag UI mặc định tắt |
+| T07 | Topics `template-authoring`, `quiz-template`, recipe JSON dùng chung giữa docs và tests; guide cập nhật syntax/lifecycle | Không thêm quiz engine, index helper hay nội suy shared CSS |
+| T08 | Build tạo SPA + MCP artifact; Docker và VPS release đóng gói HTML; CI chạy browser fixtures; rollout flag có trong managed env | Chưa chạy CI hosted/deploy. Token mutation cũ vẫn độc lập với candidate hash |
+| T09 | Chưa triển khai primitive quiz riêng | Recipe hoạt động, chưa có bằng chứng cần runtime riêng |
+| T10 | Typed sample editor đã hoàn tất ở commit `5afc0e65` | Local file picker và preset nhóm quiz vẫn là phần mở rộng |
+
+Lỗi lifecycle tái hiện bằng browser: `CardDisplay` giữ hai frame nhưng khi mặt trước active trở lại, hook gọi `render` lại cùng scripted payload và mất lựa chọn. Hook nay bỏ render thừa khi controller/source/context không đổi; vẫn gửi reveal, và áp dụng candidate mới nếu nội dung đổi khi frame đang ẩn. Có regression test cho cả hai trường hợp.
+
+Kiểm chứng local:
+
+- Bộ browser MCP App: 7 test qua trên Chrome profile cô lập, gồm bridge `ui/update-model-context` → `ui/message`. Report/evidence tại `output/template-browser/` ghi candidate hash, ABI và viewport; ảnh/trace khi thất bại.
+- MySQL local: `scripts/probe_mcp_template_preview_mysql.py` tạo fixture riêng, bắt SQL của preview và xác nhận chỉ có `SELECT`; notes/templates/versions không đổi, ownership/occurrence được kiểm tra. Fixture được dọn sau chạy.
+- Study route thật: instruction, sai/đúng, Space trên checkbox và reveal/explanation qua; không submit rating. Ảnh local tại `output/playwright/mcp-study-smoke/`.
+- Tests backend analyzer/renderer, frontend preview/renderer/editor, typecheck, lint mục tiêu và production build được chạy. Không có schema/DDL/index mới.
+- 8 case MCP cũ qua harness transaction MySQL; một case invalid-create gặp `1205 lock wait` khi dựng fixture trước bước kiểm tra template, nên không được tính pass. Đã dừng retry, rollback/đóng connection của harness; source gate được kiểm chứng riêng bằng pure unit test.
+
+Để vận hành: build/deploy bundle, thử nested iframe/CSP trên host mục tiêu và media của deployment, sau đó bật `MCP_TEMPLATE_PREVIEW_UI_ENABLED=true`. `PUBLIC_APP_URL` phải là web origin phục vụ media; Connect port 4790 tự nó không phục vụ media. Tắt flag rollback advertisement, tool text/structured vẫn dùng được. Các bước và lệnh nằm trong [guide](../guides/NOTE_TYPE_TEMPLATE_GUIDE.md#12-preview-và-kiểm-chứng-qua-mcp).
+
+Chưa đóng issue hoặc đăng comment lên GitHub; chưa thay template/note production. Kiểm thử local chứng minh recipe và các đường mới, không chứng minh thẻ cũ trong deck #248 đã tự được thay hoặc đã hoạt động đúng trên trình duyệt của người dùng.

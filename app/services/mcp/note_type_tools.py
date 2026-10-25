@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from functools import wraps
+from types import SimpleNamespace
 from typing import Any
 from sqlalchemy import or_
 from sqlalchemy.orm.attributes import set_committed_value
@@ -199,6 +200,23 @@ def create_note_type(
     if not cleaned_name:
         raise RequestValidationError("Tên NoteType là bắt buộc.", field="name", status=400, code="INVALID_PARAMS")
 
+    # Reject definitely invalid supplied source before taking any database
+    # write locks. This is source validation, not a browser/interaction pass.
+    if templates:
+        from app.services.template_authoring_service import analyze_template_sources
+        candidate_fields = [SimpleNamespace(name=str(item.get("name") or ""),
+            field_type=str(item.get("field_type") or "text")) for item in (fields or [])]
+        for index, item in enumerate(templates):
+            candidate = SimpleNamespace(**{key: str(item.get(key) or "")
+                for key in ("front_html", "back_html", "shared_css")})
+            errors = [entry for entry in analyze_template_sources(template=candidate, field_defs=candidate_fields)
+                      if entry["severity"] == "error"]
+            if errors:
+                t_name = str(item.get("name") or f"Card {index + 1}")
+                raise RequestValidationError(f"Lỗi cú pháp trong template '{t_name}': "
+                    + "; ".join(f"{entry['code']}: {entry['message']}" for entry in errors),
+                    field="templates", status=400, code="TEMPLATE_SYNTAX_ERROR")
+
     existing = NoteType.query.filter_by(user_id=user_id, name=cleaned_name).first()
     if existing is not None:
         raise RequestValidationError(
@@ -258,7 +276,7 @@ def create_note_type(
         seen_names.add(f_name.lower())
 
         f_type = str(f.get("field_type") or "text").strip().lower()
-        if f_type not in {"text", "richtext", "markdown", "image", "audio", "diagram"}:
+        if f_type not in FIELD_TYPES:
             db.session.rollback()
             raise RequestValidationError(f"Unsupported field_type: '{f_type}'.", field="fields", status=400, code="INVALID_FIELD_TYPE")
 
@@ -352,6 +370,25 @@ def _note_type_update_resource_version(nt, *, notes_count, cards_count):
             "id", "name", "field_type", "position", "required", "identity_role",
         )} for row in sorted(nt.field_defs, key=lambda row: row.id)],
     )
+
+
+def _template_change_diagnostics(nt, templates):
+    """Analyze only newly supplied template source, preserving unrelated legacy edits."""
+    if templates is None:
+        return []
+    from app.services.study_note_template_service import _plan
+    from app.services.template_authoring_service import analyze_template_sources
+    current = tuple(template_library_repository.attached_templates(db.session, nt.id))
+    updates, additions, _ = _plan(current, templates)
+    result = []
+    for view, data in list(updates) + [(None, data) for data in additions]:
+        if view is not None and not any(key in data for key in ("front_html", "back_html", "shared_css")):
+            continue
+        candidate = SimpleNamespace(**{key: str(data.get(key, getattr(view, key, "")) or "")
+            for key in ("front_html", "back_html", "shared_css")})
+        for item in analyze_template_sources(template=candidate, field_defs=list(nt.field_defs)):
+            result.append(dict(item, application_id=str(view.application_id) if view else None))
+    return result[:100]
 
 
 def preview_note_type_update(
@@ -456,6 +493,9 @@ def preview_note_type_update(
         )
 
     resource_version = _note_type_update_resource_version(nt, notes_count=notes_count, cards_count=cards_count)
+    diagnostics = _template_change_diagnostics(nt, templates)
+    validation_errors.extend(item["message"] for item in diagnostics if item["severity"] == "error")
+    warnings.extend(f"{item['code']}: {item['message']} {item['hint']}" for item in diagnostics if item["severity"] == "warning")
 
     impact_summary = {
         "notes_count": notes_count,
@@ -506,6 +546,9 @@ def preview_note_type_update(
         "data_loss_possible": data_loss_possible,
         "template_regeneration_required": template_regeneration_required,
         "validation_errors": validation_errors,
+        "diagnostics": diagnostics,
+        "checks": {"template": ("not_run" if templates is None else "failed" if validation_errors else "passed"),
+                   "study_browser": "not_run", "interaction": "not_run"},
         "warnings": warnings,
         "requires_confirmation": data_loss_possible,
     }
@@ -596,6 +639,12 @@ def update_note_type(
 ) -> dict[str, Any]:
     """Update a note type's schema, metadata, fields, or templates with data migration support."""
     nt = _owned_note_type_for_mutation(user_id=user_id, note_type_id=note_type_id)
+
+    diagnostics = _template_change_diagnostics(nt, templates)
+    errors = [item for item in diagnostics if item["severity"] == "error"]
+    if errors:
+        raise RequestValidationError("; ".join(f"{item['code']}: {item['message']}" for item in errors),
+            field="templates", status=400, code="TEMPLATE_SYNTAX_ERROR")
 
     if templates is not None:
         from app.services import study_content_delete_service as content_topology

@@ -30,6 +30,7 @@ Khi tạo một Note Type, bạn có thể tạo nhiều trường dữ liệu v
 4. **`audio`** (Âm thanh): File phát âm từ vựng, ví dụ, trích dẫn.
 5. **`image`** (Hình ảnh): Ảnh minh họa nghĩa, ảnh sơ đồ tư duy.
 6. **`diagram`** (Biểu đồ): Biểu đồ hoặc hình vẽ cấu trúc.
+7. **`array`** (Danh sách): JSON list gồm text hoặc list lồng. Dữ liệu cũ mỗi dòng một item vẫn đọc được; số hoặc object không phải item hợp lệ.
 
 ---
 
@@ -39,6 +40,12 @@ Khi tạo một Note Type, bạn có thể tạo nhiều trường dữ liệu v
 * `{{{InputKey}}}`: Hiển thị nội dung input dạng HTML (dùng cho input `richtext`).
 * `{{#InputKey}} ... {{/InputKey}}`: **Điều kiện CÓ dữ liệu** (nếu input có dữ liệu thì hiển thị khối bên trong).
 * `{{^InputKey}} ... {{/InputKey}}`: **Điều kiện KHÔNG có dữ liệu** (hiển thị nội dung mặc định khi input bị bỏ trống).
+* `{{#options}}<span>{{.}}</span>{{/options}}`: lặp từng item của array. `{{options.0}}` lấy item đầu; `{{options}}` in toàn list thành chuỗi nối bằng dấu phẩy.
+* `{{FrontSide}}`: mặt sau hiển thị phần HTML của mặt trước; không chạy lại script mặt trước trong phần được chèn này.
+
+Không dùng Handlebars `{{#each options}}`, partials, đổi delimiter hoặc `{{@index}}`. Không có helper `{{index}}`: để đánh số đáp án, dùng thứ tự DOM `index + 1` trong script. Chuỗi được escape; rich text/Markdown được renderer chuẩn bị và sanitize trước khi chèn HTML.
+
+`shared_css` là CSS tĩnh, không nội suy Mustache. Token trong HTML và inline `<style>` được render; script của template được tách trước Mustache, vì vậy token trong `<script>` giữ nguyên. Script lấy dữ liệu qua `FlamaCard.getContext().fieldValues`, tránh đưa raw text vào mã JavaScript. Script chạy khi dựng nội dung mới; dùng `FlamaCard.onReveal(callback)` nếu cần xử lý khi mặt thẻ được mở lại. Lật lại mặt thẻ không thay candidate giữ DOM và lựa chọn hiện tại.
 
 ---
 
@@ -193,3 +200,36 @@ Trước một phiên mới, **Chuẩn bị phiên học** cho phép chọn mộ
 **Ghi nhớ cho bộ thẻ này** lưu riêng lựa chọn và ánh xạ cá nhân. Khi bật, bạn có thể tắt **Luôn hỏi trước khi học** để dùng lại một lựa chọn hợp lệ cho phiên sau. Nếu không ghi nhớ, lựa chọn chỉ áp dụng cho phiên này và không đổi cài đặt đã lưu. Lỗi lưu tùy chọn giữ form để **Thử lại**.
 
 Phiên đang học hoặc được khôi phục tiếp tục dùng nội dung và ánh xạ đã chốt khi mở phiên, kể cả mẫu hoặc tùy chọn cá nhân thay đổi sau đó. Ánh xạ cá nhân không sửa ánh xạ dùng chung của loại thẻ. Input dạng danh sách field chưa thuộc phiên bản này.
+
+## 12. Preview và kiểm chứng qua MCP
+
+Chat đọc `get_flama_documentation(topic="template-authoring")` để lấy contract và `topic="quiz-template"` để lấy recipe trắc nghiệm đã dùng trong bộ test browser. Hai topic cũng có qua `flama://docs/template-authoring` và `flama://docs/quiz-template`.
+
+`preview_note_type_template` chỉ đọc, nhận raw candidate với `input_schema`, `front_html`, `back_html`, `shared_css`, `sample_values`; hoặc `note_type_id` của mình cùng `application_id` xác định đúng lần gắn và mapping. Trong trường hợp gắn sẵn, sample được key theo tên field nguồn. V1 chưa đọc note thật hoặc preview trong installed/pinned context: dùng raw candidate với sample rõ ràng. `template_id` đơn lẻ không đủ chọn occurrence.
+
+Kết quả có candidate hash, ABI, diagnostics và artifact cùng đường render client của Study. Các trạng thái `study_browser=not_run`, `interaction=not_run` cho biết server chưa thao tác browser. `preview_note_type_update` vẫn là phân tích tác động và token xác nhận; analyzer cũng kiểm tra candidate trước khi ghi. Preview không thay thế token hay confirmation của mutation.
+
+Khi host hỗ trợ MCP Apps và deployment bật UI, người dùng có thể mở Front/Back, chọn đáp án, xem lỗi sandbox rồi bấm **Send report to chat**. Báo cáo chứa candidate hash, mặt thẻ, lỗi và ghi chú người dùng. GPT nhận báo cáo qua bridge; không tự đọc DOM hoặc tự click. Nếu host chỉ hỗ trợ cập nhật context, gửi tin nhắn tiếp trong chat để yêu cầu review. Không có browser runner theo từng cuộc chat trong v1.
+
+Recipe quiz dùng `options` và `correct_answers` là list phẳng, đáp án là vị trí chuỗi bắt đầu từ 1, ví dụ `["1", "3"]`. Preview với `profile="quiz"` kiểm tra rỗng, trùng, ngoài khoảng và kiểu item. Khi chọn đúng N mục, recipe hiện đúng/sai; thay lựa chọn sẽ tính lại, chọn thiếu/thừa thì chưa chấm. Back hiển thị đáp án và explanation hoặc nội dung dự phòng. Đổi thứ tự options phải cập nhật vị trí đáp án; validation không biết ý nghĩa câu trả lời. Logic này không đổi điểm scheduler.
+
+### Build, kiểm thử và bật inline UI
+
+Chạy từ repo trên Windows:
+
+```powershell
+cd frontend
+npm ci
+npm run build
+cd ..
+.\.venv\Scripts\python.exe scripts/build_template_browser_fixtures.py
+cd frontend
+npx playwright install chromium
+npm run test:template-browser
+```
+
+Build tạo SPA và `frontend/dist-mcp/index.html` tự chứa mã app, CSS, renderer host. Docker đóng gói cả hai; CI chạy browser fixtures bằng compiler chuẩn. Browser profile của Playwright tách biệt profile cá nhân. Report ở `output/template-browser/report.json`, evidence theo candidate/ABI/viewport và ảnh/trace khi thất bại.
+
+`MCP_TEMPLATE_PREVIEW_UI_ENABLED=false` mặc định giữ text/structured preview. Sau khi kiểm tra host thật cho phép nested `srcdoc` sandbox và CSP tương ứng, đặt `true`, cấu hình `PUBLIC_APP_URL` trỏ đúng web origin phục vụ media rồi restart Flask/Connect. Với VPS deploy qua GitHub, đặt flag trong Variables của Environment Flama để managed env giữ giá trị qua các lần deploy. Docker và VPS release đều mang theo `frontend/dist-mcp/index.html`; VPS chỉ build resource này trên runner. Registry chỉ advertise UI khi flag bật và bundle tồn tại. Resource không chứa dữ liệu người dùng hay credential.
+
+Host simulator không chứng minh ChatGPT host đã chạy được inline UI. Media riêng tư qua cookie trong host khác origin cũng cần kiểm tra riêng. Có thể tắt flag để rollback advertisement mà giữ tool preview và luồng ghi hiện hành.

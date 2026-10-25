@@ -475,6 +475,22 @@ def _normalize_multiline_value(value: Any) -> str:
     return normalized.replace("\n", LINEBREAK_TOKEN)
 
 
+class _MustacheText(str):
+    """Make Chevron's lookup data-only instead of exposing Python attributes.
+
+    Chevron falls back to getattr after a string/list TypeError. A missing
+    data property must raise KeyError instead; numeric access remains available
+    just as in mustache.js. Normal string operations retain their behavior.
+    """
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            if not key.isascii() or not key.isdecimal():
+                raise KeyError(key)
+            key = int(key)
+        return super().__getitem__(key)
+
+
 class _MustacheList(list):
     """A stored array, handed to Mustache unchanged so sections iterate it.
 
@@ -485,11 +501,18 @@ class _MustacheList(list):
 
     __slots__ = ()
 
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            if not key.isascii() or not key.isdecimal():
+                raise KeyError(key)
+            key = int(key)
+        return super().__getitem__(key)
+
     def __str__(self) -> str:
         return ",".join("" if item is None else str(item) for item in self)
 
 
-class _MustacheEmptyItem(str):
+class _MustacheEmptyItem(_MustacheText):
     """An empty array item that still takes its place in a section loop.
 
     chevron skips a section body whose item is falsy; mustache.js renders it
@@ -507,7 +530,7 @@ def _mustache_list(items: list[Any]) -> _MustacheList:
     return _MustacheList(
         _mustache_list(item) if isinstance(item, list)
         else _MustacheEmptyItem() if item is None or item == ""
-        else item
+        else _MustacheText(item) if isinstance(item, str) else item
         for item in items
     )
 
@@ -516,6 +539,18 @@ def _plain_context_value(value: Any) -> Any:
     if isinstance(value, list):
         return _mustache_list(value)
     return _normalize_multiline_value(value)
+
+
+def _data_only_mustache_scope(value):
+    if isinstance(value, dict):
+        return {key: _data_only_mustache_scope(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return _MustacheList(_data_only_mustache_scope(item) for item in value)
+    if isinstance(value, _MustacheEmptyItem):
+        return value
+    if isinstance(value, str):
+        return _MustacheText(value)
+    return value
 
 
 def _normalize_markdown_value(value: Any) -> str:
@@ -790,7 +825,7 @@ def _cache_template(cache_key: str, source: str) -> str:
             return existing
     try:
         # Render once with empty data to validate Mustache syntax.
-        chevron.render(source, {})
+        chevron.render(source, {}, partials_path=None)
     except Exception as exc:  # pragma: no cover - defensive
         raise TemplateCompileError(str(exc)) from exc
     with _cache_lock:
@@ -1136,8 +1171,9 @@ def render_template_pair(
     back_source = _cache_template(back_key, back_source_prepared)
 
     try:
-        front_rendered = chevron.render(front_source, context)
-        back_rendered = chevron.render(back_source, context)
+        safe_scope = _data_only_mustache_scope(context)
+        front_rendered = chevron.render(front_source, safe_scope, partials_path=None)
+        back_rendered = chevron.render(back_source, safe_scope, partials_path=None)
     except Exception as exc:
         raise TemplateCompileError(str(exc)) from exc
     if _FRONT_SIDE_MARKER in back_rendered:

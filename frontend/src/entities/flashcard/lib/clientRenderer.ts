@@ -5,7 +5,7 @@ import type {
   CardRenderContent,
   CardRenderTemplate,
 } from '../model/types'
-import { fieldValueEditorText } from '@/lib/arrayField'
+import { fieldValueEditorText } from './arrayField'
 
 export const LINEBREAK_TOKEN = '__FC_LINEBREAK_TOKEN__'
 

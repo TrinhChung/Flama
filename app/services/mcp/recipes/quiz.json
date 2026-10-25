@@ -1,0 +1,41 @@
+{
+  "input_schema": [
+    {
+      "key": "question",
+      "type": "markdown",
+      "required": true
+    },
+    {
+      "key": "options",
+      "type": "array",
+      "required": true
+    },
+    {
+      "key": "correct_answers",
+      "type": "array",
+      "required": true
+    },
+    {
+      "key": "explanation",
+      "type": "markdown",
+      "required": false
+    }
+  ],
+  "front_html": "<div class=\"quiz\">\n<div class=\"question\">{{question}}</div>\n<p id=\"instruction\"></p>\n<div id=\"options\">{{#options}}<label class=\"option\"><input type=\"checkbox\" name=\"quiz-option\"><span>{{.}}</span></label>{{/options}}</div>\n<p id=\"selection-count\" aria-live=\"polite\"></p>\n<p id=\"feedback\" role=\"status\" aria-live=\"polite\"></p>\n</div>\n<script>\n(function () {\n  var values = FlamaCard.getContext().fieldValues || {};\n  var answers = values.correct_answers;\n  var inputs = Array.from(document.querySelectorAll('input[name=\"quiz-option\"]'));\n  var valid = Array.isArray(answers) && answers.length > 0 &&\n    answers.every(function (a) { return typeof a === 'string' && /^[1-9][0-9]*$/.test(a) && Number(a) <= inputs.length; }) &&\n    new Set(answers).size === answers.length;\n  if (!valid) { document.getElementById('feedback').textContent = 'Invalid quiz answers'; inputs.forEach(function (input) { input.disabled = true; }); return; }\n  document.getElementById('instruction').textContent = 'Select ' + answers.length + ' answer' + (answers.length === 1 ? '' : 's');\n  inputs.forEach(function (input, index) { input.value = String(index + 1); });\n  function grade() {\n    var chosen = inputs.filter(function (input) { return input.checked; }).map(function (input) { return input.value; });\n    document.getElementById('selection-count').textContent = chosen.length + ' / ' + answers.length + ' selected';\n    var feedback = document.getElementById('feedback');\n    feedback.textContent = chosen.length === answers.length ?\n      (chosen.every(function (value) { return answers.includes(value); }) ? 'Correct' : 'Incorrect') : '';\n  }\n  inputs.forEach(function (input) { input.addEventListener('change', grade); });\n  grade();\n})();\n</script>",
+  "back_html": "<div class=\"quiz\"><div>{{question}}</div><h2>Correct answers</h2><ul id=\"answer-list\"></ul><div id=\"explanation\">{{#explanation}}{{explanation}}{{/explanation}}{{^explanation}}No explanation provided.{{/explanation}}</div></div>\n<script>\n(function () {\n  var values = FlamaCard.getContext().fieldValues || {};\n  var options = values.options || [];\n  var answers = values.correct_answers || [];\n  answers.forEach(function (position) {\n    var item = document.createElement('li');\n    item.textContent = position + '. ' + (options[Number(position) - 1] || '');\n    document.getElementById('answer-list').appendChild(item);\n  });\n})();\n</script>",
+  "shared_css": ".quiz { font-family: system-ui, sans-serif; max-width: 42rem; margin: auto; padding: 16px; color: #291e18; background: #fff; } .option { display: flex; gap: 10px; padding: 12px; border: 1px solid #dfd2c8; border-radius: 10px; margin: 8px 0; cursor: pointer; } .option:focus-within { outline: 2px solid #db6032; } #feedback { font-weight: bold; min-height: 1.5em; }",
+  "sample_values": {
+    "question": "Which options are correct?",
+    "options": [
+      "Alpha",
+      "Beta",
+      "Gamma",
+      "Delta"
+    ],
+    "correct_answers": [
+      "1"
+    ],
+    "explanation": "**Alpha** is correct."
+  },
+  "profile": "quiz"
+}

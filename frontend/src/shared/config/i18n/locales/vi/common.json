@@ -12,6 +12,7 @@
   "copy": "Sao chép",
   "copied": "Đã sao chép",
   "card_preview": {
+    "runtime_errors": "Lỗi khi chạy bản xem trước",
     "title": "Xem Trước Trực Tiếp (Live Preview)",
     "subtitle": "(Hiển thị mô phỏng dữ liệu thẻ mẫu)",
     "updating": "Đang cập nhật…",
