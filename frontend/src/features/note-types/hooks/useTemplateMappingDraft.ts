@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { apiRequest } from '@/shared/api/client'
+import { withStudyClientPreview } from '@/entities/flashcard/rendering'
 import {
   cardTemplateQueryKeys, defaultTemplateSample, fetchTemplateApplications, previewLibraryTemplate, previewSampleValue, updateTemplateApplication, useTemplateSamples, validateBindings,
   type MappingField, type TemplateApplication, type TemplateBindings, type TemplateInputSpec, type TemplateLibraryPreview, type TemplatePreviewBody, type TemplateSampleValues,
@@ -123,7 +124,7 @@ export function useTemplateMappingDraft(noteTypeId: string, applicationId: strin
     let cancelled = false
     const timer = window.setTimeout(() => {
       void previewLibraryTemplate(templateId, previewBody, controller.signal).then((data) => {
-        if (!cancelled) setPreview({ key: previewKey, data })
+        if (!cancelled) setPreview({ key: previewKey, data: withStudyClientPreview(data) })
       }).catch((error: unknown) => {
         if (!cancelled) setPreview({ key: previewKey, error: error instanceof Error ? error.message : t('retry') })
       })

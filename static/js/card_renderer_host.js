@@ -771,6 +771,9 @@
       : {};
     let ready = false;
     let pendingRevealPayload = null;
+    let readyTimer = null;
+    let diagnosticCount = 0;
+    let destroyed = false;
     const minHeight = clampFrameHeight(initialOptions.minHeight || DEFAULT_MIN_HEIGHT, DEFAULT_MIN_HEIGHT);
     const fillHeight = initialOptions.fillHeight === true;
     const autoHeight = !fillHeight && initialOptions.autoHeight !== false;
@@ -781,6 +784,36 @@
       DEFAULT_MIN_HEIGHT
     );
     const allowedAudioUrls = new Set();
+
+    function renderIdentity() {
+      return {
+        side: activeConfig.side === "back" ? "back" : "front",
+        cardId: typeof activeContext.cardId === "string" ? activeContext.cardId : "",
+        candidateHash: typeof activeContext.candidateHash === "string" ? activeContext.candidateHash : "",
+      };
+    }
+
+    function emitDiagnostic(code, message, stage) {
+      if (destroyed || diagnosticCount >= 20 || typeof message !== "string") {
+        return;
+      }
+      const boundedMessage = message.slice(0, 1000).trim();
+      if (!boundedMessage) return;
+      diagnosticCount += 1;
+      const diagnostic = Object.assign({ code, message: boundedMessage, stage }, renderIdentity());
+      if (typeof initialOptions.onError === "function") {
+        initialOptions.onError(diagnostic);
+      } else {
+        global.console.warn("Flama card renderer:", boundedMessage);
+      }
+    }
+
+    function clearReadyTimer() {
+      if (readyTimer !== null) {
+        global.clearTimeout(readyTimer);
+        readyTimer = null;
+      }
+    }
 
     function syncAllowedAudioUrls(payload) {
       allowedAudioUrls.clear();
@@ -1033,13 +1066,18 @@
       const action = String(data.action || "");
       const payload = data.payload && typeof data.payload === "object" ? data.payload : {};
       if (action === "renderer_ready") {
+        const wasReady = ready;
         ready = true;
+        clearReadyTimer();
         if (autoHeight) {
           setFrameHeight(payload.height);
         }
         if (pendingRevealPayload) {
           postHostMessage("reveal", pendingRevealPayload);
           pendingRevealPayload = null;
+        }
+        if (!wasReady && typeof initialOptions.onReady === "function") {
+          initialOptions.onReady(renderIdentity());
         }
         return;
       }
@@ -1058,10 +1096,7 @@
         return;
       }
       if (action === "log_error") {
-        const message = typeof payload.message === "string" ? payload.message.trim() : "";
-        if (message) {
-          global.console.warn("Flama card renderer:", message);
-        }
+        emitDiagnostic("SANDBOX_RUNTIME_ERROR", payload.message, "runtime");
         return;
       }
       if (action === "release_focus") {
@@ -1107,11 +1142,14 @@
     }
 
     function render(nextPayload, renderOptions) {
+      if (destroyed) return;
       const optionsObject = renderOptions && typeof renderOptions === "object" ? renderOptions : {};
       const normalizedPayload = normalizeRendererSidePayload(nextPayload);
       if (patch(normalizedPayload, optionsObject)) {
         return;
       }
+      clearReadyTimer();
+      diagnosticCount = 0;
       activePayload = normalizedPayload;
       activeConfig = optionsObject.config && typeof optionsObject.config === "object"
         ? optionsObject.config
@@ -1147,6 +1185,16 @@
         fillHeight,
       });
       frameEl.srcdoc = documentHtml;
+      const pendingInstanceId = instanceId;
+      const requestedTimeout = Number(initialOptions.readyTimeoutMs);
+      const readyTimeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+        ? Math.min(30000, Math.max(100, requestedTimeout)) : 8000;
+      readyTimer = global.setTimeout(function () {
+        readyTimer = null;
+        if (!ready && instanceId === pendingInstanceId) {
+          emitDiagnostic("RENDERER_TIMEOUT", "The card sandbox did not become ready within " + readyTimeoutMs + " ms.", "host");
+        }
+      }, readyTimeoutMs);
     }
 
     function reveal(payload) {
@@ -1159,6 +1207,8 @@
     }
 
     function destroy() {
+      destroyed = true;
+      clearReadyTimer();
       global.removeEventListener("message", handleRendererMessage);
       const playback = sharedAudioPlayback;
       if (playback && playback.controllerToken === controllerToken) {

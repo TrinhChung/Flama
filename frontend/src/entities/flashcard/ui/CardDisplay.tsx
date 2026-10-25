@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/shared/lib'
 import { CardRendererFrame } from './CardRendererFrame'
 import type {
   CardDisplayProps,
@@ -27,6 +27,10 @@ export function CardDisplay({
   fieldDefs = EMPTY_FIELD_DEFS,
   fieldValues = EMPTY_FIELD_VALUES,
   enableLivePatch = true,
+  candidateHash,
+  mediaBaseUrl,
+  onDiagnostic,
+  onReady,
   className,
   slots,
   headerSlot,
@@ -94,6 +98,10 @@ export function CardDisplay({
           scopeId={scopeId}
           fieldDefs={fieldDefs}
           fieldValues={fieldValues}
+          candidateHash={candidateHash}
+          mediaBaseUrl={mediaBaseUrl}
+          onDiagnostic={onDiagnostic}
+          onReady={onReady}
           enableLivePatch={enableLivePatch}
           fillHeight
         />
@@ -116,6 +124,10 @@ export function CardDisplay({
           scopeId={scopeId}
           fieldDefs={fieldDefs}
           fieldValues={fieldValues}
+          candidateHash={candidateHash}
+          mediaBaseUrl={mediaBaseUrl}
+          onDiagnostic={onDiagnostic}
+          onReady={onReady}
           enableLivePatch={enableLivePatch}
           fillHeight
         />

@@ -301,6 +301,8 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         "RATE_LIMIT_DAILY_ENABLED": coerce_bool_env("RATE_LIMIT_DAILY_ENABLED", default=True),
         "RATE_LIMIT_DAILY_TIMEZONE": os.getenv("RATE_LIMIT_DAILY_TIMEZONE", "Asia/Ho_Chi_Minh").strip() or "Asia/Ho_Chi_Minh",
         "MCP_PREVIEW_BACKEND": os.getenv("MCP_PREVIEW_BACKEND", "local").strip().lower(),
+        "MCP_TEMPLATE_PREVIEW_UI_ENABLED": coerce_bool_env("MCP_TEMPLATE_PREVIEW_UI_ENABLED", default=False),
+        "MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL": os.getenv("MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL", "").strip(),
         "MCP_PREVIEW_TTL_SECONDS": coerce_int_env("MCP_PREVIEW_TTL_SECONDS", default=600),
         "SHARED_DECK_TREE_CLONE_MODE": os.getenv(
             "SHARED_DECK_TREE_CLONE_MODE", "batched"

@@ -68,6 +68,19 @@ export type RendererSidePayload = CardRenderPayload
 
 export const FLAMA_RENDERER_CHANNEL = 'flama-card-renderer' as const
 
+/** Error text from a card is untrusted data, never a host instruction. */
+export interface RendererReadyEvent {
+  side: 'front' | 'back'
+  cardId?: string
+  candidateHash?: string
+}
+
+export interface RendererDiagnostic extends RendererReadyEvent {
+  code: 'SANDBOX_RUNTIME_ERROR' | 'RENDERER_TIMEOUT' | 'RENDERER_HOST_LOAD_FAILED'
+  stage: 'runtime' | 'host'
+  message: string
+}
+
 // ============================================================================
 // 4. Abstract Slots for Extensibility (R2 Open Boundary)
 // ============================================================================
@@ -134,6 +147,10 @@ export interface CardRendererFrameProps {
   scopeId?: string | null
   fieldDefs?: unknown[]
   fieldValues?: Record<string, unknown>
+  candidateHash?: string
+  mediaBaseUrl?: string
+  onDiagnostic?: (diagnostic: RendererDiagnostic) => void
+  onReady?: (event: RendererReadyEvent) => void
   active?: boolean
   enableLivePatch?: boolean
   fillHeight?: boolean
@@ -157,6 +174,10 @@ export interface CardDisplayProps {
   scopeId?: string | null
   fieldDefs?: unknown[]
   fieldValues?: Record<string, unknown>
+  candidateHash?: string
+  mediaBaseUrl?: string
+  onDiagnostic?: (diagnostic: RendererDiagnostic) => void
+  onReady?: (event: RendererReadyEvent) => void
   enableLivePatch?: boolean
   className?: string
   slots?: CardRendererSlots

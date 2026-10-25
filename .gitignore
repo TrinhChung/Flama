@@ -10,6 +10,7 @@ env/
 
 # Environment variables
 .env
+.tmp/
 static/tmp/
 /static/uploads/*
 !/static/uploads/.gitignore
@@ -90,3 +91,23 @@ Thumbs.db
 
 # Private database dumps and generated template test exports.
 /docs/dumps/
+
+/*.sql
+/*.sql.gz
+/cleanup_transient_smoke.py
+/docs/audit/snapshots/
+/docs/audit/manifests/
+/scripts/restore_latest_prod_dump.py
+/scripts/poc_*.py
+/scripts/stress_test_poc_adversarial.py
+/scripts/test_repeatability_benchmark.py
+/scripts/verify_m2_*.py
+/scripts/migrations/
+/scripts/audit/
+/tests/test_adversarial_*.py
+/tests/test_audit_*.py
+/tests/test_challenger_*.py
+/tests/test_harness_poc.py
+/tests/test_master_audit_matrix.py
+/tests/test_poc_test_runner.py
+/tests/test_wave*.py

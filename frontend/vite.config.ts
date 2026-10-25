@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
+  // Other HTML entries are built with their dedicated configs.
+  optimizeDeps: { entries: ['index.html'] },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

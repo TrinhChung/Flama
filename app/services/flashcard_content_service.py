@@ -1029,13 +1029,19 @@ def preview_template(
             input_bindings=application.input_bindings,
         )
     try:
-        return render_template_pair(
+        result = dict(render_template_pair(
             template=preview_template_obj,
             field_defs=field_defs,
             field_values=values,
             media_assets=media_assets,
             preview_note_key=preview_key,
+        ))
+        from app.services.template_authoring_service import build_candidate_preview
+        result["study_preview"] = build_candidate_preview(
+            template=preview_template_obj, field_defs=field_defs, field_values=values,
+            media_assets=media_assets, sample_source={"kind": "editor_sample" if use_sample else "owned_note"},
         )
+        return result
     except TemplateCompileError as exc:
         raise ContentApiError(
             "TEMPLATE_COMPILE_ERROR",
@@ -1131,13 +1137,19 @@ def preview_raw_template(
     ).hexdigest()[:16]
 
     try:
-        return render_template_pair(
+        result = dict(render_template_pair(
             template=preview_template_obj,
             field_defs=field_defs,
             field_values=sample_values,
             media_assets=[],
             preview_note_key=f"raw_preview:{preview_hash}",
+        ))
+        from app.services.template_authoring_service import build_candidate_preview
+        result["study_preview"] = build_candidate_preview(
+            template=preview_template_obj, field_defs=field_defs, field_values=sample_values,
+            sample_source={"kind": "editor_sample", "provided_keys": list(raw_field_values)},
         )
+        return result
     except TemplateCompileError as exc:
         raise ContentApiError(
             "TEMPLATE_COMPILE_ERROR",

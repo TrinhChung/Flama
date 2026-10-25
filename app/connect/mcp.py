@@ -193,11 +193,11 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
 
         # Method: resources/list
         if rpc_request.method == "resources/list":
-            from app.services.mcp import public_search_tools
+            from app.services import mcp_resource_registry
             return _jsonrpc_result(
                 request_id,
                 {
-                    "resources": public_search_tools.list_documentation_resources(),
+                    "resources": mcp_resource_registry.list_resources(),
                 },
             )
 
@@ -212,11 +212,11 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
 
         # Method: resources/read
         if rpc_request.method == "resources/read":
-            from app.services.mcp import public_search_tools
+            from app.services import mcp_resource_registry
             uri = ""
             if isinstance(rpc_request.params, dict):
                 uri = str(rpc_request.params.get("uri") or "").strip()
-            res_content = public_search_tools.read_documentation_resource(uri)
+            res_content = mcp_resource_registry.read_resource(uri)
             if res_content is None:
                 return _jsonrpc_error(
                     request_id,

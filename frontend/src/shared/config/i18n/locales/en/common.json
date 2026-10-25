@@ -12,6 +12,7 @@
   "copy": "Copy",
   "copied": "Copied",
   "card_preview": {
+    "runtime_errors": "Preview runtime errors",
     "title": "Live Preview",
     "subtitle": "(Simulating sample card data)",
     "updating": "Updating…",

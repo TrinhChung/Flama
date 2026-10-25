@@ -29,6 +29,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Node for the MCP UI resource
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.2'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the self-contained MCP UI resource
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build:mcp
+
       - name: Build managed environment payload
         env:
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
@@ -102,6 +115,8 @@ jobs:
           MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS: ${{ vars.MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS || '100000' }}
           MCP_PREVIEW_BACKEND: ${{ vars.MCP_PREVIEW_BACKEND || 'redis' }}
           MCP_PREVIEW_TTL_SECONDS: ${{ vars.MCP_PREVIEW_TTL_SECONDS || '600' }}
+          MCP_TEMPLATE_PREVIEW_UI_ENABLED: ${{ vars.MCP_TEMPLATE_PREVIEW_UI_ENABLED || 'false' }}
+          MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL: ${{ vars.MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL || 'https://api.flama.vn' }}
           SHARED_DECK_TREE_CLONE_MODE: ${{ vars.SHARED_DECK_TREE_CLONE_MODE || 'batched' }}
           DECK_SOURCE_NOTETYPE_GUARD_MODE: ${{ vars.DECK_SOURCE_NOTETYPE_GUARD_MODE || 'shadow' }}
           MARKETPLACE_SAMPLE_MODE: ${{ vars.MARKETPLACE_SAMPLE_MODE || 'shadow_cache' }}
@@ -118,6 +133,7 @@ jobs:
           release_tar="/tmp/flama-${RELEASE_ID}.tar"
           git archive --format=tar --output="$release_tar" HEAD \
             -- . ':(exclude)frontend'
+          tar --append --file="$release_tar" frontend/dist-mcp/index.html
           gzip "$release_tar"
 
       - name: Record runner network diagnostics

@@ -14,6 +14,8 @@ export { prefersMultilineEditor } from './lib/noteFieldLayout'
 export { NOTE_TAG_MAX_COUNT, NOTE_TAG_MAX_LENGTH, tagDedupeKey } from './lib/noteTags'
 export type { NoteFieldEditorDensity, NoteFieldEditorField, NoteFieldEditorProps } from './ui/NoteFieldEditor'
 export type {
+  RendererDiagnostic,
+  RendererReadyEvent,
   CardRendererFrameProps,
   CardDisplayProps,
   CardRendererSlots,

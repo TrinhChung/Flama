@@ -84,6 +84,7 @@ class McpToolDefinition:
     output_schema: dict[str, Any] | None = None
     annotations: dict[str, Any] | None = None
     is_public: bool = False
+    meta: dict[str, Any] | None = None
 
     def to_mcp_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -97,6 +98,11 @@ class McpToolDefinition:
             payload["outputSchema"] = self.output_schema
         if self.annotations:
             payload["annotations"] = self.annotations
+        if self.meta:
+            # Never advertise a missing bundled UI; data/text preview still works.
+            from app.services.mcp_resource_registry import TEMPLATE_PREVIEW_URI, template_preview_ui_available
+            if self.meta.get("ui", {}).get("resourceUri") != TEMPLATE_PREVIEW_URI or template_preview_ui_available():
+                payload["_meta"] = self.meta
         return payload
 
     def execute(self, *, user_id: int | None = None, arguments: Any) -> dict[str, Any]:
@@ -2081,13 +2087,13 @@ def _call_get_flama_documentation(*, user_id: int | None = None, arguments: dict
 GET_FLAMA_DOCUMENTATION_TOOL = McpToolDefinition(
     name="get_flama_documentation",
     title="Get Flama Feature Documentation",
-    description="Reference official Flama documentation on SRS spaced repetition, Yomitan mining bridge, Local TTS (VoiceVox/Kokoro), and Community Marketplace.",
+    description="Reference official Flama documentation on template-authoring syntax/sandbox/preview, quiz-template recipe, SRS, Yomitan mining, Local TTS, and Marketplace.",
     input_schema={
         "type": "object",
         "properties": {
             "topic": {
                 "type": "string",
-                "enum": ["overview", "srs", "yomitan", "tts", "marketplace", "faq"],
+                "enum": list(public_search_tools.FLAMA_DOCUMENTATION_TOPICS),
                 "description": "Specific feature domain documentation topic",
                 "default": "overview",
             },
@@ -2100,6 +2106,28 @@ GET_FLAMA_DOCUMENTATION_TOOL = McpToolDefinition(
     handler=_call_get_flama_documentation,
     arguments_validator=public_search_tools.validate_get_flama_documentation_arguments,
 )
+
+from app.services.mcp.template_preview_tools import preview_note_type_template
+from app.validators.mcp_template_preview import (
+    TEMPLATE_PREVIEW_INPUT_SCHEMA, TEMPLATE_PREVIEW_OUTPUT_SCHEMA, validate_template_preview_arguments,
+)
+
+PREVIEW_NOTE_TYPE_TEMPLATE_TOOL = McpToolDefinition(
+    name="preview_note_type_template",
+    title="Preview NoteType Template",
+    description=("Analyze a candidate without saving, and return Study client artifacts for sandbox preview. "
+        "Supply input_schema, front_html, back_html and explicit sample_values for a raw candidate, or "
+        "an owned note_type_id plus application_id. Browser/interaction checks remain not_run. "
+        "Use get_flama_documentation(topic='template-authoring') for syntax and quiz-template for a recipe."),
+    input_schema=TEMPLATE_PREVIEW_INPUT_SCHEMA,
+    output_schema=TEMPLATE_PREVIEW_OUTPUT_SCHEMA,
+    required_scope="note-type:read",
+    annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
+    meta={"ui": {"resourceUri": "ui://flama/template-preview/v1.html"}},
+    handler=preview_note_type_template,
+    arguments_validator=validate_template_preview_arguments,
+)
+
 
 # All Registered MCP Tools
 # ---------------------------------------------------------------------------
@@ -2145,6 +2173,7 @@ _MCP_TOOL_DEFINITIONS = (
     GET_NOTE_TYPE_SCHEMA_TOOL,
     CREATE_NOTE_TYPE_TOOL,
     PREVIEW_NOTE_TYPE_UPDATE_TOOL,
+    PREVIEW_NOTE_TYPE_TEMPLATE_TOOL,
     UPDATE_NOTE_TYPE_TOOL,
     DELETE_NOTE_TYPE_TOOL,
     # Image Library & Crawling

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '@/shared/api/client'
+import { withStudyClientPreview } from '@/entities/flashcard/rendering'
 import {
   archiveLibraryTemplate, cardTemplateQueryKeys, deleteLibraryTemplate, fetchLibraryTemplate, previewLibraryTemplate, templateSampleValues, updateLibraryTemplate, useTemplateSamples,
   type CardTemplateItem, type TemplateInputSpec, type TemplateLibraryDetail, type TemplateLibraryPreview,
@@ -132,7 +133,7 @@ export function useTemplateLibraryEditor(id: string) {
     const timer = setTimeout(async () => {
       setPreview({ key: previewKey, data: null, error: null, loading: true })
       try {
-        const data = await previewLibraryTemplate(id, previewBody, controller.signal)
+        const data = withStudyClientPreview(await previewLibraryTemplate(id, previewBody, controller.signal))
         if (active) setPreview({ key: previewKey, data, error: null, loading: false })
       } catch (error) { if (active && !controller.signal.aborted) setPreview({ key: previewKey, data: null, error: errorMessage(error), loading: false }) }
     }, 500)

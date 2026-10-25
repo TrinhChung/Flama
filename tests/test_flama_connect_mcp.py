@@ -275,6 +275,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "get_note_type_schema",
             "create_note_type",
             "preview_note_type_update",
+            "preview_note_type_template",
             "update_note_type",
             "delete_note_type",
             # Image Library
@@ -297,7 +298,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "list_installed_decks",
         }
         self.assertEqual(tool_names, expected_tools)
-        self.assertEqual(len(tools), 51)
+        self.assertEqual(len(tools), 52)
 
 
     # -----------------------------------------------------------------------
