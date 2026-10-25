@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { noteTypeDetailApi } from '../api/noteTypeDetailApi'
@@ -9,6 +9,7 @@ import { canonicalTemplateId, templateOccurrenceId } from '../model/types'
 export function useSharedNoteTypeDetail() {
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { t, i18n } = useTranslation('marketplace')
   const numberLocale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
 
@@ -146,11 +147,22 @@ export function useSharedNoteTypeDetail() {
 
   // Publish Status Mutation for Creator
   const publishStatusMutation = useMutation({
-    mutationFn: (newStatus: 'private' | 'published') =>
-      noteTypeDetailApi.status(id!, {
-        publish_status: newStatus,
-      }),
-    onSuccess: (_, newStatus) => {
+    mutationFn: async (newStatus: 'private' | 'published') => {
+      if (newStatus === 'published') {
+        // An own template withdrawn from the template market needs its price
+        // again, which only the publish form collects.
+        const { templates } = await noteTypeDetailApi.publishOptions(id!)
+        if (templates.some((item) => item.is_owned && item.requires_publication)) return { needsPublishForm: true }
+      }
+      await noteTypeDetailApi.status(id!, { publish_status: newStatus })
+      return { needsPublishForm: false }
+    },
+    onSuccess: ({ needsPublishForm }, newStatus) => {
+      if (needsPublishForm) {
+        toast.info(t('notetype_detail.toast_republish_needs_listing', 'Hãy đặt giá cho mẫu giao diện chưa đăng chợ trước khi xuất bản lại.'))
+        navigate(`/marketplace/note-types/publish?id=${encodeURIComponent(id!)}&edit=1`)
+        return
+      }
       queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
       toast.success(
         newStatus === 'private'

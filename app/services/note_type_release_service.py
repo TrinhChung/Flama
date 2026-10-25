@@ -12,6 +12,7 @@ import json
 from sqlalchemy import select
 
 from app.repositories import note_type_release_repository as repository
+from app.services import release_core
 from models.field_def import FieldDef
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
@@ -68,10 +69,18 @@ def stage_publication(session, *, note_type, actor_user_id):
     if not label or len(label) > 50:
         raise NoteTypeReleaseError("NOTE_TYPE_VERSION_INVALID", "Version must contain 1 to 50 characters.", status=400)
     existing = repository.by_label(session, note_type.id, label)
-    if existing:
-        if existing.content_hash != digest:
+    if existing and existing.content_hash != digest:
+        if existing.id != note_type.current_release_id:
             raise NoteTypeReleaseError("NOTE_TYPE_VERSION_CONFLICT",
                 "This version already contains a different Note Type schema or template mapping. Choose a new version.")
+        # Republishing edits under the current label continues its sequence;
+        # only an explicitly chosen older label is a conflict.
+        label = release_core.next_free_version(label, lambda value: repository.by_label(session, note_type.id, value) is not None)
+        if len(label) > 50:
+            raise NoteTypeReleaseError("NOTE_TYPE_VERSION_INVALID", "Version must contain 1 to 50 characters.", status=400)
+        note_type.version = label
+        existing = None
+    if existing:
         note_type.current_release_id = existing.id
         return existing
     release = NoteTypeRelease(note_type_id=note_type.id, version_label=label,

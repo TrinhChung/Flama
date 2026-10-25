@@ -177,6 +177,26 @@ class TemplateMarketplaceTests(unittest.TestCase):
         self.login("tpl-buyer")
         self.assertEqual(self.client.get(f"/api/marketplace/templates/{self.template_id}").status_code, 200)
 
+    def test_relisting_after_a_manual_label_skips_labels_already_used(self):
+        self.assertEqual(self.list_on_market().status_code, 200)  # 1.0.0
+        self.client.patch(f"/api/card-templates/{self.template_id}", json={"front_html": "<b>{{word}}</b>"})
+        self.assertEqual(self.list_on_market().status_code, 200)  # 1.0.1
+        self.client.patch(f"/api/card-templates/{self.template_id}", json={"front_html": "<i>{{word}}</i>"})
+        head = self.client.get(f"/api/card-templates/{self.template_id}/marketplace").get_json()["current_release"]["id"]
+        manual = self.client.post(f"/api/card-templates/{self.template_id}/releases", headers={"Idempotency-Key": "manual-1"},
+            json={"version_label": "1.0", "expected_current_release_id": head, "expected_current_version_id": None})
+        self.assertEqual(manual.status_code, 201, manual.get_json())
+        self.assertEqual(self.client.put(f"/api/card-templates/{self.template_id}/marketplace",
+            json={"marketplace_status": "private"}).status_code, 200)
+        self.client.patch(f"/api/card-templates/{self.template_id}", json={"front_html": "<u>{{word}}</u>"})
+        relisted = self.list_on_market()
+        self.assertEqual(relisted.status_code, 200, relisted.get_json())
+        self.assertEqual(relisted.get_json()["current_release"]["version_label"], "1.0.2")
+        with self.app.app_context():
+            labels = [row.version_label for row in TemplateRelease.query.filter_by(template_id=self.template_id)
+                .order_by(TemplateRelease.sequence_no)]
+        self.assertEqual(labels, ["1.0.0", "1.0.1", "1.0", "1.0.2"])
+
     def test_archived_template_cannot_be_listed(self):
         self.client.patch(f"/api/card-templates/{self.template_id}/archive", json={"archived": True})
         response = self.list_on_market()

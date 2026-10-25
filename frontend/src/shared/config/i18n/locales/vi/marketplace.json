@@ -269,6 +269,7 @@
     "toast_saved": "Đã lưu cấu trúc thẻ",
     "toast_revoked": "Đã thu hồi cấu trúc thẻ khỏi Marketplace.",
     "toast_republished": "Đã xuất bản lại cấu trúc thẻ lên Marketplace.",
+    "toast_republish_needs_listing": "Hãy đặt giá cho mẫu giao diện chưa đăng chợ trước khi xuất bản lại.",
     "loading": "Đang tải thông tin cấu trúc thẻ…",
     "not_found": "Không tìm thấy cấu trúc thẻ",
     "header_desc": "Cấu trúc trường và các giao diện tham chiếu trên chợ Flama.",

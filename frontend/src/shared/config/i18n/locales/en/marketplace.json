@@ -269,6 +269,7 @@
     "toast_saved": "Note Type saved",
     "toast_revoked": "Note Type withdrawn from the Marketplace.",
     "toast_republished": "Note Type republished on the Marketplace.",
+    "toast_republish_needs_listing": "Set a price for your unlisted card templates before republishing.",
     "loading": "Loading Note Type information…",
     "not_found": "Note Type not found",
     "header_desc": "Note type structure and referenced templates on Flama Marketplace.",

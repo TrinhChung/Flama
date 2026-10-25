@@ -16,6 +16,7 @@ import { DeckCardPreviewSection } from '../components/deck-detail/DeckCardPrevie
 import { DeckLessonsSection } from '../components/deck-detail/DeckLessonsSection'
 import { DeckReviewsSection } from '../components/deck-detail/DeckReviewsSection'
 import { DeckRelatedSection } from '../components/deck-detail/DeckRelatedSection'
+import { useDeckPublishStatus } from '../hooks/useDeckPublishStatus'
 
 type AuthorProfile = {
   username?: string
@@ -336,24 +337,7 @@ export function SharedDeckDetailPage() {
     },
   })
 
-  // Publish Status Mutation for Creator
-  const publishStatusMutation = useMutation({
-    mutationFn: (newStatus: 'private' | 'published') =>
-      appApi.mutate(`/api/creator/decks/${id}/publish-status`, 'PATCH', {
-        publish_status: newStatus,
-      }),
-    onSuccess: (_, newStatus) => {
-      queryClient.invalidateQueries({ queryKey: ['shared-deck-detail', id] })
-      toast.success(
-        newStatus === 'private'
-          ? t('detail.toast_revoked', 'Đã thu hồi bộ deck khỏi Marketplace.')
-          : t('detail.toast_republished', 'Đã xuất bản lại bộ deck lên Marketplace.')
-      )
-    },
-    onError: (err: any) => {
-      toast.error(err?.message || t('common.error', 'Không thể cập nhật trạng thái xuất bản.'))
-    },
-  })
+  const publishStatusMutation = useDeckPublishStatus(id)
 
   const handlePrevSample = () => {
     if (!samples.length) return
