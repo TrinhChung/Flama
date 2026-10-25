@@ -79,6 +79,7 @@
   ["PATCH", "/api/browse/cards/<card_id>"],
   ["POST", "/api/browse/cards/batch-delete"],
   ["GET", "/api/browse/decks"],
+  ["GET", "/api/browse/decks/summaries"],
   ["GET", "/api/browse/decks/tree"],
   ["GET", "/api/browse/notes"],
   ["DELETE", "/api/browse/notes/<note_id>"],

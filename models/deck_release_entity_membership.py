@@ -21,7 +21,6 @@ class DeckReleaseEntityMembership(db.Model):
             ondelete="CASCADE",
         ),
         nullable=False,
-        index=True,
     )
     entity_kind = db.Column(db.String(32), nullable=False)
     entity_id = db.Column(db.String(64), nullable=False)

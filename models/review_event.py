@@ -10,7 +10,7 @@ class ReviewEvent(db.Model):
     __tablename__ = "review_events"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     # The Card as named when answered: a presentation key, or a pre-P11 ID.
     card_id = db.Column(db.String(80), nullable=False, index=True)
     # Snapshot of the Card's Note when the event was written (no FK: history
@@ -29,7 +29,6 @@ class ReviewEvent(db.Model):
         db.String(36),
         db.ForeignKey("study_sessions.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     client_event_id = db.Column(db.String(36), nullable=True)
     sequence_no = db.Column(db.Integer, nullable=True)
@@ -40,8 +39,8 @@ class ReviewEvent(db.Model):
     duration_ms = db.Column(db.Integer, nullable=True)
     rating = db.Column(db.String(20), nullable=False)
     mode = db.Column(db.String(20), nullable=False)
-    scheduler_mode = db.Column(db.String(20), nullable=False, default="legacy", index=True)
-    review_kind = db.Column(db.String(20), nullable=False, default="review", index=True)
+    scheduler_mode = db.Column(db.String(20), nullable=False, default="legacy")
+    review_kind = db.Column(db.String(20), nullable=False, default="review")
     queue_before = db.Column(db.String(20), nullable=True)
     queue_after = db.Column(db.String(20), nullable=True)
     interval_days_before = db.Column(db.Float, nullable=True)

@@ -21,7 +21,6 @@ class DeckReleaseChange(db.Model):
             ondelete="CASCADE",
         ),
         nullable=False,
-        index=True,
     )
     release_sequence_no = db.Column(db.BigInteger, nullable=False)
     change_key = db.Column(db.String(191), nullable=False)

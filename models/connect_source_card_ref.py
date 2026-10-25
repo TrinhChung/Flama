@@ -25,7 +25,6 @@ class ConnectSourceCardRef(db.Model):
         db.Integer,
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     source_key = db.Column(db.String(255), nullable=False)
     external_card_id = db.Column(db.String(128), nullable=False)

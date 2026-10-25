@@ -11,7 +11,7 @@ class Note(db.Model):
 
     id = db.Column(db.String(36), primary_key=True, default=uuid_str)
     note_type_id = db.Column(db.String(36), db.ForeignKey("note_types.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     deck_id = db.Column(db.Integer, db.ForeignKey("decks.id", ondelete="SET NULL"), nullable=True, index=True)
     # The only live value store. Labels are projected at API/render boundaries.
     field_values_by_id = db.Column(db.JSON, nullable=False, default=dict)

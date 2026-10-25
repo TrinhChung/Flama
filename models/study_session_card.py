@@ -13,7 +13,6 @@ class StudySessionCard(db.Model):
         db.String(36),
         db.ForeignKey("study_sessions.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     # Presentation key of the dealt Card (ADR P11); Cards are derived, no FK.
     card_id = db.Column(db.String(80), nullable=False, index=True)
