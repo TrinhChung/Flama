@@ -159,13 +159,16 @@ def selected_note_values(*, user_id, admin_mode, timezone_name, note_ids):
     return result
 
 
-def authorized_note(*, user_id, admin_mode, timezone_name, note_id, include_media=True):
-    note = repository.load_note_reference(note_id, include_media=include_media)
+def authorized_note(*, user_id, admin_mode, timezone_name, note_id, include_media=True, defer_clone_values=False):
+    note = repository.load_note_reference(note_id, include_media=include_media,
+        include_live_values=not defer_clone_values or admin_mode)
     if note is None:
         raise shared.BrowseApiError("Note not found", status=404)
     if admin_mode or note.user_id == user_id:
         # The ownership check already authorizes this Note. Resolving every
         # installed deck again would add unrelated scope queries to each edit.
+        if defer_clone_values:
+            repository.ensure_live_values(note)
         return repository.BrowseNoteReference(note), None
     from app.services import flashcards_share
     with shared._study_authority_conflict():
@@ -175,6 +178,8 @@ def authorized_note(*, user_id, admin_mode, timezone_name, note_id, include_medi
     for root_id in repository.clone_scope_roots_for_note(user_id=user_id, source_deck_id=note.deck_id):
         scope = flashcards_share.resolve_clone_scope_for_local_deck(user_id=user_id, local_deck_id=root_id)
         if scope and scope.source_deck_ids and repository.note_matches_clone_scope(note_id=note.id, scope=scope):
+            if defer_clone_values and not (scope.install.version_mode == 'release' and scope.install.applied_release_id):
+                repository.ensure_live_values(note)
             return repository.BrowseNoteReference(note, scope), None
     raise shared.BrowseApiError("Note not found", status=404)
 
@@ -218,7 +223,7 @@ def _editor_detail(*, reference, user_id, admin_mode, timezone_name):
 
 def get_note_detail(*, user_id, admin_mode, timezone_name, note_id, compact=False):
     ref, context = authorized_note(user_id=user_id, admin_mode=admin_mode,
-        timezone_name=timezone_name, note_id=note_id, include_media=not compact)
+        timezone_name=timezone_name, note_id=note_id, include_media=not compact, defer_clone_values=compact)
     if compact:
         return _editor_detail(reference=ref, user_id=user_id, admin_mode=admin_mode, timezone_name=timezone_name)
     detail = shared._build_browse_detail_payload(user_id=user_id, admin_mode=admin_mode,

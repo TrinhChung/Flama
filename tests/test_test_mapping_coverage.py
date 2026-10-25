@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import fnmatch
 from pathlib import Path
+import subprocess
 import unittest
 
 from scripts import run_tests
 
 
 class TestMappingCoverageTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Local experiments must neither hide missing CI files nor require
+        # domain mappings. The index is also valid before a new commit exists.
+        cls.tracked_paths = set(subprocess.check_output(
+            ["git", "ls-files", "-z"], cwd=run_tests.ROOT_DIR,
+        ).decode("utf-8").split("\0")) - {""}
+
     def test_every_backend_source_is_mapped_or_explicitly_full_suite(self):
         missing: list[str] = []
         source_paths = [
@@ -27,6 +36,8 @@ class TestMappingCoverageTests(unittest.TestCase):
             }:
                 continue
             relative = path.relative_to(run_tests.ROOT_DIR).as_posix()
+            if relative not in self.tracked_paths:
+                continue
             mapped = any(
                 fnmatch.fnmatch(relative, pattern)
                 for module in run_tests.MODULES.values()
@@ -49,16 +60,16 @@ class TestMappingCoverageTests(unittest.TestCase):
         missing: list[str] = []
         for module_name, module in run_tests.MODULES.items():
             for relative in module["backend_tests"]:
-                if not (run_tests.ROOT_DIR / relative).is_file():
+                if relative not in self.tracked_paths or not (run_tests.ROOT_DIR / relative).is_file():
                     missing.append(f"{module_name}:backend:{relative}")
             for relative in module["frontend_tests"]:
-                if not (run_tests.ROOT_DIR / "frontend" / relative).is_file():
+                if f"frontend/{relative}" not in self.tracked_paths or not (run_tests.ROOT_DIR / "frontend" / relative).is_file():
                     missing.append(f"{module_name}:frontend:{relative}")
 
         self.assertEqual(
             sorted(missing),
             [],
-            "Remove or update stale test paths in scripts/run_tests.py",
+            "Catalog tests must exist in Git; untracked local files do not exist in CI",
         )
 
 

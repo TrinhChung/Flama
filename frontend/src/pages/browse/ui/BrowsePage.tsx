@@ -106,6 +106,7 @@ export function BrowsePage() {
             size="sm"
             className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1.5 bg-background hover:bg-muted border-border"
             onClick={openWorksheetModal}
+            disabled={selectedCards.length === 0 && browse.selectedDeckSummaryPending}
             title={worksheetTitle}
           >
             <Printer className="size-3.5 text-primary" />
@@ -122,7 +123,7 @@ export function BrowsePage() {
                 variant="secondary"
                 className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center font-medium bg-muted text-muted-foreground rounded-full"
               >
-                {browse.selectedDeck.counts?.total ?? 0}
+                {browse.selectedDeck.summary_loaded === false ? '?' : browse.selectedDeck.counts?.total ?? 0}
               </Badge>
             ) : null}
           </Button>
@@ -132,6 +133,7 @@ export function BrowsePage() {
             size="sm"
             className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1 bg-background hover:bg-muted border-border"
             onClick={openBatchStrokeModal}
+            disabled={selectedCards.length === 0 && browse.selectedDeckSummaryPending}
             title={strokeTitle}
           >
             <PenTool className="size-3.5 text-primary" />
@@ -141,7 +143,7 @@ export function BrowsePage() {
                 variant="secondary"
                 className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center font-medium bg-muted text-muted-foreground rounded-full"
               >
-                {browse.selectedDeck.counts?.total ?? 0}
+                {browse.selectedDeck.summary_loaded === false ? '?' : browse.selectedDeck.counts?.total ?? 0}
               </Badge>
             ) : null}
           </Button>
@@ -207,7 +209,7 @@ export function BrowsePage() {
                     variant="secondary"
                     className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center font-medium bg-muted text-muted-foreground rounded-full"
                   >
-                    {browse.selectedDeck.counts?.total ?? 0}
+                    {browse.selectedDeck.summary_loaded === false ? '?' : browse.selectedDeck.counts?.total ?? 0}
                   </Badge>
                 ) : null}
               </Button>
@@ -219,6 +221,7 @@ export function BrowsePage() {
 
               <DropdownMenuItem
                 onClick={openWorksheetModal}
+            disabled={selectedCards.length === 0 && browse.selectedDeckSummaryPending}
                 className="flex items-center justify-between cursor-pointer py-2"
               >
                 <div className="flex items-center gap-2">
@@ -231,13 +234,14 @@ export function BrowsePage() {
                   </Badge>
                 ) : browse.selectedDeck ? (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium bg-muted text-muted-foreground rounded-full">
-                    {browse.selectedDeck.counts?.total ?? 0}
+                    {browse.selectedDeck.summary_loaded === false ? '?' : browse.selectedDeck.counts?.total ?? 0}
                   </Badge>
                 ) : null}
               </DropdownMenuItem>
 
               <DropdownMenuItem
                 onClick={openBatchStrokeModal}
+            disabled={selectedCards.length === 0 && browse.selectedDeckSummaryPending}
                 className="flex items-center gap-2 cursor-pointer py-2"
               >
                 <PenTool className="size-4 text-primary" />
@@ -251,6 +255,7 @@ export function BrowsePage() {
                       toast.info(t('toasts.deck_or_cards_required'))
                       return
                     }
+                    if (browse.selectedDeckSummaryPending) return
                     if (browse.selectedDeck?.has_mixed_note_types) {
                       toast.error(t('toasts.mixed_note_types_error'))
                       return
@@ -304,9 +309,9 @@ export function BrowsePage() {
             onRetry={browse.refetchCards}
             total={browse.cardsQuery.data?.total || 0}
             pages={browse.cardsQuery.data?.pages || 1}
-            page={browse.page}
+            page={browse.displayedPage}
             setPage={browse.setPage}
-            perPage={browse.perPage}
+            perPage={browse.displayedPerPage}
             onPerPageChange={browse.handlePerPageChange}
             selectedCardSet={browse.selectedCardSet}
             selectedCount={selectedCards.length}

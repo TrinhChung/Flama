@@ -18,7 +18,7 @@ export function useBrowseState() {
   const queryClient = useQueryClient()
   const bootstrapQuery = useBootstrap()
   const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
-  const filters = useBrowseFilters(urlDeckId)
+  const filters = useBrowseFilters()
   const data = useBrowseData(filters)
   const selection = useBrowseSelection(data.cards)
   const editor = useBrowseEditor({ urlDeckId, urlCardId, filters, data, selection })

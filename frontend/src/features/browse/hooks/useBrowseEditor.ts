@@ -9,7 +9,6 @@ import { noteWritePreconditions } from '@/entities/flashcard/fields'
 import { NOTE_TAG_MAX_COUNT, NOTE_TAG_MAX_LENGTH, tagDedupeKey } from '@/entities/flashcard'
 import { browseApi } from '../api/browseApi'
 import { browseQueryKeys } from '../api/browseQueryKeys'
-import { parseDeckIdParam } from '../utils/browseParams'
 import type { useBrowseFilters } from './useBrowseFilters'
 import type { useBrowseData } from './useBrowseData'
 import type { useBrowseSelection } from './useBrowseSelection'
@@ -41,22 +40,14 @@ export function useBrowseEditor({ urlDeckId, urlCardId, filters, data, selection
     urlCardId ? 'editor' : 'cards',
   )
 
-  // Sync state if URL search parameters change on initial mount
-  const initialUrlDeckSyncedRef = useRef(false)
+  // Deck/page are owned by the URL filter hook; editor bookmarks stay independent.
   useEffect(() => {
-    if (!initialUrlDeckSyncedRef.current) {
-      initialUrlDeckSyncedRef.current = true
-      const parsedDeckId = parseDeckIdParam(urlDeckId)
-      if (parsedDeckId !== null) {
-        setSelectedDeckId(parsedDeckId)
-      }
-    }
     if (urlCardId) {
       setActiveCardId(urlCardId)
       setIsCreatingCard(false)
       setMobileTab('editor')
     }
-  }, [urlDeckId, urlCardId, setSelectedDeckId])
+  }, [urlCardId])
 
   const [editFieldValues, setEditFieldValues] = useState<Record<string, unknown>>({})
   const [editDeckId, setEditDeckId] = useState<number | null>(null)
@@ -149,15 +140,23 @@ export function useBrowseEditor({ urlDeckId, urlCardId, filters, data, selection
     setEditTags(initialTags)
   }
 
-  const handleStartCreateCard = () => {
+  const defaultCreateDeckId = selectedDeckId ?? decksQuery.data?.decks?.[0]?.id ?? null
+  const defaultCreateDeckIdRef = useRef(defaultCreateDeckId)
+  defaultCreateDeckIdRef.current = defaultCreateDeckId
+  const handleStartCreateCard = async () => {
+    const defaultDeckId = defaultCreateDeckId
+    let currentDeck = decksQuery.data?.decks?.find((deck) => deck.id === defaultDeckId)
+    if (defaultDeckId !== null && currentDeck?.summary_loaded !== true) {
+      try { currentDeck = await data.ensureDeckSummary(defaultDeckId) }
+      catch (error) { toast.error(t('toasts.create_error'), { description: error instanceof Error ? error.message : String(error) }); return }
+      if (defaultCreateDeckIdRef.current !== defaultDeckId) return
+    }
     setIsCreatingCard(true)
     setActiveCardId(null)
     setSelectedCards([])
 
-    const defaultDeckId = selectedDeckId ?? decksQuery.data?.decks?.[0]?.id ?? null
     setEditDeckId(defaultDeckId)
 
-    const currentDeck = decksQuery.data?.decks?.find((d) => d.id === defaultDeckId)
     const availableNoteTypes = noteTypesQuery.data?.items || []
     const resolvedNoteTypeId =
       currentDeck?.note_type_id ||

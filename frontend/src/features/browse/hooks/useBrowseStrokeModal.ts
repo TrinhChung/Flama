@@ -38,6 +38,9 @@ export function useBrowseStrokeModal({
   } = browse || {}
 
   const queryClient = browseQueryClient || defaultQueryClient
+  const isDeckScope = mode === 'batch' && selectedCards.length === 0 && Boolean(selectedDeckId)
+  const selectedDeck = browse?.selectedDeck
+  const summaryPending = isDeckScope && Boolean(browse) && (!selectedDeck || selectedDeck.summary_loaded === false)
   const editFieldValues = browseEditFieldValues || fieldValues || EMPTY_FIELD_VALUES
 
   // Determine target card ID to resolve actual Note Type fields
@@ -289,13 +292,14 @@ export function useBrowseStrokeModal({
         overwrite,
         max_characters: maxChars,
       }),
-    enabled: isOpen && mode !== 'single' && Boolean(sourceField.trim() && targetField.trim()),
+    enabled: isOpen && mode !== 'single' && !summaryPending && Boolean(sourceField.trim() && targetField.trim()),
     staleTime: 1000 * 30,
   })
 
   // Batch generate mutation
   const batchMutation = useMutation({
     mutationFn: () => {
+      if (summaryPending || selectedDeck?.has_mixed_note_types) throw new Error(t('toasts.mixed_note_types_error'))
       if (!sourceField.trim()) {
         throw new Error(t('stroke_modal.errors.select_source'))
       }
@@ -369,8 +373,6 @@ export function useBrowseStrokeModal({
     }
   }
 
-  const isDeckScope = mode === 'batch' && selectedCards.length === 0 && Boolean(selectedDeckId)
-  const selectedDeck = browse?.selectedDeck
   const isMixedNoteTypes =
     isDeckScope &&
     (Boolean(selectedDeck?.has_mixed_note_types) || Boolean(estimateQuery.data?.has_mixed_note_types))
@@ -387,5 +389,5 @@ export function useBrowseStrokeModal({
             })
           : t('stroke_modal.all_cards_in_deck')
 
-  return { isOpen, onClose, mode, t, noteFieldNames, mediaTargetFieldNames, sourceField, setSourceField, targetField, setTargetField, locale, setLocale, overwrite, setOverwrite, copiedCode, sampleText, setSampleText, previewQuery, estimateQuery, batchMutation, handleApplySingle, handleCopyCode, selectedDeck, isMixedNoteTypes, targetCount }
+  return { isOpen, onClose, mode, t, noteFieldNames, mediaTargetFieldNames, sourceField, setSourceField, targetField, setTargetField, locale, setLocale, overwrite, setOverwrite, copiedCode, sampleText, setSampleText, previewQuery, estimateQuery, batchMutation, handleApplySingle, handleCopyCode, selectedDeck, isMixedNoteTypes, summaryPending, targetCount }
 }

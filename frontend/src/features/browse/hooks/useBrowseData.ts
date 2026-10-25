@@ -1,9 +1,10 @@
-import { useCallback, useEffect } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ApiError } from '@/shared/api/client'
 import { browseApi, browseQueryKeys } from '../api/browseApi'
 import type { BrowseCardRow } from '../types'
 import type { useBrowseFilters } from './useBrowseFilters'
+import { useBrowseDeckSummaries } from './useBrowseDeckSummaries'
 
 const EMPTY_BROWSE_CARDS: BrowseCardRow[] = []
 
@@ -16,10 +17,21 @@ function retryUnlessClientError(failureCount: number, error: Error) {
 export function useBrowseData(filters: ReturnType<typeof useBrowseFilters>) {
   const { debouncedQuery, selectedDeckId, statusFilter, sortBy, sortDir, page, setPage, perPage } = filters
   // Decks Tree Query
-  const decksQuery = useQuery({
-    queryKey: ['browse', 'decks'],
-    queryFn: ({ signal }) => browseApi.fetchDecks(signal),
+  const structureQuery = useQuery({
+    queryKey: ['browse', 'decks', 'structure'],
+    queryFn: ({ signal }) => browseApi.fetchDeckStructure(signal),
   })
+  const [visibleDeckIds, setVisibleDeckIds] = useState<number[]>([])
+  const summaryIds = useMemo(() => [...new Set([
+    ...(selectedDeckId === null ? [] : [selectedDeckId]), ...visibleDeckIds,
+  ])].sort((a, b) => a - b), [selectedDeckId, visibleDeckIds])
+  const summaries = useBrowseDeckSummaries(summaryIds)
+  const decks = useMemo(() => (structureQuery.data?.decks || []).map((deck) => {
+    const summary = summaries.byId.get(deck.id)
+    return summary ? { ...deck, ...summary } : deck
+  }), [structureQuery.data, summaries.byId])
+  // Retain the existing workspace contract while keeping server caches separate.
+  const decksQuery = { ...structureQuery, data: structureQuery.data ? { decks } : undefined }
 
   // Note Types Query for Card Creation
   const noteTypesQuery = useQuery({
@@ -40,8 +52,8 @@ export function useBrowseData(filters: ReturnType<typeof useBrowseFilters>) {
       page,
       perPage,
     ],
-    queryFn: ({ signal }) =>
-      browseApi.fetchCards({
+    queryFn: async ({ signal }) => {
+      const result = await browseApi.fetchCards({
         q: debouncedQuery,
         deck_id: selectedDeckId !== null ? selectedDeckId : '',
         status: statusFilter,
@@ -49,12 +61,21 @@ export function useBrowseData(filters: ReturnType<typeof useBrowseFilters>) {
         sort_dir: sortDir,
         page,
         per_page: perPage,
-      }, signal),
-    placeholderData: keepPreviousData,
+      }, signal)
+      return { ...result, per_page: result.per_page ?? perPage }
+    },
+    // Retain rows only while paging inside the same deck/filter/sort scope.
+    placeholderData: (previous, previousQuery) => {
+      const previousScope = previousQuery?.queryKey.slice(2, 7)
+      const scope = [debouncedQuery, selectedDeckId, statusFilter, sortBy, sortDir]
+      return previousScope?.every((value, index) => value === scope[index]) ? previous : undefined
+    },
     retry: retryUnlessClientError,
   })
 
   const cards = cardsQuery.data?.items || EMPTY_BROWSE_CARDS
+  const displayedPage = cardsQuery.data?.page ?? page
+  const displayedPerPage = cardsQuery.data?.per_page ?? perPage
 
   // Pull the page back inside the result, e.g. after deleting the last rows.
   const confirmedPageCount = cardsQuery.isPlaceholderData ? null : cardsQuery.data?.pages
@@ -75,5 +96,6 @@ export function useBrowseData(filters: ReturnType<typeof useBrowseFilters>) {
       : null
 
 
-  return { decksQuery, noteTypesQuery, cardsQuery, cards, selectedDeck, refetchCards }
+  const selectedDeckSummaryPending = selectedDeckId !== null && selectedDeck?.summary_loaded !== true
+  return { decksQuery, noteTypesQuery, cardsQuery, cards, selectedDeck, refetchCards, setVisibleDeckIds, selectedDeckSummaryPending, deckSummaryError: summaries.error, displayedPage, displayedPerPage, ensureDeckSummary: summaries.ensureDeckSummary }
 }

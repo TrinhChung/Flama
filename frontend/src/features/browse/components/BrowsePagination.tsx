@@ -22,6 +22,7 @@ export interface BrowsePaginationProps {
   total: number
   pages: number
   selectedCount?: number
+  isFetchingPage?: boolean
 }
 
 function getPageItems(current: number, total: number): (number | 'ellipsis-start' | 'ellipsis-end')[] {
@@ -48,6 +49,7 @@ export function BrowsePagination({
   total,
   pages,
   selectedCount = 0,
+  isFetchingPage = false,
 }: BrowsePaginationProps) {
   const { t } = useTranslation('browse')
 
@@ -59,6 +61,8 @@ export function BrowsePagination({
 
   return (
     <footer
+      inert={isFetchingPage}
+      aria-busy={isFetchingPage}
       aria-label={t('pagination.aria_label')}
       className="shrink-0 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-4 border-t border-border/60 bg-muted/15 px-3 py-2.5 sm:px-4 sm:py-2 mt-auto"
     >

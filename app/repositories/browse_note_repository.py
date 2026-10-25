@@ -42,24 +42,41 @@ class BrowseNoteReference:
         return self.note.updated_at
 
 
-def load_note(note_id, *, include_media=True):
+_LIVE_VALUE_COLUMNS = (Note.field_values_by_id, Note.field_values_codec, Note.field_values_extras)
+
+
+def load_note(note_id, *, include_media=True, include_live_values=True):
     query = Note.query.options(selectinload(Note.note_type).options(
         load_only(NoteType.id, NoteType.user_id, NoteType.name, NoteType.field_schema_revision),
         selectinload(NoteType.field_defs)))
     if include_media:
         query = query.options(selectinload(Note.media_assets))
+    if not include_live_values:
+        query = query.options(load_only(Note.id, Note.user_id, Note.note_type_id, Note.deck_id,
+            Note.tags, Note.created_at, Note.updated_at, Note.content_revision))
     return query.filter(Note.id == note_id).first()
 
 
-def load_note_reference(note_id, *, include_media=True):
-    note = load_note(note_id, include_media=include_media)
+def load_note_reference(note_id, *, include_media=True, include_live_values=True):
+    note = load_note(note_id, include_media=include_media, include_live_values=include_live_values)
     if note is not None:
         return note
     # Resolve an old bookmark's identity without loading a presentation or its
     # template. Authorization is always checked on the resulting Note.
     from models.card import card_key_pairs
     pair = card_key_pairs(db.session, [note_id]).get(str(note_id))
-    return load_note(pair[0], include_media=include_media) if pair else None
+    return load_note(pair[0], include_media=include_media, include_live_values=include_live_values) if pair else None
+
+
+def ensure_live_values(note):
+    """Hydrate all deferred value columns together for owner/snapshot reads."""
+    from sqlalchemy import inspect
+    missing = inspect(note).unloaded.intersection(column.key for column in _LIVE_VALUE_COLUMNS)
+    if missing:
+        # Keep the optimistic-lock token in the same row read as its values,
+        # including under a connection configured for READ COMMITTED.
+        db.session.refresh(note, attribute_names=[column.key for column in _LIVE_VALUE_COLUMNS]
+            + [Note.content_revision.key])
 
 
 def installed_scope_candidates(*, user_id, local_deck_ids):
@@ -75,16 +92,43 @@ def installed_scope_candidates(*, user_id, local_deck_ids):
     return sorted(int(row[0]) for row in db.session.execute(roots.union(mapped)) if row[0] is not None)
 
 
-def selected_owned_decks(*, user_id, deck_id, include_subdecks):
-    """Fast path for an entirely owned subtree; mixed visibility uses the normal resolver."""
-    root = db.session.get(Deck, deck_id)
-    if root is None or root.deleted_at is not None or root.owner_user_id != user_id:
-        return None
-    decks = {int(root.id): root}
-    frontier = [int(root.id)] if include_subdecks else []
+def installed_batch_scope_roots(*, user_id, local_deck_ids):
+    """Relevant install roots in the full Browse resolver's precedence order.
+
+    An install can present several requested branches; resolve it once and
+    clip its maps afterwards. Keep nested installs as independent branches,
+    as the full sidebar does, rather than hiding them under an outer install.
+    """
+    from models.deck_install import DeckInstall
+    from models.deck_clone_deck_map import DeckCloneDeckMap
+    maps = select(DeckCloneDeckMap.id).where(DeckCloneDeckMap.deck_install_id == DeckInstall.id)
+    mapped = maps.where(DeckCloneDeckMap.local_deck_id.in_(local_deck_ids)).exists()
+    rows = db.session.query(DeckInstall.local_deck_id).filter(
+        DeckInstall.user_id == user_id,
+        DeckInstall.clone_mode == "logical_overlay",
+        DeckInstall.local_deck_id.isnot(None),
+        or_(DeckInstall.local_deck_id.in_(local_deck_ids), mapped, ~maps.exists())).distinct().all()
+    return [int(row[0]) for row in rows]
+
+
+def selected_browse_decks(*, user_id, admin_mode, deck_ids, include_subdecks):
+    """Read selected subtrees once; learner mixed visibility retains its resolver.
+
+    Admin Browse permits only owned/unowned decks and cannot traverse a
+    foreign child. A learner's all-owned subtree is already authorized; a
+    foreign descendant needs the established ancestor/install visibility rules.
+    """
+    roots = set(deck_ids)
+    query = Deck.query.filter(Deck.id.in_(roots), Deck.deleted_at.is_(None))
+    allowed = or_(Deck.owner_user_id == user_id, Deck.owner_user_id.is_(None)) if admin_mode else Deck.owner_user_id == user_id
+    decks = {int(root.id): root for root in query.filter(allowed)}
+    if set(decks) != roots:
+        return [] if admin_mode else None
+    frontier = list(roots) if include_subdecks else []
     while frontier:
-        children = Deck.query.filter(Deck.parent_id.in_(frontier), Deck.deleted_at.is_(None)).all()
-        if any(child.owner_user_id != user_id for child in children):
+        children_query = Deck.query.filter(Deck.parent_id.in_(frontier), Deck.deleted_at.is_(None))
+        children = children_query.filter(allowed).all() if admin_mode else children_query.all()
+        if not admin_mode and any(child.owner_user_id != user_id for child in children):
             return None
         frontier = []
         for child in children:
@@ -92,6 +136,11 @@ def selected_owned_decks(*, user_id, deck_id, include_subdecks):
                 decks[int(child.id)] = child
                 frontier.append(int(child.id))
     return list(decks.values())
+
+
+def selected_owned_decks(*, user_id, deck_id, include_subdecks):
+    return selected_browse_decks(user_id=user_id, admin_mode=False,
+        deck_ids=[deck_id], include_subdecks=include_subdecks)
 
 
 def clone_scope_roots_for_note(*, user_id, source_deck_id):

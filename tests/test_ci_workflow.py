@@ -167,6 +167,27 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertEqual(report["env"]["MYSQL_CONTAINER"], "${{ job.services.mysql.id }}")
         self.assertNotIn("${{", report["run"])
 
+    def test_browse_contracts_run_explicitly_on_local_mysql_without_skips(self):
+        import shlex
+
+        _, steps = self._mysql_steps()
+        step = steps["Qualify Browse pagination, scope and release contracts on MySQL"]
+        self.assertEqual(step["env"]["FLAMA_BROWSE_MYSQL_TESTS"], "1")
+        self.assertEqual(step["env"]["DB_HOST"], "127.0.0.1")
+        self.assertEqual(step["env"]["DB_NAME"], "ci")
+        self.assertEqual(step["env"]["DB_USER"], "root")
+        self.assertNotIn("continue-on-error", step)
+        tokens = shlex.split(step["run"])
+        self.assertEqual(tokens[:8], ["python", "scripts/run_tests.py", "--backend-only",
+            "--jobs", "1", "--bin-timeout", "1200", "--file"])
+        self.assertEqual(tokens[8:], [
+            "tests/test_browse_notes_mysql.py",
+            "tests/test_browse_scope_optimization_mysql.py",
+            "tests/test_browse_deck_summary_mysql.py",
+            "tests/test_browse_search_mysql.py",
+            "tests/test_browse_mysql_contract.py",
+        ])
+
     def test_only_schema_owning_probes_run_in_parallel_with_unchanged_commands(self):
         import shlex
 

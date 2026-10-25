@@ -34,6 +34,7 @@ export type BrowseCardRow = {
 export type BrowseCardsResponse = {
   items: BrowseCardRow[]
   page: number
+  per_page?: number
   total: number
   pages: number
   has_next: boolean
@@ -42,6 +43,8 @@ export type BrowseCardsResponse = {
 export type BrowseDeck = {
   id: number
   name: string
+  /** False on the lightweight tree until its subtree summary has arrived. */
+  summary_loaded?: boolean
   parent_id?: number | null
   path?: string
   note_type_id?: string | null

@@ -17,6 +17,8 @@ vi.mock('@/features/browse/api/browseApi', () => ({
   browseQueryKeys: { noteTypes: ['note-types', 'browse', 'compact'] },
   browseApi: {
     fetchDecks: () => mocks.get('/browse/decks'),
+    fetchDeckStructure: () => mocks.get('/browse/decks'),
+    fetchDeckSummaries: (ids: number[]) => mocks.get('/browse/deck-summaries', ids),
     fetchNoteTypes: () => mocks.get('/note-types', { compact: 1 }),
     fetchCards: (params: unknown) => mocks.get('/browse/cards', params),
     fetchCardDetail: (id: string) => mocks.get(`/browse/cards/${id}`),
@@ -100,6 +102,7 @@ describe('BrowsePage card list contract with GET /api/browse/cards', () => {
     mocks.get.mockImplementation(async (path: string, params: CardsParams) => {
       if (path === '/browse/cards') return listCards(params)
       if (path === '/browse/decks') return { decks: [{ id: 7, name: 'Deck' }] }
+      if (path === '/browse/deck-summaries') return { decks: (Array.isArray(params) ? params : [7]).map((id: number) => ({ id, name: 'Deck', summary_loaded: true, counts: { total: 2 } })) }
       if (path === '/note-types') return { items: [] }
       throw new Error(`unexpected GET ${path}`)
     })
@@ -124,6 +127,7 @@ describe('BrowsePage card list contract with GET /api/browse/cards', () => {
     expect(options).toEqual(['all', 'new', 'learn', 'review'])
     await chooseStatus('learn')
     await waitFor(() => lastRequest().status === 'learn')
+    await waitFor(() => Boolean(header('Từ vựng')))
 
     for (const text of ['Đọc', 'Ý nghĩa', 'Trạng thái']) {
       await act(async () => header(text).click())
@@ -131,6 +135,7 @@ describe('BrowsePage card list contract with GET /api/browse/cards', () => {
     await act(async () => header('Từ vựng').click())
     await waitFor(() => lastRequest().sort_by === 'word')
     expect(lastRequest()).toMatchObject({ sort_by: 'word', sort_dir: 'asc', status: 'learn' })
+    await waitFor(() => Boolean(header('Từ vựng')))
     await act(async () => header('Từ vựng').click())
     await waitFor(() => lastRequest().sort_dir === 'desc')
 

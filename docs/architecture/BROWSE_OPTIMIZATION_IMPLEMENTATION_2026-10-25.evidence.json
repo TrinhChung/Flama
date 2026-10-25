@@ -1,0 +1,315 @@
+{
+  "date": "2026-10-25",
+  "scope": "Local MySQL service calls, not HTTP/browser/load latency",
+  "baseline_modules": "16e82f3b (same blobs at 0b723b1f) for three owned backend modules; other shared dependencies from current checkout in both subprocesses",
+  "clock": "2026-10-25T01:58:58.932403Z",
+  "samples_per_case": 3,
+  "warmup_per_case": 1,
+  "schema_or_index_changes": false,
+  "cases": [
+    {
+      "name": "A-selected-20",
+      "stable": true,
+      "median_ms": 78.615,
+      "samples_ms": [
+        70.353,
+        78.615,
+        214.536
+      ],
+      "statements": 19,
+      "payload_bytes": 4262,
+      "db_value_bytes": 44128,
+      "db_rows_returned": 122,
+      "live_note_content_rows": 20,
+      "checkpoint_content_rows": 0,
+      "payload_sha256": "1e31a4a35cac236b25757c6d6d5bf795c345d6b942aa1d76966e19f4b1b775dc",
+      "new_scope_hydration": [
+        20
+      ],
+      "before": {
+        "median_ms": 169.555,
+        "statements": 18,
+        "payload_bytes": 4262,
+        "db_value_bytes": 151769,
+        "live_note_content_rows": 20,
+        "payload_sha256": "1e31a4a35cac236b25757c6d6d5bf795c345d6b942aa1d76966e19f4b1b775dc"
+      }
+    },
+    {
+      "name": "A-editor",
+      "stable": true,
+      "median_ms": 42.645,
+      "samples_ms": [
+        49.242,
+        42.645,
+        40.743
+      ],
+      "statements": 16,
+      "payload_bytes": 2881,
+      "db_value_bytes": 5126,
+      "db_rows_returned": 44,
+      "live_note_content_rows": 1,
+      "checkpoint_content_rows": 0,
+      "payload_sha256": "edac383a47f972aeaa0f537a319d1cb9ea2737c04b21685aa619a6cc0c6aabfd",
+      "new_scope_hydration": [],
+      "before": {
+        "median_ms": 48.625,
+        "statements": 16,
+        "payload_bytes": 2881,
+        "db_value_bytes": 5126,
+        "live_note_content_rows": 1,
+        "payload_sha256": "edac383a47f972aeaa0f537a319d1cb9ea2737c04b21685aa619a6cc0c6aabfd"
+      }
+    },
+    {
+      "name": "A-sidebar-full",
+      "stable": true,
+      "median_ms": 914.701,
+      "samples_ms": [
+        914.701,
+        1506.842,
+        799.007
+      ],
+      "statements": 9,
+      "payload_bytes": 597091,
+      "db_value_bytes": 179851,
+      "db_rows_returned": 4480,
+      "live_note_content_rows": 0,
+      "checkpoint_content_rows": 0,
+      "payload_sha256": "2746881f7d58972645858eb2b4ac09509b577a62472f696dbc178aff52d0094e",
+      "new_scope_hydration": [],
+      "before": {
+        "median_ms": 922.654,
+        "statements": 9,
+        "payload_bytes": 597091,
+        "db_value_bytes": 179851,
+        "live_note_content_rows": 0,
+        "payload_sha256": "2746881f7d58972645858eb2b4ac09509b577a62472f696dbc178aff52d0094e"
+      }
+    },
+    {
+      "name": "A-sidebar-structure",
+      "stable": true,
+      "median_ms": 73.796,
+      "samples_ms": [
+        252.021,
+        73.572,
+        73.796
+      ],
+      "statements": 1,
+      "payload_bytes": 205927,
+      "db_value_bytes": 107733,
+      "db_rows_returned": 1534,
+      "live_note_content_rows": 0,
+      "checkpoint_content_rows": 0,
+      "payload_sha256": "685990a985b987356673c5f90fd18ebbe9bc384cd97d00a640257069aa235d0b",
+      "new_scope_hydration": []
+    },
+    {
+      "name": "A-sidebar-selected-summary",
+      "stable": true,
+      "median_ms": 190.643,
+      "samples_ms": [
+        190.323,
+        190.643,
+        211.017
+      ],
+      "statements": 10,
+      "payload_bytes": 363,
+      "db_value_bytes": 279,
+      "db_rows_returned": 7,
+      "live_note_content_rows": 0,
+      "checkpoint_content_rows": 0,
+      "payload_sha256": "1ddaee2f2a2e7a725b98d25743dba4814f02573092a64548f77d7c4410c61140",
+      "new_scope_hydration": []
+    },
+    {
+      "name": "B-selected-20",
+      "stable": true,
+      "median_ms": 142.512,
+      "samples_ms": [
+        153.164,
+        142.512,
+        130.546
+      ],
+      "statements": 33,
+      "payload_bytes": 3997,
+      "db_value_bytes": 48406,
+      "db_rows_returned": 248,
+      "live_note_content_rows": 0,
+      "checkpoint_content_rows": 20,
+      "payload_sha256": "bab6caf76d5076d35b05720e9d23d10a9f668da6657146a9df3509dd473c85f1",
+      "new_scope_hydration": [
+        20
+      ],
+      "before": {
+        "median_ms": 239.633,
+        "statements": 33,
+        "payload_bytes": 3997,
+        "db_value_bytes": 48406,
+        "live_note_content_rows": 0,
+        "payload_sha256": "bab6caf76d5076d35b05720e9d23d10a9f668da6657146a9df3509dd473c85f1"
+      }
+    },
+    {
+      "name": "B-editor",
+      "stable": true,
+      "median_ms": 109.256,
+      "samples_ms": [
+        109.256,
+        107.357,
+        119.626
+      ],
+      "statements": 35,
+      "payload_bytes": 2927,
+      "db_value_bytes": 17883,
+      "db_rows_returned": 182,
+      "live_note_content_rows": 0,
+      "checkpoint_content_rows": 1,
+      "payload_sha256": "507aeb77d0c6765b618edcee9f21b3509290b2a7231a3e06011ea2eaa95b12bb",
+      "new_scope_hydration": [],
+      "before": {
+        "median_ms": 124.845,
+        "statements": 35,
+        "payload_bytes": 2927,
+        "db_value_bytes": 18829,
+        "live_note_content_rows": 1,
+        "payload_sha256": "507aeb77d0c6765b618edcee9f21b3509290b2a7231a3e06011ea2eaa95b12bb"
+      }
+    },
+    {
+      "name": "B-sidebar-full",
+      "stable": true,
+      "median_ms": 523.941,
+      "samples_ms": [
+        539.015,
+        503.623,
+        523.941
+      ],
+      "statements": 58,
+      "payload_bytes": 113595,
+      "db_value_bytes": 117621,
+      "db_rows_returned": 1754,
+      "live_note_content_rows": 0,
+      "checkpoint_content_rows": 0,
+      "payload_sha256": "9da5685284b7d1f84fe0eb02c36ea18bf0789f7d3a7720456ac697633662f11f",
+      "new_scope_hydration": [],
+      "before": {
+        "median_ms": 801.577,
+        "statements": 58,
+        "payload_bytes": 113595,
+        "db_value_bytes": 117621,
+        "live_note_content_rows": 0,
+        "payload_sha256": "9da5685284b7d1f84fe0eb02c36ea18bf0789f7d3a7720456ac697633662f11f"
+      }
+    },
+    {
+      "name": "B-sidebar-structure",
+      "stable": true,
+      "median_ms": 32.939,
+      "samples_ms": [
+        32.939,
+        33.777,
+        26.922
+      ],
+      "statements": 4,
+      "payload_bytes": 29925,
+      "db_value_bytes": 49651,
+      "db_rows_returned": 569,
+      "live_note_content_rows": 0,
+      "checkpoint_content_rows": 0,
+      "payload_sha256": "b9d87e6c56cfc6c85bf54f075643c6adc4097c26732d2d3845c3ca44324e6ba9",
+      "new_scope_hydration": []
+    },
+    {
+      "name": "B-sidebar-selected-summary",
+      "stable": true,
+      "median_ms": 67.453,
+      "samples_ms": [
+        67.453,
+        79.277,
+        66.332
+      ],
+      "statements": 18,
+      "payload_bytes": 406,
+      "db_value_bytes": 3122,
+      "db_rows_returned": 53,
+      "live_note_content_rows": 0,
+      "checkpoint_content_rows": 0,
+      "payload_sha256": "5331b5d091e33ec9641171fc348595d116d0d877d64efdba95d170f347d64356",
+      "new_scope_hydration": []
+    }
+  ],
+  "parity": [
+    {
+      "name": "A-selected-20",
+      "equal_payload": true
+    },
+    {
+      "name": "A-editor",
+      "equal_payload": true
+    },
+    {
+      "name": "A-sidebar-full",
+      "equal_payload": true
+    },
+    {
+      "name": "B-selected-20",
+      "equal_payload": true
+    },
+    {
+      "name": "B-editor",
+      "equal_payload": true
+    },
+    {
+      "name": "B-sidebar-full",
+      "equal_payload": true
+    }
+  ],
+  "verification": {
+    "frontend": {
+      "suites": 15,
+      "cases": 83,
+      "passed": true,
+      "max_workers": 1
+    },
+    "mysql_distinct_cases": 28,
+    "typecheck": true,
+    "vite_build": true,
+    "scoped_lint": true,
+    "route_snapshot_rules": 304,
+    "visual": [
+      {
+        "viewport": "desktop",
+        "mode": "edit",
+        "pixels_changed": 0,
+        "bounding_box": null
+      },
+      {
+        "viewport": "desktop",
+        "mode": "create",
+        "pixels_changed": 0,
+        "bounding_box": null
+      },
+      {
+        "viewport": "mobile",
+        "mode": "edit",
+        "pixels_changed": 0,
+        "bounding_box": null
+      },
+      {
+        "viewport": "mobile",
+        "mode": "create",
+        "pixels_changed": 0,
+        "bounding_box": null
+      }
+    ],
+    "backend_total_cases": 29,
+    "entrypoint": {
+      "health": 200,
+      "anonymous_structure": 401,
+      "anonymous_summary": 401,
+      "startup_maintenance": false
+    }
+  }
+}

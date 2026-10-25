@@ -27,7 +27,7 @@ export function BrowseStrokeModal(props: BrowseStrokeModalProps) {
     sourceField, setSourceField, targetField, setTargetField, locale, setLocale,
     overwrite, setOverwrite, copiedCode, sampleText, setSampleText,
     previewQuery, estimateQuery, batchMutation, handleApplySingle, handleCopyCode,
-    selectedDeck, isMixedNoteTypes, targetCount,
+    selectedDeck, isMixedNoteTypes, summaryPending, targetCount,
   } = useBrowseStrokeModal(props)
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -103,7 +103,7 @@ export function BrowseStrokeModal(props: BrowseStrokeModalProps) {
             <Button
               size="sm"
               onClick={() => batchMutation.mutate()}
-              disabled={!targetField || batchMutation.isPending || isMixedNoteTypes}
+              disabled={!targetField || batchMutation.isPending || isMixedNoteTypes || summaryPending}
               className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs"
             >
               {batchMutation.isPending ? (
