@@ -24,7 +24,7 @@ if str(ROOT_DIR) not in sys.path:
 from models import db
 from scripts.probe_p5_direct_replay_mysql import _probe_app
 from scripts.mysql_probe_db import (
-    _connection_settings, _database_uri, _source_database_collation,
+    _connection_settings, _database_uri, _source_database_collation, reuse_generated_schema,
 )
 from tests.test_study_session_retention import StudySessionRetentionTests
 
@@ -56,9 +56,11 @@ def run_probe() -> dict:
                 cls.app = app
 
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLSessionRetentionTests)
-        result = unittest.TextTestRunner(verbosity=2).run(suite)
+        with reuse_generated_schema(name) as schema_reuse:
+            result = unittest.TextTestRunner(verbosity=2).run(suite)
         report.update({"tests_run": result.testsRun, "failures": len(result.failures),
-                       "errors": len(result.errors), "status": "PASS" if result.wasSuccessful() else "FAIL"})
+                       "errors": len(result.errors), "schema_reuse": schema_reuse,
+                       "status": "PASS" if result.wasSuccessful() else "FAIL"})
         return report
     finally:
         if app is not None:

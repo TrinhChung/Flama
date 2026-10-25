@@ -25,7 +25,9 @@ if str(ROOT) not in sys.path:
 
 from app import create_audit_app
 from models import db
-from scripts.mysql_probe_db import _connection_settings, _database_uri, _source_database_collation
+from scripts.mysql_probe_db import (
+    _connection_settings, _database_uri, _source_database_collation, reuse_generated_schema,
+)
 from tests import test_note_stats_retirement as fixture
 
 PROBE_NAME = re.compile(r"^flama_note_analytics_probe_[0-9]+_[a-f0-9]{8}$")
@@ -74,10 +76,10 @@ def run():
             return app
 
         suite = unittest.TestSuite(fixture.NoteStatsRetirementTests(case) for case in CASES)
-        with patch.object(fixture, "create_audit_app", side_effect=factory):
+        with reuse_generated_schema(name) as schema_reuse, patch.object(fixture, "create_audit_app", side_effect=factory):
             result = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0).run(suite)
         report.update(tests_run=result.testsRun, failures=len(result.failures), errors=len(result.errors),
-                      status="PASS" if result.wasSuccessful() else "FAIL")
+                      schema_reuse=schema_reuse, status="PASS" if result.wasSuccessful() else "FAIL")
         if not result.wasSuccessful():
             report["failed_cases"] = [test.id() for test, _ in result.failures + result.errors]
             # Fixtures contain synthetic data only; retain useful final error

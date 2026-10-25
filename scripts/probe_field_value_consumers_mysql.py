@@ -22,7 +22,9 @@ if str(ROOT) not in sys.path:
 
 from app import create_audit_app
 from models import db
-from scripts.mysql_probe_db import _connection_settings, _database_uri, _source_database_collation
+from scripts.mysql_probe_db import (
+    _connection_settings, _database_uri, _source_database_collation, reuse_generated_schema,
+)
 from tests import test_field_value_consumers as fixtures
 
 NAME = re.compile(r"^flama_field_consumer_probe_[0-9]+_[a-f0-9]{12}$")
@@ -63,10 +65,10 @@ def run(env_file=ROOT / ".env", *, selected_cases=None):
                 raise ValueError("Unknown consumer fixture case.")
             cases = [case for case in cases if case in selected_cases]
         suite = unittest.TestSuite(fixtures.FieldValueConsumerTests(case) for case in cases)
-        with patch.object(fixtures, "create_app", side_effect=factory):
+        with reuse_generated_schema(name) as schema_reuse, patch.object(fixtures, "create_app", side_effect=factory):
             result = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0).run(suite)
         report.update(tests_run=result.testsRun, failures=len(result.failures), errors=len(result.errors), fixture_cases=cases,
-            status="PASS" if result.wasSuccessful() else "FAIL")
+            schema_reuse=schema_reuse, status="PASS" if result.wasSuccessful() else "FAIL")
         if not result.wasSuccessful():
             report["failed_cases"] = [test.id() for test, _ in result.failures + result.errors]
             report["failure_summaries"] = [next((line[:300] for line in trace.splitlines() if line.startswith("AssertionError")),
