@@ -128,7 +128,7 @@ def prewarm_forecast_summary(*, user_id, deck_ids=None, now_utc=None, session_fa
         if not force and _valid(header, captured, now):
             return {"ok": True, "user_id": user_id, "cached": True, "published": False,
                     "bucket_count": header["bucket_count"]}
-        buckets, load, note_rows = {}, 0.0, 0
+        buckets, loads, note_rows = {}, [], 0
         rows = query_consolidated_forecast_rows(user_id=user_id, scope_deck_ids=deck_ids,
                                                session=session, stream=True)
         for _note, queue, due_at, due_day, suspended, state_type, interval, weight in rows:
@@ -136,7 +136,7 @@ def prewarm_forecast_summary(*, user_id, deck_ids=None, now_utc=None, session_fa
             if suspended:
                 continue
             if normalize_progress_queue(state_type) == REVIEW_QUEUE:
-                load += int(weight) / max(1.0, state_interval_days(interval))
+                loads.append(int(weight) / max(1.0, state_interval_days(interval)))
             day = _progress_due_local_day(due_at=due_at, due_day=due_day, queue_value=queue,
                 timezone_name=policy.timezone_name, day_boundary_hour_local=policy.day_boundary_hour)
             if day is not None:
@@ -144,6 +144,8 @@ def prewarm_forecast_summary(*, user_id, deck_ids=None, now_utc=None, session_fa
                 buckets[key] = buckets.get(key, 0) + int(weight)
                 if len(buckets) > max_buckets:
                     return {"ok": False, "error": "BUCKET_BUDGET_EXCEEDED", "published": False}
+        # The same order-free sum as the raw forecast, so both read the same load.
+        load = math.fsum(loads)
         if not math.isfinite(load):
             raise ValueError("Forecast daily load must be finite")
     with _fresh_session(session_factory) as session:

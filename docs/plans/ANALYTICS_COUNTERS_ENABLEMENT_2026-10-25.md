@@ -50,6 +50,10 @@ Ghi chú:
 
 ## Còn lại
 
-- **Đếm trực tiếp deck cài đặt chậm** (phát hiện ngày 2026-10-25). Theo đơn vị Note, nửa installed của scope (`_installed_presentations` + `clone_source_card_visibility`) vẫn tách mỗi Note thành các occurrence: với user 20, 14.835 Note thành 42.459 dòng. Truy vấn chạy `EXISTS` membership của release 114.598 lần, rồi đếm distinct application theo Note, tốn khoảng 2,4 trên 2,5 s. Nửa owned đã là một dòng mỗi Note, nối với số application theo note type. Khi bộ đếm đã bật, đường này chỉ chạy sau khi global epoch tăng và với deck vừa học, nhưng vẫn là nguyên nhân gốc khiến learner có install chậm gấp 4–5 lần user 1. Phần này thuộc vùng clone overlay, nên đọc `docs/backend/old/completed-plans/CLONE_CUTOVER_REPORT.md` trước khi sửa.
+- **Đã sửa: đếm trực tiếp deck cài đặt chậm.** Theo đơn vị Note, nửa installed của scope từng tách mỗi Note thành các occurrence: với user 20, 14.835 Note thành 42.459 dòng. Truy vấn chạy `EXISTS` membership của release 114.598 lần, tốn khoảng 2,4 trên 2,5 s.
+  - **Cách sửa:** đếm Note giờ dùng `clone_source_note_visibility`, kiểm tra membership một lần cho mỗi Note và chỉ hỏi xem có application hiển thị được hay không, không dựng `Card`. Đơn vị Card vẫn dùng đường cũ.
+  - **So sánh code cũ và mới** (5 user × 6 endpoint): mọi số đếm, bucket và heatmap giống hệt nhau. Riêng `daily_load` lệch ở chữ số cuối, do bản sửa bên dưới.
+  - **Thời gian raw:** learner có install giảm từ 1,8–2,9 s xuống 0,3–0,8 s. User 1 không có install nên đường của user này không đổi: 53/56 câu SQL giống hệt, 3 câu còn lại chỉ đổi cột hằng số.
+- **Đã sửa: `daily_load` phụ thuộc thứ tự dòng.** Raw và snapshot cộng dồn số thực theo thứ tự trả về của một truy vấn không có ORDER BY. Hai cách tính chỉ khớp tuyệt đối khi tình cờ cùng thứ tự; khi scope mới đổi thứ tự dòng, user 20 lệch ở chữ số thứ 16. Cả hai giờ dùng `math.fsum`, cho tổng làm tròn đúng bất kể thứ tự. Tag `forecast-*-buckets.v2` buộc dựng lại các bucket cũ.
 - Index composite nhóm 3 của `review_events` cần duyệt riêng theo AGENTS.md.
 - Vấn đề 1, 3, 4 của `DASHBOARD_COUNT_READ_PATH_PARKED_2026-10-24.md` vẫn tạm hoãn.
