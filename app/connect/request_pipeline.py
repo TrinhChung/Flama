@@ -7,7 +7,7 @@ from flask import current_app, jsonify, make_response, request
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.connect.protocol import ProtocolError, encode_result, parse_body, validate_payload
-from app.services import flama_connect_service as service, user_api_token_service as tokens
+from app.services import flama_connect_service as service, quota_service, user_api_token_service as tokens
 from app.services.connect.registry import ACTIONS, MAX_MULTI_ACTIONS
 from app.services.connect.rate_limit import rate_allowed
 from app.services.connect.unit_of_work import ConnectUnitOfWork
@@ -150,6 +150,9 @@ def handle_request(*, standard=False, url_token=None):
         if setting and not rate_allowed(f"{setting[0]}:{user.id}", setting[1], 20):
             uow.rollback()
             return respond(error="rate limit exceeded", status=429)
+        if not quota_service.consume(user, quota_service.KIND_API, cost).allowed:
+            uow.rollback()
+            return respond(error="API quota exceeded for this period", status=429)
         if nested is not None:
             result = []
             for item in nested:

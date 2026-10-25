@@ -7,7 +7,7 @@ from typing import Any
 
 from flask import Request
 
-from app.services import daily_rate_limit_service, mcp_access_token_service, user_api_token_service
+from app.services import mcp_access_token_service, user_api_token_service
 from app.services.mcp_access_token_service import McpAccessTokenError
 from models import db
 from models.user import User
@@ -85,17 +85,6 @@ def authenticate_mcp_request(
         if authenticated is not None:
             token_row, user = authenticated
             scopes_set = user_api_token_service.parse_scopes(token_row)
-            daily_quota = daily_rate_limit_service.resolve_user_daily_quota(user)
-            if daily_quota is not None:
-                allowed, used_count, remaining, reset_epoch = daily_rate_limit_service.consume_daily_quota(
-                    int(user.id), daily_quota
-                )
-                if not allowed:
-                    raise McpAccessTokenError(
-                        f"MCP daily rate limit reached ({daily_quota} requests/day). Please try again tomorrow.",
-                        status=429,
-                        code="MCP_DAILY_RATE_LIMIT_EXCEEDED",
-                    )
             return McpRequestAuthContext(
                 user=user,
                 auth_type="user_api_token",
@@ -142,17 +131,6 @@ def authenticate_mcp_request(
                 status=403,
                 code="USER_DISABLED",
             )
-        daily_quota = daily_rate_limit_service.resolve_user_daily_quota(session_user)
-        if daily_quota is not None:
-            allowed, used_count, remaining, reset_epoch = daily_rate_limit_service.consume_daily_quota(
-                int(session_user.id), daily_quota
-            )
-            if not allowed:
-                raise McpAccessTokenError(
-                    f"MCP daily rate limit reached ({daily_quota} requests/day). Please try again tomorrow.",
-                    status=429,
-                    code="MCP_DAILY_RATE_LIMIT_EXCEEDED",
-                )
         return McpRequestAuthContext(
             user=session_user,
             auth_type="session",

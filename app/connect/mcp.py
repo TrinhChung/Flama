@@ -7,7 +7,7 @@ from typing import Any
 
 from flask import Blueprint, jsonify, make_response, request
 
-from app.services import mcp_auth_service, mcp_tool_registry, mcp_tool_service, oauth_service
+from app.services import mcp_auth_service, mcp_tool_registry, mcp_tool_service, oauth_service, quota_service
 from app.services.mcp_access_token_service import McpAccessTokenError
 from app.validators import (
     RequestValidationError,
@@ -291,6 +291,13 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                     session_user=session_user,
                     required_scope=tool_definition.required_scope,
                 )
+                # Only private tool calls count; initialize/tools/list and public tools stay free.
+                if not quota_service.consume(auth_context.user, quota_service.KIND_MCP).allowed:
+                    raise McpAccessTokenError(
+                        "MCP quota exceeded for this period. Please try again after it resets.",
+                        status=429,
+                        code="MCP_QUOTA_EXCEEDED",
+                    )
                 user_id = auth_context.user.id
                 auth_type = auth_context.auth_type
 
