@@ -371,12 +371,16 @@ def publish_note_type(
             "FIELD_NOT_FOUND", "Note type not found.", status=404
         )
 
+    payload.setdefault("publish_status", "published")
+    going_visible = str(payload.get("publish_status") or "").strip().lower() in PUBLISH_STATUSES_VISIBLE
     eligibility = flashcards_share_service.get_note_type_publish_eligibility(
         note_type=note_type,
         user_id=user_id,
         is_admin=is_admin,
     )
-    if not eligibility["is_selectable"]:
+    # A referenced template losing its listing must not trap the author's
+    # Note Type on the marketplace: withdrawing it stays possible.
+    if not eligibility["is_selectable"] and (going_visible or eligibility["block_code"] != "marketplace_template"):
         raise MarketplaceNoteTypeError(
             "CONFLICT",
             str(eligibility["block_reason"]),
@@ -384,7 +388,6 @@ def publish_note_type(
             field="source_note_type_id",
         )
 
-    payload.setdefault("publish_status", "published")
     validation_error = flashcards_share_service.apply_note_type_marketplace_payload(
         note_type,
         payload,

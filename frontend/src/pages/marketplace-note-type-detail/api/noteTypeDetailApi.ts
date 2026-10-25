@@ -10,5 +10,6 @@ export const noteTypeDetailApi = {
   installTemplate: (id: string, templateId: string) => apiJson<InstallResult>(`${detailPath(id)}/templates/${encodeURIComponent(templateId)}/install`, 'POST'),
   save: (id: string, currentlySaved: boolean) => apiJson(`${detailPath(id)}/save`, currentlySaved ? 'DELETE' : 'POST'),
   rate: (id: string, body: { rating: number; comment?: string }) => apiJson(`${detailPath(id)}/rate`, 'POST', body),
-  status: (id: string, body: { publish_status: 'private' | 'published' }) => apiJson(`/api/creator/note-types/${encodeURIComponent(id)}/publish-status`, 'PATCH', body),
+  status: (id: string, body: { publish_status: 'private' | 'published' }) => apiJson(`${detailPath(id)}/publish`, 'POST', body),
+  publishOptions: (id: string) => apiRequest<{ templates: { is_owned: boolean; requires_publication: boolean }[] }>(`${detailPath(id)}/publish-options`),
 }

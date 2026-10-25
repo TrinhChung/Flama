@@ -98,6 +98,12 @@ def _snapshot(session, row, *, actor_user_id=None, origin="edit"):
     return repository.version(session, version_id, row["id"])
 
 
+def _auto_label(session, template_id, head):
+    """A manual label such as "1.0" after "1.0.1" must not block automatic releases."""
+    return release_core.next_free_version(head["version_label"] if head else None, lambda label: repository.one(
+        session, TemplateRelease, TemplateRelease.template_id == template_id, TemplateRelease.version_label == label) is not None)
+
+
 def _serialize_release(row):
     if row is None:
         return None
@@ -275,7 +281,7 @@ def _on_version_appended(session, template_id, version_id, actor_user_id=None, c
     if not release_core.should_auto_publish(enabled=True, eligible=True, revision=int(version["version_no"]), published_revision=int(head_version["version_no"]) if head_version else None):
         return None
     request = release_core.PublishRequest(
-        release_core.next_auto_version(head["version_label"] if head else None),
+        _auto_label(session, template_id, head),
         f"auto:{version_id}", publication["current_release_id"], version_id,
         change_note or "Tự động phát hành bản cập nhật.", "automatic",
     )
@@ -517,7 +523,7 @@ def capture_deck_release_template_pins(session, release, *, actor_user_id=None):
         if template_release is None:
             publication = repository.ensure_publication(session, template_id)
             head = repository.release(session, publication["current_release_id"], template_id) if publication["current_release_id"] else None
-            request = release_core.PublishRequest(release_core.next_auto_version(head["version_label"] if head else None), f"deck:{release.id}", publication["current_release_id"], version["id"], "Published with deck release.")
+            request = release_core.PublishRequest(_auto_label(session, template_id, head), f"deck:{release.id}", publication["current_release_id"], version["id"], "Published with deck release.")
             template_release, _ = _publish_version(session, row, version, actor_user_id=actor_user_id, request=request, allow_archived=True)
         session.execute(insert(DeckReleaseTemplatePin.__table__).values(
             deck_release_id=release.id, source_template_id=template_id,
@@ -585,7 +591,7 @@ def stage_note_type_publications(session, *, note_type_id, actor_user_id, initia
             else:
                 publication = repository.ensure_publication(session, row["id"])
                 request = release_core.PublishRequest(
-                    release_core.next_auto_version(head["version_label"] if head else None),
+                    _auto_label(session, row["id"], head),
                     f"note-type:{version['id']}", publication["current_release_id"], version["id"],
                     "Published with shared NoteType.",
                 )
@@ -608,7 +614,7 @@ def stage_marketplace_release(session, row, *, actor_user_id):
         return existing
     publication = repository.ensure_publication(session, row["id"])
     request = release_core.PublishRequest(
-        release_core.next_auto_version(head["version_label"] if head else None),
+        _auto_label(session, row["id"], head),
         f"market:{version['id']}", publication["current_release_id"], version["id"],
         "Phát hành khi đăng lên chợ giao diện thẻ.",
     )

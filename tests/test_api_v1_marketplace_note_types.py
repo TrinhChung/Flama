@@ -1,6 +1,7 @@
 """Unit tests for REST API V1 marketplace note type & template resources."""
 
 import unittest
+from unittest.mock import patch
 
 from app import create_app
 from models import db
@@ -322,6 +323,51 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
         payload = res.get_json()
         self.assertEqual(payload["primary_category"], "Custom Technology")
         self.assertEqual(payload["taxonomy_metadata"]["subject"], "it_coding")
+
+    def _publish(self, **body):
+        return self.client.post(f"/api/marketplace/note-types/{self.note_type_id}/publish", json=body)
+
+    def _release_labels(self):
+        from models.note_type_release import NoteTypeRelease
+        with self.app.app_context():
+            return [row.version_label for row in NoteTypeRelease.query.filter_by(
+                note_type_id=self.note_type_id).order_by(NoteTypeRelease.sequence_no)]
+
+    def test_revoke_then_republish_continues_the_released_version(self):
+        self._login("author@example.com")
+        taxonomy = {"domain": "japanese", "subject": "japanese", "difficulty_band": "beginner",
+            "learning_goals": ["vocabulary"], "primary_topics": ["meaning_recall"]}
+        revoked = self._publish(publish_status="private")
+        self.assertEqual(revoked.status_code, 200, revoked.get_json())
+        self.assertEqual(revoked.get_json()["publish_status"], "private")
+
+        # Edits kept under the released label continue its sequence.
+        edited = self._publish(publish_status="published", description="Edited while private", **taxonomy)
+        self.assertEqual(edited.status_code, 200, edited.get_json())
+        self.assertEqual(edited.get_json()["version"], "1.0.1")
+        self.assertEqual(self._release_labels(), ["1.0.0", "1.0.1"])
+
+        self.assertEqual(self._publish(publish_status="private").status_code, 200)
+        unchanged = self._publish(publish_status="published")
+        self.assertEqual(unchanged.status_code, 200, unchanged.get_json())
+        self.assertEqual(unchanged.get_json()["version"], "1.0.1")
+        self.assertEqual(self._release_labels(), ["1.0.0", "1.0.1"])
+
+        # Explicitly reusing an older label for different content stays a conflict.
+        older = self._publish(publish_status="published", version="1.0.0", description="Another edit")
+        self.assertEqual(older.status_code, 400)
+        self.assertIn("Choose a new version", older.get_json()["message"])
+        self.assertEqual(self._release_labels(), ["1.0.0", "1.0.1"])
+
+    def test_revoke_stays_possible_after_a_referenced_template_is_delisted(self):
+        self._login("author@example.com")
+        with patch("app.services.note_type_bundle_publication_service.reference_validation_error",
+                return_value="A referenced third-party template must have a published original listing."):
+            republish = self._publish(publish_status="published")
+            self.assertEqual(republish.status_code, 409)
+            revoked = self._publish(publish_status="private")
+        self.assertEqual(revoked.status_code, 200, revoked.get_json())
+        self.assertEqual(revoked.get_json()["publish_status"], "private")
 
     def test_recommendations_endpoint(self):
         self._login("learner@example.com")

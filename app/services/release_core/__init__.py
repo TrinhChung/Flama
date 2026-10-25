@@ -73,5 +73,13 @@ def next_auto_version(current_label):
     return f"v{int(match.group(1)) + 1}" if match else f"{label}.1"
 
 
+def next_free_version(current_label, is_taken):
+    """Next automatic label after the head, skipping labels an author already used."""
+    label = next_auto_version(current_label)
+    while is_taken(label):
+        label = next_auto_version(label)
+    return label
+
+
 def should_auto_publish(*, enabled, eligible, revision, published_revision):
     return bool(enabled and eligible and (published_revision is None or revision > published_revision))
