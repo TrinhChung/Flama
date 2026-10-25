@@ -33,17 +33,17 @@ class MediaFieldMigrationItem(db.Model):
         nullable=False,
         index=True,
     )
-    entity_type = db.Column(db.String(32), nullable=False, index=True)
-    entity_id = db.Column(db.String(36), nullable=False, index=True)
+    entity_type = db.Column(db.String(32), nullable=False)
+    entity_id = db.Column(db.String(36), nullable=False)
     field_name = db.Column(db.String(255), nullable=False)
     field_type = db.Column(db.String(32), nullable=True)
-    action = db.Column(db.String(32), nullable=False, index=True)
-    reason = db.Column(db.String(64), nullable=False, index=True)
+    action = db.Column(db.String(32), nullable=False)
+    reason = db.Column(db.String(64), nullable=False)
     old_value = db.Column(db.Text, nullable=True)
     new_value = db.Column(db.Text, nullable=True)
     semantic_change = db.Column(db.Boolean, nullable=False, default=False)
-    user_id = db.Column(db.Integer, nullable=True, index=True)
-    deck_id = db.Column(db.Integer, nullable=True, index=True)
+    user_id = db.Column(db.Integer, nullable=True)
+    deck_id = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     run = db.relationship("MediaFieldMigrationRun", back_populates="items")

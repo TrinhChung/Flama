@@ -12,7 +12,9 @@ from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError, StudyAuthorityRoute, lock_study_authority_route,
     read_study_authority_route, lock_study_authority_siblings, lock_study_authority_subject,
 )
-from app.repositories.flashcards_share_repository import clone_source_card_visibility
+from app.repositories.flashcards_share_repository import (
+    clone_source_card_visibility, clone_source_note_visibility,
+)
 from app.services.flashcards_share_service import CloneDeckScope, query_clone_scope_cards
 from models import db
 from models.card import (
@@ -242,6 +244,36 @@ class DerivedCardRetirementScopeTests(unittest.TestCase):
             clone_source_card_visibility(install),
         ).execution_options(include_retired_cards=True)).scalars().all()
         self.assertEqual([c.note_id for c in rows], ["qualification-n1"])
+
+    def test_note_grain_visibility_is_exactly_the_notes_of_visible_cards(self):
+        release = self._setwise_install()
+        legacy = SimpleNamespace(applied_release_id=None, version_mode="legacy_snapshot",
+                                 deck_item_id="not-a-release", base_snapshot_at=CUTOFF, installed_at=CUTOFF)
+        unbounded = SimpleNamespace(applied_release_id=None, version_mode="legacy_snapshot",
+                                    deck_item_id="not-a-release", base_snapshot_at=None, installed_at=None)
+        seen = {}
+        for pins in ("pinned", "unpinned"):
+            db.session.connection().execute(sa.update(DeckRelease.__table__).values(
+                template_pins_initialized=pins == "pinned"))
+            for status in ("ACTIVE", "RETIRED"):
+                db.session.get(StudyApplication, "qualification-a1").status_code = status
+                db.session.commit()
+                for name, install in (("release", release), ("legacy", legacy), ("unbounded", unbounded)):
+                    by_card = db.session.execute(sa.select(Card.note_id).join(Note, Card.note_id == Note.id).where(
+                        clone_source_card_visibility(install),
+                    ).execution_options(include_retired_cards=True)).scalars().all()
+                    by_note = db.session.execute(sa.select(Note.id).where(
+                        clone_source_note_visibility(install),
+                    )).scalars().all()
+                    with self.subTest(pins=pins, a1=status, install=name):
+                        self.assertEqual(sorted(by_note), sorted(set(by_card)))
+                    seen[pins, status, name] = sorted(by_note)
+        # Pins, live ACTIVE, release sequence and the alias timestamp each decide.
+        self.assertEqual(seen["pinned", "RETIRED", "release"], ["qualification-n1"])
+        self.assertEqual(seen["unpinned", "RETIRED", "release"], ["qualification-n1"])
+        self.assertEqual(seen["unpinned", "ACTIVE", "legacy"], ["qualification-n1"])
+        self.assertEqual(seen["unpinned", "RETIRED", "legacy"], [])
+        self.assertEqual(seen["unpinned", "RETIRED", "unbounded"], ["qualification-n1", "qualification-n2"])
 
     def test_alias_archive_survives_content_delete_but_does_not_resolve_live_card(self):
         forget_card_identities(db.session, ["qualification-n1"])

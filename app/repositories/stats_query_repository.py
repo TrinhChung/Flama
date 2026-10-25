@@ -109,7 +109,7 @@ def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] 
 
     session = db.session if session is None else session
     by_note = forecast_counts_notes()
-    scope = collection_note_scope(session, learner_user_id=user_id, deck_ids=scope_deck_ids)
+    scope = collection_note_scope(session, learner_user_id=user_id, deck_ids=scope_deck_ids, by_note=by_note)
     rows = note_rows(scope, learner_user_id=user_id, include_state=True).subquery("forecast_notes")
     statement = select(
         rows.c.note_id, rows.c.queue, rows.c.due_at,
@@ -228,7 +228,7 @@ def query_canonical_future_due_day_counts_mysql(
     by_note = forecast_counts_notes()
     # A due value implies current state (ck_sp_subject_progress_group), so the
     # due filter below alone keeps the scheduled Notes.
-    scope = collection_note_scope(db.session, learner_user_id=user_id)
+    scope = collection_note_scope(db.session, learner_user_id=user_id, by_note=by_note)
     rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("availability")
     # TO_DAYS has a year-zero origin; Python date ordinals start at 0001-01-01.
     # Review due_day overrides due_at; every other queue uses its UTC timestamp.
@@ -263,6 +263,13 @@ def query_canonical_future_due_day_counts_mysql(
         date.fromordinal(int(day_index)): int(count)
         for day_index, count in db.session.execute(statement).all()
     }
+
+
+# For a learner's months-long day range MySQL picks (user_id, client_event_id),
+# a prefix match that reads every review of the learner before filtering the
+# days (one-day ranges already use this index). The hint reads only the
+# requested days; MySQL ignores it if the index is missing.
+_USER_DAY_RANGE_HINT = "/*+ INDEX(review_events ix_review_events_user_reviewed_at) */"
 
 
 def _query_daily_review_aggregates_mysql(
@@ -301,6 +308,7 @@ def _query_daily_review_aggregates_mysql(
             db.func.count(ReviewEvent.id).label("cards"),
             duration_expr.label("duration_ms"),
         )
+        .prefix_with(_USER_DAY_RANGE_HINT, dialect="mysql")
         .filter(
             ReviewEvent.user_id == user_id,
             ReviewEvent.reviewed_at >= start_utc,
@@ -332,6 +340,7 @@ def _query_daily_review_aggregates_python(
 ) -> dict[date, dict[str, int]]:
     rows = (
         db.session.query(ReviewEvent.reviewed_at, ReviewEvent.duration_ms)
+        .prefix_with(_USER_DAY_RANGE_HINT, dialect="mysql")
         .filter(
             ReviewEvent.user_id == user_id,
             ReviewEvent.reviewed_at >= start_utc,
@@ -557,6 +566,7 @@ def _query_user_daily_study_time_mysql(
             duration_expr.label("total_duration_ms"),
             passed_expr.label("passed_reviews"),
         )
+        .prefix_with(_USER_DAY_RANGE_HINT, dialect="mysql")
         .filter(
             ReviewEvent.user_id == user_id,
             ReviewEvent.reviewed_at >= start_utc,
@@ -609,7 +619,7 @@ def _query_user_daily_study_time_python(
         ReviewEvent.duration_ms,
         ReviewEvent.rating,
         ReviewEvent.deck_id,
-    ).filter(
+    ).prefix_with(_USER_DAY_RANGE_HINT, dialect="mysql").filter(
         ReviewEvent.user_id == user_id,
         ReviewEvent.reviewed_at >= start_utc,
         ReviewEvent.reviewed_at < end_utc,

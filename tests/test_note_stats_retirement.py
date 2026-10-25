@@ -196,8 +196,12 @@ class NoteStatsRetirementTests(unittest.TestCase):
     def test_multiple_installs_count_per_local_deck_but_collection_forecast_deduplicates(self):
         self._clone()
         self._clone(local_deck=4, duplicate=True)
+        self.trace.clear()
         counts = self._aggregate([3, 4])
         self.assertEqual((counts[3]["total"], counts[4]["total"]), (1, 1))
+        # Counting Notes tests release membership per Note, without Card rows.
+        self.assertFalse(any("card_presentations" in sql for sql in self.trace))
+        self.assertEqual(self._aggregate([3, 4], by_note=False)[3]["total"], 1)
         rows, load = _consolidated_due_rows_and_load(user_id=1, scope_deck_ids=None)
         self.assertEqual(len(rows), 2)  # owned Note + shared source presentation
         self.assertAlmostEqual(load, 0.2)
@@ -250,6 +254,10 @@ class NoteStatsRetirementTests(unittest.TestCase):
             scope.c.note_id, scope.c.card_count,
         ).execution_options(include_retired_cards=True)).all())
         self.assertEqual(actual, expected)
+        by_note = collection_note_scope(db.session, learner_user_id=1, deck_ids=deck_ids, by_note=True)
+        notes = db.session.execute(sa.select(by_note.c.note_id, by_note.c.card_count)).all()
+        self.assertEqual(dict(notes), {note_id: 1 for note_id in expected})
+        self.assertEqual(len(notes), len(expected))
         return actual
 
     def test_note_scope_counts_every_active_application_whatever_the_cutover_archive(self):

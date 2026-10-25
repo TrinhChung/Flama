@@ -71,7 +71,7 @@ def dependency_hash(session, *, user_id, deck_ids):
     route = read_study_authority_route(session, learner_user_id=user_id)
     # Buckets hold the raw forecast's unit; flipping it invalidates them.
     unit = "note" if forecast_counts_notes() else "card"
-    return _hash({"implementation": f"forecast-{unit}-buckets.v1", "scope": scope_key(deck_ids).hex(),
+    return _hash({"implementation": f"forecast-{unit}-buckets.v2", "scope": scope_key(deck_ids).hex(),
                   "owned_decks": [tuple(row) for row in owned],
                   "installs": [tuple(row) for row in installs], "maps": [tuple(row) for row in maps],
                   "revisions": vectors, "global_content": int(global_content),

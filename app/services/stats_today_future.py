@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
+import math
 import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -311,7 +312,7 @@ def _consolidated_due_rows_and_load(
     if scope_deck_ids is not None and not scope_deck_ids:
         return [], 0.0
     rows: list[tuple[Any, Any, Any, int]] = []
-    total = 0.0
+    loads: list[float] = []
     fetched = query_consolidated_forecast_rows(user_id=user_id, scope_deck_ids=scope_deck_ids)
     for _note_id, queue, due_at, due_day, suspended, state_type, interval, card_count in fetched:
         if suspended:
@@ -319,8 +320,9 @@ def _consolidated_due_rows_and_load(
         if due_at is not None or due_day is not None:
             rows.append((due_at, due_day, queue, int(card_count)))
         if normalize_progress_queue(state_type) == REVIEW_QUEUE:
-            total += int(card_count) / max(1.0, state_interval_days(interval))
-    return rows, total
+            loads.append(int(card_count) / max(1.0, state_interval_days(interval)))
+    # Rows arrive in no set order; fsum's exact sum does not depend on it.
+    return rows, math.fsum(loads)
 
 
 def build_today_future_stats(

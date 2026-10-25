@@ -3,13 +3,14 @@
 Progress belongs to a learner/Note, so expand neither presentation IDs nor
 availability for siblings. Owned multiplicity is the NoteType's ACTIVE
 application count. Installed membership
-retains the canonical release/timestamp predicate, then groups before progress.
+retains the canonical release/timestamp predicate, then groups before progress;
+counting Notes (``by_note``) tests it once per Note, without multiplicity.
 
 Counts read progress rows as stored; the offline ``study-authority-read-audit``
 re-derives them. Study and Browse keep their own bounded evidence checks.
 """
 
-from sqlalchemy import and_, func, not_, null, or_, select, union_all
+from sqlalchemy import and_, func, literal, not_, null, or_, select, union_all
 
 from models.card import Card
 from models.deck_clone_deck_map import DeckCloneDeckMap
@@ -45,17 +46,28 @@ def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False)
     )
 
 
-def _installed_presentations(*, learner_user_id, deck_ids=None):
-    """Canonical release membership; no progress joins or state hydration."""
-    from app.repositories.flashcards_share_repository import clone_source_card_visibility
+def _installed_source(*, learner_user_id, deck_ids=None, by_note=False):
+    """Canonical release membership; no progress joins or state hydration.
 
-    statement = (
-        select(
+    Card rows, or with ``by_note`` the Notes showing at least one of them.
+    """
+    from app.repositories.flashcards_share_repository import (
+        clone_source_card_visibility, clone_source_note_visibility,
+    )
+
+    if by_note:
+        statement = select(
+            DeckCloneDeckMap.local_deck_id.label("deck_id"), Note.id.label("note_id"),
+        ).select_from(Note)
+        visible = clone_source_note_visibility(DeckInstall)
+    else:
+        statement = select(
             DeckCloneDeckMap.local_deck_id.label("deck_id"),
             Card.note_id.label("note_id"), Card.application_id.label("application_id"),
-        )
-        .select_from(Card)
-        .join(Note, Card.note_id == Note.id)
+        ).select_from(Card).join(Note, Card.note_id == Note.id)
+        visible = clone_source_card_visibility(DeckInstall)
+    statement = (
+        statement
         .join(DeckCloneDeckMap, DeckCloneDeckMap.source_deck_id == Note.deck_id)
         .join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id)
         .where(
@@ -65,7 +77,7 @@ def _installed_presentations(*, learner_user_id, deck_ids=None):
             DeckCloneDeckMap.local_deck_id.isnot(None),
             or_(DeckInstall.source_owner_user_id.is_(None),
                 Note.user_id == DeckInstall.source_owner_user_id),
-            clone_source_card_visibility(DeckInstall),
+            visible,
         )
     )
     if deck_ids is not None:
@@ -73,27 +85,42 @@ def _installed_presentations(*, learner_user_id, deck_ids=None):
     return statement
 
 
-def _combine(owned, installed, *, per_deck):
-    """Inputs have disjoint application sets; combine Note-level weights."""
+def _combine(owned, installed, *, per_deck, by_note=False):
+    """Inputs have disjoint application sets; combine Note-level weights.
+
+    Counting Notes needs no multiplicity: the owned and installed rows of one
+    Note merge into a row of weight 1.
+    """
     owned_rows = select(
         owned.c.deck_id if per_deck else null().label("deck_id"),
         owned.c.note_id, owned.c.card_count,
     )
     rows = union_all(owned_rows, installed).subquery("analytics_note_weights")
+    weight = literal(1) if by_note else func.sum(rows.c.card_count)
     return (
-        select(rows.c.deck_id, rows.c.note_id, func.sum(rows.c.card_count).label("card_count"))
+        select(rows.c.deck_id, rows.c.note_id, weight.label("card_count"))
         .group_by(rows.c.deck_id, rows.c.note_id)
         .subquery("analytics_note_scope")
     )
 
 
-def deck_note_scope(*, learner_user_id, deck_ids, overlay=None, owned_by_any_user=False):
-    """One row per effective deck/Note; duplicate installations count once."""
+def deck_note_scope(*, learner_user_id, deck_ids, overlay=None, owned_by_any_user=False, by_note=False):
+    """One row per effective deck/Note; duplicate installations count once.
+
+    With ``by_note`` the overlay holds Notes (``_overlay_scope(by_note=True)``):
+    an installed Note that is also owned in the same deck is that owned row.
+    """
     owned = owned_note_scope(
         learner_user_id=learner_user_id, deck_ids=deck_ids, owned_by_any_user=owned_by_any_user,
     )
     if overlay is None:
         return owned
+    if by_note:
+        installed = overlay.with_only_columns(
+            DeckCloneDeckMap.local_deck_id.label("deck_id"), Note.id.label("note_id"),
+            literal(1).label("card_count"),
+        )
+        return _combine(owned, installed, per_deck=True, by_note=True)
     # An active owned presentation mapped back to its physical deck is already
     # counted. Retired release pins, and presentations mapped elsewhere, are not.
     duplicate = and_(Note.deck_id == DeckCloneDeckMap.local_deck_id,
@@ -107,13 +134,14 @@ def deck_note_scope(*, learner_user_id, deck_ids, overlay=None, owned_by_any_use
     return _combine(owned, installed, per_deck=True)
 
 
-def collection_note_scope(session, *, learner_user_id, deck_ids=None):
+def collection_note_scope(session, *, learner_user_id, deck_ids=None, by_note=False):
     """One row per visible Note, with Card multiplicity deduped across installs.
 
     Owned active presentations are present once. Installed applications absent
     from that owned scope (including retired pins) are counted distinctly per
     Note across all selected installations. Different pin subsets therefore
-    form a union, rather than a max/sum of each installation's count.
+    form a union, rather than a max/sum of each installation's count. With
+    ``by_note`` every visible Note weighs 1 and no Card row is built.
     """
     owned = owned_note_scope(learner_user_id=learner_user_id, deck_ids=deck_ids)
     has_install = session.execute(select(DeckInstall.id).where(
@@ -121,13 +149,20 @@ def collection_note_scope(session, *, learner_user_id, deck_ids=None):
         DeckInstall.clone_mode == "logical_overlay", DeckInstall.local_deck_id.isnot(None),
     ).limit(1)).first()
     if has_install is None:
-        return select(null().label("deck_id"), owned.c.note_id, owned.c.card_count).subquery("analytics_note_scope")
+        weight = literal(1) if by_note else owned.c.card_count
+        return select(null().label("deck_id"), owned.c.note_id, weight.label("card_count")).subquery("analytics_note_scope")
 
+    installed = _installed_source(learner_user_id=learner_user_id, deck_ids=deck_ids, by_note=by_note)
+    if by_note:
+        # An installed Note the learner owns in scope is the owned row.
+        installed = installed.with_only_columns(
+            null().label("deck_id"), Note.id.label("note_id"), literal(1).label("card_count"),
+        )
+        return _combine(owned, installed, per_deck=False, by_note=True)
     duplicate = and_(Note.user_id == int(learner_user_id), Card.application_status == "ACTIVE")
     if deck_ids is not None:
         # NULL physical decks are outside any requested deck scope.
         duplicate = and_(duplicate, Note.deck_id.isnot(None), Note.deck_id.in_(deck_ids))
-    installed = _installed_presentations(learner_user_id=learner_user_id, deck_ids=deck_ids)
     installed = installed.with_only_columns(
         null().label("deck_id"), Card.note_id.label("note_id"),
         func.count(func.distinct(Card.application_id)).label("card_count"),

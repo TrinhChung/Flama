@@ -62,6 +62,19 @@ class ForecastSnapshotTests(unittest.TestCase):
         self.assertNotIn("from notes", sql)
         self.assertEqual(self._payload(), raw)
 
+    def test_daily_load_is_one_exact_sum_whatever_the_row_order(self):
+        from app.services.study_progress_shadow_codec import encode_float
+
+        rows = [(f"load-note-{days}", "review", None, DAY + days, False, "review",
+                 encode_float(float(days), field_name="interval_days"), 1) for days in range(1, 7)]
+        # Summed in turn, these loads give 2.4499999999999997 forward and 2.45 reversed.
+        with patch.object(service, "query_consolidated_forecast_rows", return_value=rows):
+            self.assertTrue(self._prewarm()["published"])
+        with patch("app.services.stats_today_future.query_consolidated_forecast_rows", return_value=rows[::-1]):
+            raw = self._payload("raw")
+        self.assertEqual(raw["totals"]["daily_load"], 2.45)
+        self.assertEqual(self._payload(), raw)
+
     def test_overlap_installs_and_pinned_retirement_are_collection_union(self):
         self.fixture._clone(local_deck=3)
         self.fixture._clone(local_deck=4, duplicate=True)

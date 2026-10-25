@@ -355,6 +355,27 @@ class DeckCountSnapshotTests(unittest.TestCase):
         self.prewarm()
         self.assertEqual(self.resolve(visible_deck_ids=[self.local_id])[0][self.local_id]["total"], 5)
 
+    def test_unpinned_release_counts_live_occurrences_and_an_occurrence_change_invalidates_it(self):
+        self._install_release_fixture()
+        db.session.get(DeckRelease, self.release_ids[0]).template_pins_initialized = False
+        db.session.commit()
+        self.assertEqual(self.prewarm()["published"], 3)
+        cached, dirty = self.resolve(visible_deck_ids=[self.local_id])
+        self.assertFalse(dirty)
+        # Live ACTIVE occurrences only: the retired one is not counted.
+        self.assertEqual(cached[self.local_id], {"total": 2, "new": 1, "learn": 0, "due": 1})
+        StudyApplication.query.filter_by(status_code="RETIRED").one().status_code = "ACTIVE"
+        db.session.commit()
+        self.assertEqual(self.resolve(visible_deck_ids=[self.local_id])[1], [self.local_id])
+        self.prewarm()
+        raw, _ = service.aggregate_deck_study_counts(
+            db.session, learner_user_id=self.user_id, visible_deck_ids=[self.local_id],
+            include_note_types=False, today_day_index=DAY, day_cutoff_utc=CUTOFF,
+        )
+        cached = self.resolve(visible_deck_ids=[self.local_id])[0]
+        self.assertEqual(cached[self.local_id], raw[self.local_id])
+        self.assertEqual(cached[self.local_id]["total"], 3)
+
     def test_installed_pin_race_is_discarded_and_legacy_scope_stays_raw(self):
         self._install_release_fixture()
         original = service._publish_count_snapshots
@@ -439,7 +460,8 @@ class DeckCountSnapshotTests(unittest.TestCase):
         sa.event.listen(db.engine, "before_cursor_execute", capture)
         try:
             with patch.object(repository, "owned_scope_rows", side_effect=observed):
-                eligible = service._owned_eligible_scope(db.session, self.user_id, deck_ids)
+                eligible = service._owned_eligible_scope(
+                    db.session, *service._owned_metadata(db.session, self.user_id, deck_ids))
         finally:
             sa.event.remove(db.engine, "before_cursor_execute", capture)
         self.assertEqual(eligible, tuple(deck_ids))
@@ -455,7 +477,8 @@ class DeckCountSnapshotTests(unittest.TestCase):
             {"id": 30003, "name": "foreign parent", "owner_user_id": self.user_id, "parent_id": self.other_deck_id},
         ])
         db.session.commit()
-        self.assertEqual(service._owned_eligible_scope(db.session, self.user_id, [30000, 30001, 30002, 30003]), ())
+        metadata = service._owned_metadata(db.session, self.user_id, [30000, 30001, 30002, 30003])
+        self.assertEqual(service._owned_eligible_scope(db.session, *metadata), ())
 
     def test_changed_dependency_between_compute_and_publish_discards_result(self):
         original = service._publish_count_snapshots

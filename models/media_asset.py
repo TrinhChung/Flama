@@ -11,7 +11,7 @@ class MediaAsset(db.Model):
     __tablename__ = "media_assets"
 
     id = db.Column(db.String(36), primary_key=True, default=uuid_str)
-    note_id = db.Column(db.String(36), db.ForeignKey("notes.id", ondelete="CASCADE"), nullable=False, index=True)
+    note_id = db.Column(db.String(36), db.ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
     _field_name = db.Column("field_name", db.String(255), nullable=False)
     # Scoped by note.note_type_id; retained after a FieldDef is removed.
     # No FK: historical media identity must survive schema changes.

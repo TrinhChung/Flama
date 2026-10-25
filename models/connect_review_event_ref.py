@@ -14,7 +14,6 @@ class ConnectReviewEventRef(db.Model):
         db.Integer,
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     source_key = db.Column(db.String(255), nullable=False)
     external_review_id = db.Column(db.String(128), nullable=False)
@@ -26,7 +25,7 @@ class ConnectReviewEventRef(db.Model):
         index=True,
     )
     payload_hash = db.Column(db.String(64), nullable=False)
-    status = db.Column(db.String(20), nullable=False, default="imported", index=True)
+    status = db.Column(db.String(20), nullable=False, default="imported")
     ignored_reason = db.Column(db.String(64), nullable=True)
     last_session_id = db.Column(
         db.String(36),

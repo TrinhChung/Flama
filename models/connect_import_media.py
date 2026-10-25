@@ -14,7 +14,6 @@ class ConnectImportMedia(db.Model):
         db.String(36),
         db.ForeignKey("connect_import_sessions.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     user_id = db.Column(
         db.Integer,

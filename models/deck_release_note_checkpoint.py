@@ -21,7 +21,6 @@ class DeckReleaseNoteCheckpoint(db.Model):
             ondelete="CASCADE",
         ),
         nullable=False,
-        index=True,
     )
     release_sequence_no = db.Column(db.BigInteger, nullable=False)
     source_note_id = db.Column(db.String(36), nullable=False)

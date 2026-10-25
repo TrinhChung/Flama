@@ -41,7 +41,7 @@ class PresentationAlias(db.Model):
     __tablename__ = "card_presentation_aliases"
 
     id = db.Column(db.String(36), primary_key=True)
-    note_id = db.Column(db.String(36), nullable=False, index=True)
+    note_id = db.Column(db.String(36), nullable=False)
     template_id = db.Column(db.String(36), nullable=False, index=True)
     application_id = db.Column(db.String(36), nullable=False, index=True)
     created_at = db.Column(db.DateTime, nullable=False)

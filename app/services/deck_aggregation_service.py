@@ -59,8 +59,9 @@ def _overlay_scope(
     *,
     learner_user_id: int,
     visible_deck_ids: list[int],
+    by_note: bool = False,
 ):
-    """Logical-overlay source Cards under the learner's mapped local decks."""
+    """Logical-overlay source Cards, or with ``by_note`` Notes, under the learner's mapped local decks."""
 
     installs = session.execute(
         select(DeckInstall.id, DeckInstall.source_note_type_id)
@@ -97,15 +98,23 @@ def _overlay_scope(
     ]
     if not has_mapped_source:
         return None, overlay_types
-    from app.repositories.flashcards_share_repository import clone_source_card_visibility
-    overlay = (
-        select(
+    from app.repositories.flashcards_share_repository import (
+        clone_source_card_visibility, clone_source_note_visibility,
+    )
+    if by_note:
+        overlay = select(
+            DeckCloneDeckMap.local_deck_id.label("deck_id"), Note.id.label("note_id"),
+        ).select_from(Note)
+        visible = clone_source_note_visibility(DeckInstall)
+    else:
+        overlay = select(
             DeckCloneDeckMap.local_deck_id.label("deck_id"),
             Card.id.label("card_id"),
             Card.note_id.label("note_id"),
-        )
-        .select_from(Card)
-        .join(Note, Card.note_id == Note.id)
+        ).select_from(Card).join(Note, Card.note_id == Note.id)
+        visible = clone_source_card_visibility(DeckInstall)
+    overlay = (
+        overlay
         .join(DeckCloneDeckMap, DeckCloneDeckMap.source_deck_id == Note.deck_id)
         .join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id)
         .where(
@@ -116,7 +125,7 @@ def _overlay_scope(
                 DeckInstall.source_owner_user_id.is_(None),
                 Note.user_id == DeckInstall.source_owner_user_id,
             ),
-            clone_source_card_visibility(DeckInstall),
+            visible,
         )
     )
     return overlay, overlay_types
@@ -168,13 +177,14 @@ def aggregate_deck_study_counts(
             session,
             learner_user_id=learner_user_id,
             visible_deck_ids=visible_deck_ids,
+            by_note=count_by_note,
         )
     )
     from app.repositories.note_analytics_scope_repository import deck_note_scope
 
     scope = deck_note_scope(
         learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
-        overlay=overlay, owned_by_any_user=owned_by_any_user,
+        overlay=overlay, owned_by_any_user=owned_by_any_user, by_note=count_by_note,
     )
     rows = note_reads.note_rows(scope, learner_user_id=learner_user_id).subquery("rows")
 

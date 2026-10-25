@@ -474,16 +474,8 @@ def ensure_backward_compatible_schema() -> None:
             "ix_review_events_scheduler_preset_id",
             "CREATE INDEX ix_review_events_scheduler_preset_id ON review_events (scheduler_preset_id)",
         )
-        _ensure_index(
-            "review_events",
-            "ix_review_events_scheduler_mode",
-            "CREATE INDEX ix_review_events_scheduler_mode ON review_events (scheduler_mode)",
-        )
-        _ensure_index(
-            "review_events",
-            "ix_review_events_review_kind",
-            "CREATE INDEX ix_review_events_review_kind ON review_events (review_kind)",
-        )
+        # No query filters scheduler_mode or review_kind alone; their single-column
+        # indexes were dropped by migration 20261025_000074.
         _ensure_index(
             "review_events",
             "ix_review_events_user_scheduler_reviewed_at",
