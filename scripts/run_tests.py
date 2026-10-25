@@ -648,6 +648,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "source_patterns": [
             "app/services/template_authoring_service.py",
             "app/validators/mcp_template_preview.py",
+            "scripts/build_template_browser_fixtures.py",
+            "scripts/probe_mcp_template_preview_mysql.py",
             "scripts/flama_mcp_server.py",
             "scripts/probe_connect_protocol_mysql.py",
             "connect_wsgi.py",
