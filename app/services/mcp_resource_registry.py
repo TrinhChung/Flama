@@ -18,7 +18,8 @@ def template_preview_ui_available():
 
 def media_base_url():
     """Use explicit deployment origin when present, otherwise the MCP request origin."""
-    configured = str(current_app.config.get("PUBLIC_APP_URL") or "") if has_app_context() else ""
+    configured = str(current_app.config.get("MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL")
+        or current_app.config.get("PUBLIC_APP_URL") or "") if has_app_context() else ""
     if not configured and has_request_context():
         from app.services.oauth_service import get_base_url
         configured = get_base_url(request)

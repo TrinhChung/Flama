@@ -232,4 +232,6 @@ Build tạo SPA và `frontend/dist-mcp/index.html` tự chứa mã app, CSS, ren
 
 `MCP_TEMPLATE_PREVIEW_UI_ENABLED=false` mặc định giữ text/structured preview. Sau khi kiểm tra host thật cho phép nested `srcdoc` sandbox và CSP tương ứng, đặt `true`, cấu hình `PUBLIC_APP_URL` trỏ đúng web origin phục vụ media rồi restart Flask/Connect. Với VPS deploy qua GitHub, đặt flag trong Variables của Environment Flama để managed env giữ giá trị qua các lần deploy. Docker và VPS release đều mang theo `frontend/dist-mcp/index.html`; VPS chỉ build resource này trên runner. Registry chỉ advertise UI khi flag bật và bundle tồn tại. Resource không chứa dữ liệu người dùng hay credential.
 
+Khi SPA và backend khác origin, đặt `MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL` thành origin backend phục vụ `/media`, ví dụ `https://api.flama.vn`; `PUBLIC_APP_URL` tiếp tục trỏ tới SPA cho các luồng web/email. VPS managed env có cấu hình origin media riêng này.
+
 Host simulator không chứng minh ChatGPT host đã chạy được inline UI. Media riêng tư qua cookie trong host khác origin cũng cần kiểm tra riêng. Có thể tắt flag để rollback advertisement mà giữ tool preview và luồng ghi hiện hành.

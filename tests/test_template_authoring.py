@@ -130,6 +130,22 @@ class McpTemplatePreviewSurfaceTests(unittest.TestCase):
                 self.assertIsNone(registry.read_resource(str(artifact)))
                 self.assertIn("Mustache", registry.read_resource("flama://docs/template-authoring")["text"])
 
+    def test_media_origin_is_separate_from_frontend_origin(self):
+        from app.services import mcp_resource_registry as registry
+        app = Flask(__name__)
+        app.config.update(MCP_TEMPLATE_PREVIEW_UI_ENABLED=True,
+            PUBLIC_APP_URL="https://flama.vn", MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL="https://api.flama.vn/media/")
+        with app.app_context(), tempfile.TemporaryDirectory() as folder:
+            artifact = Path(folder) / "index.html"
+            artifact.write_text("<!doctype html><title>Preview</title>", encoding="utf-8")
+            with patch.object(registry, "_UI_PATH", artifact):
+                self.assertEqual(registry.media_base_url(), "https://api.flama.vn/")
+                meta = registry.read_resource(registry.TEMPLATE_PREVIEW_URI)["_meta"]["ui"]["csp"]
+                self.assertEqual(meta["resourceDomains"], ["https://api.flama.vn"])
+                self.assertNotIn("https://flama.vn", meta["resourceDomains"])
+            app.config["MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL"] = "javascript:alert(1)"
+            self.assertEqual(registry.media_base_url(), "")
+
     def test_raw_tool_uses_no_persistence_operations(self):
         from app.services.mcp.template_preview_tools import preview_note_type_template
         session = MagicMock()
