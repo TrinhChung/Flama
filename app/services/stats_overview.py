@@ -208,7 +208,7 @@ def _canonical_future_due_day_counts(
 
     by_note = forecast_counts_notes()
     # A due value implies current state, so the due filter alone keeps the scheduled Notes.
-    scope = collection_note_scope(db.session, learner_user_id=user_id)
+    scope = collection_note_scope(db.session, learner_user_id=user_id, by_note=by_note)
     rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("rows")
     weight = literal(1).label("card_count") if by_note else rows.c.card_count
     fetched = db.session.execute(

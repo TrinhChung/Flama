@@ -10,13 +10,14 @@ from typing import Any, List, Optional
 from datetime import datetime
 from collections import defaultdict
 
-from sqlalchemy import and_, literal, or_, select
+from sqlalchemy import and_, case, literal, or_, select
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.functions import GenericFunction
 from sqlalchemy.types import Boolean
 
 from models import db
+from models.card import PresentationAlias, greatest
 from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.study_application import StudyApplication
@@ -61,6 +62,55 @@ def _sqlite_pin_has_application(element, compiler, **kw):
     return f"json_type({document}, '$.\"' || {application_id} || '\"') IS NOT NULL"
 
 
+class _CloneVisibility:
+    """The install's release terms shared by Card and Note grain visibility."""
+
+    def __init__(self, install):
+        def column(name):
+            value = getattr(install, name)
+            return value if hasattr(value, "__clause_element__") else literal(value)
+
+        self.release_id = column("applied_release_id")
+        self.deck_item_id = column("deck_item_id")
+        releases = DeckRelease.__table__
+        has_release = select(releases.c.id).where(releases.c.id == self.release_id).exists()
+        self.initialized = select(releases.c.id).where(
+            releases.c.id == self.release_id, releases.c.template_pins_initialized.is_(True),
+        ).exists()
+        self.release_mode = and_(column("version_mode") == "release", has_release)
+        self.snapshot_at = db.func.coalesce(column("base_snapshot_at"), column("installed_at"))
+
+    def presentation(self, template_id, application_id, status_code):
+        pins = DeckReleaseTemplatePin.__table__
+        pinned_application = select(pins.c.deck_release_id).where(
+            pins.c.deck_release_id == self.release_id,
+            pins.c.source_template_id == template_id,
+            _pin_has_application(pins.c.applications_json, application_id),
+        ).exists()
+        return or_(
+            and_(self.initialized, pinned_application),
+            and_(~self.initialized, status_code == "ACTIVE"),
+        )
+
+    def membership(self, note):
+        releases = DeckRelease.__table__
+        memberships = DeckReleaseEntityMembership.__table__
+        return select(memberships.c.id).select_from(
+            memberships.join(releases, releases.c.id == self.release_id),
+        ).where(
+            memberships.c.deck_item_id == self.deck_item_id,
+            memberships.c.entity_kind == "note", memberships.c.entity_id == note.id,
+            memberships.c.introduced_sequence <= releases.c.sequence_no,
+            or_(memberships.c.removed_sequence.is_(None), memberships.c.removed_sequence > releases.c.sequence_no),
+        ).exists()
+
+    def before_snapshot(self, note, card_created_at):
+        return or_(
+            self.snapshot_at.is_(None),
+            and_(note.created_at <= self.snapshot_at, card_created_at <= self.snapshot_at),
+        )
+
+
 def clone_source_card_visibility(install, *, card=Card, note=Note):
     """Set-wise source membership for installed releases and timestamp fallback.
 
@@ -68,41 +118,40 @@ def clone_source_card_visibility(install, *, card=Card, note=Note):
     still constrain owner/deck scope and must propagate include_retired_cards
     to the outer statement: a frozen release may pin a retired application.
     """
-    def column(name):
-        value = getattr(install, name)
-        return value if hasattr(value, "__clause_element__") else literal(value)
+    terms = _CloneVisibility(install)
+    presentation = terms.presentation(card.template_id, card.application_id, card.application_status)
+    return and_(presentation, or_(
+        and_(terms.release_mode, terms.membership(note)),
+        and_(~terms.release_mode, terms.before_snapshot(note, card.created_at)),
+    ))
 
-    release_id = column("applied_release_id")
-    releases = DeckRelease.__table__
-    memberships = DeckReleaseEntityMembership.__table__
-    pins = DeckReleaseTemplatePin.__table__
-    has_release = select(releases.c.id).where(releases.c.id == release_id).exists()
-    initialized = select(releases.c.id).where(
-        releases.c.id == release_id, releases.c.template_pins_initialized.is_(True),
-    ).exists()
-    pinned_application = select(pins.c.deck_release_id).where(
-        pins.c.deck_release_id == release_id,
-        pins.c.source_template_id == card.template_id,
-        _pin_has_application(pins.c.applications_json, card.application_id),
-    ).exists()
-    presentation = or_(
-        and_(initialized, pinned_application),
-        and_(~initialized, card.application_status == "ACTIVE"),
+
+def clone_source_note_visibility(install, *, note=Note):
+    """The Notes with at least one Card that ``clone_source_card_visibility`` shows.
+
+    Release membership belongs to the Note, so it is tested once per Note and
+    no Card row is built. A Card is the Note through one application of its
+    NoteType (ADR P11); its timestamp is the old alias's, else the later of
+    the Note's and the application's.
+    """
+    terms = _CloneVisibility(install)
+    application = StudyApplication.__table__.alias("visible_applications")
+    shown = and_(
+        application.c.note_type_id == note.note_type_id,
+        terms.presentation(application.c.template_id, application.c.id, application.c.status_code),
     )
-    release_mode = and_(column("version_mode") == "release", has_release)
-    membership = select(memberships.c.id).select_from(
-        memberships.join(releases, releases.c.id == release_id),
-    ).where(
-        memberships.c.deck_item_id == column("deck_item_id"),
-        memberships.c.entity_kind == "note", memberships.c.entity_id == note.id,
-        memberships.c.introduced_sequence <= releases.c.sequence_no,
-        or_(memberships.c.removed_sequence.is_(None), memberships.c.removed_sequence > releases.c.sequence_no),
-    ).exists()
-    snapshot_at = db.func.coalesce(column("base_snapshot_at"), column("installed_at"))
-    legacy_membership = or_(
-        snapshot_at.is_(None), and_(note.created_at <= snapshot_at, card.created_at <= snapshot_at),
+    alias = PresentationAlias.__table__.alias("visible_aliases")
+    card_created_at = case(
+        (alias.c.id.isnot(None), alias.c.created_at),
+        else_=greatest(note.created_at, application.c.created_at),
     )
-    return and_(presentation, or_(and_(release_mode, membership), and_(~release_mode, legacy_membership)))
+    snapshot_card = select(application.c.id).select_from(application.outerjoin(alias, and_(
+        alias.c.note_id == note.id, alias.c.application_id == application.c.id,
+    ))).where(shown, terms.before_snapshot(note, card_created_at)).exists()
+    return or_(
+        and_(terms.release_mode, terms.membership(note), select(application.c.id).where(shown).exists()),
+        and_(~terms.release_mode, snapshot_card),
+    )
 
 
 def get_note_type_by_user_and_name(user_id: int, name: str) -> Optional[NoteType]:
