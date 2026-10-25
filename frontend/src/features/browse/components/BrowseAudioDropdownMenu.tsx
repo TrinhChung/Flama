@@ -39,7 +39,8 @@ export function BrowseAudioDropdownMenu({
         toast.info(t('toasts.deck_or_cards_required'))
         return
       }
-      if (selectedDeck?.has_mixed_note_types) {
+      if (!selectedDeck || selectedDeck.summary_loaded === false) return
+      if (selectedDeck.has_mixed_note_types) {
         toast.error(t('toasts.mixed_note_types_error'))
         return
       }
@@ -53,7 +54,8 @@ export function BrowseAudioDropdownMenu({
         toast.info(t('toasts.deck_or_cards_required'))
         return
       }
-      if (selectedDeck?.has_mixed_note_types) {
+      if (!selectedDeck || selectedDeck.summary_loaded === false) return
+      if (selectedDeck.has_mixed_note_types) {
         toast.error(t('toasts.mixed_note_types_error'))
         return
       }
@@ -71,10 +73,11 @@ export function BrowseAudioDropdownMenu({
           <span className="font-medium">{t('audio_menu.japanese')}</span>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="w-48">
-          <DropdownMenuItem onClick={handleSelectWebVoiceVox}>
+          <DropdownMenuItem onClick={handleSelectWebVoiceVox} disabled={selectedCards.length === 0 && (!selectedDeck || selectedDeck.summary_loaded === false)}>
             <span className="font-medium text-foreground">{t('audio_menu.web_voicevox')}</span>
           </DropdownMenuItem>
           <DropdownMenuItem
+            disabled={selectedCards.length === 0 && (!selectedDeck || selectedDeck.summary_loaded === false)}
             onClick={() => handleSelectLocalVoice('voicevox', '3')}
             className="flex items-center justify-between font-medium cursor-pointer"
           >
@@ -87,6 +90,7 @@ export function BrowseAudioDropdownMenu({
       </DropdownMenuSub>
 
       <DropdownMenuItem
+        disabled={selectedCards.length === 0 && (!selectedDeck || selectedDeck.summary_loaded === false)}
         onClick={() => handleSelectLocalVoice('kokoro', 'af_bella')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
@@ -97,6 +101,7 @@ export function BrowseAudioDropdownMenu({
       </DropdownMenuItem>
 
       <DropdownMenuItem
+        disabled={selectedCards.length === 0 && (!selectedDeck || selectedDeck.summary_loaded === false)}
         onClick={() => handleSelectLocalVoice('kokoro', 'zf_xiaobei')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
@@ -107,6 +112,7 @@ export function BrowseAudioDropdownMenu({
       </DropdownMenuItem>
 
       <DropdownMenuItem
+        disabled={selectedCards.length === 0 && (!selectedDeck || selectedDeck.summary_loaded === false)}
         onClick={() => handleSelectLocalVoice('kokoro', 'ef_dora')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
@@ -117,6 +123,7 @@ export function BrowseAudioDropdownMenu({
       </DropdownMenuItem>
 
       <DropdownMenuItem
+        disabled={selectedCards.length === 0 && (!selectedDeck || selectedDeck.summary_loaded === false)}
         onClick={() => handleSelectLocalVoice('kokoro', 'ff_siwis')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
@@ -127,6 +134,7 @@ export function BrowseAudioDropdownMenu({
       </DropdownMenuItem>
 
       <DropdownMenuItem
+        disabled={selectedCards.length === 0 && (!selectedDeck || selectedDeck.summary_loaded === false)}
         onClick={() => handleSelectLocalVoice('kokoro', 'if_sara')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
@@ -137,6 +145,7 @@ export function BrowseAudioDropdownMenu({
       </DropdownMenuItem>
 
       <DropdownMenuItem
+        disabled={selectedCards.length === 0 && (!selectedDeck || selectedDeck.summary_loaded === false)}
         onClick={() => handleSelectLocalVoice('kokoro', 'pf_dora')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >

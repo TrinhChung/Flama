@@ -390,7 +390,7 @@ def _join_note_availability(query, *, learner_user_id: int, note_id_column=None)
     )
 
 
-def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, query_args, notes_only: bool = False, scope_only: bool = False, scope_note=None):
+def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, query_args, notes_only: bool = False, scope_only: bool = False, scope_note=None, scoped_deck_ids=None):
     """Share visibility and effective-value filters; Note reads never expand applications."""
     from app.services import flashcards_share as share_ctrl
 
@@ -447,11 +447,25 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
             selected_deck_id = int(deck_id_raw)
         except (TypeError, ValueError) as exc:
             raise BrowseApiError("Invalid deck_id") from exc
+    requested_roots = None
+    if scoped_deck_ids is not None:
+        try:
+            raw_roots = list(scoped_deck_ids)
+            if not raw_roots or len(raw_roots) > 50 or any(
+                isinstance(value, bool) or not str(value).isdigit() or int(value) <= 0 for value in raw_roots
+            ):
+                raise ValueError
+            requested_roots = set(map(int, raw_roots))
+        except (TypeError, ValueError) as exc:
+            raise BrowseApiError("Invalid scoped_deck_ids", field="deck_ids") from exc
+    selection_roots = requested_roots if requested_roots is not None else (
+        {selected_deck_id} if selected_deck_id is not None else None)
+    expand_selection = True if requested_roots is not None else include_subdecks
     scoped_decks = None
-    if notes_only and not admin_mode and selected_deck_id is not None:
-        from app.repositories.browse_note_repository import selected_owned_decks
-        scoped_decks = selected_owned_decks(user_id=user_id, deck_id=selected_deck_id,
-            include_subdecks=include_subdecks)
+    if notes_only and selection_roots is not None:
+        from app.repositories.browse_note_repository import selected_browse_decks
+        scoped_decks = selected_browse_decks(user_id=user_id, admin_mode=admin_mode,
+            deck_ids=selection_roots, include_subdecks=expand_selection)
     if scoped_decks is None:
         scoped_decks = vocabulary_ctrl.collect_accessible_browse_decks(
             user_id=user_id, admin_mode=admin_mode)
@@ -460,15 +474,20 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
     children_by_parent = vocabulary_ctrl.deck_children_map(scoped_decks)
     scoped_ids = set(deck_by_id)
     selected_ids: set[int] | None = None
-    if deck_id_raw:
-        if selected_deck_id not in scoped_ids:
+    if selection_roots is not None:
+        if not selection_roots.issubset(scoped_ids):
             raise BrowseApiError("Deck not found", status=404)
-        if include_subdecks:
-            selected_ids = set(
-                vocabulary_ctrl.collect_subtree_ids(selected_deck_id, children_by_parent)
-            )
+        if expand_selection:
+            selected_ids = {deck_id for root in selection_roots
+                for deck_id in vocabulary_ctrl.collect_subtree_ids(root, children_by_parent)}
         else:
-            selected_ids = {selected_deck_id}
+            selected_ids = set(selection_roots)
+        if requested_roots is not None:
+            # Sidebar batches expose only the requested union, even when a
+            # mixed learner subtree needed the full visibility resolver.
+            deck_by_id = {deck_id: deck for deck_id, deck in deck_by_id.items() if deck_id in selected_ids}
+            deck_lookup = {deck_id: deck.name for deck_id, deck in deck_by_id.items()}
+            scoped_ids = set(deck_by_id)
 
     query = Note.query if notes_only else Card.query.join(Note, Card.note_id == Note.id)
     # Status and due order come from the learner's Note row (verified
@@ -488,7 +507,10 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
     else:
         local_scope_ids = set(selected_ids or scoped_ids)
 
-        if selected_ids is not None:
+        if requested_roots is not None:
+            from app.repositories.browse_note_repository import installed_batch_scope_roots
+            scope_candidates = installed_batch_scope_roots(user_id=user_id, local_deck_ids=local_scope_ids)
+        elif selected_ids is not None:
             if notes_only:
                 from app.repositories.browse_note_repository import installed_scope_candidates
                 scope_candidates = installed_scope_candidates(user_id=user_id, local_deck_ids=local_scope_ids)
@@ -517,7 +539,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
         covered_local_ids: set[int] = set()
         seen_scope_keys: set[tuple[str, int]] = set()
         for local_scope_deck_id in scope_candidates:
-            if selected_ids is not None and local_scope_deck_id in covered_local_ids:
+            if requested_roots is None and selected_ids is not None and local_scope_deck_id in covered_local_ids:
                 continue
             clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
                 user_id=user_id,
@@ -525,6 +547,16 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
             )
             if clone_scope is None or not clone_scope.source_deck_ids:
                 continue
+            if requested_roots is not None:
+                from dataclasses import replace
+                mapping = {int(source): int(local) for source, local in
+                    (clone_scope.source_to_local_deck_id or {}).items() if int(local) in local_scope_ids}
+                clone_scope = replace(clone_scope,
+                    local_deck_ids=[deck_id for deck_id in clone_scope.local_deck_ids if deck_id in local_scope_ids],
+                    source_deck_ids=[deck_id for deck_id in clone_scope.source_deck_ids if deck_id in mapping],
+                    source_to_local_deck_id=mapping)
+                if not clone_scope.source_deck_ids:
+                    continue
             scope_key = (clone_scope.install.id, int(clone_scope.local_scope_deck_id))
             if scope_key in seen_scope_keys:
                 continue

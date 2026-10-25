@@ -1,50 +1,14 @@
 import '@/shared/config/i18n'
-import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Folder, FolderOpen, RotateCcw, Search, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react'
 import type { useBrowseState } from '../hooks/useBrowseState'
-import type { BrowseDeck } from '../types'
+import { useBrowseDeckSidebar, type BrowseDeckTreeNode } from '../hooks/useBrowseDeckSidebar'
 
 export interface BrowseDeckSidebarProps {
   browse: ReturnType<typeof useBrowseState>
-}
-
-interface BrowseDeckTreeNode {
-  deck: BrowseDeck
-  children: BrowseDeckTreeNode[]
-}
-
-function buildBrowseDeckTree(decks: BrowseDeck[], allowedIds: Set<number>): BrowseDeckTreeNode[] {
-  const nodes = new Map<number, BrowseDeckTreeNode>()
-  
-  decks.forEach((deck) => {
-    if (allowedIds.has(deck.id)) {
-      nodes.set(deck.id, { deck, children: [] })
-    }
-  })
-
-  const roots: BrowseDeckTreeNode[] = []
-  decks.forEach((deck) => {
-    if (!allowedIds.has(deck.id)) return
-    const node = nodes.get(deck.id)!
-    const parentId = deck.parent_id
-    const parent = parentId == null ? null : nodes.get(parentId)
-    if (parent) {
-      parent.children.push(node)
-    } else {
-      roots.push(node)
-    }
-  })
-
-  const sortNodes = (items: BrowseDeckTreeNode[]) => {
-    items.sort((left, right) => left.deck.name.localeCompare(right.deck.name, 'vi'))
-    items.forEach((item) => sortNodes(item.children))
-  }
-  sortNodes(roots)
-  return roots
 }
 
 export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
@@ -56,66 +20,13 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
     deckSearch,
     setDeckSearch,
     handleResetDeckFilter,
-    setPage,
+    setVisibleDeckIds,
+    deckSummaryError,
   } = browse
 
-  const [expandedNodes, setExpandedNodes] = useState<Record<number, boolean>>({})
-
-  const toggleExpand = useCallback((deckId: number) => {
-    setExpandedNodes((prev) => ({ ...prev, [deckId]: !prev[deckId] }))
-  }, [])
-
-  // Auto expand selected deck parent hierarchy on change
-  useEffect(() => {
-    if (selectedDeckId === null) return
-    const decks = decksQuery.data?.decks || []
-    const byId = new Map(decks.map((d) => [d.id, d]))
-    const toExpand: Record<number, boolean> = {}
-
-    let current = byId.get(selectedDeckId)
-    while (current) {
-      const parentId = current.parent_id
-      if (parentId != null) {
-        toExpand[parentId] = true
-        current = byId.get(parentId)
-      } else {
-        break
-      }
-    }
-    setExpandedNodes((prev) => ({ ...prev, ...toExpand }))
-  }, [selectedDeckId, decksQuery.data?.decks])
-
-  // Get allowed deck IDs based on filter
-  const allowedIds = useMemo(() => {
-    const allowed = new Set<number>()
-    const decks = decksQuery.data?.decks || []
-    if (!deckSearch.trim()) {
-      decks.forEach((d) => allowed.add(d.id))
-      return allowed
-    }
-
-    const byId = new Map(decks.map((d) => [d.id, d]))
-    const query = deckSearch.trim().toLowerCase()
-    decks.forEach((deck) => {
-      if (deck.name.toLowerCase().includes(query)) {
-        allowed.add(deck.id)
-        let parentId = deck.parent_id
-        const seen = new Set<number>()
-        while (parentId != null && !seen.has(parentId)) {
-          seen.add(parentId)
-          allowed.add(parentId)
-          parentId = byId.get(parentId)?.parent_id ?? null
-        }
-      }
-    })
-    return allowed
-  }, [decksQuery.data?.decks, deckSearch])
-
-  // Build recursive tree nodes
-  const treeRoots = useMemo(() => {
-    const decks = decksQuery.data?.decks || []
-    return buildBrowseDeckTree(decks, allowedIds)
-  }, [decksQuery.data?.decks, allowedIds])
+  const { treeRoots, expandedNodes, toggleExpand, searching } = useBrowseDeckSidebar(
+    decksQuery.data?.decks, selectedDeckId, deckSearch, setVisibleDeckIds,
+  )
 
   if (decksQuery.isPending) {
     return (
@@ -136,9 +47,10 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
   const renderTreeNode = (node: BrowseDeckTreeNode, level: number) => {
     const hasChildren = node.children.length > 0
     const isSelected = selectedDeckId === node.deck.id
-    const isExpanded = !!deckSearch.trim() || !!expandedNodes[node.deck.id]
-    const counts = node.deck.counts || {}
-    const totalDue = (counts.new || 0) + (counts.learn || 0) + (counts.due || 0)
+    const isExpanded = searching || !!expandedNodes[node.deck.id]
+    const counts = node.deck.counts
+    const totalDue = node.deck.summary_loaded === true && counts
+      ? (counts.new || 0) + (counts.learn || 0) + (counts.due || 0) : null
 
     return (
       <div key={node.deck.id} className="space-y-0.5">
@@ -151,7 +63,6 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
           }`}
           onClick={() => {
             setSelectedDeckId(node.deck.id)
-            setPage(1)
           }}
         >
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -194,7 +105,7 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
             </div>
           </div>
 
-          {totalDue > 0 && (
+          {totalDue !== null && totalDue > 0 && (
             <Badge
               variant="outline"
               className={`text-[10px] px-1.5 py-0 rounded-full shrink-0 border-0 ${
@@ -244,6 +155,7 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
 
       {/* Decks List scrollable */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {deckSummaryError && <div role="alert" className="px-2 py-1 text-xs text-destructive">{deckSummaryError.message}</div>}
         {treeRoots.length === 0 ? (
           <div className="text-center py-6 text-xs text-muted-foreground italic">{t('deck_sidebar.no_decks_found')}</div>
         ) : (

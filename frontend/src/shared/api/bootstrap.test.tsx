@@ -19,6 +19,8 @@ vi.mock('@/features/browse/api/browseApi', () => ({
   browseQueryKeys: { noteTypes: ['note-types', 'browse', 'compact'] },
   browseApi: {
     fetchDecks: () => mocks.get('/browse/decks'),
+    fetchDeckStructure: () => mocks.get('/browse/decks'),
+    fetchDeckSummaries: () => Promise.resolve({ decks: [] }),
     fetchNoteTypes: () => mocks.get('/note-types', { compact: 1 }),
     fetchCards: (params: unknown) => mocks.get('/browse/cards', params),
     fetchCardDetail: (id: string) => mocks.get(`/browse/cards/${id}`),

@@ -68,11 +68,13 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
   const availableVoices = ttsVoicesQuery.data?.items || []
 
   const isDeckScope = selectedCards.length === 0 && Boolean(selectedDeckId)
+  const summaryPending = isDeckScope && (!selectedDeck || selectedDeck.summary_loaded === false)
   const isMixedNoteTypes = isDeckScope && Boolean(selectedDeck?.has_mixed_note_types)
   const deckCardCount = selectedDeck?.counts?.total ?? cards.length
   const effectiveCardCount = isDeckScope ? deckCardCount : targetTtsCardIds.length
 
   const handleGenerate = () => {
+    if (summaryPending || isMixedNoteTypes) return
     generateTtsMutation.mutate({
       card_ids: isDeckScope ? undefined : targetTtsCardIds,
       deck_id: isDeckScope && selectedDeckId ? selectedDeckId : undefined,
@@ -211,6 +213,7 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
               disabled={
                 generateTtsMutation.isPending
                 || isMixedNoteTypes
+                || summaryPending
                 || effectiveCardCount === 0
                 || availableSourceFieldNames.length === 0
                 || availableAudioFieldNames.length === 0

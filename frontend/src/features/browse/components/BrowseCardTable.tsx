@@ -1,5 +1,5 @@
 import '@/shared/config/i18n'
-import { memo, useRef, useEffect } from 'react'
+import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -10,6 +10,7 @@ import { isValidArrayJson } from '@/entities/flashcard/fields'
 import type { BrowseCardRow, BrowseSortBy, BrowseSortDir } from '../types'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import { BrowsePagination, type BrowsePaginationProps } from './BrowsePagination'
+import { useBrowseTableScroll } from '../hooks/useBrowseTableScroll'
 
 export type BrowseArrayViewMode = 'normal' | 'code'
 
@@ -123,15 +124,7 @@ export const BrowseCardTable = memo(function BrowseCardTable({
 }: BrowseCardTableProps) {
   const { t } = useTranslation('browse')
 
-  const tableContainerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (typeof tableContainerRef.current?.scrollTo === 'function') {
-      tableContainerRef.current.scrollTo({ top: 0, behavior: 'instant' })
-    } else if (tableContainerRef.current) {
-      tableContainerRef.current.scrollTop = 0
-    }
-  }, [page])
+  const tableContainerRef = useBrowseTableScroll(page)
 
   if (isPending) {
     return (
@@ -242,6 +235,7 @@ export const BrowseCardTable = memo(function BrowseCardTable({
         total={total}
         pages={pages}
         selectedCount={selectedCount}
+        isFetchingPage={isShowingPreviousResult}
       />
     </div>
   )

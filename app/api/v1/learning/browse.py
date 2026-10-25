@@ -6,11 +6,12 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_login import current_user, login_required
 
-from app.services import browse_card_service, browse_note_service, browse_voicevox_service
+from app.services import browse_card_service, browse_deck_service, browse_note_service, browse_voicevox_service
 from app.services.stats_overview import get_effective_timezone_name
 from app.utils.permissions import is_admin_user
 from app.validators import RequestValidationError
 from app.validators.browse_note import validate_note_delete_payload
+from app.validators.browse_decks import validate_deck_summary_ids, validate_structure_only
 
 
 browse_bp = Blueprint("api_v1_browse", __name__)
@@ -68,6 +69,8 @@ def browse_decks():
     user_id, admin_mode, timezone_name = _context()
     try:
         if request.args.get("view") == "notes":
+            if validate_structure_only(request.args.get("structure_only")):
+                return jsonify(browse_deck_service.build_structure(user_id=user_id, admin_mode=admin_mode))
             return jsonify(browse_note_service.build_decks(user_id=user_id, admin_mode=admin_mode,
                 timezone_name=timezone_name))
         payload = browse_card_service.build_browse_decks(
@@ -75,9 +78,25 @@ def browse_decks():
             admin_mode=admin_mode,
             timezone_name=timezone_name,
         )
+    except RequestValidationError as exc:
+        return jsonify({"error": str(exc), "code": exc.code, "field": exc.field}), exc.status
     except browse_card_service.BrowseApiError as exc:
         return _browse_error(exc)
     return jsonify(payload)
+
+
+@browse_bp.get("/decks/summaries")
+@login_required
+def browse_deck_summaries():
+    user_id, admin_mode, timezone_name = _context()
+    try:
+        deck_ids = validate_deck_summary_ids(request.args.get("deck_ids"))
+        return jsonify(browse_deck_service.build_summaries(user_id=user_id,
+            admin_mode=admin_mode, timezone_name=timezone_name, deck_ids=deck_ids))
+    except RequestValidationError as exc:
+        return jsonify({"error": str(exc), "code": exc.code, "field": exc.field}), exc.status
+    except browse_card_service.BrowseApiError as exc:
+        return _browse_error(exc)
 
 
 @browse_bp.get("/cards")

@@ -17,6 +17,8 @@ vi.mock('@/features/browse/api/browseApi', () => ({
   browseQueryKeys: { noteTypes: ['note-types', 'browse', 'compact'] },
   browseApi: {
     fetchDecks: () => mocks.get('/browse/decks'),
+    fetchDeckStructure: () => mocks.get('/browse/decks'),
+    fetchDeckSummaries: (ids: number[]) => mocks.get('/browse/deck-summaries', ids),
     fetchNoteTypes: () => mocks.get('/note-types', { compact: 1 }),
     fetchCards: (params: unknown) => mocks.get('/browse/cards', params),
     fetchCardDetail: (id: string) => mocks.get(`/browse/cards/${id}`),
@@ -97,8 +99,9 @@ describe('Browse field editing and persistence', () => {
     vi.clearAllMocks()
     mocks.sync.mockResolvedValue(undefined)
     details = { A: makeDetail('A'), B: makeDetail('B') }
-    mocks.get.mockImplementation(async (path: string) => {
+    mocks.get.mockImplementation(async (path: string, params?: unknown) => {
       if (path === '/browse/decks') return { decks: [{ id: 1, name: 'Deck', note_type_id: 'type' }] }
+      if (path === '/browse/deck-summaries') return { decks: (Array.isArray(params) ? params : [1]).map((id: number) => ({ id, name: 'Deck', note_type_id: 'type', summary_loaded: true })) }
       if (path === '/note-types') return { items: [{ id: 'type', name: 'Type', field_defs: details.A.fields }] }
       if (path === '/browse/cards') return { items: [details.A.card, details.B.card], page: 1, total: 2, pages: 1, has_next: false }
       return details[path.split('/').at(-1)!]
@@ -260,6 +263,24 @@ describe('Browse field editing and persistence', () => {
     expect(mocks.mutate).toHaveBeenCalledWith('/notes', 'POST', { deck_id: 1, note_type_id: 'type', field_values: { Word: 'new', Answer: [['one', 'two'], 'three'] }, tags: [] })
   })
 
+  it('waits for the default deck schema before creating instead of choosing an unrelated first type', async () => {
+    let finish!: (value: unknown) => void
+    const previousGet = mocks.get.getMockImplementation()!
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => path === '/browse/deck-summaries'
+      ? new Promise((resolve) => { finish = resolve }) : previousGet(path, ...args))
+    await act(async () => queryClient.setQueryData(['note-types', 'browse', 'compact'], {
+      items: [{ id: 'unrelated', name: 'Other', field_defs: [{ name: 'Word', position: 0 }] }, { id: 'type', name: 'Correct', field_defs: details.A.fields }],
+    }))
+    let start!: Promise<void>
+    await act(async () => { start = browse.handleStartCreateCard() })
+    await waitFor(() => typeof finish === 'function')
+    expect(browse.isCreatingCard).toBe(false)
+    await act(async () => { finish({ decks: [{ id: 1, name: 'Deck', note_type_id: 'type', summary_loaded: true }] }); await start })
+    expect(browse.isCreatingCard).toBe(true)
+    expect(browse.createNoteTypeId).toBe('type')
+    expect(browse.editDeckId).toBe(1)
+  })
+
   it('preserves a newer draft while synchronizing the committed values after an in-flight save', async () => {
     let finish!: (value: { detail: CardDetailResponse }) => void
     mocks.mutate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
@@ -294,9 +315,10 @@ describe('Browse field editing and persistence', () => {
   it('bulk deletes Note IDs and retains selected identities across pages', async () => {
     await act(async () => browse.setSelectedCards(['A']))
     await act(async () => browse.setPage(2))
-    mocks.get.mockImplementation(async (path: string) => {
+    mocks.get.mockImplementation(async (path: string, params?: unknown) => {
       if (path === '/browse/cards') return { items: [details.B.card], page: 2, total: 2, pages: 2 }
       if (path === '/browse/decks') return { decks: [{ id: 1, name: 'Deck' }] }
+      if (path === '/browse/deck-summaries') return { decks: (Array.isArray(params) ? params : [1]).map((id: number) => ({ id, name: 'Deck', note_type_id: 'type', summary_loaded: true })) }
       if (path === '/note-types') return { items: [] }
       return details[path.split('/').at(-1)!]
     })
