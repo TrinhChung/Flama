@@ -48,7 +48,8 @@ class _Context:
     hashes: dict[int, bytes]
 
 
-def _owned_eligible_scope(session, user_id, deck_ids):
+def _owned_metadata(session, user_id, deck_ids):
+    """The requested owned decks, and every owned ancestor by ID."""
     rows = repository.owned_scope_rows(session, user_id=user_id, deck_ids=deck_ids)
     by_id = {int(row.id): row for row in rows}
     # Load ancestor metadata in batches, so an unmapped branch under an
@@ -60,6 +61,10 @@ def _owned_eligible_scope(session, user_id, deck_ids):
             break
         by_id.update({int(row.id): row for row in parents})
         ancestors = {int(row.parent_id) for row in parents if row.parent_id is not None} - set(by_id)
+    return rows, by_id
+
+
+def _owned_eligible_scope(session, rows, by_id):
     overlays = repository.overlay_local_deck_ids(session, by_id)
     resolved = {}
     for row in rows:
@@ -92,26 +97,20 @@ def _owned_eligible_scope(session, user_id, deck_ids):
     return tuple(sorted(int(row.id) for row in rows if resolved[int(row.id)]))
 
 
-def _installed_eligible_scope(session, user_id, deck_ids):
-    """Only well-formed initialized release scopes can acquire cache stamps.
+def _installed_eligible_scope(session, user_id, rows, by_id):
+    """Only well-formed release scopes can acquire cache stamps.
 
     Legacy timestamp scopes, unmapped descendants, foreign installs, cycles
     and incomplete release metadata keep the exact raw fallback. This reads
     deck/map/release metadata only; source Note membership remains shared.
+    A release published before template pins reads the live ACTIVE
+    occurrences, and an occurrence change bumps the global content epoch.
     """
-    rows = repository.owned_scope_rows(session, user_id=user_id, deck_ids=deck_ids)
-    by_id = {int(row.id): row for row in rows}
-    dependencies = repository.read_installed_scope_dependencies(session, deck_ids=by_id)
+    ancestor_dependencies = repository.read_installed_scope_dependencies(session, deck_ids=by_id)
+    dependencies = {int(row.id): ancestor_dependencies[int(row.id)] for row in rows
+                    if int(row.id) in ancestor_dependencies}
     if not dependencies:
         return {}
-    ancestors = {int(row.parent_id) for row in rows if row.parent_id is not None} - set(by_id)
-    while ancestors:
-        parents = repository.owned_scope_rows(session, user_id=user_id, deck_ids=ancestors)
-        if not parents:
-            break
-        by_id.update({int(row.id): row for row in parents})
-        ancestors = {int(row.parent_id) for row in parents if row.parent_id is not None} - set(by_id)
-    ancestor_dependencies = repository.read_installed_scope_dependencies(session, deck_ids=by_id)
     allowed = {}
     for deck_id, vector in dependencies.items():
         if (vector["install_user_id"] != int(user_id)
@@ -122,8 +121,7 @@ def _installed_eligible_scope(session, user_id, deck_ids):
                 or not vector["install_local_deck_id"]
                 or vector["release_id"] != vector["applied_release_id"]
                 or vector["release_deck_item_id"] != vector["deck_item_id"]
-                or vector["release_status"] != "published"
-                or not vector["template_pins_initialized"]):
+                or vector["release_status"] != "published"):
             continue
         root_id = int(vector["install_local_deck_id"])
         root = ancestor_dependencies.get(root_id)
@@ -151,8 +149,9 @@ def _context(session, *, user_id, deck_ids, policy, day_index, cutoff,
     route = authority_route or read_study_authority_route(session, learner_user_id=int(user_id))
     if bool(is_note_mode) != (route.mode_code == "NOTE"):
         return None
-    owned = _owned_eligible_scope(session, int(user_id), deck_ids)
-    installed = {} if admin_mode else _installed_eligible_scope(session, int(user_id), deck_ids)
+    rows, by_id = _owned_metadata(session, int(user_id), deck_ids)
+    owned = _owned_eligible_scope(session, rows, by_id)
+    installed = {} if admin_mode else _installed_eligible_scope(session, int(user_id), rows, by_id)
     eligible = tuple(sorted({*owned, *installed}))
     revision_ids = {*eligible, *(int(vector["map_source_deck_id"]) for vector in installed.values())}
     vectors = repository.read_revision_vectors(session, user_id=user_id, deck_ids=revision_ids)
