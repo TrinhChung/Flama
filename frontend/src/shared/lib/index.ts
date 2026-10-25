@@ -1,3 +1,4 @@
+export { cn } from './utils'
 export {
   formatDate,
   formatRelativeTime,

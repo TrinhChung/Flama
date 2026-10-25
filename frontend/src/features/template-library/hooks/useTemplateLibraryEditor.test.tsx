@@ -79,7 +79,7 @@ describe('useTemplateLibraryEditor preserves versioned drafts and request identi
     await render(); expect(previewLibraryTemplate).not.toHaveBeenCalled(); await flush(510)
     const firstSignal = vi.mocked(previewLibraryTemplate).mock.calls[0][2]!
     await act(async () => { editor.setSampleValue('Front', ''); editor.updateDraft({ front_html: 'changed' }) }); expect(firstSignal.aborted).toBe(true)
-    await flush(510); expect(previewLibraryTemplate).toHaveBeenLastCalledWith('t1', expect.objectContaining({ front_html: 'changed', sample_values: { Front: '' } }), expect.any(AbortSignal))
+    await flush(510); expect(previewLibraryTemplate).toHaveBeenLastCalledWith('t1', expect.objectContaining({ front_html: 'changed', sample_values: { Front: '', Back: 'Sample text' } }), expect.any(AbortSignal))
     await act(async () => second.resolve({ front_html: 'latest', back_html: '', front_renderer_payload: {}, back_renderer_payload: {} })); await act(async () => first.resolve({ front_html: 'old', back_html: '', front_renderer_payload: {}, back_renderer_payload: {} })); expect(editor.previewResult?.front_html).toBe('latest')
     await act(async () => editor.updateDraft({ input_schema: [] })); expect(editor.sampleValues).toEqual({})
     await act(async () => editor.updateDraft({ input_schema: detail().input_schema })); expect(editor.sampleValues).toEqual({})
@@ -93,6 +93,26 @@ describe('useTemplateLibraryEditor preserves versioned drafts and request identi
     await render(); expect(Object.getPrototypeOf(editor.sampleValues)).toBeNull()
     for (const key of ['__proto__', 'constructor', 'toString']) expect(editor.sampleValues[key]).toBeUndefined()
     await act(async () => editor.setSampleValue('__proto__', 'safe sample')); expect(editor.sampleValues.__proto__).toBe('safe sample'); expect(editor.sampleValues.constructor).toBeUndefined()
-    await flush(510); expect(previewLibraryTemplate).toHaveBeenLastCalledWith('t1', expect.objectContaining({ sample_values: JSON.parse('{"__proto__":"safe sample"}') }), expect.any(AbortSignal))
+    await flush(510); expect(previewLibraryTemplate).toHaveBeenLastCalledWith('t1', expect.objectContaining({ sample_values: JSON.parse('{"__proto__":"safe sample","constructor":"Sample text","toString":"Sample text"}') }), expect.any(AbortSignal))
+  })
+
+  it('sends native samples only to preview, resets on type changes, and never saves them', async () => {
+    server.input_schema = [{ key: 'Items', label: 'Items', type: 'array', required: false }]
+    await render(); await flush(510)
+    expect(previewLibraryTemplate).toHaveBeenLastCalledWith('t1', expect.objectContaining({ sample_values: { Items: ['First item', 'Second item', 'Third item'] } }), expect.any(AbortSignal))
+    await act(async () => editor.setSampleValue('Items', ['one', ['two', '']]))
+    expect(editor.dirty).toBe(false)
+    await flush(510)
+    expect(previewLibraryTemplate).toHaveBeenLastCalledWith('t1', expect.objectContaining({ sample_values: { Items: ['one', ['two', '']] } }), expect.any(AbortSignal))
+    await act(async () => editor.updateDraft({ front_html: '{{#Items}}{{.}}{{/Items}}' }))
+    await act(async () => editor.save()); await flush()
+    const body = vi.mocked(updateLibraryTemplate).mock.calls[0][1]
+    expect(body).not.toHaveProperty('sample_values')
+    expect(body).not.toHaveProperty('sampleValues')
+    await act(async () => editor.updateDraft({ input_schema: [{ key: 'Items', label: 'Items', type: 'text', required: false }] }))
+    expect(editor.sampleValues.Items).toBeUndefined()
+    await flush(510)
+    expect(previewLibraryTemplate).toHaveBeenLastCalledWith('t1', expect.objectContaining({ sample_values: { Items: 'Sample text' } }), expect.any(AbortSignal))
+    await render('t2'); expect(editor.sampleValues).toEqual({})
   })
 })

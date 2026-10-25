@@ -59,3 +59,8 @@ export { SplitPane, splitPaneHandleVariants } from "./SplitPane"
 export type { SplitPaneProps } from "./SplitPane"
 export { WorkspaceLayout } from "./WorkspaceLayout"
 export type { WorkspaceLayoutProps, WorkspacePane } from "./WorkspaceLayout"
+export { Button, buttonVariants } from './primitives/button'
+export { Input } from './primitives/input'
+export { Label } from './primitives/label'
+export { Textarea } from './primitives/textarea'
+export { Sheet, SheetTrigger, SheetClose, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription } from './primitives/sheet'

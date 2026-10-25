@@ -1,6 +1,2 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+/** Compatibility entry; use @/shared/lib for new consumers. */
+export { cn } from '@/shared/lib/utils'

@@ -1,4 +1,26 @@
 {
+  "samples": {
+    "html_mode": "HTML nâng cao",
+    "visual_mode": "Trực quan",
+    "item_count": "{{count}} phần tử",
+    "list_mode": "Danh sách",
+    "json_mode": "JSON nâng cao",
+    "array_item": "{{label}} — phần tử {{number}}",
+    "move_up": "Đưa phần tử {{number}} lên",
+    "move_down": "Đưa phần tử {{number}} xuống",
+    "remove_item": "Xóa phần tử {{number}}",
+    "add_item": "Thêm phần tử",
+    "invalid_array": "Nhập JSON list gồm chữ hoặc list lồng. Preview giữ dữ liệu hợp lệ gần nhất.",
+    "format_text": "Định dạng dữ liệu mẫu",
+    "bold": "Chữ đậm",
+    "italic": "Chữ nghiêng",
+    "list": "Danh sách",
+    "reset": "Mẫu mặc định",
+    "reset_field": "Khôi phục mẫu {{label}}",
+    "empty_field": "Để trống {{label}}",
+    "invalid_media": "Dùng URL HTTPS hoặc đường dẫn media hợp lệ của Flama.",
+    "media_hint": "Đổi URL để thử nguồn khác. Dữ liệu mẫu chỉ dùng xem trước."
+  },
   "setup": {
     "front": "Mặt trước",
     "back": "Mặt sau",

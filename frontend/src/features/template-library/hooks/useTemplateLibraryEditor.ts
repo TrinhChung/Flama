@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '@/shared/api/client'
 import {
-  archiveLibraryTemplate, cardTemplateQueryKeys, deleteLibraryTemplate, fetchLibraryTemplate, previewLibraryTemplate, previewSampleValue, updateLibraryTemplate,
+  archiveLibraryTemplate, cardTemplateQueryKeys, deleteLibraryTemplate, fetchLibraryTemplate, previewLibraryTemplate, templateSampleValues, updateLibraryTemplate, useTemplateSamples,
   type CardTemplateItem, type TemplateInputSpec, type TemplateLibraryDetail, type TemplateLibraryPreview,
   type TemplateLibraryTemplate, type TemplateWriteBody,
 } from '@/entities/card-template'
@@ -40,7 +40,6 @@ export function useTemplateLibraryEditor(id: string) {
   const stillCurrent = (request: { id: string; generation: number }) => identity.current.mounted && request.id === identity.current.id && request.generation === identity.current.generation
   const detailQuery = useQuery({ queryKey: cardTemplateQueryKeys.libraryDetail(id), queryFn: ({ signal }) => fetchLibraryTemplate(id, signal), enabled: Boolean(id) })
   const [state, setState] = useState<EditorState | null>(null)
-  const [samples, setSamples] = useState<{ id: string; values: Record<string, string> }>({ id, values: {} })
   const [replacingId, setReplacingId] = useState<string | null>(null)
   const [reloadError, setReloadError] = useState<{ id: string; message: string } | null>(null)
   const [saveError, setSaveError] = useState<{ id: string; message: string; stale: boolean } | null>(null)
@@ -50,19 +49,13 @@ export function useTemplateLibraryEditor(id: string) {
     if (data?.id !== id) return
     setState((old) => old?.id === id && isDirty(old) ? old : fromTemplate(data))
   }, [id, detailQuery.data])
-  useEffect(() => { setSamples({ id, values: {} }); setReloadError(null); setSaveError(null) }, [id])
+  useEffect(() => { setReloadError(null); setSaveError(null) }, [id])
   const current = state?.id === id ? state : null
   const draft = current?.draft ?? null
   const dirty = current ? isDirty(current) : false
   const schemaIssues = draft ? inputSchemaIssues(draft.input_schema) : []
-  // Input keys can legally be "constructor" or "__proto__". An absent sample
-  // must stay absent instead of resolving to a property on Object.prototype.
-  const sampleValues: Record<string, string> = Object.assign(Object.create(null), Object.fromEntries(Object.entries(samples.id === id ? samples.values : {}).filter(([key]) => draft?.input_schema.some((input) => input.key === key))))
-  const schemaKeys = JSON.stringify(draft?.input_schema.map((input) => input.key) ?? [])
-  useEffect(() => {
-    const keys = new Set<string>(JSON.parse(schemaKeys))
-    setSamples((old) => old.id !== id ? old : { id, values: Object.fromEntries(Object.entries(old.values).filter(([key]) => keys.has(key))) })
-  }, [id, schemaKeys])
+  const samples = useTemplateSamples(id, draft?.input_schema.map((input) => ({ key: input.key, type: input.type })) ?? [])
+  const sampleValues = samples.values
 
   const invalidate = async (usages = detailQuery.data?.applications ?? []) => {
     await Promise.all([
@@ -130,7 +123,7 @@ export function useTemplateLibraryEditor(id: string) {
 
   const [preview, setPreview] = useState<{ key: string; data: TemplateLibraryPreview | null; error: string | null; loading: boolean } | null>(null)
   const previewBody = draft ? { front_html: draft.front_html, back_html: draft.back_html, shared_css: draft.shared_css, input_schema: draft.input_schema,
-    sample_values: Object.fromEntries(Object.entries(sampleValues).map(([key, value]) => [key, previewSampleValue(value, draft.input_schema.find((input) => input.key === key)?.type ?? 'text')])) } : null
+    sample_values: templateSampleValues(draft.input_schema.map((input) => ({ key: input.key, type: input.type })), sampleValues) } : null
   const previewKey = JSON.stringify([id, previewBody])
   useEffect(() => {
     if (!previewBody || schemaIssues.length) return
@@ -155,8 +148,8 @@ export function useTemplateLibraryEditor(id: string) {
   return {
     detailQuery, template: detailQuery.data?.id === id ? detailQuery.data : null, draft, dirty, schemaIssues,
     persistedInputKeys: current?.baseline.input_schema.map((input) => input.key) ?? [],
-    resetSampleValues: () => setSamples({ id, values: {} }),
-    sampleValues, setSampleValue: (key: string, value: string) => setSamples((old) => ({ id, values: { ...(old.id === id ? old.values : {}), [key]: value } })),
+    resetSampleValues: samples.reset,
+    sampleValues, setSampleValue: samples.setValue,
     updateDraft: (patch: Partial<TemplateLibraryDraft>) => setState((old) => old?.id === id && !isReplacingDraft ? { ...old, draft: { ...old.draft, ...patch } } : old),
     canSave, saveMutation, saveError: error?.message ?? null, isStale: error?.stale ?? false,
     save: () => { if (current && canSave) saveMutation.mutate({ ...capture(), body: { ...current.draft, name: current.draft.name.trim(), primary_category: current.draft.primary_category || null, expected_current_version_id: current.head } }) },

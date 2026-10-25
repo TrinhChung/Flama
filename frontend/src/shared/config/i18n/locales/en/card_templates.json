@@ -1,4 +1,26 @@
 {
+  "samples": {
+    "html_mode": "Advanced HTML",
+    "visual_mode": "Visual",
+    "item_count": "{{count}} items",
+    "list_mode": "List",
+    "json_mode": "Advanced JSON",
+    "array_item": "{{label}} ? item {{number}}",
+    "move_up": "Move item {{number}} up",
+    "move_down": "Move item {{number}} down",
+    "remove_item": "Remove item {{number}}",
+    "add_item": "Add item",
+    "invalid_array": "Enter a JSON list of text or nested lists. Preview keeps the last valid data.",
+    "format_text": "Format sample data",
+    "bold": "Bold",
+    "italic": "Italic",
+    "list": "List",
+    "reset": "Default sample",
+    "reset_field": "Reset {{label}} sample",
+    "empty_field": "Clear {{label}} sample",
+    "invalid_media": "Use an HTTPS URL or a valid Flama media path.",
+    "media_hint": "Change the URL to try another source. Samples are only used for preview."
+  },
   "setup": {
     "front": "Front",
     "back": "Back",

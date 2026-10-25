@@ -463,6 +463,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_template_binding_service.py",
             "tests/test_template_input_policy.py",
             "tests/test_template_library.py",
+            "tests/test_template_preview_samples.py",
             "tests/test_template_library_fe_contract.py",
             "tests/test_template_release_service.py",
             "tests/test_legacy_template_provenance.py",
