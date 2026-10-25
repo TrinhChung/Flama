@@ -265,6 +265,13 @@ def query_canonical_future_due_day_counts_mysql(
     }
 
 
+# For a learner's months-long day range MySQL picks (user_id, client_event_id),
+# a prefix match that reads every review of the learner before filtering the
+# days (one-day ranges already use this index). The hint reads only the
+# requested days; MySQL ignores it if the index is missing.
+_USER_DAY_RANGE_HINT = "/*+ INDEX(review_events ix_review_events_user_reviewed_at) */"
+
+
 def _query_daily_review_aggregates_mysql(
     *,
     user_id: int,
@@ -301,6 +308,7 @@ def _query_daily_review_aggregates_mysql(
             db.func.count(ReviewEvent.id).label("cards"),
             duration_expr.label("duration_ms"),
         )
+        .prefix_with(_USER_DAY_RANGE_HINT, dialect="mysql")
         .filter(
             ReviewEvent.user_id == user_id,
             ReviewEvent.reviewed_at >= start_utc,
@@ -332,6 +340,7 @@ def _query_daily_review_aggregates_python(
 ) -> dict[date, dict[str, int]]:
     rows = (
         db.session.query(ReviewEvent.reviewed_at, ReviewEvent.duration_ms)
+        .prefix_with(_USER_DAY_RANGE_HINT, dialect="mysql")
         .filter(
             ReviewEvent.user_id == user_id,
             ReviewEvent.reviewed_at >= start_utc,
@@ -557,6 +566,7 @@ def _query_user_daily_study_time_mysql(
             duration_expr.label("total_duration_ms"),
             passed_expr.label("passed_reviews"),
         )
+        .prefix_with(_USER_DAY_RANGE_HINT, dialect="mysql")
         .filter(
             ReviewEvent.user_id == user_id,
             ReviewEvent.reviewed_at >= start_utc,
@@ -609,7 +619,7 @@ def _query_user_daily_study_time_python(
         ReviewEvent.duration_ms,
         ReviewEvent.rating,
         ReviewEvent.deck_id,
-    ).filter(
+    ).prefix_with(_USER_DAY_RANGE_HINT, dialect="mysql").filter(
         ReviewEvent.user_id == user_id,
         ReviewEvent.reviewed_at >= start_utc,
         ReviewEvent.reviewed_at < end_utc,
