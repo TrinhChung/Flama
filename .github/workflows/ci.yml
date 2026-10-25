@@ -303,6 +303,22 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Qualify Browse pagination, scope and release contracts on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+          FLAMA_BROWSE_MYSQL_TESTS: '1'
+        run: >-
+          python scripts/run_tests.py --backend-only --jobs 1 --bin-timeout 1200
+          --file tests/test_browse_notes_mysql.py
+          tests/test_browse_scope_optimization_mysql.py
+          tests/test_browse_deck_summary_mysql.py
+          tests/test_browse_search_mysql.py
+          tests/test_browse_mysql_contract.py
+
       - name: Verify Alembic migrations on MySQL
         env:
           DB_HOST: 127.0.0.1

@@ -258,6 +258,36 @@ class ModularTestRunnerTests(unittest.TestCase):
         self.assertTrue(plan["mysql_contract"])
         self.assertFalse(plan["deploy"])
 
+    def test_browse_sql_and_mysql_regressions_select_mysql_contract(self):
+        for path in (
+            "app/api/v1/learning/browse.py",
+            "app/services/browse_card_service.py",
+            "app/services/browse_note_service.py",
+            "app/services/browse_deck_service.py",
+            "app/repositories/browse_card_repository.py",
+            "app/repositories/browse_note_repository.py",
+            "app/repositories/browse_deck_repository.py",
+            "app/repositories/browse_search_repository.py",
+            "app/validators/browse_decks.py",
+            "tests/test_browse_notes_mysql.py",
+            "tests/test_browse_scope_optimization_mysql.py",
+            "tests/test_browse_deck_summary_mysql.py",
+            "tests/test_browse_search_mysql.py",
+            "tests/test_browse_mysql_contract.py",
+            "tests/test_browse_query_bounds.py",
+        ):
+            with self.subTest(path=path):
+                plan = run_tests.build_ci_change_plan([path])
+                self.assertTrue(plan["backend"])
+                self.assertTrue(plan["mysql_contract"])
+
+    def test_browse_frontend_only_change_does_not_start_mysql(self):
+        plan = run_tests.build_ci_change_plan([
+            "frontend/src/features/browse/components/BrowseToolbar.tsx",
+        ])
+        self.assertTrue(plan["frontend"])
+        self.assertFalse(plan["mysql_contract"])
+
     def test_ci_plan_selects_external_contracts_by_source(self):
         redis_plan = run_tests.build_ci_change_plan(
             ["app/services/redis_state_service.py"]
