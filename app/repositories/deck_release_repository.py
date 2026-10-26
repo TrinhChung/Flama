@@ -6,9 +6,11 @@ flush while building a release, but the HTTP adapter owns commit/rollback.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from itertools import islice
+from typing import Any
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, insert, or_, select
 from sqlalchemy.orm import load_only
 
 from app.repositories.deck_tree_query import collect_subtree_ids
@@ -170,11 +172,38 @@ def list_field_defs_by_ids(field_def_ids: Iterable[str]) -> list[FieldDef]:
 
 def list_working_dirty_entities(
     deck_item_id: str,
+    *,
+    entity_kind: str | None = None,
+    content_only: bool = False,
 ) -> list[DeckWorkingDirtyEntity]:
+    query = DeckWorkingDirtyEntity.query.filter_by(deck_item_id=deck_item_id)
+    if entity_kind is not None:
+        query = query.filter_by(entity_kind=entity_kind)
+    if content_only:
+        query = query.options(load_only(
+            DeckWorkingDirtyEntity.id, DeckWorkingDirtyEntity.entity_kind,
+            DeckWorkingDirtyEntity.entity_id, DeckWorkingDirtyEntity.field_def_id,
+            DeckWorkingDirtyEntity.property_key, DeckWorkingDirtyEntity.operation,
+            DeckWorkingDirtyEntity.current_hash, DeckWorkingDirtyEntity.source_deck_id,
+            DeckWorkingDirtyEntity.working_revision,
+        ))
+    return query.order_by(DeckWorkingDirtyEntity.id.asc()).all()
+
+
+def _latest_note_checkpoint_sequences(deck_item_id: str, through_sequence: int):
     return (
-        DeckWorkingDirtyEntity.query.filter_by(deck_item_id=deck_item_id)
-        .order_by(DeckWorkingDirtyEntity.id.asc())
-        .all()
+        select(
+            DeckReleaseNoteCheckpoint.source_note_id.label("note_id"),
+            func.max(DeckReleaseNoteCheckpoint.release_sequence_no).label("sequence_no"),
+        )
+        .join(DeckRelease, DeckRelease.id == DeckReleaseNoteCheckpoint.release_id)
+        .where(
+            DeckRelease.deck_item_id == deck_item_id,
+            DeckRelease.status == "published",
+            DeckReleaseNoteCheckpoint.release_sequence_no <= through_sequence,
+        )
+        .group_by(DeckReleaseNoteCheckpoint.source_note_id)
+        .subquery()
     )
 
 
@@ -184,6 +213,7 @@ def list_release_history_changes(
     through_sequence: int,
     entity_kinds: Iterable[str] | None = None,
     content_only: bool = False,
+    after_checkpoints: bool = False,
 ) -> list[DeckReleaseChange]:
     query = (
         DeckReleaseChange.query.join(
@@ -199,12 +229,24 @@ def list_release_history_changes(
     normalized_kinds = [str(value) for value in (entity_kinds or []) if value]
     if normalized_kinds:
         query = query.filter(DeckReleaseChange.entity_kind.in_(normalized_kinds))
+    if after_checkpoints:
+        # Reconstruction already starts from these snapshots. Keep all schema
+        # atoms and history for notes without a checkpoint, including legacy
+        # baselines; diff/history endpoints deliberately retain their atoms.
+        latest = _latest_note_checkpoint_sequences(deck_item_id, through_sequence)
+        query = query.outerjoin(latest, latest.c.note_id == DeckReleaseChange.entity_id).filter(
+            or_(
+                DeckReleaseChange.entity_kind != "note_field",
+                DeckReleaseChange.release_sequence_no > func.coalesce(latest.c.sequence_no, 0),
+            )
+        )
     if content_only:
         query = query.options(load_only(
             DeckReleaseChange.id, DeckReleaseChange.release_sequence_no,
             DeckReleaseChange.entity_kind, DeckReleaseChange.entity_id,
             DeckReleaseChange.field_def_id, DeckReleaseChange.property_key,
             DeckReleaseChange.operation, DeckReleaseChange.after_value,
+            DeckReleaseChange.source_deck_id,
         ))
     return query.order_by(
         DeckReleaseChange.release_sequence_no.asc(),
@@ -298,11 +340,12 @@ def list_note_field_history_for_ids(
     through_sequence: int,
     note_ids: Iterable[str],
     content_only: bool = False,
+    checkpoint_sequences: Mapping[str, int] | None = None,
 ) -> list[DeckReleaseChange]:
     normalized_ids = sorted({str(note_id) for note_id in note_ids if note_id})
     if not normalized_ids:
         return []
-    return (
+    query = (
         DeckReleaseChange.query.options(*([load_only(
             DeckReleaseChange.id, DeckReleaseChange.release_sequence_no,
             DeckReleaseChange.entity_id, DeckReleaseChange.field_def_id,
@@ -318,12 +361,49 @@ def list_note_field_history_for_ids(
             DeckReleaseChange.entity_kind == "note_field",
             DeckReleaseChange.entity_id.in_(normalized_ids),
         )
-        .order_by(
-            DeckReleaseChange.release_sequence_no.asc(),
-            DeckReleaseChange.id.asc(),
-        )
-        .all()
     )
+    if checkpoint_sequences is not None:
+        groups: dict[int, list[str]] = {}
+        for note_id in normalized_ids:
+            groups.setdefault(checkpoint_sequences.get(note_id, 0), []).append(note_id)
+        earliest = min(groups)
+        # Release and atom sequences are written together by the publisher.
+        # Bounding the release join avoids rescanning baseline atoms for each
+        # 500-note chunk. Missing checkpoints retain the complete history.
+        query = query.filter(
+            DeckRelease.sequence_no > earliest,
+            DeckReleaseChange.release_sequence_no > earliest,
+        )
+        if len(groups) > 1:
+            query = query.filter(or_(*(
+                and_(
+                    DeckReleaseChange.entity_id.in_(ids),
+                    DeckReleaseChange.release_sequence_no > sequence,
+                )
+                for sequence, ids in groups.items()
+            )))
+    return query.order_by(
+        DeckReleaseChange.release_sequence_no.asc(),
+        DeckReleaseChange.id.asc(),
+    ).all()
+
+
+def list_note_ids_at_release(
+    *, deck_item_id: str, sequence_no: int, limit: int,
+) -> list[str]:
+    return [str(row[0]) for row in (
+        db.session.query(DeckReleaseEntityMembership.entity_id)
+        .filter(
+            DeckReleaseEntityMembership.deck_item_id == deck_item_id,
+            DeckReleaseEntityMembership.entity_kind == "note",
+            DeckReleaseEntityMembership.introduced_sequence <= sequence_no,
+            or_(DeckReleaseEntityMembership.removed_sequence.is_(None),
+                DeckReleaseEntityMembership.removed_sequence > sequence_no),
+        )
+        .order_by(DeckReleaseEntityMembership.entity_id.asc())
+        .limit(limit)
+        .all()
+    )]
 
 
 def list_memberships(deck_item_id: str) -> list[DeckReleaseEntityMembership]:
@@ -398,8 +478,13 @@ def add_release(release: DeckRelease) -> None:
     db.session.add(release)
 
 
-def add_release_changes(changes: Iterable[DeckReleaseChange]) -> None:
-    db.session.add_all(list(changes))
+def add_release_changes(changes: Iterable[Mapping[str, Any]]) -> None:
+    # Change IDs are not consumed while publishing. Core executemany avoids
+    # one INSERT/lastrowid round trip per ORM object on MySQL. The caller still
+    # owns the single release transaction, including all batches.
+    rows = iter(changes)
+    while batch := list(islice(rows, 500)):
+        db.session.execute(insert(DeckReleaseChange.__table__), batch)
 
 
 def add_note_checkpoints(

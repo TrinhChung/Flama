@@ -359,6 +359,8 @@ def reconstruct_release_state(release_or_id: DeckRelease | str) -> DeckReleaseSt
         deck_item_id=release.deck_item_id,
         through_sequence=target_sequence,
         entity_kinds=VISIBLE_ENTITY_KINDS,
+        content_only=True,
+        after_checkpoints=True,
     )
     field_changes = [row for row in history if row.entity_kind == "field_def"]
     note_changes = [row for row in history if row.entity_kind == "note_field"]
@@ -607,14 +609,6 @@ def _get_note_field_values_by_id_for_ids_at_release(
                 content_only=True,
             )
         )
-        note_changes.extend(
-            deck_release_repository.list_note_field_history_for_ids(
-                deck_item_id=release.deck_item_id,
-                through_sequence=target_sequence,
-                note_ids=note_id_chunk,
-                content_only=True,
-            )
-        )
         note_memberships.extend(
             deck_release_repository.list_memberships_for_entities(
                 deck_item_id=release.deck_item_id,
@@ -626,6 +620,21 @@ def _get_note_field_values_by_id_for_ids_at_release(
     latest_checkpoints: dict[str, DeckReleaseNoteCheckpoint] = {}
     for checkpoint in checkpoints:
         latest_checkpoints[str(checkpoint.source_note_id)] = checkpoint
+
+    checkpoint_sequences = {
+        note_id: int(checkpoint.release_sequence_no)
+        for note_id, checkpoint in latest_checkpoints.items()
+    }
+    for note_id_chunk in _chunks(requested_ids):
+        note_changes.extend(
+            deck_release_repository.list_note_field_history_for_ids(
+                deck_item_id=release.deck_item_id,
+                through_sequence=target_sequence,
+                note_ids=note_id_chunk,
+                content_only=True,
+                checkpoint_sequences=checkpoint_sequences,
+            )
+        )
 
     membership_by_id = {
         str(row.entity_id): row
@@ -958,6 +967,50 @@ def _active_memberships_for_keys(
     return active
 
 
+def _valid_dirty_row(row: Any, base_revision: int, working_revision: int) -> bool:
+    return (
+        str(row.entity_kind) in VISIBLE_ENTITY_KINDS
+        and str(row.operation) in {"add", "set", "remove", "retire"}
+        and bool(row.field_def_id)
+        and base_revision < int(row.working_revision or 0) <= working_revision
+    )
+
+
+def _schema_journal_matches_working_state(
+    item: DeckMarketplaceItem, base_revision: int, working_revision: int,
+) -> bool:
+    """Reject stale schema hashes before reading the much larger note journal."""
+    rows = deck_release_repository.list_working_dirty_entities(
+        item.id, entity_kind="field_def", content_only=True,
+    )
+    if not rows:
+        return True
+    if any(
+        not _valid_dirty_row(row, base_revision, working_revision)
+        or str(row.entity_id) != str(row.field_def_id)
+        or row.property_key not in FIELD_DEF_PROPERTIES
+        for row in rows
+    ):
+        return False
+    fields = {
+        str(row.id): _field_def_payload(row)
+        for row in _load_rows_in_chunks(
+            deck_release_repository.list_field_defs_by_ids,
+            {str(row.field_def_id) for row in rows},
+        )
+        if str(row.note_type_id) == str(item.source_note_type_id)
+    }
+    for row in rows:
+        payload = fields.get(str(row.field_def_id))
+        expected_hash = (
+            _hash_value(payload[row.property_key])
+            if payload is not None and row.property_key in payload else None
+        )
+        if row.current_hash != expected_hash:
+            return False
+    return True
+
+
 def _try_build_sparse_diff(
     *,
     item: DeckMarketplaceItem,
@@ -976,7 +1029,11 @@ def _try_build_sparse_diff(
     if tracked_revision != working_revision or working_revision < base_working_revision:
         return None
 
-    dirty_rows = deck_release_repository.list_working_dirty_entities(item.id)
+    if working_revision > base_working_revision and not _schema_journal_matches_working_state(
+        item, base_working_revision, working_revision,
+    ):
+        return None
+    dirty_rows = deck_release_repository.list_working_dirty_entities(item.id, content_only=True)
     if working_revision == base_working_revision:
         if dirty_rows:
             return None
@@ -989,15 +1046,8 @@ def _try_build_sparse_diff(
     if not dirty_rows:
         return None
 
-    allowed_operations = {"add", "set", "remove", "retire"}
     for row in dirty_rows:
-        if (
-            str(row.entity_kind) not in VISIBLE_ENTITY_KINDS
-            or str(row.operation) not in allowed_operations
-            or not row.field_def_id
-            or int(row.working_revision or 0) <= base_working_revision
-            or int(row.working_revision or 0) > working_revision
-        ):
+        if not _valid_dirty_row(row, base_working_revision, working_revision):
             return None
 
     note_ids = {
@@ -1561,9 +1611,9 @@ def _build_release_change_rows(
     *,
     release: DeckRelease,
     changes: list[dict[str, Any]],
-) -> list[DeckReleaseChange]:
+) -> list[dict[str, Any]]:
     return [
-        DeckReleaseChange(
+        dict(
             release_id=release.id,
             release_sequence_no=int(release.sequence_no),
             change_key=row["change_key"],
