@@ -38,7 +38,7 @@ React 19 SPA + Flask REST modular monolith for Japanese spaced repetition (SRS) 
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - MySQL 8.0 server (default database name `flama`)
 - Node.js 20+ (for `frontend/`)
 - Python dependencies listed in `requirements.txt`

@@ -113,6 +113,16 @@ def validate_get_note_type_schema_arguments(arguments: Any) -> dict[str, Any]:
             status=400,
             code="INVALID_PARAMS",
         )
+    if set(arguments) - {"note_type_id", "name", "include_templates", "application_id"}:
+        raise RequestValidationError("Unknown schema argument.", field="arguments", code="INVALID_PARAMS")
+    include_templates = arguments.get("include_templates", False)
+    if not isinstance(include_templates, bool):
+        raise RequestValidationError("include_templates must be boolean.", field="include_templates", code="INVALID_PARAMS")
+    application_id = arguments.get("application_id")
+    if application_id is not None and (not include_templates or not isinstance(application_id, str)
+            or not application_id.strip() or len(application_id) > 128):
+        raise RequestValidationError("application_id requires include_templates=true and a nonempty occurrence ID.",
+            field="application_id", code="INVALID_PARAMS")
     note_type_id = arguments.get("note_type_id")
     name = arguments.get("name")
     if not note_type_id and not name:
@@ -125,6 +135,8 @@ def validate_get_note_type_schema_arguments(arguments: Any) -> dict[str, Any]:
     return {
         "note_type_id": str(note_type_id).strip() if note_type_id else None,
         "name": str(name).strip() if name else None,
+        "include_templates": include_templates,
+        "application_id": application_id.strip() if application_id is not None else None,
     }
 
 

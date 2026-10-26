@@ -306,12 +306,16 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                 user_id=user_id,
                 arguments=params.get("arguments"),
             )
-            db.session.commit()
+            if result.get("isError"):
+                db.session.rollback()
+            else:
+                db.session.commit()
             logger.info(
-                "MCP Connect tool=%s user_id=%s auth_type=%s success=True",
+                "MCP Connect tool=%s user_id=%s auth_type=%s success=%s",
                 tool_name,
                 user_id,
                 auth_type,
+                not result.get("isError", False),
             )
             return _jsonrpc_result(request_id, result)
 

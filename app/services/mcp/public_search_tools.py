@@ -42,11 +42,26 @@ FLAMA_DOCUMENTATION_TOPICS: dict[str, dict[str, str]] = {
         "title": "Card Template Authoring Contract v1 (2026-10-26)",
         "markdown": """# Card Template Authoring v1 — 2026-10-26
 
-Use preview_note_type_template before applying a candidate. It returns diagnostics,
-Study client artifacts, candidate_hash, and explicit check stages. A passed server
-render does not mean browser or interaction passed: those are initially not_run.
+Use preview_note_type_template before applying a candidate. It checks Mustache,
+field binding and inline JavaScript syntax without executing JavaScript. Checks
+include javascript_syntax. Browser behavior and appearance are for user review;
+study_browser and interaction remain not_run. A passed syntax check is not a
+claim about runtime behavior, correct answers or visual quality.
+It returns small diagnostics and candidate_hash; Study artifacts are delivered
+only to the UI through result _meta by default. Request include_preview=true for
+model-visible artifacts or include_server_render=true for legacy HTML debugging.
+Input validation errors return isError with checks and diagnostics, not a generic
+exception. Each diagnostic has code, severity, stage, source_part, line, column,
+hint and suggestions. Unknown positions are null, not fabricated coordinates.
 An MCP App can display the sandbox and, after user action, send a bounded report
 to chat. The model cannot automatically click or inspect the preview DOM.
+
+get_note_type_schema returns metadata without HTML/CSS or field/binding IDs by
+default. Request include_templates=true only when source is needed. An optional
+application_id selects one owned occurrence in source mode. Create/update return
+compact metadata, not a copy of the submitted HTML/CSS. Only necessary target
+references are returned; IDs never grant permission. The server enforces scopes,
+ownership and published-release visibility even when an ID is known.
 
 ## Syntax and arrays
 - Mustache sections: {{#options}}<li>{{.}}</li>{{/options}}.

@@ -8,6 +8,7 @@ __all__ = [
     "TemplateTokenError",
     "base_variable_name",
     "extract_variable_names",
+    "iter_variable_tokens",
     "rewrite_variable_names",
     "template_content_hash",
 ]
@@ -90,6 +91,11 @@ def extract_variable_names(source: str | None) -> list[str]:
             seen.add(name)
             names.append(name)
     return names
+
+
+def iter_variable_tokens(source: str):
+    """Yield names and character spans for diagnostics in the original source."""
+    return _scan_tags(source)
 
 
 def rewrite_variable_names(source: str | None, mapping: dict[str, str]) -> str:

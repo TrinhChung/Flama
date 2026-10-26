@@ -7,6 +7,9 @@ from typing import Any, Callable
 
 from app.services import mcp_tool_service
 from app.services.mcp import public_search_tools
+from app.services.mcp.authoring_responses import wrap_authoring_error, wrap_preview_error, wrap_schema_result, wrap_impact_result
+from app.services.mcp.note_type_tools import compact_note_type_schema
+from app.services.mcp_resource_registry import TEMPLATE_PREVIEW_URI
 from app.validators import RequestValidationError
 from models import db
 from models.field_types import FIELD_TYPES
@@ -85,6 +88,7 @@ class McpToolDefinition:
     annotations: dict[str, Any] | None = None
     is_public: bool = False
     meta: dict[str, Any] | None = None
+    error_handler: Callable[[RequestValidationError], dict[str, Any]] | None = None
 
     def to_mcp_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -106,8 +110,13 @@ class McpToolDefinition:
         return payload
 
     def execute(self, *, user_id: int | None = None, arguments: Any) -> dict[str, Any]:
-        normalized_arguments = self.arguments_validator(arguments)
-        return self.handler(user_id=user_id, arguments=normalized_arguments)
+        try:
+            normalized_arguments = self.arguments_validator(arguments)
+            return self.handler(user_id=user_id, arguments=normalized_arguments)
+        except RequestValidationError as exc:
+            if self.error_handler is None:
+                raise
+            return self.error_handler(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -1072,11 +1081,13 @@ LIST_NOTE_TYPES_TOOL = McpToolDefinition(
 
 
 def _call_get_note_type_schema(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
-    return mcp_tool_service._wrap_tool_result(
+    return wrap_schema_result(
         mcp_tool_service.get_note_type_schema(
             user_id=user_id,
             note_type_id=arguments.get("note_type_id"),
             name=arguments.get("name"),
+            include_templates=arguments.get("include_templates", False),
+            application_id=arguments.get("application_id"),
         )
     )
 
@@ -1084,12 +1095,15 @@ def _call_get_note_type_schema(*, user_id: int, arguments: dict[str, Any]) -> di
 GET_NOTE_TYPE_SCHEMA_TOOL = McpToolDefinition(
     name=mcp_tool_service.GET_NOTE_TYPE_SCHEMA_TOOL_NAME,
     title="Get Note Type Schema",
-    description="Return detailed field definitions, validation constraints, and templates for a specific note type by id or name.",
+    description="Return compact fields and template metadata by NoteType id or exact name. Source and binding IDs are omitted by default. Request include_templates=true for authoring source; application_id selects one owned occurrence. IDs are references, never authorization.",
     input_schema={
         "type": "object",
         "properties": {
             "note_type_id": {"type": "string", "description": "UUID of the note type"},
             "name": {"type": "string", "description": "Exact name of the note type"},
+            "include_templates": {"type": "boolean", "default": False,
+                "description": "Include HTML/CSS, full field definitions and bindings only when needed for authoring."},
+            "application_id": {"type": "string", "description": "Select one owned template occurrence; requires include_templates=true."},
         },
         "additionalProperties": False,
     },
@@ -1097,12 +1111,13 @@ GET_NOTE_TYPE_SCHEMA_TOOL = McpToolDefinition(
     annotations={"readOnly": True},
     handler=_call_get_note_type_schema,
     arguments_validator=validate_get_note_type_schema_arguments,
+    error_handler=wrap_authoring_error,
 )
 
 
 def _call_create_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
-    return mcp_tool_service._wrap_tool_result(
-        mcp_tool_service.create_note_type(
+    return wrap_schema_result(
+        compact_note_type_schema(mcp_tool_service.create_note_type(
             user_id=user_id,
             name=arguments["name"],
             description=arguments.get("description"),
@@ -1113,7 +1128,7 @@ def _call_create_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[s
             preview_image_url=arguments.get("preview_image_url"),
             fields=arguments.get("fields"),
             templates=arguments.get("templates"),
-        )
+        ))
     )
 
 
@@ -1171,11 +1186,12 @@ CREATE_NOTE_TYPE_TOOL = McpToolDefinition(
     required_scope="note-type:write",
     handler=_call_create_note_type,
     arguments_validator=validate_create_note_type_arguments,
+    error_handler=wrap_authoring_error,
 )
 
 
 def _call_preview_note_type_update(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
-    return mcp_tool_service._wrap_tool_result(
+    return wrap_impact_result(
         mcp_tool_service.preview_note_type_update(
             user_id=user_id,
             note_type_id=arguments["note_type_id"],
@@ -1211,12 +1227,13 @@ PREVIEW_NOTE_TYPE_UPDATE_TOOL = McpToolDefinition(
     annotations={"readOnly": True},
     handler=_call_preview_note_type_update,
     arguments_validator=validate_preview_note_type_update_arguments,
+    error_handler=wrap_authoring_error,
 )
 
 
 def _call_update_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
-    return mcp_tool_service._wrap_tool_result(
-        mcp_tool_service.update_note_type(
+    return wrap_schema_result(
+        compact_note_type_schema(mcp_tool_service.update_note_type(
             user_id=user_id,
             note_type_id=arguments["note_type_id"],
             name=arguments.get("name"),
@@ -1233,7 +1250,7 @@ def _call_update_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[s
             templates=arguments.get("templates"),
             preview_id=arguments.get("preview_id"),
             confirm=bool(arguments.get("confirm", False)),
-        )
+        ))
     )
 
 
@@ -1266,6 +1283,7 @@ UPDATE_NOTE_TYPE_TOOL = McpToolDefinition(
     required_scope="note-type:write",
     handler=_call_update_note_type,
     arguments_validator=validate_update_note_type_arguments,
+    error_handler=wrap_authoring_error,
 )
 
 
@@ -2115,17 +2133,19 @@ from app.validators.mcp_template_preview import (
 PREVIEW_NOTE_TYPE_TEMPLATE_TOOL = McpToolDefinition(
     name="preview_note_type_template",
     title="Preview NoteType Template",
-    description=("Analyze a candidate without saving, and return Study client artifacts for sandbox preview. "
+    description=("Check Mustache, binding and inline JavaScript syntax without saving or executing JavaScript. "
         "Supply input_schema, front_html, back_html and explicit sample_values for a raw candidate, or "
-        "an owned note_type_id plus application_id. Browser/interaction checks remain not_run. "
+        "an owned note_type_id plus application_id. Artifacts go only to the preview UI by default; request include_preview=true for debugging. "
+        "Appearance and browser behavior are reviewed by the user. Browser/interaction checks remain not_run. "
         "Use get_flama_documentation(topic='template-authoring') for syntax and quiz-template for a recipe."),
     input_schema=TEMPLATE_PREVIEW_INPUT_SCHEMA,
     output_schema=TEMPLATE_PREVIEW_OUTPUT_SCHEMA,
     required_scope="note-type:read",
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
-    meta={"ui": {"resourceUri": "ui://flama/template-preview/v1.html"}},
+    meta={"ui": {"resourceUri": TEMPLATE_PREVIEW_URI}},
     handler=preview_note_type_template,
     arguments_validator=validate_template_preview_arguments,
+    error_handler=wrap_preview_error,
 )
 
 

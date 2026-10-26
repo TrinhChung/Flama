@@ -28,13 +28,15 @@ export function TemplatePreviewApp({ initialResult }: { initialResult?: unknown 
     {state.error && <p role="alert">{state.error}</p>}
     {!preview && !state.error && <p role="status">Waiting for the template preview result…</p>}
     {preview && <>
-      <p className="break-all text-xs text-muted-foreground" data-testid="candidate-hash">{preview.candidate_hash}</p>
+      {preview.candidate_hash && <p className="break-all text-xs text-muted-foreground" data-testid="candidate-hash">{preview.candidate_hash}</p>}
       {preview.diagnostics.length > 0 && <ul className="space-y-2 text-sm" aria-label="Template diagnostics">
-        {preview.diagnostics.map((d, i) => <li key={i}><strong>{d.code}</strong>: {d.message} {d.hint}</li>)}
+        {preview.diagnostics.map((d, i) => <li key={i}><strong>{d.code}</strong>: {d.message}
+          {d.line && <> · {d.source_part}:{d.line}{d.column ? `:${d.column}` : ''}</>} {d.hint}
+          {!!d.suggestions?.length && <> Suggested inputs: {d.suggestions.join(', ')}.</>}</li>)}
       </ul>}
       {rendered && 'error' in rendered ? <p role="alert">{rendered.error}</p> : rendered && <div className="h-[440px] min-h-60 overflow-hidden rounded-xl border bg-card">
-        <CardDisplay key={preview.candidate_hash} cardId={preview.candidate_hash} side={state.side}
-          candidateHash={preview.candidate_hash} mediaBaseUrl={preview.media_base_url}
+        <CardDisplay key={preview.candidate_hash} cardId={preview.candidate_hash ?? undefined} side={state.side}
+          candidateHash={preview.candidate_hash ?? undefined} mediaBaseUrl={preview.media_base_url}
           frontPayload={rendered.front} backPayload={rendered.back}
           fieldDefs={preview.preview?.template_artifact.field_defs}
           fieldValues={preview.preview?.content_artifact.field_values}

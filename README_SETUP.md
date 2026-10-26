@@ -57,7 +57,7 @@ flask --app connect_wsgi.py run --host=0.0.0.0 --port=4790
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - Docker + Docker Compose plugin (neu chay MySQL bang container)
 - Tren Windows:
   - Dung PowerShell hoac Command Prompt cho cac lenh native cua Windows

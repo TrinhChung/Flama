@@ -23,6 +23,10 @@ TEMPLATE_PREVIEW_INPUT_SCHEMA = {
             "additionalProperties": {"$ref": "#/$defs/sampleValue"},
             "description": "Explicit text or native string-list values keyed by input name (raw) or source field name (attached). Never persisted. No numeric/object/null values."},
         "profile": {"type": "string", "enum": ["generic", "quiz"], "default": "generic"},
+        "include_preview": {"type": "boolean", "default": False,
+            "description": "Include full Study artifacts in model-visible output. Normally artifacts are delivered only to the preview UI."},
+        "include_server_render": {"type": "boolean", "default": False,
+            "description": "Include legacy server-rendered HTML only for explicit render debugging."},
     },
     "required": ["sample_values"], "additionalProperties": False,
 }
@@ -31,17 +35,21 @@ TEMPLATE_PREVIEW_OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
         "schema_version": {"const": "template-preview.v1"},
-        "candidate_hash": {"type": "string", "pattern": "^sha256-[a-f0-9]{64}$"},
+        "candidate_hash": {"type": ["string", "null"], "pattern": "^sha256-[a-f0-9]{64}$"},
         "renderer_abi": {"type": "string"},
         "checks": {"type": "object", "properties": {
             stage: {"type": "string", "enum": ["passed", "failed", "not_run", "unsupported"]}
-            for stage in ("input", "binding", "template", "server_render", "study_browser", "interaction")},
-            "required": ["input", "binding", "template", "server_render", "study_browser", "interaction"]},
+            for stage in ("input", "binding", "template", "javascript_syntax", "server_render", "study_browser", "interaction")},
+            "required": ["input", "binding", "template", "javascript_syntax", "server_render", "study_browser", "interaction"]},
         "diagnostics": {"type": "array", "maxItems": 100, "items": {"type": "object",
             "properties": {"code": {"type": "string"}, "severity": {"enum": ["warning", "error"]},
                 "stage": {"type": "string"}, "source_part": {"type": "string"},
+                "line": {"type": ["integer", "null"], "minimum": 1},
+                "column": {"type": ["integer", "null"], "minimum": 1},
+                "suggestions": {"type": "array", "maxItems": 5, "items": {"type": "string"}},
                 "message": {"type": "string", "maxLength": 1000}, "hint": {"type": "string", "maxLength": 1000}},
-            "required": ["code", "severity", "stage", "source_part", "message", "hint"]}},
+            "required": ["code", "severity", "stage", "source_part", "message", "hint", "line", "column", "suggestions"]}},
+        "preview_available": {"type": "boolean"},
         "preview": {"type": ["object", "null"], "properties": {
             "template_artifact": {"type": "object"}, "content_artifact": {"type": "object"}},
             "required": ["template_artifact", "content_artifact"]},
@@ -51,7 +59,7 @@ TEMPLATE_PREVIEW_OUTPUT_SCHEMA = {
         "verification_note": {"type": "string"},
     },
     "required": ["schema_version", "candidate_hash", "renderer_abi", "checks", "diagnostics", "preview",
-                 "sample_source", "media_base_url", "ui_available", "verification_note"],
+                 "preview_available", "sample_source", "media_base_url", "ui_available", "verification_note"],
 }
 
 
@@ -64,6 +72,9 @@ def validate_template_preview_arguments(arguments):
     if set(arguments) - allowed:
         invalid("Unknown preview argument. Select an occurrence with application_id, not template_id.")
     result = dict(arguments)
+    for key in ("include_preview", "include_server_render"):
+        if key in result and not isinstance(result[key], bool):
+            invalid(f"{key} must be boolean.", key)
     for key in ("note_type_id", "application_id"):
         if key in result and (not isinstance(result[key], str) or not 1 <= len(result[key]) <= 128):
             invalid(f"{key} must be a nonempty ID.", key)

@@ -27,6 +27,7 @@ from app.services.mcp_preview_service import (
     validate_preview_token,
 )
 from app.validators.flashcard_input import RequestValidationError
+from app.validators.template_authoring import TemplateAuthoringValidationError
 from models import db
 from models.card import Card
 from models.deck import Deck
@@ -71,7 +72,22 @@ def list_note_types(*, user_id: int) -> list[dict[str, Any]]:
     return items
 
 
-def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name: str | None = None) -> dict[str, Any]:
+def compact_note_type_schema(schema):
+    """Expose only operational references; field/binding internals require source mode."""
+    result = dict(schema)
+    result.pop("sample_note_payload", None)
+    result.update({
+        "description": _compact_description(schema.get("description")),
+        "fields": [{key: field[key] for key in ("name", "field_type", "required", "identity_role")}
+            for field in schema["fields"]],
+        "templates": [{key: template[key] for key in ("application_id", "name", "position", "is_default") if key in template}
+            for template in schema["templates"]],
+    })
+    return result
+
+
+def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name: str | None = None,
+                         include_templates: bool = True, application_id: str | None = None) -> dict[str, Any]:
     """Return comprehensive field definitions, validation metadata, and templates for a specific note type."""
     query = NoteType.query.filter(
         or_(
@@ -125,6 +141,7 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
             "application_id": t.application_id,
             "occurrence_key": t.application.occurrence_key,
             "input_bindings": t.application.input_bindings or {},
+            "input_schema": t.input_schema or [],
             "display_name": t.application.display_name,
             "name": t.name,
             "position": t.position,
@@ -153,7 +170,12 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
             for t in marketplace_query_service.serialize_note_type_templates(nt, published=True)
         ]
 
-    return {
+    if application_id is not None:
+        templates = [t for t in templates if t.get("application_id") == application_id]
+        if not templates:
+            raise RequestValidationError("Template occurrence not found in this NoteType.",
+                field="application_id", status=404, code="APPLICATION_NOT_FOUND")
+    result = {
         "id": str(nt.id),
         "name": nt.name,
         "description": nt.description,
@@ -177,6 +199,7 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
             "tags": [],
         },
     }
+    return result if include_templates else compact_note_type_schema(result)
 
 
 
@@ -213,9 +236,9 @@ def create_note_type(
                       if entry["severity"] == "error"]
             if errors:
                 t_name = str(item.get("name") or f"Card {index + 1}")
-                raise RequestValidationError(f"Lỗi cú pháp trong template '{t_name}': "
+                raise TemplateAuthoringValidationError(f"Lỗi cú pháp trong template '{t_name}': "
                     + "; ".join(f"{entry['code']}: {entry['message']}" for entry in errors),
-                    field="templates", status=400, code="TEMPLATE_SYNTAX_ERROR")
+                    diagnostics=errors, field="templates", status=400, code="TEMPLATE_SYNTAX_ERROR")
 
     existing = NoteType.query.filter_by(user_id=user_id, name=cleaned_name).first()
     if existing is not None:
@@ -391,6 +414,12 @@ def _template_change_diagnostics(nt, templates):
     return result[:100]
 
 
+def _has_template_source(templates):
+    items = templates if isinstance(templates, list) else (
+        list((templates or {}).get("added", [])) + list((templates or {}).get("updated", [])))
+    return any(isinstance(item, dict) and any(key in item for key in ("front_html", "back_html")) for item in items)
+
+
 def preview_note_type_update(
     *,
     user_id: int,
@@ -508,20 +537,22 @@ def preview_note_type_update(
         "data_loss_possible": data_loss_possible,
     }
 
-    try:
-        preview_id, expires_at = create_preview_token(
-            user_id=user_id,
-            action="update_note_type",
-            resource_id=nt.id,
-            resource_version=resource_version,
-            impact_summary=impact_summary,
-        )
-    except PreviewStoreUnavailable as exc:
-        raise RequestValidationError(
-            str(exc),
-            status=503,
-            code="PREVIEW_STORE_UNAVAILABLE",
-        ) from exc
+    preview_id, expires_at = None, None
+    if not validation_errors:
+        try:
+            preview_id, expires_at = create_preview_token(
+                user_id=user_id,
+                action="update_note_type",
+                resource_id=nt.id,
+                resource_version=resource_version,
+                impact_summary=impact_summary,
+            )
+        except PreviewStoreUnavailable as exc:
+            raise RequestValidationError(
+                str(exc),
+                status=503,
+                code="PREVIEW_STORE_UNAVAILABLE",
+            ) from exc
 
     return {
         "preview_id": preview_id,
@@ -548,6 +579,8 @@ def preview_note_type_update(
         "validation_errors": validation_errors,
         "diagnostics": diagnostics,
         "checks": {"template": ("not_run" if templates is None else "failed" if validation_errors else "passed"),
+                   "javascript_syntax": ("not_run" if not _has_template_source(templates) else "failed" if any(
+                       item["severity"] == "error" and item["stage"] == "javascript_syntax" for item in diagnostics) else "passed"),
                    "study_browser": "not_run", "interaction": "not_run"},
         "warnings": warnings,
         "requires_confirmation": data_loss_possible,
@@ -643,8 +676,8 @@ def update_note_type(
     diagnostics = _template_change_diagnostics(nt, templates)
     errors = [item for item in diagnostics if item["severity"] == "error"]
     if errors:
-        raise RequestValidationError("; ".join(f"{item['code']}: {item['message']}" for item in errors),
-            field="templates", status=400, code="TEMPLATE_SYNTAX_ERROR")
+        raise TemplateAuthoringValidationError("; ".join(f"{item['code']}: {item['message']}" for item in errors),
+            diagnostics=errors, field="templates", status=400, code="TEMPLATE_SYNTAX_ERROR")
 
     if templates is not None:
         from app.services import study_content_delete_service as content_topology

@@ -6,7 +6,8 @@ from urllib.parse import urlsplit
 from flask import current_app, has_app_context, has_request_context, request
 
 
-TEMPLATE_PREVIEW_URI = "ui://flama/template-preview/v1.html"
+TEMPLATE_PREVIEW_URI = "ui://flama/template-preview/v2.html"
+_LEGACY_PREVIEW_URI = "ui://flama/template-preview/v1.html"
 TEMPLATE_PREVIEW_MIME = "text/html;profile=mcp-app"
 _UI_PATH = Path(__file__).resolve().parents[2] / "frontend" / "dist-mcp" / "index.html"
 
@@ -51,7 +52,7 @@ def list_resources():
 
 
 def read_resource(uri):
-    if uri == TEMPLATE_PREVIEW_URI:
+    if uri in (TEMPLATE_PREVIEW_URI, _LEGACY_PREVIEW_URI):
         if not template_preview_ui_available():
             return None
         return dict(uri=uri, mimeType=TEMPLATE_PREVIEW_MIME, text=_UI_PATH.read_text(encoding="utf-8"),

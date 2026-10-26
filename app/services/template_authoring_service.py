@@ -7,20 +7,18 @@ normal code and must still be rendered by its client and sandbox.
 from __future__ import annotations
 
 import re
+from difflib import get_close_matches
 from types import SimpleNamespace
 from typing import Any
 
 from chevron.tokenizer import ChevronError, tokenize
 
 from app.services.flashcard_renderer import (
-    TemplateCompileError, prepare_client_template_source, render_template_pair,
+    TemplateCompileError, prepare_client_template_source, render_template_pair, _INLINE_SCRIPT_RE,
 )
-from app.services.template_tokens import extract_variable_names, TemplateTokenError
-
-
-def diagnostic(code, message, *, severity="warning", stage="template", source_part="front_html", hint=""):
-    return dict(code=code, severity=severity, stage=stage, source_part=source_part,
-                message=str(message)[:1000], hint=str(hint)[:1000])
+from app.services.template_tokens import extract_variable_names, iter_variable_tokens, TemplateTokenError
+from app.services.template_javascript_service import javascript_diagnostics
+from app.services.template_diagnostics import diagnostic, source_position
 
 
 def analyze_template_sources(*, template, field_defs) -> list[dict[str, Any]]:
@@ -37,6 +35,13 @@ def analyze_template_sources(*, template, field_defs) -> list[dict[str, Any]]:
     for part in ("front_html", "back_html"):
         source = str(getattr(template, part, "") or "")
         prepared = prepare_client_template_source(source, field_defs)
+        result.extend(javascript_diagnostics(source, part))
+        # Script blocks are literal JS; preserve original offsets when locating HTML tokens.
+        masked = _INLINE_SCRIPT_RE.sub(lambda m: re.sub(r"[^\r\n]", " ", m.group()), source)
+        try:
+            spans = {name: start for name, start, _ in reversed(list(iter_variable_tokens(masked)))}
+        except TemplateTokenError:
+            spans = {}
         try:
             names = extract_variable_names(prepared["source"])
             # Tokenization validates paired sections with the actual parser.
@@ -46,17 +51,20 @@ def analyze_template_sources(*, template, field_defs) -> list[dict[str, Any]]:
                 severity="error", source_part=part, hint="Use paired {{#name}}…{{/name}} sections."))
             continue
         for name in names:
+            position = source_position(source, spans[name]) if name in spans else {}
             if (re.match(r"^(?:each|if|unless|with)\s", name)
                     or name.startswith("../") or (name == "else" and name not in known)):
                 result.append(diagnostic("HANDLEBARS_UNSUPPORTED", f"Unsupported helper: {name}",
                     severity="error", source_part=part,
-                    hint="Use Mustache {{#options}}{{.}}{{/options}}; compute positions in template JavaScript."))
+                    hint="Use Mustache {{#options}}{{.}}{{/options}}; compute positions in template JavaScript.", **position))
             elif name.startswith("@"):
                 result.append(diagnostic("LOOP_METADATA_UNSUPPORTED", f"{name} has no loop metadata value.",
-                    source_part=part, hint="Iterate DOM options with index + 1; do not use @index."))
+                    source_part=part, hint="Iterate DOM options with index + 1; do not use @index.", **position))
             elif name not in known and name.split(".", 1)[0] not in known:
+                suggestions = get_close_matches(name, sorted(known), n=5, cutoff=0.6)
                 result.append(diagnostic("UNDECLARED_VARIABLE", f"No declared input named {name}.",
-                    source_part=part, hint="Declare/map the input, or remove the token. Item methods such as index are not values."))
+                    source_part=part, hint="Use a declared input or remove this token. Item methods such as index are not values.",
+                    suggestions=suggestions, **position))
         if any("{{" in script for script in prepared["inline_scripts"]):
             result.append(diagnostic("SCRIPT_TOKENS_LITERAL", "Study does not interpolate Mustache inside template scripts.",
                 source_part=part, hint="Read already-rendered DOM text or FlamaCard.getContext().fieldValues; never insert raw field data into JavaScript."))
@@ -144,7 +152,9 @@ def build_candidate_preview(*, template, field_defs, field_values, media_assets=
         input_bindings=getattr(template, "input_bindings", {}), renderer_abi=RENDERER_ABI,
     ))
     checks = {stage: ("failed" if any(d["severity"] == "error" and d["stage"] == stage for d in diagnostics)
-                       else "passed") for stage in ("input", "binding", "template")}
+                       else "passed") for stage in ("input", "binding", "template", "javascript_syntax")}
+    if checks["javascript_syntax"] == "failed":
+        checks["template"] = "failed"
     checks.update(server_render="not_run", study_browser="not_run", interaction="not_run")
     preview = None
     server_render = None
@@ -165,4 +175,5 @@ def build_candidate_preview(*, template, field_defs, field_values, media_assets=
         diagnostics=sorted(diagnostics, key=lambda item: item["severity"] != "error")[:100],
         preview=preview, server_render=server_render,
         sample_source=sample_source or {"kind": "provided"},
-        verification_note="Browser and interaction checks have not run. Server HTML is diagnostic evidence only.")
+        verification_note="Mustache, binding and inline JavaScript syntax are checked without executing JavaScript. "
+            "Browser behavior and appearance require user review; browser and interaction checks have not run.")

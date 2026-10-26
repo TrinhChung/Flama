@@ -240,7 +240,7 @@ class McpTaxonomyMetadataTests(unittest.TestCase):
             },
         })
         self.assertNotIn("error", create_resp, f"Create note type error: {create_resp.get('error')}")
-        nt_data = json.loads(create_resp["result"]["content"][0]["text"])
+        nt_data = create_resp["result"]["structuredContent"]
         nt_id = nt_data["id"]
 
         with self.app.app_context():
@@ -305,8 +305,8 @@ class McpTaxonomyMetadataTests(unittest.TestCase):
                 "pricing_mode": "invalid_mode",
             },
         })
-        self.assertIn("error", resp2)
-        self.assertEqual(resp2["error"]["code"], -32602)
+        self.assertTrue(resp2["result"]["isError"])
+        self.assertEqual(resp2["result"]["structuredContent"]["checks"]["input"], "failed")
 
 
 if __name__ == "__main__":
