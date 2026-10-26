@@ -131,7 +131,15 @@ def resolve_scheduler_runtime_settings(
 
 
 def resolve_day_boundary_hour_local(*, user_id: int | None = None) -> int:
-    return resolve_scheduler_runtime_settings(user_id=user_id).day_boundary_hour_local
+    default_hour = int(default_deck_options().dayBoundaryHourLocal)
+    if user_id is None:
+        return default_hour
+    raw_hour = (
+        UserSchedulerSettings.query.with_entities(UserSchedulerSettings.day_boundary_hour_local)
+        .filter_by(user_id=user_id)
+        .scalar()
+    )
+    return _clamp_int(raw_hour, minimum=0, maximum=23, default=default_hour)
 
 
 def resolve_learn_ahead_seconds(*, user_id: int | None = None) -> int:

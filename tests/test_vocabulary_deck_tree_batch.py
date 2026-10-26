@@ -206,10 +206,10 @@ class VocabularyDeckTreeBatchTests(unittest.TestCase):
             self.assertEqual(node["counts"]["due"], 0)
 
         # Check total SELECT statements executed:
-        # With 5 installs, exactly 1 batch query for maps and 1 batch query for counts
+        # With 5 installs, 1 existence check for overlay and 1 batch query for counts.
         # The authority route adds one fixed statement (counts run no evidence
         # scan); the total remains independent of the number of installs or Notes.
-        self.assertEqual(len(select_statements), 12)
+        self.assertEqual(len(select_statements), 11)
         self.assertFalse(any("card_progress" in sql.lower() for sql in select_statements))
 
     def test_overlap_guard_fallback_on_cross_install_overlap(self):

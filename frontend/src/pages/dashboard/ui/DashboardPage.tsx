@@ -66,10 +66,10 @@ export function DashboardPage() {
     return findDeck(dashboardData.decks, selectedDeckId)
   }, [dashboardData, selectedDeckId])
 
-  if (bootstrapQuery.isPending || dashboardQuery.isPending) {
+  if (dashboardQuery.isPending) {
     return <PageLoading label={t('page.loading')} />
   }
-  if (!bootstrapQuery.data) {
+  if (!bootstrapQuery.isPending && !bootstrapQuery.data) {
     return <Page><PageError error={new Error(t('page.auth_error'))} /></Page>
   }
   if (dashboardQuery.error) {
@@ -80,7 +80,7 @@ export function DashboardPage() {
   const dashboard = dashboardQuery.data
 
   const statsUrl = selectedDeck ? `/statistics?deck_id=${selectedDeck.id}` : '/statistics'
-  const browseUrl = selectedDeck ? `/browse?deck_id=${selectedDeck.id}` : bootstrap.links.browse
+  const browseUrl = selectedDeck ? `/browse?deck_id=${selectedDeck.id}` : (bootstrap?.links.browse ?? '/browse')
   const importUrl = selectedDeck
     ? `/flashcards/import?deck_id=${selectedDeck.id}`
     : '/flashcards/import'

@@ -7,6 +7,7 @@ from models.flashcard import DeckInstall, Note
 from models.deck import Deck
 from models.study_progress_subject import StudyProgressSubject
 from sqlalchemy import or_
+from sqlalchemy.orm import defer
 
 
 def collect_accessible_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
@@ -22,7 +23,8 @@ def collect_accessible_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
     """
     if admin_mode:
         initial_decks = (
-            Deck.query.filter(
+            Deck.query.options(defer(Deck.description))
+            .filter(
                 Deck.deleted_at.is_(None),
                 or_(
                     Deck.owner_user_id == user_id,
@@ -41,7 +43,8 @@ def collect_accessible_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
         } - set(by_id)
         while frontier:
             parent_decks = (
-                Deck.query.filter(
+                Deck.query.options(defer(Deck.description))
+                .filter(
                     Deck.id.in_(frontier),
                     Deck.deleted_at.is_(None),
                 )
@@ -63,77 +66,101 @@ def collect_accessible_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
             ),
         )
 
-    owned_root_ids = {
+    owned_decks = (
+        Deck.query.options(defer(Deck.description))
+        .filter(
+            Deck.owner_user_id == user_id,
+            Deck.deleted_at.is_(None),
+        )
+        .all()
+    )
+    by_id: dict[int, Deck] = {int(deck.id): deck for deck in owned_decks}
+    already_owned = set(by_id)
+
+    installed_root_ids = {
         int(deck_id)
         for (deck_id,) in (
-            db.session.query(Deck.id)
+            db.session.query(DeckInstall.local_deck_id)
             .filter(
-                Deck.owner_user_id == user_id,
-                Deck.deleted_at.is_(None),
+                DeckInstall.user_id == user_id,
+                DeckInstall.local_deck_id.isnot(None),
             )
+            .distinct()
             .all()
         )
         if deck_id is not None
     }
-    installs = DeckInstall.query.filter_by(user_id=user_id).all()
-    installed_root_ids = {
-        int(inst.local_deck_id)
-        for inst in installs
-        if inst.local_deck_id
-    }
-    root_ids = installed_root_ids | owned_root_ids
-    if not root_ids:
+    if not by_id and not installed_root_ids:
         return []
 
-    # BFS downward – collect children
-    visible_ids: set[int] = set()
-    frontier: set[int] = set(root_ids)
-    while frontier:
-        current_ids = {deck_id for deck_id in frontier if deck_id not in visible_ids}
-        if not current_ids:
-            break
-        visible_ids.update(current_ids)
-        child_rows = (
-            db.session.query(Deck.id)
+    missing_roots = installed_root_ids - set(by_id)
+    if missing_roots:
+        for deck in (
+            Deck.query.options(defer(Deck.description))
             .filter(
-                Deck.parent_id.in_(current_ids),
+                Deck.id.in_(missing_roots),
                 Deck.deleted_at.is_(None),
             )
             .all()
-        )
-        frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
+        ):
+            by_id[int(deck.id)] = deck
 
-    # Walk upward – ensure ancestor folders are included
-    ancestor_frontier = set(visible_ids)
+    # BFS downward for installed roots – collect any non-owned children
+    expanded: set[int] = set()
+    frontier: set[int] = set(installed_root_ids)
+    while frontier:
+        expanded |= frontier
+        child_ids: set[int] = set()
+        for deck in (
+            Deck.query.options(defer(Deck.description))
+            .filter(
+                Deck.parent_id.in_(frontier),
+                Deck.deleted_at.is_(None),
+            )
+            .all()
+        ):
+            deck_id = int(deck.id)
+            by_id[deck_id] = deck
+            child_ids.add(deck_id)
+        frontier = child_ids - already_owned - expanded
+
+    # Walk upward – ensure ancestor folders not already loaded are included
+    ancestor_frontier = {
+        int(deck.parent_id)
+        for deck in by_id.values()
+        if deck.parent_id is not None and int(deck.parent_id) not in by_id
+    }
+    checked_missing: set[int] = set()
     while ancestor_frontier:
-        parent_rows = (
-            db.session.query(Deck.parent_id)
+        checked_missing |= ancestor_frontier
+        parent_decks = (
+            Deck.query.options(defer(Deck.description))
             .filter(
                 Deck.id.in_(ancestor_frontier),
-                Deck.parent_id.isnot(None),
                 Deck.deleted_at.is_(None),
             )
             .all()
         )
-        parent_ids = {int(row[0]) for row in parent_rows if row and row[0] is not None}
-        next_parents = parent_ids - visible_ids
-        if not next_parents:
+        if not parent_decks:
             break
-        visible_ids.update(next_parents)
-        ancestor_frontier = next_parents
+        for deck in parent_decks:
+            by_id[int(deck.id)] = deck
+        ancestor_frontier = {
+            int(deck.parent_id)
+            for deck in parent_decks
+            if deck.parent_id is not None
+            and int(deck.parent_id) not in by_id
+            and int(deck.parent_id) not in checked_missing
+        }
 
-    return (
-        Deck.query.filter(
-            Deck.id.in_(visible_ids),
-            Deck.deleted_at.is_(None),
-        )
-        .order_by(
-            Deck.parent_id.isnot(None),
-            Deck.position,
-            Deck.created_at,
-            Deck.id,
-        )
-        .all()
+    return sorted(
+        by_id.values(),
+        key=lambda deck: (
+            deck.parent_id is not None,
+            deck.position or 0,
+            deck.created_at,
+            deck.id,
+        ),
     )
 
 

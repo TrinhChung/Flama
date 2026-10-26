@@ -90,12 +90,9 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], bool]:
 
     by_parent: Dict[int, List[Deck]] = {}
     for deck in decks:
-        # parent_id might be None, safely use a dict
+        # collect_accessible_decks already returns decks sorted by (position, created_at, id)
         pid = deck.parent_id or 0
         by_parent.setdefault(pid, []).append(deck)
-
-    for children in by_parent.values():
-        children.sort(key=lambda item: ((item.position or 0), item.created_at, item.id))
 
     # The admin row menu copies this display identifier; numeric PATCH IDs
     # still own authorization, so learners are sent none.

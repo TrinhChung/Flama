@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
@@ -23,6 +25,7 @@ from app.services.stats_today_future import (
 from app.services.study_authority_read_service import StudyAuthorityReadError
 from app.services.study_analytics_read_service import analytics_read_transaction
 from app.services.analytics_summary_readiness import AnalyticsSummaryNotReady
+from app.utils.permissions import is_admin_user
 
 
 analytics_bp = Blueprint("api_v1_analytics", __name__)
@@ -48,9 +51,15 @@ def _resolve_request_timezone() -> str:
 @analytics_bp.get("/dashboard")
 @login_required
 def dashboard():
+    user_snapshot = SimpleNamespace(
+        id=int(current_user.id),
+        timezone=getattr(current_user, "timezone", "UTC"),
+        is_authenticated=True,
+        is_admin=is_admin_user(current_user),
+    )
     try:
         with analytics_read_transaction():
-            payload = build_dashboard_payload(current_user)
+            payload = build_dashboard_payload(user_snapshot)
         return jsonify(payload)
     except AnalyticsSummaryNotReady as exc:
         return _summary_pending_response(exc)
@@ -109,10 +118,11 @@ def statistics_overview():
         )
 
     resolved_tz = _resolve_request_timezone()
+    user_id = int(current_user.id)
     try:
         with analytics_read_transaction():
             payload = build_stats_overview(
-                user_id=current_user.id,
+                user_id=user_id,
                 year=year,
                 timezone_name=resolved_tz,
             )
@@ -164,10 +174,11 @@ def statistics_today_future():
             )
 
     resolved_tz = _resolve_request_timezone()
+    user_id = int(current_user.id)
     try:
         with analytics_read_transaction():
             payload = build_today_future_stats(
-                user_id=current_user.id,
+                user_id=user_id,
                 timezone_name=resolved_tz,
                 scope=scope,
                 deck_id=deck_id,
@@ -206,10 +217,11 @@ def statistics_study_time():
         )
 
     resolved_tz = _resolve_request_timezone()
+    user_id = int(current_user.id)
     try:
         with analytics_read_transaction():
             payload = build_user_study_time_stats(
-                user_id=current_user.id, timezone_name=resolved_tz, scope=scope,
+                user_id=user_id, timezone_name=resolved_tz, scope=scope,
                 deck_id=deck_id, range_preset=range_preset,
                 start_date_str=start_date, end_date_str=end_date,
             )
