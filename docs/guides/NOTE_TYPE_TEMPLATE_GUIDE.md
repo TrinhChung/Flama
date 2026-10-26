@@ -207,7 +207,15 @@ Chat đọc `get_flama_documentation(topic="template-authoring")` để lấy co
 
 `preview_note_type_template` chỉ đọc, nhận raw candidate với `input_schema`, `front_html`, `back_html`, `shared_css`, `sample_values`; hoặc `note_type_id` của mình cùng `application_id` xác định đúng lần gắn và mapping. Trong trường hợp gắn sẵn, sample được key theo tên field nguồn. V1 chưa đọc note thật hoặc preview trong installed/pinned context: dùng raw candidate với sample rõ ràng. `template_id` đơn lẻ không đủ chọn occurrence.
 
-Kết quả có candidate hash, ABI, diagnostics và artifact cùng đường render client của Study. Các trạng thái `study_browser=not_run`, `interaction=not_run` cho biết server chưa thao tác browser. `preview_note_type_update` vẫn là phân tích tác động và token xác nhận; analyzer cũng kiểm tra candidate trước khi ghi. Preview không thay thế token hay confirmation của mutation.
+MCP hỗ trợ những ràng buộc bên trong renderer để AI giúp tạo thẻ; người dùng tự duyệt giao diện và hành vi theo ý muốn. Server chỉ parse Mustache và JavaScript, kiểm tra binding/dữ liệu; không thực thi JavaScript. JavaScript sai cú pháp làm `javascript_syntax=failed`, `template=failed` và không tạo preview. Các trạng thái `study_browser=not_run`, `interaction=not_run` không được suy ra từ việc parse thành công.
+
+Lỗi đầu vào thông thường trả `isError=true` với `checks` và `diagnostics`. Diagnostic có `code`, `severity`, `stage`, `source_part`, `line`, `column`, `hint`, `suggestions`; vị trí chưa xác định là `null`. Dòng/cột tính từ 1 trong source gốc, theo ký tự Unicode. Đầu vào chưa hợp lệ có `candidate_hash=null`. Lỗi xác thực/quyền hoặc sự cố hạ tầng vẫn theo cơ chế lỗi giao thức. Request có lỗi rollback thay vì commit.
+
+`get_note_type_schema` mặc định chỉ trả metadata gọn: không HTML/CSS, field ID hay bảng binding. Dùng `include_templates=true` khi cần source và có thể thêm `application_id` để chỉ lấy một occurrence thuộc NoteType của mình. Create/update cũng trả metadata gọn. Những ID cần thiết để thao tác tiếp vẫn được giữ; server luôn kiểm tra scope, ownership và quyền xem published release, không coi ID là quyền truy cập.
+
+Preview mặc định trả diagnostics/hash/checks cho model; artifact Study được chuyển riêng cho widget qua `_meta["flama/template-preview"]`. `include_preview=true` trả artifact trong `structuredContent`; `include_server_render=true` bổ sung HTML chẩn đoán cũ. Nếu host không mở được widget, dùng diagnostics trong chat hoặc yêu cầu artifact rõ ràng. `preview_note_type_update` vẫn là phân tích tác động và token xác nhận; analyzer cũng kiểm tra source trước khi ghi. Preview không thay thế token hay confirmation của mutation.
+
+Resource UI hiện tại là `ui://flama/template-preview/v2.html` để host tải bundle hỗ trợ payload gọn. URI v1 cũ vẫn đọc được cùng bundle hiện hành; dữ liệu JSON vẫn theo `template-preview.v1`. Cần deploy backend và bundle MCP cùng nhau rồi refresh kết nối MCP để nhận mô tả/schema tool mới.
 
 Khi host hỗ trợ MCP Apps và deployment bật UI, người dùng có thể mở Front/Back, chọn đáp án, xem lỗi sandbox rồi bấm **Send report to chat**. Báo cáo chứa candidate hash, mặt thẻ, lỗi và ghi chú người dùng. GPT nhận báo cáo qua bridge; không tự đọc DOM hoặc tự click. Nếu host chỉ hỗ trợ cập nhật context, gửi tin nhắn tiếp trong chat để yêu cầu review. Không có browser runner theo từng cuộc chat trong v1.
 

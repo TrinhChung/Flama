@@ -40,4 +40,12 @@ describe('MCP template app', () => {
     expect(view.querySelector('[role="alert"]')?.textContent).toContain('Invalid')
     expect(calls.props).toBeNull()
   })
+  it('shows structured input failures without mounting the card renderer', async () => {
+    const view = await mount({ isError: true, structuredContent: { ...result, candidate_hash: null, preview: null,
+      diagnostics: [{ code: 'JAVASCRIPT_SYNTAX_ERROR', severity: 'error', stage: 'javascript_syntax',
+        source_part: 'back_html', line: 3, column: 16, message: 'Unexpected token ;', suggestions: ['question'] }] } })
+    expect(view.textContent).toContain('back_html:3:16')
+    expect(view.textContent).toContain('question')
+    expect(calls.props).toBeNull()
+  })
 })

@@ -187,6 +187,27 @@ def _upsert_dirty(
     row.metadata_json = dict(metadata or {})
 
 
+def _resolve_note_field_value(
+    note: Note,
+    field_name: str,
+    field_id: str | None,
+) -> Any:
+    pending = note.__dict__.get("_pending_named_field_values")
+    if isinstance(pending, dict):
+        return pending.get(field_name)
+    by_id = getattr(note, "field_values_by_id", None)
+    if (
+        field_id
+        and isinstance(by_id, dict)
+        and getattr(note, "field_values_codec", None) == "field-id.v1"
+    ):
+        return by_id.get(field_id)
+    extras = getattr(note, "field_values_extras", None)
+    if isinstance(extras, dict) and field_name in extras:
+        return extras.get(field_name)
+    return (note.field_values or {}).get(field_name)
+
+
 def mark_note_fields_changed(
     *,
     note: Note,
@@ -221,7 +242,7 @@ def mark_note_fields_changed(
                 entity_id=str(note.id),
                 property_key=property_key,
                 operation=operation,
-                current_value=(note.field_values or {}).get(field_name),
+                current_value=_resolve_note_field_value(note, field_name, field_id),
                 field_def_id=field_id,
                 source_deck_id=resolved_deck_id,
                 metadata={"field_name": field_name},
@@ -382,7 +403,11 @@ def mark_note_field_batches_changed(
                         "property_key": f"field:{field_id}",
                         "field_def_id": field_id,
                         "operation": mutation["operation"],
-                        "current_value": (note.field_values or {}).get(field_name),
+                        "current_value": _resolve_note_field_value(
+                            note,
+                            field_name,
+                            field_id,
+                        ),
                         "source_deck_id": resolved_deck_id,
                         "metadata": {"field_name": field_name},
                     }

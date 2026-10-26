@@ -65,18 +65,25 @@ def _sqlite_pin_has_application(element, compiler, **kw):
 class _CloneVisibility:
     """The install's release terms shared by Card and Note grain visibility."""
 
-    def __init__(self, install):
+    def __init__(self, install, *, release=None):
         def column(name):
             value = getattr(install, name)
             return value if hasattr(value, "__clause_element__") else literal(value)
 
         self.release_id = column("applied_release_id")
         self.deck_item_id = column("deck_item_id")
+        self.release_obj = release
         releases = DeckRelease.__table__
-        has_release = select(releases.c.id).where(releases.c.id == self.release_id).exists()
-        self.initialized = select(releases.c.id).where(
-            releases.c.id == self.release_id, releases.c.template_pins_initialized.is_(True),
-        ).exists()
+        if release is not None:
+            has_release = release.id.isnot(None)
+            self.initialized = and_(has_release, release.template_pins_initialized.is_(True))
+        else:
+            has_release = select(releases.c.id).where(
+                releases.c.id == self.release_id,
+            ).correlate_except(releases).exists()
+            self.initialized = select(releases.c.id).where(
+                releases.c.id == self.release_id, releases.c.template_pins_initialized.is_(True),
+            ).correlate_except(releases).exists()
         self.release_mode = and_(column("version_mode") == "release", has_release)
         self.snapshot_at = db.func.coalesce(column("base_snapshot_at"), column("installed_at"))
 
@@ -86,15 +93,25 @@ class _CloneVisibility:
             pins.c.deck_release_id == self.release_id,
             pins.c.source_template_id == template_id,
             _pin_has_application(pins.c.applications_json, application_id),
-        ).exists()
+        ).correlate_except(pins).exists()
         return or_(
             and_(self.initialized, pinned_application),
             and_(~self.initialized, status_code == "ACTIVE"),
         )
 
     def membership(self, note):
-        releases = DeckRelease.__table__
         memberships = DeckReleaseEntityMembership.__table__
+        if self.release_obj is not None:
+            return select(memberships.c.id).where(
+                memberships.c.deck_item_id == self.deck_item_id,
+                memberships.c.entity_kind == "note", memberships.c.entity_id == note.id,
+                memberships.c.introduced_sequence <= self.release_obj.sequence_no,
+                or_(
+                    memberships.c.removed_sequence.is_(None),
+                    memberships.c.removed_sequence > self.release_obj.sequence_no,
+                ),
+            ).correlate_except(memberships).exists()
+        releases = DeckRelease.__table__
         return select(memberships.c.id).select_from(
             memberships.join(releases, releases.c.id == self.release_id),
         ).where(
@@ -102,7 +119,7 @@ class _CloneVisibility:
             memberships.c.entity_kind == "note", memberships.c.entity_id == note.id,
             memberships.c.introduced_sequence <= releases.c.sequence_no,
             or_(memberships.c.removed_sequence.is_(None), memberships.c.removed_sequence > releases.c.sequence_no),
-        ).exists()
+        ).correlate_except(memberships, releases).exists()
 
     def before_snapshot(self, note, card_created_at):
         return or_(
@@ -111,14 +128,14 @@ class _CloneVisibility:
         )
 
 
-def clone_source_card_visibility(install, *, card=Card, note=Note):
+def clone_source_card_visibility(install, *, card=Card, note=Note, release=None):
     """Set-wise source membership for installed releases and timestamp fallback.
 
     ``install`` may be DeckInstall, an ORM alias, or a loaded row. Callers
     still constrain owner/deck scope and must propagate include_retired_cards
     to the outer statement: a frozen release may pin a retired application.
     """
-    terms = _CloneVisibility(install)
+    terms = _CloneVisibility(install, release=release)
     presentation = terms.presentation(card.template_id, card.application_id, card.application_status)
     return and_(presentation, or_(
         and_(terms.release_mode, terms.membership(note)),
@@ -126,7 +143,7 @@ def clone_source_card_visibility(install, *, card=Card, note=Note):
     ))
 
 
-def clone_source_note_visibility(install, *, note=Note):
+def clone_source_note_visibility(install, *, note=Note, release=None, active_note_type_id=None):
     """The Notes with at least one Card that ``clone_source_card_visibility`` shows.
 
     Release membership belongs to the Note, so it is tested once per Note and
@@ -134,8 +151,40 @@ def clone_source_note_visibility(install, *, note=Note):
     NoteType (ADR P11); its timestamp is the old alias's, else the later of
     the Note's and the application's.
     """
-    terms = _CloneVisibility(install)
+    terms = _CloneVisibility(install, release=release)
     application = StudyApplication.__table__.alias("visible_applications")
+    pins = DeckReleaseTemplatePin.__table__
+    pinned_app_exists = (
+        select(application.c.id)
+        .select_from(
+            application.join(
+                pins,
+                and_(
+                    pins.c.deck_release_id == terms.release_id,
+                    pins.c.source_template_id == application.c.template_id,
+                    _pin_has_application(pins.c.applications_json, application.c.id),
+                ),
+            )
+        )
+        .where(application.c.note_type_id == note.note_type_id)
+        .correlate_except(application, pins)
+        .exists()
+    )
+    active_app_exists = (
+        active_note_type_id.isnot(None)
+        if active_note_type_id is not None
+        else select(application.c.id)
+        .where(
+            application.c.note_type_id == note.note_type_id,
+            application.c.status_code == "ACTIVE",
+        )
+        .correlate_except(application)
+        .exists()
+    )
+    release_shown = or_(
+        and_(terms.initialized, pinned_app_exists),
+        and_(~terms.initialized, active_app_exists),
+    )
     shown = and_(
         application.c.note_type_id == note.note_type_id,
         terms.presentation(application.c.template_id, application.c.id, application.c.status_code),
@@ -147,9 +196,11 @@ def clone_source_note_visibility(install, *, note=Note):
     )
     snapshot_card = select(application.c.id).select_from(application.outerjoin(alias, and_(
         alias.c.note_id == note.id, alias.c.application_id == application.c.id,
-    ))).where(shown, terms.before_snapshot(note, card_created_at)).exists()
+    ))).where(
+        shown, terms.before_snapshot(note, card_created_at),
+    ).correlate_except(application, alias).exists()
     return or_(
-        and_(terms.release_mode, terms.membership(note), select(application.c.id).where(shown).exists()),
+        and_(terms.release_mode, terms.membership(note), release_shown),
         and_(~terms.release_mode, snapshot_card),
     )
 

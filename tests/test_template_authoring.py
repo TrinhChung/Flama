@@ -32,6 +32,49 @@ class TemplateAuthoringTests(unittest.TestCase):
         self.assertEqual(result["preview"]["template_artifact"]["schema_version"], "study-template.v1")
         self.assertIn("<li>A</li><li>B</li>", result["server_render"]["front_html"])
 
+    def test_javascript_syntax_and_early_errors_cannot_pass_or_render(self):
+        for script in ("const broken = ;", "const missing;", "return 1;", "const x=1; const x=2;"):
+            with self.subTest(script=script):
+                result = self.candidate(front_html=f"<script>{script}</script>")
+                self.assertEqual(result["checks"]["template"], "failed")
+                self.assertEqual(result["checks"]["javascript_syntax"], "failed")
+                self.assertEqual(result["checks"]["server_render"], "not_run")
+                self.assertIsNone(result["preview"])
+                self.assertEqual(result["diagnostics"][0]["code"], "JAVASCRIPT_SYNTAX_ERROR")
+
+    def test_modern_javascript_is_parsed_but_never_executed(self):
+        result = self.candidate(front_html='''<script>
+            const value = globalThis.missing?.value ?? [1, 2];
+            class Example { #value = 1; get value() { return this.#value; } }
+            throw new Error("Do not execute"); while (true) {}
+        </script><script type="module">export const value = await Promise.resolve(1);</script>''')
+        self.assertEqual(result["checks"]["javascript_syntax"], "passed")
+        self.assertEqual(result["checks"]["server_render"], "passed")
+        self.assertEqual(result["checks"]["study_browser"], "not_run")
+        self.assertEqual(result["checks"]["interaction"], "not_run")
+
+    def test_javascript_error_coordinates_reference_original_back_html(self):
+        result = self.candidate(back_html='<div>日本語</div>\r\n<script>\r\nconst broken = ;\r\n</script>')
+        error = next(d for d in result["diagnostics"] if d["code"] == "JAVASCRIPT_SYNTAX_ERROR")
+        self.assertEqual((error["source_part"], error["line"], error["column"]), ("back_html", 3, 16))
+
+    def test_module_syntax_uses_the_renderer_normalized_script_type(self):
+        for script_type in ("module", " module ", " MODULE "):
+            with self.subTest(script_type=script_type):
+                result = self.candidate(front_html=f'<script type="{script_type}">export const answer = await Promise.resolve(42);</script>')
+                self.assertEqual(result["checks"]["javascript_syntax"], "passed", result["diagnostics"])
+                self.assertEqual(result["checks"]["server_render"], "passed")
+                self.assertIn('<script type="module">', result["preview"]["template_artifact"]["front_inline_scripts"][0])
+
+    def test_unknown_input_has_original_position_and_declared_suggestions(self):
+        result = self.candidate(input_schema=[{"key": "question", "type": "text"}],
+            sample_values={"question": "Hello"},
+            front_html='<script>\nconst literal = "{{not_an_input}}";\n</script>\n<div>日本語 {{quesion}}</div>')
+        warnings = [d for d in result["diagnostics"] if d["code"] == "UNDECLARED_VARIABLE"]
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual((warnings[0]["line"], warnings[0]["column"]), (4, 12))
+        self.assertIn("question", warnings[0]["suggestions"])
+
     def test_bad_sections_and_handlebars_cannot_claim_compile_pass(self):
         for source in ("{{#options}}x{{/wrong}}", "{{#each options}}x{{/each options}}"):
             result = self.candidate(front_html=source)
@@ -101,6 +144,91 @@ class TemplateAuthoringTests(unittest.TestCase):
 
 
 class McpTemplatePreviewSurfaceTests(unittest.TestCase):
+    def test_invalid_tool_arguments_are_repairable_without_artifacts(self):
+        from app.services.mcp_tool_registry import call_mcp_tool
+        from app.validators.mcp_template_preview import TEMPLATE_PREVIEW_OUTPUT_SCHEMA
+        for arguments in ({"sample_values": {}}, {"sample_values": {}, "template_id": "wrong"},
+            {"sample_values": {}, "input_schema": [], "front_html": "", "back_html": "", "include_preview": "false"}):
+            result = call_mcp_tool(tool_name="preview_note_type_template", user_id=1, arguments=arguments)
+            self.assertTrue(result["isError"])
+            data = result["structuredContent"]
+            self.assertTrue(set(TEMPLATE_PREVIEW_OUTPUT_SCHEMA["required"]) <= set(data))
+            self.assertEqual(data["checks"]["input"], "failed")
+            self.assertEqual(data["checks"]["javascript_syntax"], "not_run")
+            self.assertIsNone(data["candidate_hash"])
+            self.assertIsNone(data["preview"])
+            self.assertIn("line", data["diagnostics"][0])
+            self.assertIn("column", data["diagnostics"][0])
+
+    def test_tool_returns_small_metadata_and_hydrates_ui_without_echoing_source(self):
+        from app.services.mcp_tool_registry import call_mcp_tool
+        session = MagicMock()
+        args = dict(input_schema=[], sample_values={}, front_html="<p>unique-source-token</p>", back_html="")
+        with patch("app.services.mcp.template_preview_tools.db.session", session), \
+                patch("app.services.mcp_resource_registry.template_preview_ui_available", return_value=True):
+            wrapped = call_mcp_tool(tool_name="preview_note_type_template", user_id=1, arguments=args)
+            data = wrapped["structuredContent"]
+            self.assertTrue(data["preview_available"])
+            self.assertIsNone(data["preview"])
+            self.assertNotIn("server_render", data)
+            self.assertNotIn("unique-source-token", json.dumps(data))
+            self.assertIn("unique-source-token", json.dumps(wrapped["_meta"]))
+            detailed = call_mcp_tool(tool_name="preview_note_type_template", user_id=1,
+                arguments=dict(args, include_preview=True, include_server_render=True))["structuredContent"]
+            self.assertIsNotNone(detailed["preview"])
+            self.assertIn("unique-source-token", detailed["server_render"]["front_html"])
+
+    def test_compact_schema_retains_only_needed_target_references_and_no_source_echo(self):
+        from app.services.mcp.note_type_tools import compact_note_type_schema
+        from app.services.mcp.authoring_responses import wrap_schema_result
+        schema = {"id": "note-type", "name": "Example", "description": "Purpose", "is_owner": True,
+            "is_official": False, "field_names": ["question"], "sample_note_payload": {"note_type_id": "note-type"},
+            "fields": [{"id": "internal-field-id", "name": "question", "field_type": "text", "required": True,
+                "identity_role": None, "validation_constraints": {"max_length": 100000}}],
+            "templates": [{"id": "internal-template-id", "application_id": "needed-occurrence", "name": "Card",
+                "position": 0, "is_default": True, "input_bindings": {"question": "internal-field-id"},
+                "front_html": "<div>" + "source-marker" * 1000 + "</div>", "back_html": "", "shared_css": ""}]}
+        compact = compact_note_type_schema(schema)
+        wrapped = wrap_schema_result(compact)
+        text = json.dumps(wrapped)
+        for value in ("source-marker", "internal-field-id", "internal-template-id", "sample_note_payload"):
+            self.assertNotIn(value, text)
+        self.assertIn("needed-occurrence", text)
+        self.assertEqual(compact["fields"][0]["name"], "question")
+        self.assertLess(len(text), len(json.dumps(schema)) / 4)
+        self.assertNotEqual(wrapped["content"][0]["text"], json.dumps(compact))
+
+    def test_create_tool_keeps_syntax_diagnostics_and_legacy_error_code(self):
+        from app.services.mcp_tool_registry import call_mcp_tool
+        result = call_mcp_tool(tool_name="create_note_type", user_id=1, arguments={"name": "Bad",
+            "fields": [{"name": "question", "field_type": "text"}],
+            "templates": [{"name": "Front", "front_html": "<script>const x = ;</script>", "back_html": ""}]})
+        self.assertTrue(result["isError"])
+        self.assertEqual(result["structuredContent"]["error"]["code"], "TEMPLATE_SYNTAX_ERROR")
+        self.assertEqual(result["structuredContent"]["checks"]["javascript_syntax"], "failed")
+        self.assertEqual(result["structuredContent"]["diagnostics"][0]["source_part"], "front_html")
+
+    def test_structured_http_tool_failure_rolls_back_and_auth_failure_stays_protocol_error(self):
+        from flask_login import LoginManager
+        from app.connect.mcp import mcp_connect_bp
+        app = Flask(__name__)
+        app.config["SECRET_KEY"] = "test"
+        LoginManager(app)
+        app.register_blueprint(mcp_connect_bp)
+        session = MagicMock()
+        with patch("app.connect.mcp.db.session", session), \
+                patch("app.connect.mcp.mcp_auth_service.authenticate_mcp_request", return_value=SimpleNamespace(
+                    user=SimpleNamespace(id=1), auth_type="test")), \
+                patch("app.connect.mcp.quota_service.consume", return_value=SimpleNamespace(allowed=True)):
+            response = app.test_client().post("/v1/mcp", json={"jsonrpc": "2.0", "id": 1,
+                "method": "tools/call", "params": {"name": "preview_note_type_template", "arguments": {"sample_values": {}}}})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["result"]["isError"])
+        session.rollback.assert_called_once()
+        session.commit.assert_not_called()
+        from app.services.mcp.authoring_responses import wrap_preview_error
+        with self.assertRaises(RequestValidationError):
+            wrap_preview_error(RequestValidationError("Forbidden", status=403, code="FORBIDDEN"))
     def test_meta_is_backward_compatible_and_missing_build_is_not_advertised(self):
         from app.services.mcp_tool_registry import LIST_MY_DECKS_TOOL, PREVIEW_NOTE_TYPE_TEMPLATE_TOOL
         self.assertNotIn("_meta", LIST_MY_DECKS_TOOL.to_mcp_payload())
@@ -108,7 +236,7 @@ class McpTemplatePreviewSurfaceTests(unittest.TestCase):
             self.assertNotIn("_meta", PREVIEW_NOTE_TYPE_TEMPLATE_TOOL.to_mcp_payload())
         with patch("app.services.mcp_resource_registry.template_preview_ui_available", return_value=True):
             tool = PREVIEW_NOTE_TYPE_TEMPLATE_TOOL.to_mcp_payload()
-            self.assertEqual(tool["_meta"]["ui"]["resourceUri"], "ui://flama/template-preview/v1.html")
+            self.assertEqual(tool["_meta"]["ui"]["resourceUri"], "ui://flama/template-preview/v2.html")
             self.assertTrue(tool["annotations"]["readOnlyHint"])
             self.assertEqual(tool["outputSchema"]["properties"]["schema_version"]["const"], "template-preview.v1")
 
@@ -126,6 +254,7 @@ class McpTemplatePreviewSurfaceTests(unittest.TestCase):
                 resource = registry.read_resource(registry.TEMPLATE_PREVIEW_URI)
                 self.assertEqual(resource["mimeType"], "text/html;profile=mcp-app")
                 self.assertIn("<!doctype html>", resource["text"])
+                self.assertIsNotNone(registry.read_resource("ui://flama/template-preview/v1.html"))
                 self.assertIsNone(registry.read_resource("ui://flama/../../.env"))
                 self.assertIsNone(registry.read_resource(str(artifact)))
                 self.assertIn("Mustache", registry.read_resource("flama://docs/template-authoring")["text"])

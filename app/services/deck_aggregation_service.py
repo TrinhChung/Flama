@@ -12,11 +12,13 @@ from datetime import datetime
 from typing import Dict, Tuple
 
 from sqlalchemy import and_, case, func, not_, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.repositories import note_analytics_read_repository as note_reads
 from models.card import Card
+from models.deck_release import DeckRelease
 from models.flashcard import DeckCloneDeckMap, DeckInstall, Note
+from models.study_application import StudyApplication
 
 _LEARNING_QUEUES = ("learn", "learning", "relearning")
 
@@ -60,67 +62,108 @@ def _overlay_scope(
     learner_user_id: int,
     visible_deck_ids: list[int],
     by_note: bool = False,
+    include_note_types: bool = True,
 ):
     """Logical-overlay source Cards, or with ``by_note`` Notes, under the learner's mapped local decks."""
 
-    installs = session.execute(
-        select(DeckInstall.id, DeckInstall.source_note_type_id)
-        .where(
-            DeckInstall.user_id == learner_user_id,
-            DeckInstall.clone_mode == "logical_overlay",
-            DeckInstall.local_deck_id.isnot(None),
+    local_deck_filter = (
+        DeckCloneDeckMap.local_deck_id.in_(visible_deck_ids)
+        if len(visible_deck_ids) <= 64
+        else DeckCloneDeckMap.local_deck_id.isnot(None)
+    )
+    if not include_note_types:
+        has_mapped_source = (
+            session.execute(
+                select(DeckCloneDeckMap.id)
+                .join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id)
+                .where(
+                    DeckInstall.user_id == learner_user_id,
+                    DeckInstall.clone_mode == "logical_overlay",
+                    DeckInstall.local_deck_id.isnot(None),
+                    DeckCloneDeckMap.source_deck_id.isnot(None),
+                    local_deck_filter,
+                )
+                .limit(1)
+            ).first()
+            is not None
         )
-        .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
-    ).all()
-    if not installs:
-        return None, []
-    visible = set(visible_deck_ids)
-    local_decks_by_install = defaultdict(list)
-    has_mapped_source = False
-    for install_id, local_deck_id, source_deck_id in session.execute(
-        select(
-            DeckCloneDeckMap.deck_install_id,
-            DeckCloneDeckMap.local_deck_id,
-            DeckCloneDeckMap.source_deck_id,
-        )
-        .where(DeckCloneDeckMap.deck_install_id.in_([str(row[0]) for row in installs]))
-        .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
-    ).all():
-        if local_deck_id is None or int(local_deck_id) not in visible:
-            continue
-        local_decks_by_install[str(install_id)].append(int(local_deck_id))
-        has_mapped_source = has_mapped_source or source_deck_id is not None
-    overlay_types = [
-        (local_deck_id, str(note_type_id))
-        for install_id, note_type_id in installs
-        if note_type_id
-        for local_deck_id in local_decks_by_install[str(install_id)]
-    ]
-    if not has_mapped_source:
-        return None, overlay_types
+        if not has_mapped_source:
+            return None, []
+        overlay_types = []
+    else:
+        installs = session.execute(
+            select(DeckInstall.id, DeckInstall.source_note_type_id)
+            .where(
+                DeckInstall.user_id == learner_user_id,
+                DeckInstall.clone_mode == "logical_overlay",
+                DeckInstall.local_deck_id.isnot(None),
+            )
+            .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
+        ).all()
+        if not installs:
+            return None, []
+        visible = set(visible_deck_ids)
+        local_decks_by_install = defaultdict(list)
+        has_mapped_source = False
+        for install_id, local_deck_id, source_deck_id in session.execute(
+            select(
+                DeckCloneDeckMap.deck_install_id,
+                DeckCloneDeckMap.local_deck_id,
+                DeckCloneDeckMap.source_deck_id,
+            )
+            .where(DeckCloneDeckMap.deck_install_id.in_([str(row[0]) for row in installs]))
+            .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
+        ).all():
+            if local_deck_id is None or int(local_deck_id) not in visible:
+                continue
+            local_decks_by_install[str(install_id)].append(int(local_deck_id))
+            has_mapped_source = has_mapped_source or source_deck_id is not None
+        overlay_types = [
+            (local_deck_id, str(note_type_id))
+            for install_id, note_type_id in installs
+            if note_type_id
+            for local_deck_id in local_decks_by_install[str(install_id)]
+        ]
+        if not has_mapped_source:
+            return None, overlay_types
     from app.repositories.flashcards_share_repository import (
         clone_source_card_visibility, clone_source_note_visibility,
     )
+    rel = aliased(DeckRelease)
     if by_note:
-        overlay = select(
-            DeckCloneDeckMap.local_deck_id.label("deck_id"), Note.id.label("note_id"),
-        ).select_from(Note)
-        visible = clone_source_note_visibility(DeckInstall)
+        active_nt = (
+            select(StudyApplication.note_type_id)
+            .where(StudyApplication.status_code == "ACTIVE")
+            .distinct()
+            .subquery("active_note_types")
+        )
+        overlay = (
+            select(
+                DeckCloneDeckMap.local_deck_id.label("deck_id"), Note.id.label("note_id"),
+            )
+            .select_from(Note)
+            .outerjoin(active_nt, active_nt.c.note_type_id == Note.note_type_id)
+        )
+        visible = clone_source_note_visibility(
+            DeckInstall, note=Note, release=rel, active_note_type_id=active_nt.c.note_type_id,
+        )
     else:
         overlay = select(
             DeckCloneDeckMap.local_deck_id.label("deck_id"),
             Card.id.label("card_id"),
             Card.note_id.label("note_id"),
         ).select_from(Card).join(Note, Card.note_id == Note.id)
-        visible = clone_source_card_visibility(DeckInstall)
+        visible = clone_source_card_visibility(DeckInstall, card=Card, note=Note, release=rel)
     overlay = (
         overlay
         .join(DeckCloneDeckMap, DeckCloneDeckMap.source_deck_id == Note.deck_id)
         .join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id)
+        .outerjoin(rel, rel.id == DeckInstall.applied_release_id)
         .where(
             DeckInstall.user_id == learner_user_id,
             DeckInstall.clone_mode == "logical_overlay",
-            DeckCloneDeckMap.local_deck_id.in_(visible_deck_ids),
+            DeckInstall.local_deck_id.isnot(None),
+            local_deck_filter,
             or_(
                 DeckInstall.source_owner_user_id.is_(None),
                 Note.user_id == DeckInstall.source_owner_user_id,
@@ -136,7 +179,7 @@ def deck_note_type_metadata(session, *, learner_user_id, deck_ids, admin_mode=Fa
     if not deck_ids:
         return {}
     overlay_types = [] if admin_mode else _overlay_scope(
-        session, learner_user_id=learner_user_id, visible_deck_ids=deck_ids,
+        session, learner_user_id=learner_user_id, visible_deck_ids=deck_ids, include_note_types=True,
     )[1]
     return _deck_note_types(session, learner_user_id=learner_user_id,
                             visible_deck_ids=deck_ids, overlay_types=overlay_types)
@@ -178,12 +221,18 @@ def aggregate_deck_study_counts(
             learner_user_id=learner_user_id,
             visible_deck_ids=visible_deck_ids,
             by_note=count_by_note,
+            include_note_types=include_note_types,
         )
     )
     from app.repositories.note_analytics_scope_repository import deck_note_scope
 
+    scope_deck_ids = (
+        visible_deck_ids
+        if (owned_by_any_user or len(visible_deck_ids) <= 64)
+        else None
+    )
     scope = deck_note_scope(
-        learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
+        learner_user_id=learner_user_id, deck_ids=scope_deck_ids,
         overlay=overlay, owned_by_any_user=owned_by_any_user, by_note=count_by_note,
     )
     rows = note_reads.note_rows(scope, learner_user_id=learner_user_id).subquery("rows")

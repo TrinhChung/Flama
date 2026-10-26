@@ -11,15 +11,34 @@ re-derives them. Study and Browse keep their own bounded evidence checks.
 """
 
 from sqlalchemy import and_, func, literal, not_, null, or_, select, union_all
+from sqlalchemy.orm import aliased
 
 from models.card import Card
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
+from models.deck_release import DeckRelease
 from models.note import Note
 from models.study_application import StudyApplication
 
 
-def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False):
+def _active_note_types_subquery():
+    application = StudyApplication.__table__
+    return (
+        select(application.c.note_type_id)
+        .where(application.c.status_code == "ACTIVE")
+        .distinct()
+        .subquery("active_note_types")
+    )
+
+
+def owned_note_scope(
+    *,
+    learner_user_id,
+    deck_ids=None,
+    owned_by_any_user=False,
+    by_note=False,
+    require_deck=False,
+):
     """One row per owned Note with at least one ACTIVE presentation.
 
     A Card is a Note shown through one ACTIVE application of its NoteType
@@ -27,13 +46,20 @@ def owned_note_scope(*, learner_user_id, deck_ids=None, owned_by_any_user=False)
     """
     notes = select(Note.id, Note.deck_id, Note.note_type_id)
     if not owned_by_any_user:
-        notes = notes.where(Note.user_id == int(learner_user_id))
+        notes = (
+            notes
+            .with_hint(Note, "USE INDEX (ix_notes_user_deck)", dialect_name="mysql")
+            .where(Note.user_id == int(learner_user_id))
+        )
     if deck_ids is not None:
         notes = notes.where(Note.deck_id.in_(deck_ids))
+    elif require_deck:
+        notes = notes.where(Note.deck_id.isnot(None))
     notes = notes.subquery("analytics_owned_notes")
     application = StudyApplication.__table__
+    active_count = literal(1) if by_note else func.count()
     applications = (
-        select(application.c.note_type_id, func.count().label("active_count"))
+        select(application.c.note_type_id, active_count.label("active_count"))
         .where(application.c.status_code == "ACTIVE")
         .group_by(application.c.note_type_id)
         .subquery("analytics_application_counts")
@@ -55,21 +81,30 @@ def _installed_source(*, learner_user_id, deck_ids=None, by_note=False):
         clone_source_card_visibility, clone_source_note_visibility,
     )
 
+    rel = aliased(DeckRelease)
     if by_note:
-        statement = select(
-            DeckCloneDeckMap.local_deck_id.label("deck_id"), Note.id.label("note_id"),
-        ).select_from(Note)
-        visible = clone_source_note_visibility(DeckInstall)
+        active_nt = _active_note_types_subquery()
+        statement = (
+            select(
+                DeckCloneDeckMap.local_deck_id.label("deck_id"), Note.id.label("note_id"),
+            )
+            .select_from(Note)
+            .outerjoin(active_nt, active_nt.c.note_type_id == Note.note_type_id)
+        )
+        visible = clone_source_note_visibility(
+            DeckInstall, note=Note, release=rel, active_note_type_id=active_nt.c.note_type_id,
+        )
     else:
         statement = select(
             DeckCloneDeckMap.local_deck_id.label("deck_id"),
             Card.note_id.label("note_id"), Card.application_id.label("application_id"),
         ).select_from(Card).join(Note, Card.note_id == Note.id)
-        visible = clone_source_card_visibility(DeckInstall)
+        visible = clone_source_card_visibility(DeckInstall, card=Card, note=Note, release=rel)
     statement = (
         statement
         .join(DeckCloneDeckMap, DeckCloneDeckMap.source_deck_id == Note.deck_id)
         .join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id)
+        .outerjoin(rel, rel.id == DeckInstall.applied_release_id)
         .where(
             DeckInstall.user_id == int(learner_user_id),
             DeckInstall.clone_mode == "logical_overlay",
@@ -111,7 +146,11 @@ def deck_note_scope(*, learner_user_id, deck_ids, overlay=None, owned_by_any_use
     an installed Note that is also owned in the same deck is that owned row.
     """
     owned = owned_note_scope(
-        learner_user_id=learner_user_id, deck_ids=deck_ids, owned_by_any_user=owned_by_any_user,
+        learner_user_id=learner_user_id,
+        deck_ids=deck_ids,
+        owned_by_any_user=owned_by_any_user,
+        by_note=by_note,
+        require_deck=True,
     )
     if overlay is None:
         return owned
@@ -143,7 +182,7 @@ def collection_note_scope(session, *, learner_user_id, deck_ids=None, by_note=Fa
     form a union, rather than a max/sum of each installation's count. With
     ``by_note`` every visible Note weighs 1 and no Card row is built.
     """
-    owned = owned_note_scope(learner_user_id=learner_user_id, deck_ids=deck_ids)
+    owned = owned_note_scope(learner_user_id=learner_user_id, deck_ids=deck_ids, by_note=by_note)
     has_install = session.execute(select(DeckInstall.id).where(
         DeckInstall.user_id == int(learner_user_id),
         DeckInstall.clone_mode == "logical_overlay", DeckInstall.local_deck_id.isnot(None),

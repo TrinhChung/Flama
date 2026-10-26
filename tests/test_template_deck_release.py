@@ -148,6 +148,9 @@ class TemplateDeckReleaseTests(unittest.TestCase):
         with Session(db.engine) as writer:
             writer.get(Template, template_id).front_html = "DISCARDED SESSION"
             def abort_commit(session):
+                # SQLAlchemy also dispatches before_commit when auto-publish releases its SAVEPOINT.
+                if session.in_nested_transaction():
+                    return
                 self.assertNotEqual(session.get(DeckMarketplaceItem, item_id).current_release_id, initial_id)
                 raise RuntimeError("Abort outer transaction after publication")
             event.listen(writer, "before_commit", abort_commit)

@@ -1,17 +1,13 @@
 import '@/shared/config/i18n'
-import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import { cardTemplateQueryKeys, fetchTemplateApplications } from '@/entities/card-template'
 import { AttachTemplateDialog, TemplateApplicationsPanel } from '@/features/template-library'
-import { apiRequest } from '@/shared/api/client'
+import { NoteTypeSetupShell } from '@/features/note-types'
 import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-import { NoteTypeSetupShell } from '../components/NoteTypeSetupShell'
-import type { MappingNoteType } from '../hooks/useTemplateMappingDraft'
+import { useNoteTypeTemplatesPage } from '../hooks/useNoteTypeTemplatesPage'
 
 export function NoteTypeTemplatesPage() {
   const { id = '' } = useParams<{ id: string }>()
@@ -20,17 +16,19 @@ export function NoteTypeTemplatesPage() {
 function TemplatesEditor({ noteTypeId }: { noteTypeId: string }) {
   const { t } = useTranslation('template_mapping')
   const navigate = useNavigate()
-  const [attachOpen, setAttachOpen] = useState(false)
-  const detail = useQuery({ queryKey: ['note-type-detail', noteTypeId], enabled: Boolean(noteTypeId),
-    queryFn: ({ signal }) => apiRequest<MappingNoteType>(`/api/note-types/${encodeURIComponent(noteTypeId)}`, { signal }) })
-  const applications = useQuery({ queryKey: cardTemplateQueryKeys.applications(noteTypeId, true), enabled: Boolean(noteTypeId),
-    queryFn: ({ signal }) => fetchTemplateApplications(noteTypeId, true, signal) })
+  const { detail, applications, attachOpen, setAttachOpen } = useNoteTypeTemplatesPage(noteTypeId)
   if (detail.isPending) return <PageLoading />
   if (detail.error) return <Page><PageError error={detail.error} /><Button variant="outline" onClick={() => { void detail.refetch() }}>{t('retry')}</Button></Page>
   return <NoteTypeSetupShell noteTypeId={noteTypeId} name={detail.data!.name} activeTab="templates"
     fieldCount={detail.data!.field_defs.length} templateCount={applications.data?.items.filter((item) => item.status_code === 'ACTIVE').length}>
-    <div className="space-y-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-semibold">{t('templates_title')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('templates_description')}</p></div>
-      <Button onClick={() => setAttachOpen(true)}><Plus className="size-4" />{t('attach')}</Button></div>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">{t('templates_title')}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t('templates_description')}</p>
+        </div>
+        <Button onClick={() => setAttachOpen(true)}><Plus className="size-4" />{t('attach')}</Button>
+      </div>
       <TemplateApplicationsPanel noteTypeId={noteTypeId} fields={detail.data!.field_defs} />
     </div>
     <AttachTemplateDialog open={attachOpen} onOpenChange={setAttachOpen} noteTypeId={noteTypeId}

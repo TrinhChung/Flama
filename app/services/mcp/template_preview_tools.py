@@ -45,7 +45,8 @@ def preview_note_type_template(*, user_id, arguments):
                         f"{item['key']} requests {item.get('type', 'text')}; its source field is {target.field_type}.",
                         stage="binding", source_part="input_bindings",
                         hint="Study uses the source field type; template input types are advisory."))
-            source.update(note_type_id=str(nt.id), application_id=str(application.id))
+            # The caller already supplied the target; don't echo internal references.
+            source["kind"] = "provided_for_application"
         else:
             fields = [SimpleNamespace(id=f"preview-{index}", name=item["key"], field_type=item["type"],
                 required=item.get("required", False), position=index) for index, item in enumerate(arguments["input_schema"])]
@@ -59,11 +60,19 @@ def preview_note_type_template(*, user_id, arguments):
     from app.services.mcp_resource_registry import media_base_url, template_preview_ui_available
     result["media_base_url"] = media_base_url()
     result["ui_available"] = template_preview_ui_available()
+    result["preview_available"] = result["preview"] is not None
+    artifacts = result["preview"]
+    if not arguments.get("include_preview", False):
+        result["preview"] = None
+    if not arguments.get("include_server_render", False):
+        result.pop("server_render", None)
     wrapped = wrap_tool_result(result, is_error=any(d["severity"] == "error" for d in result["diagnostics"]))
+    if artifacts is not None and result["ui_available"]:
+        wrapped["_meta"] = {"flama/template-preview": {"candidate_hash": result["candidate_hash"], "preview": artifacts}}
     wrapped["content"] = [{"type": "text", "text": (
         f"Candidate {result['candidate_hash']}: "
         + ", ".join(f"{key}={value}" for key, value in result["checks"].items())
-        + ". Browser interaction has not been tested. "
+        + ". Appearance and behavior are for user review. "
         + " ".join(f"{d['severity']} {d['code']}: {d['message']} {d['hint']}" for d in result["diagnostics"])
     )}]
     return wrapped

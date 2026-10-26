@@ -328,20 +328,36 @@ def read_study_authority_route(session: Session, *, learner_user_id: int) -> Stu
     must never use this route to admit writes or issue Study session pins.
     """
     learner_id = _positive_learner_id(learner_user_id)
-    enrollment = session.execute(
-        select(StudyAuthorityEnrollment)
-        .where(StudyAuthorityEnrollment.learner_user_id == learner_id)
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
-    if enrollment is None:
+    profile_subquery = (
+        select(StudyAuthorityStorageProfile.profile_code)
+        .where(StudyAuthorityStorageProfile.id == 1)
+        .scalar_subquery()
+    )
+    row = session.execute(
+        select(
+            StudyAuthorityEnrollment.mode_code,
+            StudyAuthorityEnrollment.epoch,
+            profile_subquery,
+        ).where(StudyAuthorityEnrollment.learner_user_id == learner_id)
+    ).one_or_none()
+    if row is None:
         raise StudyAuthorityFenceError(
             "STUDY_AUTHORITY_MIGRATION_REQUIRED", "Learner enrollment is missing; an explicit migration is required.",
         )
+    mode_code, epoch, profile_code = row
     route = _decode_route(
-        learner_user_id=learner_id, mode_code=enrollment.mode_code,
-        epoch=enrollment.epoch, persisted=True, allow_note_authority=True,
+        learner_user_id=learner_id, mode_code=mode_code,
+        epoch=epoch, persisted=True, allow_note_authority=True,
     )
-    return _with_supported_profile(route, read_study_storage_profile(session))
+    if profile_code is None:
+        resolved_profile = DEFAULT_STORAGE_PROFILE
+    elif profile_code not in STORAGE_PROFILES:
+        raise StudyAuthorityFenceError(
+            "INVALID_STORAGE_PROFILE", "Persisted study storage profile is invalid."
+        )
+    else:
+        resolved_profile = str(profile_code)
+    return _with_supported_profile(route, resolved_profile)
 
 
 def lock_study_authority_route(

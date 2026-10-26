@@ -179,7 +179,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
 
     def test_get_note_type_schema_full_metadata(self):
         with self.app.app_context():
-            schema = self._call_tool("get_note_type_schema", {"note_type_id": self.note_type_id})
+            schema = self._call_tool("get_note_type_schema", {"note_type_id": self.note_type_id, "include_templates": True})
             self.assertEqual(schema["id"], self.note_type_id)
             self.assertEqual(schema["name"], "Vocabulary Standard")
             self.assertTrue(schema["is_owner"])
@@ -309,8 +309,8 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
                 "name": "create_note_type",
                 "arguments": {"name": "Vocabulary Standard"},
             })
-            self.assertIn("error", payload)
-            self.assertIn("đã tồn tại", payload["error"]["message"])
+            self.assertTrue(payload["result"]["isError"])
+            self.assertIn("đã tồn tại", payload["result"]["structuredContent"]["error"]["message"])
 
     def test_create_note_type_duplicate_fields_fails(self):
         with self.app.app_context():
@@ -324,8 +324,8 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
                     ],
                 },
             })
-            self.assertIn("error", payload)
-            self.assertIn("trùng lặp", payload["error"]["message"].lower())
+            self.assertTrue(payload["result"]["isError"])
+            self.assertIn("trùng lặp", payload["result"]["structuredContent"]["error"]["message"].lower())
 
     def test_create_note_type_invalid_template_syntax_fails(self):
         with self.app.app_context():
@@ -343,8 +343,8 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
                     ],
                 },
             })
-            self.assertIn("error", payload)
-            self.assertIn("Lỗi cú pháp trong template", payload["error"]["message"])
+            self.assertTrue(payload["result"]["isError"])
+            self.assertIn("Lỗi cú pháp trong template", payload["result"]["structuredContent"]["error"]["message"])
 
     # -----------------------------------------------------------------------
     # 4. Preview & Update Note Type
@@ -462,8 +462,8 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
                     "preview_id": preview_id,
                 },
             })
-            self.assertIn("error", payload)
-            self.assertEqual(payload["error"]["data"]["code"], "STALE_PREVIEW_ERROR")
+            self.assertTrue(payload["result"]["isError"])
+            self.assertEqual(payload["result"]["structuredContent"]["error"]["code"], "STALE_PREVIEW_ERROR")
 
     # -----------------------------------------------------------------------
     # 5. Delete Note Type
@@ -765,9 +765,19 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
                         "params": {"name": name, "arguments": arguments},
                     },
                 )
-                self.assertEqual(response.status_code, 409, response.get_json())
                 payload = response.get_json()
-                self.assertEqual(payload["error"]["data"]["code"], expected_code)
+                if name == "update_note_type":
+                    self.assertEqual(response.status_code, 200, payload)
+                    self.assertNotIn("error", payload)
+                    result = payload["result"]
+                    self.assertTrue(result["isError"])
+                    validation = result["structuredContent"]
+                    self.assertEqual(validation["error"]["code"], expected_code)
+                    self.assertEqual(validation["checks"]["input"], "failed")
+                    self.assertEqual(validation["diagnostics"][0]["code"], expected_code)
+                else:
+                    self.assertEqual(response.status_code, 409, payload)
+                    self.assertEqual(payload["error"]["data"]["code"], expected_code)
 
             call_blocked(
                 "delete_note",

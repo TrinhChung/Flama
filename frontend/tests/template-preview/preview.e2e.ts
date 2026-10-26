@@ -10,6 +10,9 @@ const fixtures = JSON.parse(read('../../../output/template-browser/fixtures.json
 /** Minimal MCP host simulator. This does not claim a real ChatGPT host run. */
 async function mount(page: Page, name: string) {
   const result = fixtures[name]
+  const { server_render: _serverRender, ...summary } = result
+  const toolResult = { content: [], structuredContent: { ...summary, preview: null },
+    _meta: { 'flama/template-preview': { candidate_hash: result.candidate_hash, preview: result.preview } } }
   test.info().annotations.push({ type: 'candidate_hash', description: result.candidate_hash },
     { type: 'renderer_abi', description: result.renderer_abi })
   await page.route('http://flama.test/**', async (route) => {
@@ -27,7 +30,7 @@ window.addEventListener('message', function(event) {
   if(data.method === 'ui/initialize') {
     event.source.postMessage({jsonrpc:'2.0',id:data.id,result:{protocolVersion:data.params.protocolVersion,hostInfo:{name:'Flama test host',version:'1'},hostCapabilities:{message:{text:{}},updateModelContext:{text:{}}},hostContext:{theme:'light'}}},'*');
   } else if(data.method === 'ui/notifications/initialized') {
-    event.source.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:${JSON.stringify({content:[],structuredContent:result}).replace(/</g, '\\u003c')}},'*');
+    event.source.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:${JSON.stringify(toolResult).replace(/</g, '\\u003c')}},'*');
   } else if(data.method === 'ui/message' || data.method === 'ui/update-model-context') {
     window.reports.push(data);
     event.source.postMessage({jsonrpc:'2.0',id:data.id,result:{}},'*');

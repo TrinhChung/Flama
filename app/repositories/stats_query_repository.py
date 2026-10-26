@@ -220,12 +220,105 @@ def query_canonical_future_due_day_counts_mysql(
     detached or drifted evidence. Sibling Cards each contribute one count
     unless :func:`forecast_counts_notes`, then each Note does.
     """
+    from sqlalchemy import LargeBinary, String, cast
+    from sqlalchemy.orm import aliased
     from app.repositories import note_analytics_read_repository as note_reads
+    from app.repositories.flashcards_share_repository import clone_source_note_visibility
     from app.repositories.note_analytics_scope_repository import collection_note_scope
+    from models.deck_release import DeckRelease
+    from models.study_application import StudyApplication
+    from models.study_progress_subject import StudyProgressSubject
 
     offset = fixed_utc_offset_minutes(timezone_name)
     shift = int(offset) - int(day_boundary_hour_local) * 60
     by_note = forecast_counts_notes()
+    if by_note:
+        sps = StudyProgressSubject
+        day = case(
+            (
+                and_(
+                    sps.normalized_queue == REVIEW_QUEUE,
+                    sps.due_day.isnot(None),
+                ),
+                sps.due_day,
+            ),
+            else_=func.to_days(
+                func.date_add(sps.due_at, text(f"INTERVAL {shift} MINUTE"))
+            ) - 365,
+        )
+        folded = func.greatest(day, start_local_day.toordinal())
+        owned_active = (
+            select(StudyApplication.id)
+            .where(
+                Note.user_id == int(user_id),
+                StudyApplication.note_type_id == Note.note_type_id,
+                StudyApplication.status_code == "ACTIVE",
+            )
+            .correlate_except(StudyApplication)
+            .exists()
+        )
+        rel = aliased(DeckRelease)
+        active_nt = (
+            select(StudyApplication.note_type_id)
+            .where(StudyApplication.status_code == "ACTIVE")
+            .distinct()
+            .subquery("active_note_types")
+        )
+        installed_vis = (
+            select(DeckCloneDeckMap.id)
+            .select_from(DeckCloneDeckMap)
+            .join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id)
+            .outerjoin(rel, rel.id == DeckInstall.applied_release_id)
+            .outerjoin(active_nt, active_nt.c.note_type_id == Note.note_type_id)
+            .where(
+                DeckInstall.user_id == int(user_id),
+                DeckInstall.clone_mode == "logical_overlay",
+                DeckInstall.local_deck_id.isnot(None),
+                DeckCloneDeckMap.local_deck_id.isnot(None),
+                DeckCloneDeckMap.source_deck_id == Note.deck_id,
+                or_(
+                    DeckInstall.source_owner_user_id.is_(None),
+                    Note.user_id == DeckInstall.source_owner_user_id,
+                ),
+                clone_source_note_visibility(
+                    DeckInstall,
+                    note=Note,
+                    release=rel,
+                    active_note_type_id=active_nt.c.note_type_id,
+                ),
+            )
+            .correlate_except(DeckCloneDeckMap, DeckInstall, rel, active_nt)
+            .exists()
+        )
+        statement = (
+            select(folded.label("day_index"), func.count().label("cards"))
+            .prefix_with("/*+ JOIN_ORDER(study_progress_subjects, notes) */", dialect="mysql")
+            .select_from(sps)
+            .with_hint(sps, "USE INDEX (ix_sp_subject_note_due)", dialect_name="mysql")
+            .join(
+                Note,
+                and_(
+                    Note.id == cast(sps.logical_note_key, String(144)).collate("utf8mb4_unicode_ci"),
+                    sps.logical_note_key == cast(Note.id, LargeBinary),
+                ),
+            )
+            .where(
+                sps.learner_user_id == int(user_id),
+                sps.normalized_queue.in_(("new", "learn", "learning", "relearning", "review")),
+                sps.is_suspended == False,  # noqa: E712
+                or_(sps.due_at.isnot(None), sps.due_day.isnot(None)),
+                day.between(1, date.max.toordinal()),
+                day < end_local_day.toordinal(),
+                or_(owned_active, installed_vis),
+            )
+            .group_by(folded)
+            .execution_options(include_retired_cards=True)
+        )
+        return {
+            date.fromordinal(int(day_index)): int(count)
+            for day_index, count in db.session.execute(statement).all()
+        }
+
     # A due value implies current state (ck_sp_subject_progress_group), so the
     # due filter below alone keeps the scheduled Notes.
     scope = collection_note_scope(db.session, learner_user_id=user_id, by_note=by_note)

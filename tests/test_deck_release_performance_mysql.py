@@ -104,6 +104,40 @@ class DeckReleasePerformanceMySQLTests(unittest.TestCase):
         deck_working_tree_service.mark_note_fields_changed(note=note, field_names=[name])
         db.session.commit()
 
+    def _subdeck(self):
+        subdeck = Deck(name="Release probe child", owner_user_id=self.owner.id,
+            note_type_id=self.note_type.id, parent_id=self.deck.id)
+        db.session.add(subdeck)
+        db.session.commit()
+        return subdeck
+
+    def _move(self, note, deck_id):
+        # Mirrors the browse move journal: remove from the old deck, add to the new.
+        original_deck_id, names = note.deck_id, list(note.field_values)
+        note.deck_id = deck_id
+        db.session.flush()
+        deck_working_tree_service.mark_note_field_batches_changed(mutations=[
+            {"note": note, "field_names": names, "operation": "remove", "deck_id": original_deck_id},
+            {"note": note, "field_names": names, "operation": "add", "deck_id": deck_id},
+        ])
+        db.session.commit()
+
+    def _reconstruct_with_full_scan(self, release_id):
+        original = repository.list_release_history_changes
+
+        def full_scan(**kwargs):
+            kwargs.pop("min_note_field_sequence", None)
+            kwargs.pop("full_history_note_ids", None)
+            return original(**kwargs)
+
+        with patch.object(repository, "list_release_history_changes", side_effect=full_scan):
+            return service.reconstruct_release_state(release_id)
+
+    @staticmethod
+    def _state_snapshot(state):
+        return state.field_defs, {note_id: (note.source_deck_id, note.note_type_id, note.field_values_by_id)
+            for note_id, note in state.notes.items()}
+
     def test_checkpoint_filter_preserves_legacy_baseline_and_notes_without_checkpoint(self):
         self._legacy_install()
         first = self._publish("1")
@@ -208,6 +242,132 @@ class DeckReleasePerformanceMySQLTests(unittest.TestCase):
         self.assertEqual(repository.list_note_ids_at_release(deck_item_id=self.item.id, sequence_no=1, limit=1), ids[:1])
         self.assertEqual(repository.list_note_ids_at_release(deck_item_id=self.item.id, sequence_no=2, limit=1), ids[1:])
         self.assertEqual(repository.list_note_ids_at_release(deck_item_id=self.item.id, sequence_no=3, limit=1), ids[:1])
+
+    def test_media_normalizer_tracks_resolved_audio_and_sparse_diff_fails_closed_on_untracked_field(self):
+        from app.services.flashcard_media_normalizer import backfill_media_field_values
+        from models.media_asset import MediaAsset
+
+        audio_def = FieldDef(note_type_id=self.note_type.id, name="Audio", field_type="audio", position=2)
+        db.session.add(audio_def)
+        db.session.flush()
+        note0 = self.notes[0]
+        note0.field_values = {**note0.field_values, "Audio": "[sound:voice.wav]"}
+        asset = MediaAsset(
+            note_id=note0.id,
+            field_name="Audio",
+            filename="voice.wav",
+            mime_type="audio/wav",
+            storage_path="test/voice.wav",
+            sha256="b" * 64,
+            size_bytes=12,
+        )
+        db.session.add(asset)
+        db.session.commit()
+
+        first = self._publish("1")
+        backfill_media_field_values(
+            deck_id=self.deck.id,
+            apply=True,
+            include_overlays=False,
+            include_templates=False,
+        )
+        db.session.commit()
+
+        dirty_audio = DeckWorkingDirtyEntity.query.filter_by(
+            deck_item_id=self.item.id,
+            entity_kind="note_field",
+            entity_id=note0.id,
+            field_def_id=audio_def.id,
+        ).one_or_none()
+        self.assertIsNotNone(dirty_audio)
+        sparse_plan = service._try_build_sparse_diff(item=self.item, base_release=first)
+        self.assertIsNotNone(sparse_plan)
+        self.assertEqual(len(sparse_plan.changes), 1)
+        self.assertEqual(sparse_plan.changes[0]["field_def_id"], audio_def.id)
+        self.assertEqual(sparse_plan.changes[0]["after_value"], f"/media/proxy/{asset.id}")
+
+        # Simulate an older untracked audio edit alongside a tracked text edit on the same note:
+        # _try_build_sparse_diff must fail closed (return None) and fall back to full diff.
+        db.session.delete(dirty_audio)
+        self._edit(note0, "Word", "first-updated")
+        self.assertIsNone(service._try_build_sparse_diff(item=self.item, base_release=first))
+        preview = service.preview_release(deck_item_id=self.item.id, user_id=self.owner.id)
+        self.assertEqual(preview["summary"]["change_count"], 2)
+
+    def test_moved_note_without_checkpoint_keeps_values_written_before_the_move(self):
+        self._publish("1")
+        added = self._new_note("added later")
+        db.session.flush()
+        deck_working_tree_service.mark_note_fields_changed(note=added, field_names=["Word", "Values"])
+        db.session.commit()
+        self._publish("2")
+        self._move(added, self._subdeck().id)
+        self._edit(self.notes[0], "Word", "edited")
+        third = self._publish("3")
+        # The move restarted the membership at release 3 without value atoms.
+        self.assertEqual(DeckReleaseEntityMembership.query.filter_by(deck_item_id=self.item.id,
+            entity_kind="note", entity_id=added.id, removed_sequence=None).one().introduced_sequence, 3)
+        values = service.get_note_values_for_ids_at_release(third.id, [added.id])[added.id]
+        self.assertEqual(values, {"Word": "added later", "Values": ["one", ["two", "<b>three</b>"]]})
+        state = service.reconstruct_release_state(third.id)
+        self.assertEqual(state.notes[added.id].field_values_by_id[self.word.id], "added later")
+
+    def test_reconstruct_replays_history_when_only_moved_notes_without_checkpoint_remain(self):
+        self._publish("1")
+        added = [self._new_note("A"), self._new_note("B")]
+        db.session.flush()
+        for note in added:
+            deck_working_tree_service.mark_note_fields_changed(note=note, field_names=["Word", "Values"])
+        for note in self.notes:
+            deck_working_tree_service.mark_note_fields_changed(note=note, field_names=["Word", "Values"],
+                operation="remove")
+            db.session.delete(note)
+        db.session.commit()
+        self._publish("2")
+        subdeck = self._subdeck()
+        for note in added:
+            self._move(note, subdeck.id)
+        self._edit(added[1], "Word", "B edited")
+        state = service.reconstruct_release_state(self._publish("3").id)
+        self.assertEqual({note_id: note.field_values_by_id for note_id, note in state.notes.items()}, {
+            added[0].id: {self.word.id: "A", self.values.id: ["one", ["two", "<b>three</b>"]]},
+            added[1].id: {self.word.id: "B edited", self.values.id: ["one", ["two", "<b>three</b>"]]},
+        })
+
+    def test_split_history_matches_full_scan_for_notes_without_checkpoint(self):
+        outside = Deck(name="Release probe outside", owner_user_id=self.owner.id, note_type_id=self.note_type.id)
+        db.session.add(outside)
+        db.session.commit()
+        releases = [self._publish("1")]
+        added = [self._new_note("C"), self._new_note("D")]
+        db.session.flush()
+        for note in added:
+            deck_working_tree_service.mark_note_fields_changed(note=note, field_names=["Word", "Values"])
+        db.session.commit()
+        self._edit(self.notes[0], "Word", "first edited")
+        releases.append(self._publish("2"))
+        self._move(added[0], self._subdeck().id)
+        self._edit(added[1], "Word", "D edited")
+        releases.append(self._publish("3"))
+        self._move(added[1], outside.id)  # Leaves the listing.
+        self._edit(self.notes[1], "Word", "second edited")
+        releases.append(self._publish("4"))
+        self._move(added[1], self.deck.id)  # Returns without a checkpoint.
+        releases.append(self._publish("5"))
+        all_ids = [note.id for note in self.notes + added]
+        for release in releases:
+            with self.subTest(release=release.version_label):
+                expected = self._reconstruct_with_full_scan(release.id)
+                with patch.object(repository, "_latest_note_checkpoint_sequences",
+                        side_effect=AssertionError("split reconstruction must not join checkpoints")):
+                    split = service.reconstruct_release_state(release.id)
+                self.assertEqual(self._state_snapshot(split), self._state_snapshot(expected))
+                values = service.get_note_field_values_by_id_for_ids_at_release(release.id, all_ids)
+                self.assertEqual(values, {note_id: {field_id: value
+                    for field_id, value in note.field_values_by_id.items() if field_id in expected.field_defs}
+                    for note_id, note in expected.notes.items()})
+        self.assertEqual(values[added[0].id][self.word.id], "C")
+        self.assertEqual(values[added[1].id][self.word.id], "D edited")
 
 
 if __name__ == "__main__":
