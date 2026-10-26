@@ -31,6 +31,9 @@ activation_started=0
 deployment_succeeded=0
 previous_analytics_timer_enabled=0
 previous_review_timer_enabled=0
+runtime_venv=""
+previous_venv=""
+venv_switched=0
 if systemctl is-enabled --quiet flama-analytics-counts.timer; then
   previous_analytics_timer_enabled=1
 fi
@@ -122,6 +125,9 @@ rollback_activation() {
       install -m 0644 "$previous_release/deploy/flama-review-analytics-worker.service" /etc/systemd/system/flama-review-analytics-worker.service
       install -m 0644 "$previous_release/deploy/flama-review-analytics-worker.timer" /etc/systemd/system/flama-review-analytics-worker.timer
     fi
+    if [ "${venv_switched:-0}" -eq 1 ]; then
+      ln -sfn "$previous_venv" "$PROJECT_DIR/venv"
+    fi
     ln -sfn "$previous_release" "$PROJECT_DIR/current"
     systemctl daemon-reload || true
     if [ "${previous_analytics_timer_enabled:-0}" -eq 1 ] && [ -f "$previous_release/deploy/flama-analytics-counts.timer" ]; then
@@ -170,6 +176,25 @@ rollback_activation() {
   echo "No previous release was available; stopped flama.service." >&2
 }
 
+# Units only use $PROJECT_DIR/venv, so changing interpreter is a link switch
+# made while writers are stopped. Rollback points the link back.
+switch_runtime_venv() {
+  if [ -L "$PROJECT_DIR/venv" ]; then
+    previous_venv="$(readlink -f "$PROJECT_DIR/venv")"
+  elif [ -d "$PROJECT_DIR/venv" ]; then
+    # A host from before per-interpreter venvs keeps its directory for rollback.
+    mv -T "$PROJECT_DIR/venv" "$PROJECT_DIR/venv-legacy"
+    previous_venv="$PROJECT_DIR/venv-legacy"
+  fi
+  if [ "$previous_venv" != "$runtime_venv" ]; then
+    # Marked before linking, so rollback also undoes a half-made switch.
+    if [ -n "$previous_venv" ]; then
+      venv_switched=1
+    fi
+    ln -sfn "$runtime_venv" "$PROJECT_DIR/venv"
+  fi
+}
+
 cleanup() {
   status=$?
   trap - EXIT
@@ -207,8 +232,17 @@ test -f "$environment_file"
 test -f "$managed_env_payload_path"
 mkdir -p "$release_dir"
 tar -xzf "$archive_path" -C "$release_dir"
+# CI tests the interpreter named here; the release must run on the same one.
+python_version="$(tr -d '[:space:]' < "$release_dir/.python-version")"
+[[ "$python_version" =~ ^3\.[0-9]+$ ]]
+runtime_python="python$python_version"
+if ! command -v "$runtime_python" >/dev/null 2>&1; then
+  echo "Missing $runtime_python required by .python-version." >&2
+  echo "Install it with: add-apt-repository ppa:deadsnakes/ppa && apt-get install $runtime_python $runtime_python-venv $runtime_python-dev" >&2
+  exit 1
+fi
 cp -p "$environment_file" "$desired_environment_file"
-python3 "$release_dir/deploy/sync_managed_env.py" apply \
+"$runtime_python" "$release_dir/deploy/sync_managed_env.py" apply \
   --env-file "$desired_environment_file" \
   --payload-file "$managed_env_payload_path"
 FLAMA_ENVIRONMENT_FILE="$desired_environment_file" \
@@ -219,11 +253,13 @@ mkdir -p "$release_dir/static"
 ln -sfn /var/lib/flama/downloads "$release_dir/static/downloads"
 chown -R flama:flama /var/lib/flama/downloads
 
-if [ ! -x "$PROJECT_DIR/venv/bin/python" ]; then
-  python3 -m venv "$PROJECT_DIR/venv"
+# A new interpreter gets its own venv, built while the old one still serves.
+runtime_venv="$PROJECT_DIR/venv-$python_version"
+if [ ! -x "$runtime_venv/bin/python" ]; then
+  "$runtime_python" -m venv "$runtime_venv"
 fi
 
-"$PROJECT_DIR/venv/bin/pip" install --disable-pip-version-check -r "$release_dir/requirements.txt"
+"$runtime_venv/bin/pip" install --disable-pip-version-check -r "$release_dir/requirements.txt"
 previous_release="$(readlink -f "$PROJECT_DIR/current" 2>/dev/null || true)"
 case "$previous_release" in
   "$PROJECT_DIR"/releases/*) test -d "$previous_release" || previous_release="" ;;
@@ -244,6 +280,7 @@ for unit in flama.service flama-connect.service flama-study-worker.service \
     systemctl stop "$unit"
   fi
 done
+switch_runtime_venv
 phase=migrating
 record_state running
 systemd-run --quiet --wait --collect \
@@ -311,7 +348,7 @@ for attempt in $(seq 1 20); do
       "$PROJECT_DIR/venv/bin/python" study_worker.py --check-ready; then
     touch "$release_dir/.deployment_succeeded"
     deployment_succeeded=1
-    python3 "$release_dir/deploy/prune_releases.py" \
+    "$runtime_python" "$release_dir/deploy/prune_releases.py" \
       --releases-dir "$PROJECT_DIR/releases" \
       --current-release "$release_dir" \
       --keep 2 || echo "Warning: failed to prune old releases." >&2

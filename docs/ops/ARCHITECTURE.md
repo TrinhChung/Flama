@@ -79,7 +79,7 @@ The script `deploy/bootstrap_hostinger.sh` bootstraps an Ubuntu Hostinger VPS fo
   - Active Symlink: `/opt/flama/current` (points to `/opt/flama/releases/<sha>`)
   - Configuration Directory: `/etc/flama` (owner: `root:flama`, mode `0750`)
   - Media & Download Storage: `/var/lib/flama/media` and `/var/lib/flama/downloads` (owner: `flama:flama`, mode `0755`)
-  - Virtual Environment: `/opt/flama/venv`
+  - Virtual Environment: `/opt/flama/venv`, a symlink to `/opt/flama/venv-<python>` for the interpreter in `.python-version`
 - **Environment File Creation (lines 31–98)**: Seeds `/etc/flama/flama.env` (owner: `root:flama`, mode `0640`) with randomized cryptographically secure secrets (`openssl rand -hex 32`).
 - **Database & User Initialization (lines 155–161)**:
   ```sql
@@ -125,7 +125,7 @@ Maintenance jobs run on isolated schedules managed by systemd timers:
 Production deployments are automated via GitHub Actions workflow `.github/workflows/deploy.yml`:
 
 1. **Artifact Transfer**: Tarball release is unpacked into `/opt/flama/releases/<RELEASE_ID>`.
-2. **Virtualenv Dependencies**: `/opt/flama/venv/bin/pip install -r requirements.txt`.
+2. **Virtualenv Dependencies**: `/opt/flama/venv-<python>/bin/pip install -r requirements.txt`, using `python<version>` from `.python-version` (the version CI tests). A new interpreter gets a new venv while the old one still serves; `/opt/flama/venv` is relinked only after writers stop, and rollback relinks it back.
 3. **Writers Quiescence (deploy.yml:461–469)**:
    All running service and timer units are strictly stopped before executing database migrations:
    ```bash

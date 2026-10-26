@@ -134,6 +134,30 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertIn("KillSignal=SIGTERM", unit)
         self.assertNotIn("db upgrade", unit)
 
+    def test_ci_container_and_vps_run_the_interpreter_named_in_python_version(self):
+        root = WORKFLOW_PATH.parents[2]
+        version = (root / ".python-version").read_text(encoding="utf-8").strip()
+        ci = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        activation = ACTIVATION_PATH.read_text(encoding="utf-8")
+        self.assertRegex(version, r"^3\.\d+$")
+        self.assertNotIn("python-version:", ci)
+        self.assertEqual(ci.count("uses: actions/setup-python@"), ci.count("python-version-file: '.python-version'"))
+        self.assertIn(f"FROM python:{version}-slim", (root / "Dockerfile").read_text(encoding="utf-8"))
+        self.assertIn('"$release_dir/.python-version"', activation)
+        self.assertNotRegex(activation, r"(?m)^\s*python3\s")
+
+    def test_new_interpreter_venv_is_built_before_quiesce_and_linked_while_writers_stopped(self):
+        activation = ACTIVATION_PATH.read_text(encoding="utf-8")
+        body = activation[activation.index('test -f "$environment_file"'):]
+        build = body.index('"$runtime_venv/bin/pip" install')
+        quiesce = body.index("phase=quiescing")
+        stop_writers = body.index('systemctl stop "$unit"')
+        switch = body.index("\nswitch_runtime_venv\n")
+        migrate = body.index("deploy/migrate_database.py")
+        self.assertLess(build, quiesce)
+        self.assertLess(stop_writers, switch)
+        self.assertLess(switch, migrate)
+
 
 class DeployRollbackShellTests(unittest.TestCase):
     @classmethod
@@ -145,7 +169,7 @@ class DeployRollbackShellTests(unittest.TestCase):
             raise unittest.SkipTest("Bash is required for the stubbed deploy-shell rehearsal.")
 
     def _rollback(self, *, check_exit=0, quiesce_exit=0, consumer_stop_exit=0,
-                  history_exit=0, field_exit=0, previous_worker=True):
+                  history_exit=0, field_exit=0, previous_worker=True, venv_switched=0):
         workflow = deployment_source()
         function = workflow[workflow.index("rollback_activation() {"):workflow.index("cleanup() {")]
         with tempfile.TemporaryDirectory() as directory:
@@ -173,6 +197,7 @@ class DeployRollbackShellTests(unittest.TestCase):
                 "environment_file=/test-environment",
                 "environment_backup_file=" + shlex.quote(backup.as_posix()),
                 "previous_release=" + shlex.quote(previous.as_posix()),
+                f"venv_switched={venv_switched}", "previous_venv=/test-project/venv-legacy",
                 f"CHECK_EXIT={check_exit}", f"QUIESCE_EXIT={quiesce_exit}", f"CONSUMER_STOP_EXIT={consumer_stop_exit}",
                 f"HISTORY_EXIT={history_exit}",
                 f"FIELD_EXIT={field_exit}",
@@ -202,7 +227,7 @@ class DeployRollbackShellTests(unittest.TestCase):
         return result.stdout, result.stderr
 
     def test_blocked_gate_preserves_consumer_environment_and_selected_code(self):
-        output, errors = self._rollback(check_exit=1)
+        output, errors = self._rollback(check_exit=1, venv_switched=1)
         self.assertIn("stop flama.service flama-connect.service", output)
         self.assertIn("--check-code-rollback --writers-quiesced", output)
         self.assertNotIn("stop flama-study-worker.service", output)
@@ -229,6 +254,58 @@ class DeployRollbackShellTests(unittest.TestCase):
         self.assertLess(output.index("stop flama-study-worker.service"), output.index("cp "))
         self.assertLess(output.index("ln "), output.index("restart flama-study-worker.service"))
         self.assertIn("Previous release restored", errors)
+        self.assertNotIn("/test-project/venv-legacy", output)
+
+    def test_safe_rollback_points_venv_back_before_restarting_previous_release(self):
+        output, errors = self._rollback(venv_switched=1)
+        relink = output.index("ln -sfn /test-project/venv-legacy /test-project/venv")
+        self.assertLess(output.index("stop flama-study-worker.service"), relink)
+        self.assertLess(relink, output.index("restart flama.service"))
+        self.assertIn("Previous release restored", errors)
+
+    def _switch_venv(self, project):
+        coordinator = ACTIVATION_PATH.read_text(encoding="utf-8")
+        function = coordinator[coordinator.index("switch_runtime_venv() {"):coordinator.index("cleanup() {")]
+        # Only ln is stubbed; -d/-L/mv act on the generated fixture directory.
+        script = "\n".join((
+            "set -Eeuo pipefail",
+            "PROJECT_DIR=" + shlex.quote(project.as_posix()),
+            'runtime_venv="$PROJECT_DIR/venv-3.12"', 'previous_venv=""', "venv_switched=0",
+            "ln() { printf '%s\\n' \"ln $*\"; }",
+            function, "switch_runtime_venv",
+            'echo "switched=$venv_switched previous=$previous_venv"',
+        ))
+        env = {key: value for key, value in os.environ.items() if key not in {"BASH_ENV", "ENV"}}
+        result = subprocess.run([self.bash, "--noprofile", "--norc", "-s"], input=script, text=True, capture_output=True, timeout=10, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_legacy_venv_directory_is_kept_for_rollback_and_link_points_to_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            (project / "venv" / "bin").mkdir(parents=True)
+            output = self._switch_venv(project)
+            self.assertTrue((project / "venv-legacy" / "bin").is_dir())
+        root = project.as_posix()
+        self.assertIn(f"ln -sfn {root}/venv-3.12 {root}/venv", output)
+        self.assertIn(f"switched=1 previous={root}/venv-legacy", output)
+
+    def test_first_host_links_runtime_venv_without_a_rollback_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            output = self._switch_venv(project)
+        self.assertIn(f"ln -sfn {project.as_posix()}/venv-3.12 {project.as_posix()}/venv", output)
+        self.assertIn("switched=0 previous=\n", output)
+
+    @unittest.skipUnless(os.name == "posix", "Needs POSIX symlinks with matching path spelling.")
+    def test_venv_already_on_runtime_interpreter_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory).resolve()
+            (project / "venv-3.12").mkdir()
+            (project / "venv").symlink_to(project / "venv-3.12", target_is_directory=True)
+            output = self._switch_venv(project)
+        self.assertNotIn("ln ", output)
+        self.assertIn("switched=0", output)
 
     def test_pending_history_gate_preserves_environment_and_selected_release(self):
         output, errors = self._rollback(history_exit=1)

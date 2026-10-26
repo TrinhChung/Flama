@@ -43,6 +43,14 @@ selected release and preserved env files. Finish activation with compatible code
 or use a separately verified backup restore procedure. The coordinator does not
 automatically activate code after a failed migration.
 
+Production runs the interpreter named in `.python-version`. Every unit uses
+`/opt/flama/venv`, a symlink to `/opt/flama/venv-<python>`; the first deploy
+after adopting this layout moves the old directory to `/opt/flama/venv-legacy`.
+Changing the interpreter needs `python<version>`, `-venv` and `-dev` from the
+deadsnakes PPA on the VPS first; deployment stops in `preparing` without them.
+Rollback relinks the previous venv. Remove an old venv directory only after the
+release using it can no longer be rolled back to.
+
 ## Frontend
 
 Production is Cloudflare **Workers**, worker `flama-frontend1001`, custom domain

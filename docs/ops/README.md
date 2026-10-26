@@ -21,7 +21,7 @@ Welcome to the Flama Operations documentation hub. This directory covers the pro
 - **Application Root**: `/opt/flama`
 - **Active Release Symlink**: `/opt/flama/current`
 - **Releases Directory**: `/opt/flama/releases/<sha>`
-- **Python Virtualenv**: `/opt/flama/venv`
+- **Python Virtualenv**: `/opt/flama/venv` → `/opt/flama/venv-<python>` (interpreter from `.python-version`, installed from the deadsnakes PPA; system `python3` stays untouched)
 - **Configuration File**: `/etc/flama/flama.env` (permissions `0640`, owner `root:flama`)
 - **Media Assets Storage**: `/var/lib/flama/media` (owner `flama:flama`)
 - **System User**: `flama` (non-login system account)
