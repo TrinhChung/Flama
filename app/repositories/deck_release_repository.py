@@ -11,8 +11,7 @@ from datetime import datetime
 from itertools import islice
 from typing import Any
 
-from sqlalchemy import and_, func, insert, or_, select, update
-from sqlalchemy.orm import load_only
+from sqlalchemy import func, insert, or_, select, update
 
 from app.repositories.deck_tree_query import collect_subtree_ids
 from models import db
@@ -282,43 +281,6 @@ def _latest_note_checkpoint_sequences(deck_item_id: str, through_sequence: int):
     )
 
 
-def _min_note_field_sequence_after_checkpoints(
-    deck_item_id: str,
-    through_sequence: int,
-) -> int:
-    if through_sequence < 1:
-        return 1
-    checkpoint_count_seq1 = int(
-        db.session.query(func.count(DeckReleaseNoteCheckpoint.id))
-        .join(
-            DeckRelease,
-            DeckRelease.id == DeckReleaseNoteCheckpoint.release_id,
-        )
-        .filter(
-            DeckRelease.deck_item_id == deck_item_id,
-            DeckRelease.status == "published",
-            DeckReleaseNoteCheckpoint.release_sequence_no == 1,
-        )
-        .scalar()
-        or 0
-    )
-    if checkpoint_count_seq1 <= 0:
-        return 1
-    membership_count_seq1 = int(
-        db.session.query(func.count(DeckReleaseEntityMembership.id))
-        .filter(
-            DeckReleaseEntityMembership.deck_item_id == deck_item_id,
-            DeckReleaseEntityMembership.entity_kind == "note",
-            DeckReleaseEntityMembership.introduced_sequence == 1,
-        )
-        .scalar()
-        or 0
-    )
-    if checkpoint_count_seq1 >= membership_count_seq1:
-        return 2
-    return 1
-
-
 def _build_history_changes_query(*, content_only: bool):
     if content_only:
         return db.session.query(
@@ -335,6 +297,54 @@ def _build_history_changes_query(*, content_only: bool):
     return DeckReleaseChange.query
 
 
+def list_note_field_atoms_for_ids(
+    *,
+    deck_item_id: str,
+    note_ids: Iterable[str],
+    after_sequence: int,
+    through_sequence: int,
+    content_only: bool = False,
+) -> list[Any]:
+    """Load note-field atoms of the given Notes without joining ``deck_releases``.
+
+    A join driven from ``deck_releases`` reads every atom of each release via
+    ``ix_deck_release_changes_diff_cursor`` before filtering the Note IDs
+    (162k rows for a 500-Note chunk of N1). Filtering by the deck's published
+    release IDs lets MySQL range-scan ``ix_deck_release_changes_entity_history``
+    by Note ID instead.
+    """
+    normalized_ids = sorted({str(note_id) for note_id in note_ids if note_id})
+    if not normalized_ids or through_sequence <= after_sequence:
+        return []
+    release_ids = [
+        str(row[0])
+        for row in db.session.query(DeckRelease.id).filter(
+            DeckRelease.deck_item_id == deck_item_id,
+            DeckRelease.status == "published",
+            DeckRelease.sequence_no > after_sequence,
+            DeckRelease.sequence_no <= through_sequence,
+        )
+    ]
+    if not release_ids:
+        return []
+    rows: list[Any] = []
+    ids = iter(normalized_ids)
+    while chunk := list(islice(ids, 500)):
+        rows.extend(
+            _build_history_changes_query(content_only=content_only)
+            .filter(
+                DeckReleaseChange.release_id.in_(release_ids),
+                DeckReleaseChange.release_sequence_no > after_sequence,
+                DeckReleaseChange.release_sequence_no <= through_sequence,
+                DeckReleaseChange.entity_kind == "note_field",
+                DeckReleaseChange.entity_id.in_(chunk),
+            )
+            .all()
+        )
+    rows.sort(key=lambda row: (int(row.release_sequence_no), int(row.id)))
+    return rows
+
+
 def list_release_history_changes(
     *,
     deck_item_id: str,
@@ -343,85 +353,75 @@ def list_release_history_changes(
     content_only: bool = False,
     after_checkpoints: bool = False,
     min_note_field_sequence: int | None = None,
+    full_history_note_ids: Iterable[str] = (),
 ) -> list[Any]:
     normalized_kinds = [str(value) for value in (entity_kinds or []) if value]
-    if after_checkpoints and (
-        not normalized_kinds or "note_field" in normalized_kinds
+    if (
+        after_checkpoints
+        and min_note_field_sequence is not None
+        and (not normalized_kinds or "note_field" in normalized_kinds)
     ):
-        min_note_seq = (
-            int(min_note_field_sequence)
-            if min_note_field_sequence is not None
-            else _min_note_field_sequence_after_checkpoints(
-                deck_item_id,
-                through_sequence,
+        # Split reconstruction: schema atoms, note atoms from the earliest
+        # checkpoint onward, and the complete history of Notes without a
+        # checkpoint. The caller drops atoms covered by each Note's own
+        # checkpoint, so no per-note checkpoint join is needed here.
+        min_note_seq = int(min_note_field_sequence)
+        other_kinds = [
+            kind for kind in normalized_kinds if kind != "note_field"
+        ]
+        rows: list[Any] = []
+        if other_kinds or not normalized_kinds:
+            other_query = (
+                _build_history_changes_query(content_only=content_only)
+                .join(
+                    DeckRelease,
+                    DeckRelease.id == DeckReleaseChange.release_id,
+                )
+                .filter(
+                    DeckRelease.deck_item_id == deck_item_id,
+                    DeckRelease.status == "published",
+                    DeckReleaseChange.release_sequence_no <= through_sequence,
+                )
+            )
+            if other_kinds:
+                other_query = other_query.filter(
+                    DeckReleaseChange.entity_kind.in_(other_kinds)
+                )
+            else:
+                other_query = other_query.filter(
+                    DeckReleaseChange.entity_kind != "note_field"
+                )
+            rows.extend(other_query.all())
+        if min_note_seq <= through_sequence:
+            # Bounding the release side keeps this join on the newer releases.
+            rows.extend(
+                _build_history_changes_query(content_only=content_only)
+                .join(
+                    DeckRelease,
+                    DeckRelease.id == DeckReleaseChange.release_id,
+                )
+                .filter(
+                    DeckRelease.deck_item_id == deck_item_id,
+                    DeckRelease.status == "published",
+                    DeckRelease.sequence_no >= min_note_seq,
+                    DeckReleaseChange.release_sequence_no >= min_note_seq,
+                    DeckReleaseChange.release_sequence_no <= through_sequence,
+                    DeckReleaseChange.entity_kind == "note_field",
+                )
+                .all()
+            )
+        # Atoms at or after min_note_seq are already loaded above.
+        rows.extend(
+            list_note_field_atoms_for_ids(
+                deck_item_id=deck_item_id,
+                note_ids=full_history_note_ids,
+                after_sequence=0,
+                through_sequence=min(min_note_seq - 1, through_sequence),
+                content_only=content_only,
             )
         )
-        if min_note_seq > 1:
-            other_kinds = [
-                kind for kind in normalized_kinds if kind != "note_field"
-            ]
-            rows: list[Any] = []
-            if other_kinds or not normalized_kinds:
-                other_query = (
-                    _build_history_changes_query(content_only=content_only)
-                    .join(
-                        DeckRelease,
-                        DeckRelease.id == DeckReleaseChange.release_id,
-                    )
-                    .filter(
-                        DeckRelease.deck_item_id == deck_item_id,
-                        DeckRelease.status == "published",
-                        DeckReleaseChange.release_sequence_no <= through_sequence,
-                    )
-                )
-                if other_kinds:
-                    other_query = other_query.filter(
-                        DeckReleaseChange.entity_kind.in_(other_kinds)
-                    )
-                else:
-                    other_query = other_query.filter(
-                        DeckReleaseChange.entity_kind != "note_field"
-                    )
-                rows.extend(
-                    other_query.order_by(
-                        DeckReleaseChange.release_sequence_no.asc(),
-                        DeckReleaseChange.id.asc(),
-                    ).all()
-                )
-            if min_note_seq <= through_sequence:
-                latest = _latest_note_checkpoint_sequences(
-                    deck_item_id,
-                    through_sequence,
-                )
-                note_query = (
-                    _build_history_changes_query(content_only=content_only)
-                    .join(
-                        DeckRelease,
-                        DeckRelease.id == DeckReleaseChange.release_id,
-                    )
-                    .outerjoin(
-                        latest,
-                        latest.c.note_id == DeckReleaseChange.entity_id,
-                    )
-                    .filter(
-                        DeckRelease.deck_item_id == deck_item_id,
-                        DeckRelease.status == "published",
-                        DeckRelease.sequence_no >= min_note_seq,
-                        DeckReleaseChange.release_sequence_no >= min_note_seq,
-                        DeckReleaseChange.release_sequence_no <= through_sequence,
-                        DeckReleaseChange.entity_kind == "note_field",
-                        DeckReleaseChange.release_sequence_no
-                        > func.coalesce(latest.c.sequence_no, 0),
-                    )
-                )
-                rows.extend(
-                    note_query.order_by(
-                        DeckReleaseChange.release_sequence_no.asc(),
-                        DeckReleaseChange.id.asc(),
-                    ).all()
-                )
-            rows.sort(key=lambda row: (int(row.release_sequence_no), int(row.id)))
-            return rows
+        rows.sort(key=lambda row: (int(row.release_sequence_no), int(row.id)))
+        return rows
 
     query = (
         _build_history_changes_query(content_only=content_only)
@@ -609,63 +609,46 @@ def list_note_field_history_for_ids(
     normalized_ids = sorted({str(note_id) for note_id in note_ids if note_id})
     if not normalized_ids:
         return []
-    if checkpoint_sequences is not None:
-        groups: dict[int, list[str]] = {}
-        for note_id in normalized_ids:
-            seq = int(checkpoint_sequences.get(note_id, 0))
-            if seq >= through_sequence:
-                continue
-            groups.setdefault(seq, []).append(note_id)
-        if not groups:
-            return []
-        rows: list[Any] = []
-        for sequence, ids in sorted(groups.items()):
-            group_query = (
-                _build_note_field_history_query(content_only=content_only)
-                .join(
-                    DeckRelease,
-                    DeckRelease.id == DeckReleaseChange.release_id,
-                )
-                .filter(
-                    DeckRelease.deck_item_id == deck_item_id,
-                    DeckRelease.status == "published",
-                    DeckRelease.sequence_no > sequence,
-                    DeckReleaseChange.release_sequence_no > sequence,
-                    DeckReleaseChange.release_sequence_no <= through_sequence,
-                    DeckReleaseChange.entity_kind == "note_field",
-                    DeckReleaseChange.entity_id.in_(ids),
-                )
-            )
+    groups: dict[int, list[str]] = {}
+    for note_id in normalized_ids:
+        seq = int((checkpoint_sequences or {}).get(note_id, 0))
+        if seq >= through_sequence:
+            continue
+        groups.setdefault(seq, []).append(note_id)
+    rows: list[Any] = []
+    for sequence, ids in sorted(groups.items()):
+        if sequence == 0:
+            # Without a checkpoint the whole history is needed; a join from
+            # deck_releases would read every atom of every release here.
             rows.extend(
-                group_query.order_by(
-                    DeckReleaseChange.release_sequence_no.asc(),
-                    DeckReleaseChange.id.asc(),
-                ).all()
+                list_note_field_atoms_for_ids(
+                    deck_item_id=deck_item_id,
+                    note_ids=ids,
+                    after_sequence=0,
+                    through_sequence=through_sequence,
+                    content_only=content_only,
+                )
             )
-        if len(groups) > 1:
-            rows.sort(
-                key=lambda row: (int(row.release_sequence_no), int(row.id))
+            continue
+        group_query = (
+            _build_note_field_history_query(content_only=content_only)
+            .join(
+                DeckRelease,
+                DeckRelease.id == DeckReleaseChange.release_id,
             )
-        return rows
-
-    query = (
-        _build_note_field_history_query(content_only=content_only)
-        .join(
-            DeckRelease,
-            DeckRelease.id == DeckReleaseChange.release_id,
+            .filter(
+                DeckRelease.deck_item_id == deck_item_id,
+                DeckRelease.status == "published",
+                DeckRelease.sequence_no > sequence,
+                DeckReleaseChange.release_sequence_no > sequence,
+                DeckReleaseChange.release_sequence_no <= through_sequence,
+                DeckReleaseChange.entity_kind == "note_field",
+                DeckReleaseChange.entity_id.in_(ids),
+            )
         )
-        .filter(
-            DeckRelease.deck_item_id == deck_item_id,
-            DeckRelease.status == "published",
-            DeckReleaseChange.release_sequence_no <= through_sequence,
-            DeckReleaseChange.entity_kind == "note_field",
-            DeckReleaseChange.entity_id.in_(normalized_ids),
-        )
-    )
-    return query.order_by(
-        DeckReleaseChange.release_sequence_no.asc(),
-        DeckReleaseChange.id.asc(),
-    ).all()
+        rows.extend(group_query.all())
+    rows.sort(key=lambda row: (int(row.release_sequence_no), int(row.id)))
+    return rows
 
 
 def list_note_ids_at_release(

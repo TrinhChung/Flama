@@ -450,16 +450,20 @@ def reconstruct_release_state(release_or_id: DeckRelease | str) -> DeckReleaseSt
             active_field_ids.add(str(membership.entity_id))
 
     min_note_field_seq: int | None = None
+    full_history_note_ids: list[str] = []
     if memberships:
-        # Moving a note restarts its membership without new value atoms, so a
-        # note without a checkpoint replays its complete history from 0.
-        candidate_seqs = [
-            int(latest_checkpoints[nid].release_sequence_no) + 1
-            if nid in latest_checkpoints
-            else 1
-            for nid in active_note_ids
-        ]
-        min_note_field_seq = min(candidate_seqs, default=target_sequence + 1)
+        # Notes with a checkpoint replay atoms after it. Moving a note restarts
+        # its membership without new value atoms, so a note without a
+        # checkpoint replays its complete history from 0 in a separate query.
+        min_note_field_seq = min(
+            (
+                int(latest_checkpoints[nid].release_sequence_no) + 1
+                for nid in active_note_ids
+                if nid in latest_checkpoints
+            ),
+            default=target_sequence + 1,
+        )
+        full_history_note_ids = sorted(active_note_ids - set(latest_checkpoints))
 
     history = deck_release_repository.list_release_history_changes(
         deck_item_id=release.deck_item_id,
@@ -468,6 +472,7 @@ def reconstruct_release_state(release_or_id: DeckRelease | str) -> DeckReleaseSt
         content_only=True,
         after_checkpoints=True,
         min_note_field_sequence=min_note_field_seq,
+        full_history_note_ids=full_history_note_ids,
     )
     field_changes = [row for row in history if row.entity_kind == "field_def"]
     note_changes = [row for row in history if row.entity_kind == "note_field"]

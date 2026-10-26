@@ -122,6 +122,22 @@ class DeckReleasePerformanceMySQLTests(unittest.TestCase):
         ])
         db.session.commit()
 
+    def _reconstruct_with_full_scan(self, release_id):
+        original = repository.list_release_history_changes
+
+        def full_scan(**kwargs):
+            kwargs.pop("min_note_field_sequence", None)
+            kwargs.pop("full_history_note_ids", None)
+            return original(**kwargs)
+
+        with patch.object(repository, "list_release_history_changes", side_effect=full_scan):
+            return service.reconstruct_release_state(release_id)
+
+    @staticmethod
+    def _state_snapshot(state):
+        return state.field_defs, {note_id: (note.source_deck_id, note.note_type_id, note.field_values_by_id)
+            for note_id, note in state.notes.items()}
+
     def test_checkpoint_filter_preserves_legacy_baseline_and_notes_without_checkpoint(self):
         self._legacy_install()
         first = self._publish("1")
@@ -317,6 +333,41 @@ class DeckReleasePerformanceMySQLTests(unittest.TestCase):
             added[0].id: {self.word.id: "A", self.values.id: ["one", ["two", "<b>three</b>"]]},
             added[1].id: {self.word.id: "B edited", self.values.id: ["one", ["two", "<b>three</b>"]]},
         })
+
+    def test_split_history_matches_full_scan_for_notes_without_checkpoint(self):
+        outside = Deck(name="Release probe outside", owner_user_id=self.owner.id, note_type_id=self.note_type.id)
+        db.session.add(outside)
+        db.session.commit()
+        releases = [self._publish("1")]
+        added = [self._new_note("C"), self._new_note("D")]
+        db.session.flush()
+        for note in added:
+            deck_working_tree_service.mark_note_fields_changed(note=note, field_names=["Word", "Values"])
+        db.session.commit()
+        self._edit(self.notes[0], "Word", "first edited")
+        releases.append(self._publish("2"))
+        self._move(added[0], self._subdeck().id)
+        self._edit(added[1], "Word", "D edited")
+        releases.append(self._publish("3"))
+        self._move(added[1], outside.id)  # Leaves the listing.
+        self._edit(self.notes[1], "Word", "second edited")
+        releases.append(self._publish("4"))
+        self._move(added[1], self.deck.id)  # Returns without a checkpoint.
+        releases.append(self._publish("5"))
+        all_ids = [note.id for note in self.notes + added]
+        for release in releases:
+            with self.subTest(release=release.version_label):
+                expected = self._reconstruct_with_full_scan(release.id)
+                with patch.object(repository, "_latest_note_checkpoint_sequences",
+                        side_effect=AssertionError("split reconstruction must not join checkpoints")):
+                    split = service.reconstruct_release_state(release.id)
+                self.assertEqual(self._state_snapshot(split), self._state_snapshot(expected))
+                values = service.get_note_field_values_by_id_for_ids_at_release(release.id, all_ids)
+                self.assertEqual(values, {note_id: {field_id: value
+                    for field_id, value in note.field_values_by_id.items() if field_id in expected.field_defs}
+                    for note_id, note in expected.notes.items()})
+        self.assertEqual(values[added[0].id][self.word.id], "C")
+        self.assertEqual(values[added[1].id][self.word.id], "D edited")
 
 
 if __name__ == "__main__":
