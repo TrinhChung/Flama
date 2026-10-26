@@ -563,6 +563,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_deck_naming_service.py",
             "tests/test_deck_notetype_guard.py",
             "tests/test_deck_release_api.py",
+            "tests/test_deck_release_performance_mysql.py",
             "tests/test_deck_release_schema.py",
             "tests/test_deck_settings_routes.py",
             "tests/test_owner_note_dirty_tracking_services.py",

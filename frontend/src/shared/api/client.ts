@@ -1,4 +1,4 @@
-import { API_BASE_URL, resolveBackendUrl } from '@/config/env'
+import { API_BASE_URL, resolveBackendUrl } from '@/shared/config/env'
 import {
   isBackendUnavailableStatus,
   reportBackendUnavailable,
@@ -14,6 +14,8 @@ type ErrorPayload = {
 export type ApiRequestInit = RequestInit & {
   /** Omit automatic timezone only when the endpoint ignores it or receives it in the query. */
   includeTimezone?: boolean
+  /** Let optional requests surface their own errors without entering global maintenance. */
+  reportUnavailable?: boolean
 }
 
 export function getBrowserTimezone(): string | undefined {
@@ -120,7 +122,7 @@ async function apiFetch(
   accept = 'application/json',
   retryCsrf = true,
 ): Promise<Response> {
-  const { includeTimezone, ...fetchInit } = init
+  const { includeTimezone, reportUnavailable = true, ...fetchInit } = init
   const method = String(init.method || 'GET').toUpperCase()
   const headers = new Headers(init.headers)
   headers.set('Accept', accept)
@@ -167,7 +169,7 @@ async function apiFetch(
     if (error instanceof TypeError) {
       const isFormDataUpload = init.body instanceof FormData
       const browserOffline = typeof navigator !== 'undefined' && navigator.onLine === false
-      if (!isFormDataUpload && !browserOffline) {
+      if (reportUnavailable && !isFormDataUpload && !browserOffline) {
         reportBackendUnavailable()
       }
       throw new ApiError(
@@ -185,7 +187,7 @@ async function apiFetch(
   }
 
   if (isBackendUnavailableStatus(response.status)) {
-    reportBackendUnavailable()
+    if (reportUnavailable) reportBackendUnavailable()
     throw new ApiError(
       'Máy chủ đang tạm thời không sẵn sàng.',
       response.status,

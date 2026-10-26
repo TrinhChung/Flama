@@ -738,16 +738,11 @@ def build_release_sample_cache_from_release(
     from app.services import deck_release_service
 
     sequence_no = int(release.sequence_no or 0)
-    memberships = [
-        row
-        for row in deck_release_repository.list_memberships_for_entities(
-            deck_item_id=str(deck_item.id),
-            entity_kind="note",
-        )
-        if int(row.introduced_sequence or 0) <= sequence_no
-        and (row.removed_sequence is None or int(row.removed_sequence) > sequence_no)
-    ]
-    note_ids = sorted(str(row.entity_id) for row in memberships)[: max(limit * 4, 20)]
+    note_ids = deck_release_repository.list_note_ids_at_release(
+        deck_item_id=str(deck_item.id),
+        sequence_no=sequence_no,
+        limit=max(limit * 4, 20),
+    )
     values_by_note = deck_release_service.get_note_values_for_ids_at_release(
         release,
         note_ids,

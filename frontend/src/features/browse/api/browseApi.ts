@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '@/config/env'
+import { API_BASE_URL } from '@/shared/config/env'
 import { apiBlob, apiJson, apiRequest } from '@/shared/api/client'
 import type { BrowseCardRow, BrowseCardsResponse, BrowseDeck, BrowseSortBy, BrowseSortDir, BrowseStatusFilter, CardDetailResponse, NoteTypeSummary } from '../types'
 
@@ -28,7 +28,7 @@ export { browseQueryKeys } from './browseQueryKeys'
 export const browseApi = {
   fetchDecks: (signal?: AbortSignal) => apiRequest<{ decks: BrowseDeck[] }>(`${API_BASE_URL}/browse/decks?view=notes`, { signal }),
   fetchDeckStructure: (signal?: AbortSignal) => apiRequest<{ decks: BrowseDeck[] }>(`${API_BASE_URL}/browse/decks?view=notes&structure_only=1`, { signal }),
-  fetchDeckSummaries: (deckIds: number[], signal?: AbortSignal) => apiRequest<{ decks: BrowseDeck[] }>(`${API_BASE_URL}/browse/decks/summaries?${new URLSearchParams({ deck_ids: deckIds.join(',') })}`, { signal }),
+  fetchDeckSummaries: (deckIds: number[], signal?: AbortSignal) => apiRequest<{ decks: BrowseDeck[] }>(`${API_BASE_URL}/browse/decks/summaries?${new URLSearchParams({ deck_ids: deckIds.join(',') })}`, { signal, reportUnavailable: false }),
   fetchNoteTypes: (signal?: AbortSignal) => apiRequest<{ items: NoteTypeSummary[] }>(`${API_BASE_URL}/note-types?compact=1`, { signal }),
   async fetchCards(params: BrowseCardsParams, signal?: AbortSignal) {
     const query = new URLSearchParams()

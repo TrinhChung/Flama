@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setCsrfToken } from '@/shared/api/client'
+import { clearBackendUnavailable, subscribeBackendUnavailable } from '@/shared/api/backendAvailability'
 import { browseApi, browseQueryKeys } from './browseApi'
 
 describe('Browse transport', () => {
@@ -9,7 +10,25 @@ describe('Browse transport', () => {
     setCsrfToken('')
     vi.stubGlobal('fetch', fetchMock)
   })
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    clearBackendUnavailable()
+  })
+
+  it('does not enter maintenance when a summary endpoint preflight fails during deployment', async () => {
+    const unavailable = vi.fn()
+    const unsubscribe = subscribeBackendUnavailable(unavailable)
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    try {
+      await expect(browseApi.fetchDeckSummaries([7059])).rejects.toMatchObject({ status: 0 })
+      expect(unavailable).not.toHaveBeenCalled()
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      await expect(browseApi.fetchDeckStructure()).rejects.toMatchObject({ status: 0 })
+      expect(unavailable).toHaveBeenCalledOnce()
+    } finally {
+      unsubscribe()
+    }
+  })
 
   it('requests compact NoteTypes with native-array definitions and an independent cache identity', async () => {
     const payload = { items: [{ id: 'nt', name: 'Vocabulary', field_defs: [{ name: 'Answers', position: 0, field_type: 'array', required: true }] }] }
