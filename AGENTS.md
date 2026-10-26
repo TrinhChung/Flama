@@ -92,6 +92,11 @@
     2. **Tuyệt đối KHÔNG** cấu hình hoặc chuyển ứng dụng dev sang SQLite (`sqlite:///...`) để né lỗi kết nối hoặc "tiện tay" test nhanh.
     3. **Với Migrations (Alembic) & DDL**: Mọi thao tác schema, tạo bảng, đổi cột, đánh index phải được áp dụng và kiểm tra trực tiếp trên MySQL local. Nghiêm cấm chỉ test migration trên SQLite rồi coi là đạt chuẩn.
     4. **Phạm vi duy nhất của SQLite**: Chỉ chấp nhận SQLite in-memory (`sqlite:///:memory:`) cho các unit test cô lập cấp thấp (pure unit tests không phụ thuộc dialect/JSON/concurrency của MySQL) đã có sẵn trong repo. Không mở rộng việc dùng SQLite sang bất kỳ quy trình phát triển, tích hợp hoặc staging nào.
+- **Buffer pool local nhỏ có chủ đích (Local Small Buffer Pool)**:
+  - Mục tiêu cấu hình MySQL local là `128M` (`my.ini` của `MySQL80`) để lộ query đọc quá rộng, quét lịch sử hoặc N+1. Không tăng buffer pool (`SET GLOBAL`, `SET PERSIST`, sửa `my.ini`) chỉ để test chạy nhanh hơn hay benchmark đẹp hơn.
+  - Trước khi đo, đọc kích thước đang chạy, số instance, chunk size và cấu hình persisted. Phân biệt mục tiêu cấu hình với trạng thái runtime; không tự restart dịch vụ để làm hai giá trị khớp nhau.
+  - Khi đo hiệu năng, ghi cả thời gian lẫn chênh lệch `Innodb_buffer_pool_read_requests` (lượt đọc trang) và `Innodb_buffer_pool_reads` (đọc từ đĩa). Cache lớn có thể che chi phí query; thời gian nhanh chưa đủ nếu request vẫn chạm quá nhiều trang.
+  - Thao tác hàng loạt không dùng để đo (restore dump) quá chậm thì được tạm tăng bằng `SET GLOBAL` và hạ lại về 128M ngay sau đó; không dùng `SET PERSIST`.
 
 ## Testing
 - **Modular Test Execution**: To avoid long test runs across 100+ suites, use `python scripts/run_tests.py` instead of running full test suites:
