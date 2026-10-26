@@ -23,6 +23,39 @@ describe('apiJsonKeepalive', () => {
     document.cookie = 'csrf_token=; Max-Age=0; path=/'
   })
 
+  it.each(['network', 503] as const)('keeps optional request failures local: %s', async (failure) => {
+    const unavailable = vi.fn()
+    const unsubscribe = subscribeBackendUnavailable(unavailable)
+    const fetchMock = vi.fn()
+    if (failure === 'network') fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    else fetchMock.mockResolvedValueOnce(new Response(null, { status: failure }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(apiRequest('/api/optional', { reportUnavailable: false })).rejects.toMatchObject({
+        code: 'BACKEND_UNAVAILABLE', status: failure === 'network' ? 0 : failure,
+      })
+      expect(unavailable).not.toHaveBeenCalled()
+      expect(fetchMock.mock.calls[0][1]).not.toHaveProperty('reportUnavailable')
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it.each(['network', 503] as const)('still reports required request failures: %s', async (failure) => {
+    const unavailable = vi.fn()
+    const unsubscribe = subscribeBackendUnavailable(unavailable)
+    const fetchMock = vi.fn()
+    if (failure === 'network') fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    else fetchMock.mockResolvedValueOnce(new Response(null, { status: failure }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(apiRequest('/api/required')).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE' })
+      expect(unavailable).toHaveBeenCalledOnce()
+    } finally {
+      unsubscribe()
+    }
+  })
+
   it('sends an authenticated JSON request that survives page teardown', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ success: true }),
