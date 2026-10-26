@@ -29,6 +29,9 @@ def analyze_template_sources(*, template, field_defs) -> list[dict[str, Any]]:
     Script tokens are literal in Study, so their content is not parsed as HTML.
     """
     result = []
+    if not str(getattr(template, "front_html", "") or "").strip():
+        result.append(diagnostic("EMPTY_FRONT_TEMPLATE", "The front template is empty.",
+            source_part="front_html", hint="Add front content, or keep it empty if intentional."))
     known = {str(field.name) for field in field_defs}
     known |= {f"{name}{suffix}" for name in tuple(known) for suffix in ("_url", "_urls")}
     known.add("FrontSide")

@@ -6,6 +6,7 @@ Welcome to the central documentation portal for **Flama** (Nihongo Flashcard Lea
 
 ## 🏛️ Master Architecture & Codebase Reality Audit
 
+- [MCP NoteType and template workflow](backend/MCP_AUTHORING_WORKFLOW.md): capability review, reusable template tools, typed fields/inputs, creation sequence, preview diagnostics and deferred array work.
 - [MCP template authoring implementation](plans/MCP_TEMPLATE_AUTHORING_IMPLEMENTATION_PLAN_2026-10-25.md): #248/#116 candidate diagnostics, Study artifacts, browser fixtures and MCP App packaging; includes local verification and host rollout limits.
 - [Publish scope and release UX proposal](plans/PUBLISH_SCOPE_AND_RELEASE_UX_IMPLEMENTATION_PLAN_2026-10-25.md): proposed Deck, Note Type and Template publication boundaries, review flows and acceptance checks; implementation remains pending.
 - [Browse data and performance review](architecture/BROWSE_PERFORMANCE_DATA_REVIEW_2026-10-24.md): table/query inventory, historical over-fetch fixes, current bottlenecks and read-only local MySQL measurements. [Task breakdown](plans/BROWSE_PERFORMANCE_TASKS_2026-10-24.md) explains rationale, historical constraints, trade-offs and acceptance criteria; [technical-debt phase](architecture/BROWSE_TECH_DEBT_IMPLEMENTATION_2026-10-24.md) records the baseline tooling and local deck-name ordering fix.

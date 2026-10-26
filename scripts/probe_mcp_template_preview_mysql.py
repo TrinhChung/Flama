@@ -130,7 +130,7 @@ def main():
                 for invalid_arguments in ({'note_type_id': note_type['id'], 'template_id': template['id'], 'sample_values': recipe['sample_values']},
                     {'note_type_id': note_type['id'], 'application_id': 'wrong-occurrence', 'sample_values': recipe['sample_values']}):
                     rejected = call_mcp_tool(tool_name='preview_note_type_template', user_id=user.id, arguments=invalid_arguments)
-                    assert rejected.get('isError'), 'Invalid occurrence unexpectedly accepted.'
+                    assert rejected['structuredContent']['valid'] is False, 'Invalid occurrence unexpectedly accepted.'
                     assert rejected['structuredContent']['diagnostics'][0]['code'] in {'INVALID_PARAMS', 'APPLICATION_NOT_FOUND'}
                 try:
                     call_mcp_tool(tool_name='preview_note_type_template', user_id=-1, arguments={
@@ -144,7 +144,7 @@ def main():
             broken_source = {'updated': [{'application_id': first['id'], 'front_html': '<script>const broken = ;</script>'}]}
             impact = call_mcp_tool(tool_name='preview_note_type_update', user_id=user.id,
                 arguments={'note_type_id': note_type['id'], 'templates': broken_source})
-            assert impact.get('isError')
+            assert impact['structuredContent']['valid'] is False
             assert impact['structuredContent']['checks']['javascript_syntax'] == 'failed'
             assert impact['structuredContent']['preview_id'] is None
             rejected_update = client.post('/api/mcp', json={'jsonrpc': '2.0', 'id': 'invalid-source',

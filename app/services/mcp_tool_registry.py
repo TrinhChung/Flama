@@ -13,6 +13,7 @@ from app.services.mcp_resource_registry import TEMPLATE_PREVIEW_URI
 from app.validators import RequestValidationError
 from models import db
 from models.field_types import FIELD_TYPES
+from app.validators.mcp_authoring import FIELD_UPDATE_SCHEMA, TEMPLATE_UPDATE_SCHEMA
 from app.validators.mcp import (
     validate_add_tags_arguments,
     validate_batch_create_notes_arguments,
@@ -1159,6 +1160,7 @@ CREATE_NOTE_TYPE_TOOL = McpToolDefinition(
                             "description": "Field data type",
                         },
                         "required": {"type": "boolean", "default": False},
+                        "position": {"type": "integer", "minimum": 0},
                         "identity_role": {"type": ["string", "null"], "enum": [None, "primary"], "description": "Set to 'primary' for duplicate detection key"},
                     },
                     "required": ["name"],
@@ -1174,6 +1176,7 @@ CREATE_NOTE_TYPE_TOOL = McpToolDefinition(
                         "front_html": {"type": "string", "description": "Front card HTML markup with {{Field}} placeholders"},
                         "back_html": {"type": "string", "description": "Back card HTML markup with {{Field}} and {{FrontSide}} placeholders"},
                         "shared_css": {"type": "string", "description": "Optional shared CSS styling"},
+                        "position": {"type": "integer", "minimum": 0},
                     },
                     "required": ["name"],
                 },
@@ -1213,12 +1216,8 @@ PREVIEW_NOTE_TYPE_UPDATE_TOOL = McpToolDefinition(
             "note_type_id": {"type": "string", "description": "UUID of the note type to update"},
             "name": {"type": "string", "description": "New note type name"},
             "description": {"type": ["string", "null"], "description": "New description"},
-            "fields": {
-                "description": "Full fields list or delta object with added/renamed/removed/modified",
-            },
-            "templates": {
-                "description": "Full templates list or delta object",
-            },
+            "fields": FIELD_UPDATE_SCHEMA,
+            "templates": TEMPLATE_UPDATE_SCHEMA,
         },
         "required": ["note_type_id"],
         "additionalProperties": False,
@@ -1272,8 +1271,8 @@ UPDATE_NOTE_TYPE_TOOL = McpToolDefinition(
             "pricing_mode": {"type": ["string", "null"], "enum": [None, "free", "paid"], "description": "Pricing mode ('free' or 'paid')"},
             "price_amount_minor": {"type": ["integer", "null"], "description": "Price in minor units"},
             "publish_status": {"type": ["string", "null"], "enum": [None, "published", "unlisted", "archived", "private"], "description": "Publish status"},
-            "fields": {"description": "Updated fields list or delta"},
-            "templates": {"description": "Updated templates list or delta"},
+            "fields": FIELD_UPDATE_SCHEMA,
+            "templates": TEMPLATE_UPDATE_SCHEMA,
             "preview_id": {"type": ["string", "null"], "description": "Preview token from preview_note_type_update for stale protection"},
             "confirm": {"type": "boolean", "description": "Explicit confirmation for destructive changes", "default": False},
         },
@@ -2105,7 +2104,7 @@ def _call_get_flama_documentation(*, user_id: int | None = None, arguments: dict
 GET_FLAMA_DOCUMENTATION_TOOL = McpToolDefinition(
     name="get_flama_documentation",
     title="Get Flama Feature Documentation",
-    description="Reference official Flama documentation on template-authoring syntax/sandbox/preview, quiz-template recipe, SRS, Yomitan mining, Local TTS, and Marketplace.",
+    description="Reference official Flama documentation: note-type-authoring for the complete field/input/template/deck creation workflow, template-authoring for syntax/sandbox/preview, quiz-template recipe, SRS, Yomitan mining, Local TTS, and Marketplace.",
     input_schema={
         "type": "object",
         "properties": {
@@ -2137,6 +2136,7 @@ PREVIEW_NOTE_TYPE_TEMPLATE_TOOL = McpToolDefinition(
         "Supply input_schema, front_html, back_html and explicit sample_values for a raw candidate, or "
         "an owned note_type_id plus application_id. Artifacts go only to the preview UI by default; request include_preview=true for debugging. "
         "Appearance and browser behavior are reviewed by the user. Browser/interaction checks remain not_run. "
+        "Validation findings are normal structured reports: inspect valid, checks and diagnostics. "
         "Use get_flama_documentation(topic='template-authoring') for syntax and quiz-template for a recipe."),
     input_schema=TEMPLATE_PREVIEW_INPUT_SCHEMA,
     output_schema=TEMPLATE_PREVIEW_OUTPUT_SCHEMA,
@@ -2151,6 +2151,9 @@ PREVIEW_NOTE_TYPE_TEMPLATE_TOOL = McpToolDefinition(
 
 # All Registered MCP Tools
 # ---------------------------------------------------------------------------
+
+from app.services.mcp.template_tools import build_template_tools
+
 
 _MCP_TOOL_DEFINITIONS = (
     # Decks
@@ -2196,6 +2199,7 @@ _MCP_TOOL_DEFINITIONS = (
     PREVIEW_NOTE_TYPE_TEMPLATE_TOOL,
     UPDATE_NOTE_TYPE_TOOL,
     DELETE_NOTE_TYPE_TOOL,
+    *build_template_tools(McpToolDefinition),
     # Image Library & Crawling
     IMPORT_IMAGE_TOOL,
     SEARCH_IMAGES_TOOL,

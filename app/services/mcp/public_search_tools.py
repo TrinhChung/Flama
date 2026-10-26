@@ -38,6 +38,63 @@ MAX_PREVIEW_SAMPLES = 5  # Anti-scraping hard limit: strictly 3 to 5 sample card
 DEFAULT_PREVIEW_SAMPLES = 3
 
 FLAMA_DOCUMENTATION_TOPICS: dict[str, dict[str, str]] = {
+    "note-type-authoring": {
+        "title": "MCP NoteType and reusable template workflow (2026-10-27)",
+        "markdown": """# MCP authoring workflow
+
+Private tools require note-type:read or note-type:write. Listing is for discovery;
+only owned resources can be changed. IDs are references, never authorization.
+
+1. list_note_types, then get_note_type_schema to inspect field names, field_type,
+   required and identity_role. include_templates=true includes stable field IDs,
+   application IDs, source and input bindings for authoring.
+2. create_note_type with a name and fields [{name,field_type,required,identity_role}].
+   Supported types: text, richtext, markdown, image, audio, diagram, array.
+   Primary identity is optional, unique, text-only and required. Omitted fields
+   use Word/Meaning; omitted templates create a default presentation.
+3. list_card_templates (search/group/page/page_size) finds reusable templates.
+   get_card_template(include_source=true) returns HTML/CSS, typed input_schema
+   [{key,label,type,required}], current_version_id and active applications.
+4. preview_note_type_template with explicit input_schema, front_html, back_html,
+   shared_css and sample_values checks a raw candidate without saving. Input keys
+   are template variable names; labels are display text. Check valid, checks and
+   diagnostics. Invalid preview content is a normal validation report (valid=false),
+   so connectors preserve structured diagnostics. Mutations still return isError
+   on failure. Authentication/authorization and service failures remain errors.
+5. create_card_template saves a reusable definition. update_card_template renames
+   it or edits inputs/source through the versioned library. Send template_id and
+   expected_current_version_id from get_card_template to protect against stale edits.
+   Definition edits affect its active applications; inspect usages before editing.
+6. attach_card_template with note_type_id, template_id and input_bindings maps
+   input keys to that NoteType's FieldDef IDs. Example: {"prompt":"<Word field ID>"}.
+   Returns application_id. update_template_application changes the binding map,
+   display_name, position or is_default for just that occurrence. Binding maps
+   replace the previous map; include every mapping you want to keep.
+7. Preview the attached occurrence using note_type_id + application_id and explicit
+   samples keyed by source field name. Browser/interaction checks stay not_run;
+   review appearance and behavior in the Study sandbox client.
+8. create_deck(default_note_type_id=...) and create_note/batch_create_notes finish
+   the flow; read back with get_note/get_card. To retire an unwanted default
+   presentation, preview_note_type_update then update_note_type with
+   templates={"removed":["<application_id>"]}; at least one presentation must remain.
+
+## Updating NoteTypes and fields
+Use preview_note_type_update, inspect its impact, then update_note_type with the
+same changes and preview_id. Rename the NoteType with name. Prefer field deltas:
+fields={"added":[{"name":"Example","field_type":"markdown"}],
+"renamed":[{"old_name":"Meaning","new_name":"Definition"}],
+"modified":[{"name":"Reading","required":true,"position":1}]}.
+Renaming retains field identity and note data. Full field/template lists replace
+their collections; omitted fields are removed and omitted presentations retired.
+Removing populated fields requires a fresh preview and explicit user confirmation
+before confirm=true. Published shared schemas can return
+SHARED_SCHEMA_VERSIONING_REQUIRED: use the version-aware authoring UI instead.
+
+Arrays and existing data retain their current contract; this workflow does not
+migrate values or change rendering. See template-authoring for Mustache, media,
+sandbox and legacy array details. A passing preview does not prove browser behavior.
+""",
+    },
     "template-authoring": {
         "title": "Card Template Authoring Contract v1 (2026-10-26)",
         "markdown": """# Card Template Authoring v1 — 2026-10-26
@@ -50,8 +107,9 @@ claim about runtime behavior, correct answers or visual quality.
 It returns small diagnostics and candidate_hash; Study artifacts are delivered
 only to the UI through result _meta by default. Request include_preview=true for
 model-visible artifacts or include_server_render=true for legacy HTML debugging.
-Input validation errors return isError with checks and diagnostics, not a generic
-exception. Each diagnostic has code, severity, stage, source_part, line, column,
+Preview validation errors return valid=false with checks and diagnostics as a
+normal tool result, so connectors do not replace the report with an exception.
+Mutation failures still return isError. Each diagnostic has code, severity, stage, source_part, line, column,
 hint and suggestions. Unknown positions are null, not fabricated coordinates.
 An MCP App can display the sandbox and, after user action, send a bounded report
 to chat. The model cannot automatically click or inspect the preview DOM.
@@ -222,6 +280,8 @@ A: Flama implements strict anti-scraping guardrails to protect community deck cr
 }
 
 TOPIC_ALIASES: dict[str, str] = {
+    "note-type-authoring": "note-type-authoring",
+    "note_type_authoring": "note-type-authoring",
     "template-authoring": "template-authoring",
     "template_authoring": "template-authoring",
     "quiz-template": "quiz-template",
