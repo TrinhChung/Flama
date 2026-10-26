@@ -13,8 +13,10 @@ import base64
 import binascii
 import hashlib
 import json
+from collections import defaultdict
 from dataclasses import dataclass, field
 from copy import deepcopy
+from functools import lru_cache
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from typing import Any
@@ -122,7 +124,14 @@ def _json_bytes(value: Any) -> bytes:
     ).encode("utf-8")
 
 
+@lru_cache(maxsize=16384)
+def _hash_primitive(value_type: type, value: Any) -> str:
+    return hashlib.sha256(_json_bytes(value)).hexdigest()
+
+
 def _hash_value(value: Any) -> str:
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return _hash_primitive(type(value), value)
     return hashlib.sha256(_json_bytes(value)).hexdigest()
 
 
@@ -263,10 +272,53 @@ def _field_def_payload(field_def: Any) -> dict[str, Any]:
     }
 
 
+def _extract_source_note_values(
+    note: Any,
+    field_name_by_id: dict[str, str],
+    field_id_by_name: dict[str, str],
+    *,
+    need_raw: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    note_dict = getattr(note, "__dict__", None)
+    pending = (
+        note_dict.get("_pending_named_field_values")
+        if isinstance(note_dict, dict)
+        else None
+    )
+    codec = getattr(note, "field_values_codec", "field-id.v1")
+    by_id = getattr(note, "field_values_by_id", None)
+    if pending is None and codec == "field-id.v1" and isinstance(by_id, dict):
+        values_by_id = {
+            field_id: by_id[field_id]
+            for field_id in field_name_by_id
+            if field_id in by_id
+        }
+        extras = getattr(note, "field_values_extras", None)
+        if not need_raw:
+            raw_values = (
+                dict(extras) if isinstance(extras, dict) and extras else {}
+            )
+            return values_by_id, raw_values
+        raw_values = dict(extras) if isinstance(extras, dict) else {}
+        for field_id, value in values_by_id.items():
+            raw_values[field_name_by_id[field_id]] = value
+        return values_by_id, raw_values
+
+    raw_values = dict(getattr(note, "field_values", None) or {})
+    values_by_id = {
+        field_id_by_name[field_name]: value
+        for field_name, value in raw_values.items()
+        if field_name in field_id_by_name
+    }
+    return values_by_id, raw_values
+
+
 def _build_working_state(
     item: DeckMarketplaceItem,
     *,
     include_notes: bool = True,
+    include_raw_values: bool = True,
+    include_tags: bool = True,
 ) -> DeckReleaseState:
     if item.source_deck_id is None:
         raise DeckReleaseError(
@@ -285,24 +337,36 @@ def _build_working_state(
     field_defs = {str(row.id): _field_def_payload(row) for row in field_rows}
     notes: dict[str, NoteReleaseState] = {}
     if include_notes:
+        field_name_by_id = {
+            field_id: str(payload["name"])
+            for field_id, payload in field_defs.items()
+        }
         field_id_by_name = {
             str(payload["name"]): field_id
             for field_id, payload in field_defs.items()
         }
-        for note in deck_release_repository.list_source_notes(item):
-            raw_values = dict(note.field_values or {})
-            values_by_id = {
-                field_id_by_name[field_name]: value
-                for field_name, value in raw_values.items()
-                if field_name in field_id_by_name
-            }
+        for note in deck_release_repository.list_source_notes(
+            item,
+            content_only=True,
+            include_tags=include_tags,
+        ):
+            values_by_id, raw_values = _extract_source_note_values(
+                note,
+                field_name_by_id,
+                field_id_by_name,
+                need_raw=include_raw_values,
+            )
             notes[str(note.id)] = NoteReleaseState(
                 source_note_id=str(note.id),
                 source_deck_id=int(note.deck_id) if note.deck_id is not None else None,
                 note_type_id=str(note.note_type_id) if note.note_type_id else None,
                 field_values_by_id=values_by_id,
                 raw_field_values=raw_values,
-                tags=list(note.tags or []),
+                tags=(
+                    list(getattr(note, "tags", None) or [])
+                    if include_tags
+                    else []
+                ),
             )
 
     return DeckReleaseState(
@@ -355,40 +419,82 @@ def reconstruct_release_state(release_or_id: DeckRelease | str) -> DeckReleaseSt
         )
 
     target_sequence = int(release.sequence_no)
+    latest_checkpoints: dict[str, Any] = {}
+    for checkpoint in deck_release_repository.list_note_checkpoints(
+        deck_item_id=release.deck_item_id,
+        through_sequence=target_sequence,
+        content_only=True,
+    ):
+        latest_checkpoints[str(checkpoint.source_note_id)] = checkpoint
+
+    memberships = deck_release_repository.list_memberships(
+        release.deck_item_id,
+        active_at_sequence=target_sequence,
+        content_only=True,
+    )
+    active_note_ids: set[str] = set()
+    active_field_ids: set[str] = set()
+    membership_by_note: dict[str, Any] = {}
+    for membership in memberships:
+        active = int(membership.introduced_sequence) <= target_sequence and (
+            membership.removed_sequence is None
+            or int(membership.removed_sequence) > target_sequence
+        )
+        if not active:
+            continue
+        if membership.entity_kind == "note":
+            note_id = str(membership.entity_id)
+            active_note_ids.add(note_id)
+            membership_by_note[note_id] = membership
+        elif membership.entity_kind == "field_def":
+            active_field_ids.add(str(membership.entity_id))
+
+    min_note_field_seq: int | None = None
+    if memberships:
+        # Moving a note restarts its membership without new value atoms, so a
+        # note without a checkpoint replays its complete history from 0.
+        candidate_seqs = [
+            int(latest_checkpoints[nid].release_sequence_no) + 1
+            if nid in latest_checkpoints
+            else 1
+            for nid in active_note_ids
+        ]
+        min_note_field_seq = min(candidate_seqs, default=target_sequence + 1)
+
     history = deck_release_repository.list_release_history_changes(
         deck_item_id=release.deck_item_id,
         through_sequence=target_sequence,
         entity_kinds=VISIBLE_ENTITY_KINDS,
         content_only=True,
         after_checkpoints=True,
+        min_note_field_sequence=min_note_field_seq,
     )
     field_changes = [row for row in history if row.entity_kind == "field_def"]
     note_changes = [row for row in history if row.entity_kind == "note_field"]
     target_field_defs = _field_defs_at_sequence(field_changes, target_sequence)
 
-    latest_checkpoints: dict[str, DeckReleaseNoteCheckpoint] = {}
-    for checkpoint in deck_release_repository.list_note_checkpoints(
-        deck_item_id=release.deck_item_id,
-        through_sequence=target_sequence,
-    ):
-        latest_checkpoints[str(checkpoint.source_note_id)] = checkpoint
-
     notes: dict[str, NoteReleaseState] = {}
     field_state_cache: dict[int, dict[str, dict[str, Any]]] = {}
+    field_id_by_name_cache: dict[int, dict[str, str]] = {}
     for note_id, checkpoint in latest_checkpoints.items():
+        if memberships and note_id not in active_note_ids:
+            continue
         checkpoint_sequence = int(checkpoint.release_sequence_no)
-        checkpoint_field_defs = field_state_cache.get(checkpoint_sequence)
-        if checkpoint_field_defs is None:
-            checkpoint_field_defs = _field_defs_at_sequence(
-                field_changes,
-                checkpoint_sequence,
-            )
-            field_state_cache[checkpoint_sequence] = checkpoint_field_defs
-        field_id_by_name = {
-            str(payload.get("name")): field_id
-            for field_id, payload in checkpoint_field_defs.items()
-            if payload.get("name") is not None
-        }
+        field_id_by_name = field_id_by_name_cache.get(checkpoint_sequence)
+        if field_id_by_name is None:
+            checkpoint_field_defs = field_state_cache.get(checkpoint_sequence)
+            if checkpoint_field_defs is None:
+                checkpoint_field_defs = _field_defs_at_sequence(
+                    field_changes,
+                    checkpoint_sequence,
+                )
+                field_state_cache[checkpoint_sequence] = checkpoint_field_defs
+            field_id_by_name = {
+                str(payload.get("name")): field_id
+                for field_id, payload in checkpoint_field_defs.items()
+                if payload.get("name") is not None
+            }
+            field_id_by_name_cache[checkpoint_sequence] = field_id_by_name
         raw_values = dict(checkpoint.field_values or {})
         values_by_id = {
             field_id_by_name[field_name]: value
@@ -405,27 +511,9 @@ def reconstruct_release_state(release_or_id: DeckRelease | str) -> DeckReleaseSt
             note_type_id=str(checkpoint.note_type_id),
             field_values_by_id=values_by_id,
             raw_field_values=raw_values,
-            tags=list(checkpoint.tags or []),
+            tags=list(getattr(checkpoint, "tags", None) or []),
             checkpoint_sequence=checkpoint_sequence,
         )
-
-    memberships = deck_release_repository.list_memberships(release.deck_item_id)
-    active_note_ids: set[str] = set()
-    active_field_ids: set[str] = set()
-    membership_by_note: dict[str, DeckReleaseEntityMembership] = {}
-    for membership in memberships:
-        active = int(membership.introduced_sequence) <= target_sequence and (
-            membership.removed_sequence is None
-            or int(membership.removed_sequence) > target_sequence
-        )
-        if not active:
-            continue
-        if membership.entity_kind == "note":
-            note_id = str(membership.entity_id)
-            active_note_ids.add(note_id)
-            membership_by_note[note_id] = membership
-        elif membership.entity_kind == "field_def":
-            active_field_ids.add(str(membership.entity_id))
 
     for change in note_changes:
         note_id = str(change.entity_id)
@@ -617,24 +705,9 @@ def _get_note_field_values_by_id_for_ids_at_release(
             )
         )
 
-    latest_checkpoints: dict[str, DeckReleaseNoteCheckpoint] = {}
+    latest_checkpoints: dict[str, Any] = {}
     for checkpoint in checkpoints:
         latest_checkpoints[str(checkpoint.source_note_id)] = checkpoint
-
-    checkpoint_sequences = {
-        note_id: int(checkpoint.release_sequence_no)
-        for note_id, checkpoint in latest_checkpoints.items()
-    }
-    for note_id_chunk in _chunks(requested_ids):
-        note_changes.extend(
-            deck_release_repository.list_note_field_history_for_ids(
-                deck_item_id=release.deck_item_id,
-                through_sequence=target_sequence,
-                note_ids=note_id_chunk,
-                content_only=True,
-                checkpoint_sequences=checkpoint_sequences,
-            )
-        )
 
     membership_by_id = {
         str(row.entity_id): row
@@ -646,6 +719,26 @@ def _get_note_field_values_by_id_for_ids_at_release(
         )
     }
     active_note_ids = set(membership_by_id)
+    # Notes without a checkpoint keep the default bound 0: their membership may
+    # have restarted on a deck move after their value atoms were written.
+    checkpoint_sequences: dict[str, int] = {
+        note_id: int(checkpoint.release_sequence_no)
+        for note_id, checkpoint in latest_checkpoints.items()
+    }
+
+    history_target_ids = (
+        sorted(active_note_ids) if note_memberships else requested_ids
+    )
+    for note_id_chunk in _chunks(history_target_ids):
+        note_changes.extend(
+            deck_release_repository.list_note_field_history_for_ids(
+                deck_item_id=release.deck_item_id,
+                through_sequence=target_sequence,
+                note_ids=note_id_chunk,
+                content_only=True,
+                checkpoint_sequences=checkpoint_sequences,
+            )
+        )
     field_state_cache: dict[int, dict[str, dict[str, Any]]] = {}
     values_by_note: dict[str, dict[str, Any]] = {}
     checkpoint_sequence_by_note: dict[str, int] = {}
@@ -792,13 +885,28 @@ def _change_descriptor(
         "operation": operation,
         "before_value": None if not before_exists else before_value,
         "after_value": None if not after_exists else after_value,
-        "before_hash": _hash_if_present(before_value, exists=before_exists),
-        "after_hash": _hash_if_present(after_value, exists=after_exists),
+        "before_hash": None,
+        "after_hash": None,
         "source_deck_id": source_deck_id,
         "sort_key": sort_key,
         "_before_exists": before_exists,
         "_after_exists": after_exists,
+        "_hashes_ready": False,
     }
+
+
+def _ensure_change_hashes(change: dict[str, Any]) -> dict[str, Any]:
+    if not change.get("_hashes_ready"):
+        change["before_hash"] = _hash_if_present(
+            change.get("before_value"),
+            exists=bool(change.get("_before_exists")),
+        )
+        change["after_hash"] = _hash_if_present(
+            change.get("after_value"),
+            exists=bool(change.get("_after_exists")),
+        )
+        change["_hashes_ready"] = True
+    return change
 
 
 def _build_atomic_diff(
@@ -1033,9 +1141,9 @@ def _try_build_sparse_diff(
         item, base_working_revision, working_revision,
     ):
         return None
-    dirty_rows = deck_release_repository.list_working_dirty_entities(item.id, content_only=True)
+    dirty_count = deck_release_repository.count_working_dirty_entities(item.id)
     if working_revision == base_working_revision:
-        if dirty_rows:
+        if dirty_count > 0:
             return None
         return ReleaseDiffPlan(
             changes=[],
@@ -1043,6 +1151,9 @@ def _try_build_sparse_diff(
             sparse_memberships={},
             strategy="sparse",
         )
+    if dirty_count <= 0 or dirty_count > 5000:
+        return None
+    dirty_rows = deck_release_repository.list_working_dirty_entities(item.id, content_only=True)
     if not dirty_rows:
         return None
 
@@ -1055,11 +1166,12 @@ def _try_build_sparse_diff(
         for row in dirty_rows
         if row.entity_kind == "note_field"
     }
-    field_ids = {
+    dirty_schema_field_ids = {
         str(row.field_def_id or row.entity_id)
         for row in dirty_rows
         if row.entity_kind == "field_def"
-    } | {
+    }
+    field_ids = dirty_schema_field_ids | {
         str(row.field_def_id)
         for row in dirty_rows
         if row.entity_kind == "note_field" and row.field_def_id
@@ -1083,10 +1195,7 @@ def _try_build_sparse_diff(
         else {}
     )
 
-    current_field_rows = _load_rows_in_chunks(
-        deck_release_repository.list_field_defs_by_ids,
-        field_ids,
-    )
+    current_field_rows = deck_release_repository.list_source_field_defs(item)
     current_fields = {
         str(row.id): row
         for row in current_field_rows
@@ -1096,6 +1205,10 @@ def _try_build_sparse_diff(
         field_id: _field_def_payload(row)
         for field_id, row in current_fields.items()
     }
+    current_field_name_by_id = {
+        field_id: str(payload["name"])
+        for field_id, payload in current_field_defs.items()
+    }
     current_field_id_by_name = {
         str(payload["name"]): field_id
         for field_id, payload in current_field_defs.items()
@@ -1103,7 +1216,7 @@ def _try_build_sparse_diff(
 
     source_deck_ids = set(collect_subtree_ids(item.source_deck_id))
     current_note_rows = _load_rows_in_chunks(
-        deck_release_repository.list_notes_by_ids,
+        lambda chunk: deck_release_repository.list_notes_by_ids(chunk, content_only=True),
         note_ids,
     )
     current_notes = {
@@ -1115,11 +1228,29 @@ def _try_build_sparse_diff(
     }
     current_note_values: dict[str, dict[str, Any]] = {}
     for note_id, note in current_notes.items():
-        current_note_values[note_id] = {
-            current_field_id_by_name[field_name]: value
-            for field_name, value in dict(note.field_values or {}).items()
-            if field_name in current_field_id_by_name
-        }
+        by_id, _ = _extract_source_note_values(
+            note,
+            current_field_name_by_id,
+            current_field_id_by_name,
+            need_raw=False,
+        )
+        current_note_values[note_id] = by_id
+
+    dirty_fields_by_note: dict[str, set[str]] = defaultdict(set)
+    for row in dirty_rows:
+        if row.entity_kind == "note_field" and row.field_def_id:
+            dirty_fields_by_note[str(row.entity_id)].add(str(row.field_def_id))
+    for note_id in note_ids:
+        before_vals = base_note_values.get(note_id, {})
+        after_vals = current_note_values.get(note_id, {})
+        tracked_fields = dirty_fields_by_note.get(note_id, set())
+        for check_fid in (set(before_vals) | set(after_vals)) - tracked_fields:
+            if check_fid in dirty_schema_field_ids:
+                continue
+            b_exists = note_id in base_note_values and check_fid in before_vals
+            a_exists = note_id in current_note_values and check_fid in after_vals
+            if b_exists != a_exists or (b_exists and before_vals[check_fid] != after_vals[check_fid]):
+                return None
 
     sparse_memberships: dict[
         tuple[str, str], dict[str, Any] | None
@@ -1306,7 +1437,11 @@ def _build_content_release_diff_plan(
         if sparse_plan is not None:
             return sparse_plan
         base_state = reconstruct_release_state(base_release)
-        working_state = _build_working_state(item)
+        working_state = _build_working_state(
+            item,
+            include_raw_values=False,
+            include_tags=False,
+        )
         return ReleaseDiffPlan(
             changes=_build_atomic_diff(
                 item=item,
@@ -1325,6 +1460,8 @@ def _build_content_release_diff_plan(
     working_state = _build_working_state(
         item,
         include_notes=(preserve_legacy_diff or include_initial_checkpoint_state),
+        include_raw_values=include_initial_checkpoint_state,
+        include_tags=include_initial_checkpoint_state,
     )
     baseline_note_count = (
         len(working_state.notes)
@@ -1367,6 +1504,7 @@ def _summary_for_changes(changes: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def _serialize_change_dict(change: dict[str, Any]) -> dict[str, Any]:
+    _ensure_change_hashes(change)
     return {
         key: value
         for key, value in change.items()
@@ -1553,25 +1691,27 @@ def _normalize_expected_working_revision(raw_value: Any) -> int | None:
 
 
 def _release_manifest_hash(changes: list[dict[str, Any]]) -> str:
-    manifest = [
-        {
-            key: value
-            for key, value in change.items()
-            if key
-            in {
-                "change_key",
-                "entity_kind",
-                "entity_id",
-                "field_def_id",
-                "property_key",
-                "operation",
-                "before_hash",
-                "after_hash",
-                "source_deck_id",
+    manifest = []
+    for change in changes:
+        _ensure_change_hashes(change)
+        manifest.append(
+            {
+                key: value
+                for key, value in change.items()
+                if key
+                in {
+                    "change_key",
+                    "entity_kind",
+                    "entity_id",
+                    "field_def_id",
+                    "property_key",
+                    "operation",
+                    "before_hash",
+                    "after_hash",
+                    "source_deck_id",
+                }
             }
-        }
-        for change in changes
-    ]
+        )
     return _hash_value(manifest)
 
 
@@ -1612,25 +1752,28 @@ def _build_release_change_rows(
     release: DeckRelease,
     changes: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    return [
-        dict(
-            release_id=release.id,
-            release_sequence_no=int(release.sequence_no),
-            change_key=row["change_key"],
-            entity_kind=row["entity_kind"],
-            entity_id=row["entity_id"],
-            field_def_id=row["field_def_id"],
-            property_key=row["property_key"],
-            operation=row["operation"],
-            before_value=row["before_value"],
-            after_value=row["after_value"],
-            before_hash=row["before_hash"],
-            after_hash=row["after_hash"],
-            source_deck_id=row["source_deck_id"],
-            sort_key=row["sort_key"],
+    rows: list[dict[str, Any]] = []
+    for row in changes:
+        _ensure_change_hashes(row)
+        rows.append(
+            dict(
+                release_id=release.id,
+                release_sequence_no=int(release.sequence_no),
+                change_key=row["change_key"],
+                entity_kind=row["entity_kind"],
+                entity_id=row["entity_id"],
+                field_def_id=row["field_def_id"],
+                property_key=row["property_key"],
+                operation=row["operation"],
+                before_value=row["before_value"],
+                after_value=row["after_value"],
+                before_hash=row["before_hash"],
+                after_hash=row["after_hash"],
+                source_deck_id=row["source_deck_id"],
+                sort_key=row["sort_key"],
+            )
         )
-        for row in changes
-    ]
+    return rows
 
 
 def _create_initial_checkpoints(
@@ -1666,7 +1809,11 @@ def _sync_memberships(
     sequence_no: int,
     working_state: DeckReleaseState,
 ) -> None:
-    existing_rows = deck_release_repository.list_memberships(item.id)
+    existing_rows = deck_release_repository.list_memberships(
+        item.id,
+        open_only=True,
+        content_only=True,
+    )
     active_existing = {
         (row.entity_kind, str(row.entity_id)): row
         for row in existing_rows
@@ -1684,6 +1831,8 @@ def _sync_memberships(
             "metadata_json": {"note_type_id": note.note_type_id},
         }
 
+    retire_ids: list[str] = []
+    new_memberships: list[DeckReleaseEntityMembership] = []
     for key, payload in current.items():
         membership = active_existing.get(key)
         membership_changed = bool(
@@ -1694,23 +1843,29 @@ def _sync_memberships(
             )
         )
         if membership_changed:
-            membership.removed_sequence = sequence_no
+            retire_ids.append(str(membership.id))
             membership = None
         if membership is None:
-            membership = DeckReleaseEntityMembership(
-                deck_item_id=item.id,
-                entity_kind=key[0],
-                entity_id=key[1],
-                source_deck_id=payload["source_deck_id"],
-                introduced_sequence=sequence_no,
-                removed_sequence=None,
-                metadata_json=payload["metadata_json"],
+            new_memberships.append(
+                DeckReleaseEntityMembership(
+                    deck_item_id=item.id,
+                    entity_kind=key[0],
+                    entity_id=key[1],
+                    source_deck_id=payload["source_deck_id"],
+                    introduced_sequence=sequence_no,
+                    removed_sequence=None,
+                    metadata_json=payload["metadata_json"],
+                )
             )
-            deck_release_repository.add_membership(membership)
 
     for key, membership in active_existing.items():
         if key not in current and membership.removed_sequence is None:
-            membership.removed_sequence = sequence_no
+            retire_ids.append(str(membership.id))
+
+    if retire_ids:
+        deck_release_repository.retire_memberships_by_ids(retire_ids, sequence_no)
+    if new_memberships:
+        deck_release_repository.add_memberships(new_memberships)
 
 
 def _sync_sparse_memberships(

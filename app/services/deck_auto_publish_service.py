@@ -56,12 +56,26 @@ def get_auto_publish_status(
     pending_changes_count = 0
     if has_unreleased_working_edits or current_release is None:
         try:
-            preview = deck_release_service.preview_release(
-                deck_item_id=item.id,
-                user_id=user_id,
-                limit=1,
+            from app.repositories import deck_release_repository
+
+            dirty_count = (
+                deck_release_repository.count_working_dirty_entities(
+                    item.id,
+                )
+                if current_release is not None
+                else 0
             )
-            pending_changes_count = int(preview.get("summary", {}).get("change_count", 0))
+            if dirty_count > 200:
+                pending_changes_count = dirty_count
+            else:
+                preview = deck_release_service.preview_release(
+                    deck_item_id=item.id,
+                    user_id=user_id,
+                    limit=1,
+                )
+                pending_changes_count = int(
+                    preview.get("summary", {}).get("change_count", 0)
+                )
         except Exception:
             pending_changes_count = 0
 
@@ -191,27 +205,28 @@ def trigger_auto_publish_for_deck_item(
     idempotency_key = f"auto-pub-{item.id}-rev{working_revision}"
 
     try:
-        publish_result = deck_release_service.publish_release(
-            deck_item_id=item.id,
-            user_id=owner_id,
-            version_label=new_version_label,
-            changelog="Tự động phát hành bản cập nhật.",
-            expected_current_release_id=current_release.id if current_release else None,
-            expected_working_revision=working_revision,
-            idempotency_key=idempotency_key,
-            publish_mode="automatic",
-        )
-        new_release = publish_result.release
-        item.last_auto_published_at = _utcnow()
-        item.last_auto_publish_error = None
-        db.session.flush()
+        with db.session.begin_nested():
+            publish_result = deck_release_service.publish_release(
+                deck_item_id=item.id,
+                user_id=owner_id,
+                version_label=new_version_label,
+                changelog="Tự động phát hành bản cập nhật.",
+                expected_current_release_id=current_release.id if current_release else None,
+                expected_working_revision=working_revision,
+                idempotency_key=idempotency_key,
+                publish_mode="automatic",
+            )
+            new_release = publish_result.release
+            item.last_auto_published_at = _utcnow()
+            item.last_auto_publish_error = None
+            db.session.flush()
 
-        # Trigger downstream subscriber auto-updates
-        from app.services import deck_install_rebase_service
-        deck_install_rebase_service.process_subscriber_auto_updates(
-            deck_item_id=item.id,
-            release_id=new_release.id,
-        )
+            # Trigger downstream subscriber auto-updates
+            from app.services import deck_install_rebase_service
+            deck_install_rebase_service.process_subscriber_auto_updates(
+                deck_item_id=item.id,
+                release_id=new_release.id,
+            )
 
         return new_release
     except Exception as exc:

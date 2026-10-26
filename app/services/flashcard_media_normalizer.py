@@ -357,8 +357,7 @@ def backfill_media_field_values(
                 if decision.value != old_value:
                     note_changed = True
                     next_values[field_def.name] = decision.value
-                    if decision.semantic_change:
-                        semantic_fields.add(field_def.name)
+                    semantic_fields.add(field_def.name)
                 if run is not None:
                     _audit_item(
                         run=run,
@@ -537,12 +536,11 @@ def rollback_media_field_migration(*, run_id: str, apply: bool = False) -> Media
             if apply:
                 values[identity] = old_value
                 note.field_values_by_id = values
-                if item.semantic_change:
-                    mutation = semantic_mutations.setdefault(
-                        str(note.id),
-                        {"note": note, "field_names": set(), "operation": "set"},
-                    )
-                    mutation["field_names"].add(current_label)
+                mutation = semantic_mutations.setdefault(
+                    str(note.id),
+                    {"note": note, "field_names": set(), "operation": "set"},
+                )
+                mutation["field_names"].add(current_label)
             restored += 1
             continue
         if item.entity_type == "clone_override":
