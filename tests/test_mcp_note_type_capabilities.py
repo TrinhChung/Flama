@@ -765,9 +765,19 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
                         "params": {"name": name, "arguments": arguments},
                     },
                 )
-                self.assertEqual(response.status_code, 409, response.get_json())
                 payload = response.get_json()
-                self.assertEqual(payload["error"]["data"]["code"], expected_code)
+                if name == "update_note_type":
+                    self.assertEqual(response.status_code, 200, payload)
+                    self.assertNotIn("error", payload)
+                    result = payload["result"]
+                    self.assertTrue(result["isError"])
+                    validation = result["structuredContent"]
+                    self.assertEqual(validation["error"]["code"], expected_code)
+                    self.assertEqual(validation["checks"]["input"], "failed")
+                    self.assertEqual(validation["diagnostics"][0]["code"], expected_code)
+                else:
+                    self.assertEqual(response.status_code, 409, payload)
+                    self.assertEqual(payload["error"]["data"]["code"], expected_code)
 
             call_blocked(
                 "delete_note",

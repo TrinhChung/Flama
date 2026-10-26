@@ -93,7 +93,7 @@ const NoteTypeGuidePage = lazy(() =>
   })),
 )
 const NoteTypeTemplatesPage = lazy(() =>
-  import('./features/note-types/pages/NoteTypeTemplatesPage').then((module) => ({ default: module.NoteTypeTemplatesPage })),
+  import('./pages/note-type-templates').then((module) => ({ default: module.NoteTypeTemplatesPage })),
 )
 const NoteTypeTemplateMappingPage = lazy(() =>
   import('./pages/note-type-template-mapping').then((module) => ({ default: module.NoteTypeTemplateMappingPage })),

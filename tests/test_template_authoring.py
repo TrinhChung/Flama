@@ -58,6 +58,14 @@ class TemplateAuthoringTests(unittest.TestCase):
         error = next(d for d in result["diagnostics"] if d["code"] == "JAVASCRIPT_SYNTAX_ERROR")
         self.assertEqual((error["source_part"], error["line"], error["column"]), ("back_html", 3, 16))
 
+    def test_module_syntax_uses_the_renderer_normalized_script_type(self):
+        for script_type in ("module", " module ", " MODULE "):
+            with self.subTest(script_type=script_type):
+                result = self.candidate(front_html=f'<script type="{script_type}">export const answer = await Promise.resolve(42);</script>')
+                self.assertEqual(result["checks"]["javascript_syntax"], "passed", result["diagnostics"])
+                self.assertEqual(result["checks"]["server_render"], "passed")
+                self.assertIn('<script type="module">', result["preview"]["template_artifact"]["front_inline_scripts"][0])
+
     def test_unknown_input_has_original_position_and_declared_suggestions(self):
         result = self.candidate(input_schema=[{"key": "question", "type": "text"}],
             sample_values={"question": "Hello"},

@@ -15,14 +15,16 @@ def javascript_diagnostics(source, part):
                 hint="Reduce the number of inline script blocks.", **source_position(source, match.start())))
             break
         attrs, body = match.group(1), match.group(2)
-        if not _sanitize_inline_script(attrs, body):
+        safe_script = _sanitize_inline_script(attrs, body)
+        if not safe_script:
             result.append(diagnostic("SCRIPT_NOT_EXECUTED", "This script is removed by the Study renderer.",
                 source_part=part, hint="Use inline JavaScript with a supported script type; external script sources are unavailable.",
                 **source_position(source, match.start())))
             continue
         try:
             import esprima
-            parser = esprima.parseModule if re.search(r'\btype\s*=\s*([\"\'])module\1', attrs, re.I) else esprima.parseScript
+            # Validate the same script type Study executes after normalization.
+            parser = esprima.parseModule if safe_script.startswith('<script type="module">') else esprima.parseScript
             # No eval, exec, subprocess, dynamic imports or AST execution.
             parser(body, {"tolerant": False, "jsx": False, "positionEncoding": "scalar"})
         except ImportError:
