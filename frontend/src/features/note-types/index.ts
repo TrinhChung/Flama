@@ -5,3 +5,5 @@ export { getNoteTypeManagerTourSteps } from './components/manager/noteTypeManage
 export type { NoteTypeItem, NoteTypesResponse } from './model/managerTypes'
 export { NoteTypeSetupShell } from './components/NoteTypeSetupShell'
 export { useTemplateMappingWorkspace } from './hooks/useTemplateMappingWorkspace'
+export { TemplateCoherenceBanner } from './components/TemplateCoherenceBanner'
+export type { TemplateCoherenceBannerProps } from './components/TemplateCoherenceBanner'
