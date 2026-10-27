@@ -654,6 +654,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/template_diagnostics.py",
             "scripts/build_template_browser_fixtures.py",
             "scripts/probe_mcp_template_preview_mysql.py",
+            "scripts/probe_mcp_authoring_mysql.py",
+            "app/validators/mcp_authoring.py",
             "scripts/flama_mcp_server.py",
             "scripts/probe_connect_protocol_mysql.py",
             "connect_wsgi.py",
@@ -680,6 +682,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "backend_tests": [
             "tests/test_template_authoring.py",
+            "tests/test_mcp_authoring.py",
             "tests/test_anki_content_normalizer.py",
             "tests/test_anki_connect_origin_adversarial.py",
             "tests/test_flama_connect.py",

@@ -25,10 +25,10 @@ def wrap_authoring_error(exc, *, preview=False):
     if preview:
         from app.services.study_artifact_service import RENDERER_ABI
         from app.services.mcp_resource_registry import template_preview_ui_available
-        result.update(schema_version="template-preview.v1", candidate_hash=None, renderer_abi=RENDERER_ABI,
+        result.update(schema_version="template-preview.v1", valid=False, candidate_hash=None, renderer_abi=RENDERER_ABI,
             preview=None, preview_available=False, sample_source={"kind": "provided"}, media_base_url="",
             ui_available=template_preview_ui_available(), verification_note="Invalid input was not rendered or tested in a browser.")
-    return wrap_tool_result(result, is_error=True)
+    return wrap_tool_result(result, is_error=not preview)
 
 
 def wrap_preview_error(exc):
@@ -49,7 +49,8 @@ def wrap_impact_result(result):
         changes[key] = [{name: value for name, value in template.items()
             if name not in {"front_html", "back_html", "shared_css"}} for template in changes[key]]
     result = dict(result, changes=changes)
-    wrapped = wrap_tool_result(result, is_error=bool(result.get("validation_errors")))
+    result["valid"] = not bool(result.get("validation_errors"))
+    wrapped = wrap_tool_result(result)
     wrapped["content"] = [{"type": "text", "text": (
         f"{result['note_type_name']}: {result['affected_notes']} notes, {result['affected_cards']} cards affected. "
         + ", ".join(f"{key}={value}" for key, value in result["checks"].items()))}]

@@ -8,6 +8,7 @@ from typing import Any
 from models.field_types import FIELD_TYPES, stored_field_value
 
 from .flashcard_input import RequestValidationError
+from .mcp_authoring import FIELD_SCHEMA, TEMPLATE_SCHEMA, validate_note_type_changes, validate_object
 
 
 @dataclass(frozen=True)
@@ -229,6 +230,8 @@ def validate_create_note_type_arguments(arguments: Any) -> dict[str, Any]:
                     code="INVALID_FIELD_TYPE",
                 )
 
+            validate_object({**f, "name": f_name, "field_type": f_type}, FIELD_SCHEMA)
+
             identity_role = f.get("identity_role")
             if identity_role not in (None, "primary"):
                 raise RequestValidationError("identity_role chỉ có thể là null hoặc 'primary'.", field=f"fields[{idx}].identity_role", status=400, code="INVALID_PARAMS")
@@ -261,6 +264,8 @@ def validate_create_note_type_arguments(arguments: Any) -> dict[str, Any]:
             if not isinstance(t, dict):
                 raise RequestValidationError(f"Template ở vị trí {idx} phải là JSON object.", field=f"templates[{idx}]", status=400, code="INVALID_PARAMS")
             t_name = str(t.get("name") or f"Card {idx + 1}").strip()
+            validate_object({**t, "name": t_name}, {**TEMPLATE_SCHEMA,
+                "properties": {key: value for key, value in TEMPLATE_SCHEMA["properties"].items() if key != "is_default"}})
             if t_name.lower() in seen_t_names:
                 raise RequestValidationError(f"Tên template trùng lặp: '{t_name}'.", field=f"templates[{idx}].name", status=400, code="DUPLICATE_TEMPLATE_NAME")
             seen_t_names.add(t_name.lower())
@@ -290,6 +295,8 @@ def validate_preview_note_type_update_arguments(arguments: Any) -> dict[str, Any
     if not isinstance(arguments, dict):
         raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
 
+    validate_note_type_changes(arguments)
+
     note_type_id = arguments.get("note_type_id")
     if not note_type_id or not str(note_type_id).strip():
         raise RequestValidationError("note_type_id là bắt buộc.", field="note_type_id", status=400, code="INVALID_PARAMS")
@@ -309,6 +316,8 @@ def validate_preview_note_type_update_arguments(arguments: Any) -> dict[str, Any
 def validate_update_note_type_arguments(arguments: Any) -> dict[str, Any]:
     if not isinstance(arguments, dict):
         raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+
+    validate_note_type_changes(arguments)
 
     note_type_id = arguments.get("note_type_id")
     if not note_type_id or not str(note_type_id).strip():

@@ -17,6 +17,7 @@ TEMPLATE_PREVIEW_INPUT_SCHEMA = {
         "shared_css": {"type": "string", "maxLength": 100000},
         "input_schema": {"type": "array", "maxItems": 100, "items": {
             "type": "object", "properties": {"key": {"type": "string", "minLength": 1, "maxLength": 255},
+                "label": {"type": "string", "maxLength": 255},
                 "type": {"type": "string", "enum": list(FIELD_TYPES)}, "required": {"type": "boolean"}},
             "required": ["key", "type"], "additionalProperties": False}},
         "sample_values": {"type": "object", "maxProperties": 100,
@@ -35,6 +36,7 @@ TEMPLATE_PREVIEW_OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
         "schema_version": {"const": "template-preview.v1"},
+        "valid": {"type": "boolean", "description": "False means the evaluation found validation errors. Inspect checks and diagnostics; no browser verification is implied."},
         "candidate_hash": {"type": ["string", "null"], "pattern": "^sha256-[a-f0-9]{64}$"},
         "renderer_abi": {"type": "string"},
         "checks": {"type": "object", "properties": {
@@ -58,7 +60,7 @@ TEMPLATE_PREVIEW_OUTPUT_SCHEMA = {
         "media_base_url": {"type": "string"}, "ui_available": {"type": "boolean"},
         "verification_note": {"type": "string"},
     },
-    "required": ["schema_version", "candidate_hash", "renderer_abi", "checks", "diagnostics", "preview",
+    "required": ["schema_version", "valid", "candidate_hash", "renderer_abi", "checks", "diagnostics", "preview",
                  "preview_available", "sample_source", "media_base_url", "ui_available", "verification_note"],
 }
 
@@ -96,8 +98,10 @@ def validate_template_preview_arguments(arguments):
             invalid("input_schema must be a list of at most 100 inputs.", "input_schema")
         seen = set()
         for item in schema:
-            if not isinstance(item, dict) or set(item) - {"key", "type", "required"}:
+            if not isinstance(item, dict) or set(item) - {"key", "label", "type", "required"}:
                 invalid("Each input must contain key, type and optional required.", "input_schema")
+            if "label" in item and (not isinstance(item["label"], str) or len(item["label"]) > 255):
+                invalid("Input label must be text of at most 255 characters.", "input_schema")
             key = item.get("key")
             if (not isinstance(key, str) or not key.strip() or key != key.strip()
                     or len(key) > 255 or "{" in key or "}" in key or key in seen):

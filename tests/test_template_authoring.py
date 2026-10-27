@@ -150,7 +150,8 @@ class McpTemplatePreviewSurfaceTests(unittest.TestCase):
         for arguments in ({"sample_values": {}}, {"sample_values": {}, "template_id": "wrong"},
             {"sample_values": {}, "input_schema": [], "front_html": "", "back_html": "", "include_preview": "false"}):
             result = call_mcp_tool(tool_name="preview_note_type_template", user_id=1, arguments=arguments)
-            self.assertTrue(result["isError"])
+            self.assertFalse(result.get("isError", False))
+            self.assertFalse(result["structuredContent"]["valid"])
             data = result["structuredContent"]
             self.assertTrue(set(TEMPLATE_PREVIEW_OUTPUT_SCHEMA["required"]) <= set(data))
             self.assertEqual(data["checks"]["input"], "failed")
@@ -208,7 +209,7 @@ class McpTemplatePreviewSurfaceTests(unittest.TestCase):
         self.assertEqual(result["structuredContent"]["checks"]["javascript_syntax"], "failed")
         self.assertEqual(result["structuredContent"]["diagnostics"][0]["source_part"], "front_html")
 
-    def test_structured_http_tool_failure_rolls_back_and_auth_failure_stays_protocol_error(self):
+    def test_http_preview_report_is_data_and_auth_failure_stays_protocol_error(self):
         from flask_login import LoginManager
         from app.connect.mcp import mcp_connect_bp
         app = Flask(__name__)
@@ -223,9 +224,10 @@ class McpTemplatePreviewSurfaceTests(unittest.TestCase):
             response = app.test_client().post("/v1/mcp", json={"jsonrpc": "2.0", "id": 1,
                 "method": "tools/call", "params": {"name": "preview_note_type_template", "arguments": {"sample_values": {}}}})
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.get_json()["result"]["isError"])
-        session.rollback.assert_called_once()
-        session.commit.assert_not_called()
+        self.assertFalse(response.get_json()["result"].get("isError", False))
+        self.assertFalse(response.get_json()["result"]["structuredContent"]["valid"])
+        session.rollback.assert_not_called()
+        session.commit.assert_called_once()
         from app.services.mcp.authoring_responses import wrap_preview_error
         with self.assertRaises(RequestValidationError):
             wrap_preview_error(RequestValidationError("Forbidden", status=403, code="FORBIDDEN"))

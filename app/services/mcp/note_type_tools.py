@@ -28,6 +28,7 @@ from app.services.mcp_preview_service import (
 )
 from app.validators.flashcard_input import RequestValidationError
 from app.validators.template_authoring import TemplateAuthoringValidationError
+from app.validators.mcp_authoring import planned_fields, validate_note_type_changes
 from models import db
 from models.card import Card
 from models.deck import Deck
@@ -387,7 +388,8 @@ def _note_type_update_resource_version(nt, *, notes_count, cards_count):
         templates=[{key: getattr(row, key) for key in (
             "id", "name", "front_html", "back_html", "shared_css", "position", "is_default",
         )} | {"application_id": row.application_id, "occurrence_key": row.application.occurrence_key,
-              "input_bindings": row.application.input_bindings}
+              "input_bindings": row.application.input_bindings, "input_schema": row.input_schema,
+              "display_name": row.application.display_name}
          for row in sorted(template_library_repository.attached_templates(db.session, nt.id), key=lambda row: row.application_id)],
         fields=[{key: getattr(row, key) for key in (
             "id", "name", "field_type", "position", "required", "identity_role",
@@ -432,6 +434,9 @@ def preview_note_type_update(
     """Analyze and preview the impact of modifying a note type, fields, or templates."""
     nt = _owned_note_type_for_mutation(user_id=user_id, note_type_id=note_type_id)
 
+    validate_note_type_changes({"fields": fields, "templates": templates, "name": name})
+    candidate_fields = planned_fields(nt.field_defs, fields)
+
     notes_count = Note.query.filter_by(note_type_id=nt.id, user_id=user_id).count()
     cards_count = Card.query.join(Note, Card.note_id == Note.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).count()
     decks_rows = db.session.query(Deck.id, Deck.name).join(Note, Note.deck_id == Deck.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).distinct().all()
@@ -459,7 +464,7 @@ def preview_note_type_update(
     if fields is not None:
         if isinstance(fields, dict):
             for af in fields.get("added", []):
-                added_fields.append({"name": af.get("name"), "field_type": af.get("field_type", "text")})
+                added_fields.append({"field_type": "text", **af})
             for rf in fields.get("renamed", []):
                 renamed_fields.append({"old_name": rf.get("old_name"), "new_name": rf.get("new_name")})
             for rm in fields.get("removed", []):
@@ -485,6 +490,14 @@ def preview_note_type_update(
             for curr_name in current_field_map:
                 if curr_name not in new_names and curr_name not in renamed_old_names:
                     removed_fields.append(curr_name)
+
+            for row in candidate_fields:
+                old = current_field_ids.get(row.get("id"))
+                if old is not None:
+                    modified = {key: row[key] for key in ("field_type", "required", "position", "identity_role")
+                        if row[key] != getattr(old, key)}
+                    if modified:
+                        modified_fields.append({"name": row["name"], **modified})
 
     # Check data loss on removed fields
     for rem_f in removed_fields:
@@ -672,6 +685,9 @@ def update_note_type(
 ) -> dict[str, Any]:
     """Update a note type's schema, metadata, fields, or templates with data migration support."""
     nt = _owned_note_type_for_mutation(user_id=user_id, note_type_id=note_type_id)
+
+    validate_note_type_changes({"fields": fields, "templates": templates, "name": name, "confirm": confirm})
+    planned_fields(nt.field_defs, fields)
 
     diagnostics = _template_change_diagnostics(nt, templates)
     errors = [item for item in diagnostics if item["severity"] == "error"]
@@ -889,11 +905,12 @@ def update_note_type(
                         note_type_id=nt.id,
                         name=add_name,
                         field_type=add_f.get("field_type", "text"),
-                        position=int(add_f.get("position", len(nt.field_defs))),
+                        position=int(add_f.get("position", max((row.position for row in current_fields.values()), default=-1) + 1)),
                         required=bool(add_f.get("required", False)),
                         identity_role=add_f.get("identity_role"),
                     )
                     db.session.add(f_obj)
+                    current_fields[add_name] = f_obj
 
             for mod_f in fields.get("modified", []):
                 mod_name = mod_f.get("name")
@@ -952,7 +969,7 @@ def update_note_type(
                         name=f_name,
                         field_type=f.get("field_type", "text"),
                         position=int(f.get("position", idx)),
-                        required=bool(f.get("required", False)),
+                        required=True if f.get("identity_role") == "primary" else bool(f.get("required", False)),
                         identity_role=f.get("identity_role"),
                     )
                     db.session.add(f_obj)
@@ -963,6 +980,9 @@ def update_note_type(
                 if curr_f not in retained_fields:
                     db.session.delete(curr_f)
 
+        for field_obj in current_fields.values():
+            if field_obj.identity_role == "primary":
+                field_obj.required = True
         db.session.flush()
         if not nt.field_defs:
             db.session.rollback()

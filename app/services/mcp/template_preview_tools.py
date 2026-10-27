@@ -66,7 +66,10 @@ def preview_note_type_template(*, user_id, arguments):
         result["preview"] = None
     if not arguments.get("include_server_render", False):
         result.pop("server_render", None)
-    wrapped = wrap_tool_result(result, is_error=any(d["severity"] == "error" for d in result["diagnostics"]))
+    # A completed read-only evaluation can report invalid source as data.
+    # isError makes some MCP connectors replace structuredContent with an exception.
+    result["valid"] = not any(d["severity"] == "error" for d in result["diagnostics"])
+    wrapped = wrap_tool_result(result)
     if artifacts is not None and result["ui_available"]:
         wrapped["_meta"] = {"flama/template-preview": {"candidate_hash": result["candidate_hash"], "preview": artifacts}}
     wrapped["content"] = [{"type": "text", "text": (
