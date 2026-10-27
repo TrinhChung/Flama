@@ -9,6 +9,7 @@ using Flama.Audio.Api.Middlewares;
 using Flama.Audio.Core.Interfaces;
 using Flama.Audio.Engine.Voicevox;
 using Flama.Audio.Engine.Kokoro;
+using Flama.Audio.Engine.EdgeTts;
 using Flama.Audio.Infrastructure.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -73,6 +74,7 @@ public partial class App : Application
             builder.Services.AddSingleton<IPairingManager, PairingManager>();
             builder.Services.AddSingleton<ITtsEngineAdapter, VoicevoxEngineAdapter>();
             builder.Services.AddSingleton<ITtsEngineAdapter, KokoroEngineAdapter>();
+            builder.Services.AddSingleton<ITtsEngineAdapter, EdgeTtsEngineAdapter>();
             builder.Services.AddSingleton<IEngineRouter, EngineRouter>();
             builder.Services.AddSingleton<VoicevoxEngineInstaller>();
             builder.Services.AddSingleton<KokoroEngineInstaller>();
