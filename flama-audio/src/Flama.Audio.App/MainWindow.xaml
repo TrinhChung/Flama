@@ -252,6 +252,37 @@
                         </Grid>
                     </Border>
 
+                    <!-- Microsoft Edge TTS Engine Card -->
+                    <Border Background="#FFFFFF" CornerRadius="12" Padding="16" Margin="0,0,0,14" BorderBrush="#E9DDD4" BorderThickness="1">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#1F1A17" BlurRadius="8" ShadowDepth="2" Opacity="0.04"/>
+                        </Border.Effect>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🌐 Giọng đọc Đa Ngôn Ngữ Trực Tuyến (Microsoft Edge TTS)" FontWeight="Bold" FontSize="14" Foreground="#1F1A17"/>
+                                    <Border Background="#F3E8FF" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" BorderBrush="#E9D5FF" BorderThickness="1">
+                                        <TextBlock Text="Đa ngôn ngữ (Cloud Native)" FontSize="10" FontWeight="Bold" Foreground="#7E22CE"/>
+                                    </Border>
+                                    <Border x:Name="EdgeTtsStatusBadge" Background="#DCFCE7" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" BorderBrush="#86EFAC" BorderThickness="1">
+                                        <TextBlock x:Name="EdgeTtsStatusText" Text="🟢 Sẵn sàng" FontSize="10" FontWeight="Bold" Foreground="#15803D"/>
+                                    </Border>
+                                </StackPanel>
+
+                                <TextBlock x:Name="EdgeTtsDetailTextBlock" Text="320+ giọng đọc AI đa ngôn ngữ (Nhật, Anh, Việt, Trung, Hàn...) • Trực tuyến không cần tải model" FontSize="11" Foreground="#6B625C" Margin="0,6,0,8"/>
+
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="🔊 Thử giọng &amp; Chi tiết" Tag="edge-tts" Click="OnOpenEngineDetailClicked" Style="{StaticResource FlamaPrimaryButtonStyle}" Padding="12,5"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
                 </StackPanel>
             </ScrollViewer>
 
@@ -284,11 +315,15 @@
 
                             <!-- Language Selector -->
                             <TextBlock Text="Chọn Ngôn ngữ (Language):" FontSize="11" FontWeight="SemiBold" Foreground="#1F1A17" Margin="0,0,0,4"/>
-                            <ComboBox x:Name="TestLanguageComboBox" Height="32" Margin="0,0,0,12" FontSize="12" Padding="6,2" SelectionChanged="OnTestLanguageChanged"/>
+                            <ComboBox x:Name="TestLanguageComboBox" Height="32" Margin="0,0,0,12" FontSize="12" Padding="6,2" SelectionChanged="OnTestLanguageChanged"
+                                      VirtualizingStackPanel.IsVirtualizing="True"
+                                      VirtualizingStackPanel.VirtualizationMode="Recycling"/>
 
                             <!-- Voice Selector -->
                             <TextBlock Text="Chọn Giọng đọc / Nhân vật:" FontSize="11" FontWeight="SemiBold" Foreground="#1F1A17" Margin="0,0,0,4"/>
-                            <ComboBox x:Name="TestVoiceComboBox" Height="32" Margin="0,0,0,12" FontSize="12" Padding="6,2"/>
+                            <ComboBox x:Name="TestVoiceComboBox" Height="32" Margin="0,0,0,12" FontSize="12" Padding="6,2"
+                                      VirtualizingStackPanel.IsVirtualizing="True"
+                                      VirtualizingStackPanel.VirtualizationMode="Recycling"/>
 
                             <!-- Sample Text Input -->
                             <TextBlock Text="Văn bản thử nghiệm (Sample Text):" FontSize="11" FontWeight="SemiBold" Foreground="#1F1A17" Margin="0,0,0,4"/>

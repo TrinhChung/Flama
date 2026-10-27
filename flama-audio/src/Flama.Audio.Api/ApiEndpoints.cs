@@ -190,6 +190,14 @@ public static class ApiEndpoints
                 var result = await adapter.SynthesizeAsync(request, context.RequestAborted);
                 return Results.File(result.AudioData, result.ContentType, fileDownloadName: $"{result.RequestId}.wav");
             }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("rate limit", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status429TooManyRequests,
+                    title: "Rate Limit Exceeded"
+                );
+            }
             catch (Exception ex)
             {
                 return Results.Problem(

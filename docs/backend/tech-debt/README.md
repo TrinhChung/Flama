@@ -9,6 +9,7 @@
 - **Last Audited**: 2026-10-19
 - **Status**: Active Technical Debt Registry (Significant Remediation Completed)
 - **Master Audit Report**: [Comprehensive Documentation Audit Report](../../DOCUMENTATION_AUDIT_REPORT.md)
+- **Companion service review**: [Edge TTS reliability review — 2026-10-27](EDGE_TTS_RELIABILITY_REVIEW_2026-10-27.md), including WebSocket fault injection, live probes and prioritized improvements.
 
 ---
 

@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -20,6 +20,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A2F4749C-BD61-41E1-BECA-F7FD8A0DAEAA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flama.Audio.Tests", "tests\Flama.Audio.Tests\Flama.Audio.Tests.csproj", "{C3C00579-A12E-466E-A17D-850487A5655B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flama.Audio.Engine.EdgeTts", "src\Flama.Audio.Engine.EdgeTts\Flama.Audio.Engine.EdgeTts.csproj", "{50B56C70-00B8-4C97-919A-71422ED56B4D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -58,6 +60,10 @@ Global
 		{C3C00579-A12E-466E-A17D-850487A5655B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C3C00579-A12E-466E-A17D-850487A5655B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C3C00579-A12E-466E-A17D-850487A5655B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{50B56C70-00B8-4C97-919A-71422ED56B4D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{50B56C70-00B8-4C97-919A-71422ED56B4D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{50B56C70-00B8-4C97-919A-71422ED56B4D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{50B56C70-00B8-4C97-919A-71422ED56B4D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F1BAA7FC-43F0-4307-B531-E744680696D9} = {018BD557-017F-4AE6-A13D-18D5E9F4B293}
@@ -67,5 +73,6 @@ Global
 		{21AACC9D-28CB-4E03-B59D-51BB0412F810} = {018BD557-017F-4AE6-A13D-18D5E9F4B293}
 		{6042EC33-7823-46B7-943B-81B1B7163141} = {018BD557-017F-4AE6-A13D-18D5E9F4B293}
 		{C3C00579-A12E-466E-A17D-850487A5655B} = {A2F4749C-BD61-41E1-BECA-F7FD8A0DAEAA}
+		{50B56C70-00B8-4C97-919A-71422ED56B4D} = {018BD557-017F-4AE6-A13D-18D5E9F4B293}
 	EndGlobalSection
 EndGlobal

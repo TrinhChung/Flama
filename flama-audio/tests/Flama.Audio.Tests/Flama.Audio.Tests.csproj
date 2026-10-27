@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\src\Flama.Audio.Api\Flama.Audio.Api.csproj" />
     <ProjectReference Include="..\..\src\Flama.Audio.Engine.Voicevox\Flama.Audio.Engine.Voicevox.csproj" />
     <ProjectReference Include="..\..\src\Flama.Audio.Engine.Kokoro\Flama.Audio.Engine.Kokoro.csproj" />
+    <ProjectReference Include="..\..\src\Flama.Audio.Engine.EdgeTts\Flama.Audio.Engine.EdgeTts.csproj" />
   </ItemGroup>
 
 </Project>

@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Flama.Audio.Infrastructure\Flama.Audio.Infrastructure.csproj" />
     <ProjectReference Include="..\Flama.Audio.Engine.Voicevox\Flama.Audio.Engine.Voicevox.csproj" />
     <ProjectReference Include="..\Flama.Audio.Engine.Kokoro\Flama.Audio.Engine.Kokoro.csproj" />
+    <ProjectReference Include="..\Flama.Audio.Engine.EdgeTts\Flama.Audio.Engine.EdgeTts.csproj" />
     <ProjectReference Include="..\Flama.Audio.Api\Flama.Audio.Api.csproj" />
   </ItemGroup>
 
