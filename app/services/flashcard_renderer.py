@@ -126,6 +126,7 @@ ALLOWED_CSS_PROPERTIES = [
     "border",
     "border-radius",
     "object-fit",
+    "white-space",
 ]
 
 _css_sanitizer = CSSSanitizer(allowed_css_properties=ALLOWED_CSS_PROPERTIES)

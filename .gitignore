@@ -97,12 +97,14 @@ Thumbs.db
 /cleanup_transient_smoke.py
 /docs/audit/snapshots/
 /docs/audit/manifests/
+/docs/audit/diffs/
 /scripts/restore_latest_prod_dump.py
 /scripts/poc_*.py
 /scripts/stress_test_poc_adversarial.py
 /scripts/test_repeatability_benchmark.py
 /scripts/verify_m2_*.py
-/scripts/migrations/
+/scripts/migrations/*
+!/scripts/migrations/wave7_grammar_practice_recovery_migration.py
 /scripts/audit/
 /tests/test_adversarial_*.py
 /tests/test_audit_*.py
