@@ -853,6 +853,37 @@ class FlashcardSecurityTests(unittest.TestCase):
             "https://a.com/1.jpg\nhttps://a.com/2.jpg",
         )
 
+    def test_white_space_css_property_preserved_by_sanitizers(self):
+        from app.services.flashcard_renderer import (
+            ALLOWED_CSS_PROPERTIES,
+            sanitize_template_html_fragment,
+            prepare_client_template_source,
+        )
+        self.assertIn("white-space", ALLOWED_CSS_PROPERTIES)
+        self.assertIn("line-height", ALLOWED_CSS_PROPERTIES)
+        self.assertIn("flex-direction", ALLOWED_CSS_PROPERTIES)
+        self.assertIn("gap", ALLOWED_CSS_PROPERTIES)
+
+        raw_html = (
+            '<div style="font-size: 20px; display: flex; flex-direction: column; gap: 4px; white-space: pre-wrap; line-height: 1.45;">'
+            'usage content'
+            '</div>'
+            '<div style="display: flex; flex-direction: column; gap: 4px; padding-top: 10px; white-space: pre-wrap; line-height: 1.45;">'
+            'note content'
+            '</div>'
+        )
+        clean_html = sanitize_template_html_fragment(raw_html)
+        self.assertIn("white-space: pre-wrap;", clean_html)
+        self.assertIn("line-height: 1.45;", clean_html)
+        self.assertIn("flex-direction: column;", clean_html)
+        self.assertIn("gap: 4px;", clean_html)
+
+        prepared = prepare_client_template_source(raw_html, [])
+        self.assertIn("white-space: pre-wrap;", prepared["source"])
+        self.assertIn("line-height: 1.45;", prepared["source"])
+        self.assertIn("flex-direction: column;", prepared["source"])
+        self.assertIn("gap: 4px;", prepared["source"])
+
 
 if __name__ == "__main__":
     unittest.main()
