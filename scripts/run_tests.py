@@ -1103,6 +1103,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "wsgi.py",
             "gunicorn.conf.py",
             "frontend/src/shared/**",
+            "frontend/src/features/landing-story/**",
         ],
         "backend_tests": [
             "tests/test_app_startup.py",
@@ -1121,6 +1122,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "frontend_tests": [
             "src/shared/api/client.test.ts",
+            "src/features/landing-story/lib/storyTimeline.test.ts",
+            "src/features/landing-story/pages/LandingStoryPreviewPage.test.tsx",
         ],
     },
 }
