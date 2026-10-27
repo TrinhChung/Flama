@@ -278,6 +278,13 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "preview_note_type_template",
             "update_note_type",
             "delete_note_type",
+            # Reusable templates and NoteType applications
+            "list_card_templates",
+            "get_card_template",
+            "create_card_template",
+            "update_card_template",
+            "attach_card_template",
+            "update_template_application",
             # Image Library
             "import_image",
             "search_images",
@@ -298,7 +305,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "list_installed_decks",
         }
         self.assertEqual(tool_names, expected_tools)
-        self.assertEqual(len(tools), 52)
+        self.assertEqual(len(tools), len(expected_tools))
 
 
     # -----------------------------------------------------------------------
