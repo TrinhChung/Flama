@@ -112,12 +112,14 @@ class McpProductionHandshakeTests(unittest.TestCase):
         self.assertEqual(resp2.get_json()["result"], {})
 
     def test_notifications_initialized_and_other_notifications(self):
-        """Notifications should return HTTP 204."""
+        """Accepted notifications return HTTP 202 without a JSON-RPC body."""
         resp = self._post_mcp({"jsonrpc": "2.0", "method": "notifications/initialized"})
-        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(resp.status_code, 202)
+        self.assertEqual(resp.data, b"")
 
         resp2 = self._post_mcp({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 1}})
-        self.assertEqual(resp2.status_code, 204)
+        self.assertEqual(resp2.status_code, 202)
+        self.assertEqual(resp2.data, b"")
 
     def test_unsupported_mcp_method_returns_http_400_not_404(self):
         """Unknown MCP methods must return HTTP 400 with -32601 METHOD_NOT_FOUND (never HTTP 404)."""

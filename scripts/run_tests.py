@@ -688,6 +688,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_connect_wire_adversarial.py",
             "tests/test_flama_connect_mcp.py",
             "tests/test_mcp_access_tokens.py",
+            "tests/test_mcp_http_transport.py",
             "tests/test_mcp_list_my_decks.py",
             "tests/test_mcp_note_concurrency_identity.py",
             "tests/test_mcp_note_type_capabilities.py",

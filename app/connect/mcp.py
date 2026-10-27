@@ -166,7 +166,8 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
 
         # Method: notifications/initialized or any notifications
         if rpc_request.method.startswith("notifications/") or rpc_request.method == "notifications/initialized":
-            response = make_response("", 204)
+            # Streamable HTTP accepts notifications with 202 and no JSON-RPC body.
+            response = make_response("", 202)
             response.headers["MCP-Protocol-Version"] = mcp_tool_service.MCP_PROTOCOL_VERSION
             return response
 

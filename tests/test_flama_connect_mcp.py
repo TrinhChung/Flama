@@ -220,7 +220,8 @@ class FlamaConnectMcpTests(unittest.TestCase):
                 "params": {},
             }
         )
-        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data, b"")
 
     def test_tools_list(self):
         response = self._post_mcp(
