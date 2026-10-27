@@ -362,7 +362,40 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         access_token = token_data["access_token"]
         refresh_token = token_data["refresh_token"]
 
-        # 3. Call Remote MCP endpoint using Bearer Token
+        # 3. Complete the ChatGPT handshake before calling a private tool.
+        mcp_headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2025-11-25",
+        }
+        initialized = self.client.post(
+            "/api/mcp",
+            headers=mcp_headers,
+            json={
+                "jsonrpc": "2.0", "id": "init", "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {"name": "openai-mcp", "version": "1.0.0"},
+                },
+            },
+        )
+        self.assertEqual(initialized.status_code, 200)
+        self.assertIn("tools", initialized.get_json()["result"]["capabilities"])
+        notification = self.client.post(
+            "/api/mcp", headers=mcp_headers,
+            json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+        )
+        self.assertEqual(notification.status_code, 202)
+        self.assertEqual(notification.data, b"")
+        discovery = self.client.post(
+            "/api/mcp", headers=mcp_headers,
+            json={"jsonrpc": "2.0", "id": "list", "method": "tools/list"},
+        )
+        self.assertEqual(discovery.status_code, 200)
+        self.assertIn("list_my_decks", [tool["name"] for tool in discovery.get_json()["result"]["tools"]])
+
+        # Call Remote MCP endpoint using Bearer Token
         mcp_call_resp = self.client.post(
             "/api/mcp",
             headers={"Authorization": f"Bearer {access_token}"},
