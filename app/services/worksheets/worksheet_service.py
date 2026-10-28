@@ -28,6 +28,7 @@ from app.services.worksheets.template_catalog import (
     get_template,
     list_templates,
 )
+from app.services.worksheets.stroke_cache import read_stroke_svg
 from models import db
 from models.card import Card, card_id_clause
 from models.deck import Deck
@@ -303,7 +304,6 @@ def _get_stroke_svg_content(locale: str, hex_code: str, char: str | None = None)
     and if not yet found, automatically generates a new vector SVG so characters are never blank.
     """
     static_root = _get_static_root()
-    upload_root = _get_upload_root()
     folder = normalize_locale(locale)
     raw_folder = folder.replace("-", "_")
 
@@ -320,13 +320,13 @@ def _get_stroke_svg_content(locale: str, hex_code: str, char: str | None = None)
         candidates.append(static_root / "strokes" / "zh-hant" / f"{hex_code.zfill(5)}.svg")
 
     for path in candidates:
-        if path.exists():
-            try:
-                return path.read_text(encoding="utf-8")
-            except Exception:
-                pass
+        try:
+            return read_stroke_svg(path)
+        except (OSError, UnicodeError):
+            pass
 
     # 2. Check media upload library storage
+    upload_root = _get_upload_root()
     search_subs = [raw_folder]
     if "zh" in folder:
         # For Chinese locales, cross-check between zh and zh_hant but never fall back to ja
@@ -336,11 +336,10 @@ def _get_stroke_svg_content(locale: str, hex_code: str, char: str | None = None)
             search_subs.append("zh")
     for search_sub in search_subs:
         lib_path = upload_root / "library" / "strokes" / search_sub / f"{hex_code}.svg"
-        if lib_path.exists():
-            try:
-                return lib_path.read_text(encoding="utf-8")
-            except Exception:
-                pass
+        try:
+            return read_stroke_svg(lib_path)
+        except (OSError, UnicodeError):
+            pass
 
     # 3. If char is provided, fetch authentic stroke SVG or auto-generate a new SVG
     if char:
@@ -350,7 +349,7 @@ def _get_stroke_svg_content(locale: str, hex_code: str, char: str | None = None)
             if asset:
                 full_path = upload_root / asset.storage_path
                 if full_path.exists():
-                    return full_path.read_text(encoding="utf-8")
+                    return read_stroke_svg(full_path)
         except Exception as e:
             logger.debug("Could not ensure stroke asset for %s (%s): %s", char, locale, e)
 

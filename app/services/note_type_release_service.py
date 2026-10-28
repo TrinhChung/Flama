@@ -135,9 +135,14 @@ def stage_receipt(session, *, source_note_type, user_id, installed_at=None, purc
     from app.services.share.constants import MARKET_ACTIVITY_POLICY_VERSION
     if source_note_type.user_id == user_id:
         raise NoteTypeReleaseError("NOTE_TYPE_ACCESS_DENIED", "Owner cannot install their own Note Type.")
-    lock_user(session, user_id)
-    install = repository.install(session, source_note_type.id, user_id)
-    if install and install.installed_note_type_id and session.get(NoteType, install.installed_note_type_id):
+    # Take the parent X lock before a receipt flush acquires its FK S lock.
+    # Keep the same installer -> source -> receipt order as deck installs.
+    with session.no_autoflush:
+        lock_user(session, user_id)
+        repository.lock_source(session, source_note_type.id)
+        install = repository.install(session, source_note_type.id, user_id)
+    if install and install.installed_note_type_id and session.get(
+            NoteType, install.installed_note_type_id, with_for_update=True):
         return install, False
     if install and not install.applied_release_id and release_id is None:
         raise NoteTypeReleaseError("NOTE_TYPE_LEGACY_RELEASE_UNKNOWN",

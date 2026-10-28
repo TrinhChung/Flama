@@ -396,6 +396,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_counter_logic.py",
             "tests/test_api_strokes.py",
             "tests/test_stroke_service.py",
+            "tests/test_worksheet_stroke_cache.py",
             "tests/test_field_array_conversion.py",
             "tests/test_array_cutover.py",
         ],
@@ -466,6 +467,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_template_preview_samples.py",
             "tests/test_template_library_fe_contract.py",
             "tests/test_template_release_service.py",
+            "tests/test_note_type_install_locking_mysql.py",
             "tests/test_legacy_template_provenance.py",
             "tests/test_note_type_bundle_pricing.py",
             "tests/test_note_type_bundle_publication.py",
@@ -604,6 +606,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_deck_publish_index.py",
             "tests/test_batched_deck_clone.py",
             "tests/test_shared_deck_detail_ui.py",
+            "tests/test_note_type_install_locking_mysql.py",
             "tests/test_shared_state_services.py",
             "tests/test_vocab_seed_sharing.py",
         ],
@@ -903,6 +906,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "backend_tests": [
             "tests/test_api_worksheets.py",
             "tests/test_worksheet_service.py",
+            "tests/test_worksheet_stroke_cache.py",
+            "tests/test_worksheet_preview_mysql.py",
         ],
         "frontend_tests": [
             "src/features/worksheets/DeckWorksheetModal.test.tsx",
