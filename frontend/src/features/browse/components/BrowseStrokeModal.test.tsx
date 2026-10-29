@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -87,5 +87,12 @@ describe('BrowseStrokeModal', () => {
     }).not.toThrow()
 
     expect(document.body.textContent).toContain('Tạo sơ đồ thứ tự nét Kanji & Hanzi')
+
+    const footer = document.querySelector('[data-slot="dialog-footer"]')
+    expect(footer).not.toBeNull()
+    expect(footer?.className).toContain('m-0')
+    expect(footer?.className).toContain('rounded-b-2xl')
+    expect(footer?.className).toContain('border-t')
+    expect(footer?.className).toContain('border-border/60')
   })
 })
