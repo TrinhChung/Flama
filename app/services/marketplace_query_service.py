@@ -737,12 +737,17 @@ def build_release_sample_cache_from_release(
     from app.repositories import deck_release_repository
     from app.services import deck_release_service
 
-    sequence_no = int(release.sequence_no or 0)
-    note_ids = deck_release_repository.list_note_ids_at_release(
-        deck_item_id=str(deck_item.id),
-        sequence_no=sequence_no,
-        limit=max(limit * 4, 20),
-    )
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        note_ids = [row[0] for row in db.session.query(Note.id).execution_options(include_deleted_drafts=True).filter(
+            Note.deck_id.in_(collect_subtree_ids(deck_item.source_deck_id)),
+            Note.user_id == deck_item.owner_user_id,
+            Note.published_at.isnot(None), Note.deleted_at.is_(None),
+        ).order_by(Note.id).limit(max(limit * 4, 20)).all()]
+    else:
+        sequence_no = int(release.sequence_no or 0)
+        note_ids = deck_release_repository.list_note_ids_at_release(
+            deck_item_id=str(deck_item.id), sequence_no=sequence_no, limit=max(limit * 4, 20))
     values_by_note = deck_release_service.get_note_values_for_ids_at_release(
         release,
         note_ids,
@@ -785,6 +790,11 @@ def _build_live_deck_test_samples(
     limit: int,
     randomized: bool,
 ) -> list[dict[str, Any]]:
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        if deck_item.current_release is None:
+            return []
+        return build_release_sample_cache_from_release(deck_item, deck_item.current_release, limit=limit)
     if deck_item.source_deck_id is None:
         return []
 

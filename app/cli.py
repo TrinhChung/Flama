@@ -443,6 +443,36 @@ def register_audit_cli_commands(app: Flask) -> None:
 
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
+    @app.cli.command("note-base-publish-note-type")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    @click.option("--note-type-id", required=True)
+    @click.option("--version-label", required=True)
+    @click.option("--batch-key", required=True, help="Stable idempotency key for this publication batch.")
+    @click.option("--changelog", default=None)
+    @click.option("--apply", is_flag=True, help="Publish each owned listing; default only previews.")
+    def note_base_publish_note_type(**options):
+        from app.services.note_base_batch_publish_service import publish_note_type_listings
+        from app.services.deck_release_service import DeckReleaseError
+        try:
+            report = publish_note_type_listings(**options)
+        except DeckReleaseError as exc:
+            raise click.ClickException(f"{exc.error}: {exc.message}") from exc
+        click.echo(json.dumps(report, sort_keys=True))
+        if not report["complete"]:
+            raise click.exceptions.Exit(1)
+
+    @app.cli.command("note-base-retention")
+    @click.option("--apply", is_flag=True, help="Commit eligible 90-day tombstone cleanup; default is dry-run.")
+    @click.option("--limit", type=click.IntRange(1, 1000), default=200, show_default=True)
+    @click.option("--after", default=None, help="Resume from next_cursor returned by the preceding batch.")
+    def note_base_retention(apply: bool, limit: int, after: str | None):
+        from app.services.note_base_retention_service import run_retention
+        try:
+            report = run_retention(apply=apply, limit=limit, after=after)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(json.dumps(report, sort_keys=True))
+
     from app.services.template_sync_cli import register_template_sync_commands
     register_template_sync_commands(app)
     register_phase9_audit_commands(app)

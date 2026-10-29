@@ -65,6 +65,7 @@
     "view_mode_code_tooltip": "Array code view (JSON Array)"
   },
   "card_table": {
+    "base_changed": "Original content has changed",
     "searching": "Finding cards...",
     "no_cards_found": "No cards found",
     "columns": {

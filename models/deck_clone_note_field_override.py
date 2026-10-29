@@ -45,6 +45,8 @@ class DeckCloneNoteFieldOverride(db.Model):
         default="set",
     )
     value = db.Column(db.JSON, nullable=True)
+    # Hash of the Base value when the learner last accepted/edited this field.
+    base_hash = db.Column(db.String(64), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

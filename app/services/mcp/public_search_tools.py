@@ -350,9 +350,10 @@ def _resolve_deck_jlpt_level(deck_item: DeckMarketplaceItem) -> str:
 
 
 def _extract_field_text(field_values: dict[str, Any], keys: list[str]) -> str:
+    from models.field_types import field_value_text
     for key in keys:
         if key in field_values and field_values[key] is not None:
-            text = str(field_values[key]).strip()
+            text = field_value_text(field_values[key]).strip()
             if text:
                 return text
     return ""
@@ -389,6 +390,10 @@ def _extract_preview_samples(
             {key: str(sample.get(key) or "") for key in ("word", "reading", "meaning")}
             for sample in raw_samples[:clamped_limit]
         ]
+
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        return []  # No release means no Published Base, including cached previews.
 
     # 1. Try precomputed sample cache
     if isinstance(deck_item.preview_samples_json, list) and deck_item.preview_samples_json:

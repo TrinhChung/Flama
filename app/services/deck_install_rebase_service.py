@@ -642,6 +642,10 @@ def prepare_update(
     idempotency_key: str | None = None,
     mode: str = "manual",
 ) -> DeckInstallRebase:
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        raise DeckInstallUpdateError("Installed decks already read the current Published Base.",
+            status=410, error="DECK_VERSION_UPDATES_RETIRED")
     install = _require_install(install_id, user_id=user_id, for_update=True)
     target = _require_target_release(install, release_id)
     normalized_overlay_revision = _coerce_optional_revision(
@@ -1014,6 +1018,10 @@ def _set_local_overlay(local: _LocalOverlay, value: Any) -> bool:
 
 
 def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        raise DeckInstallUpdateError("Per-install rebase has been retired.", status=410,
+            error="DECK_VERSION_UPDATES_RETIRED")
     rebase = deck_install_rebase_repository.get_rebase_for_user(
         rebase_id,
         user_id=user_id,
@@ -1150,6 +1158,9 @@ def process_subscriber_auto_updates(
     release_id: str,
 ) -> list[dict[str, Any]]:
     """Process automated updates for all subscribers with auto_update_enabled."""
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        return []
     installs = (
         DeckInstall.query.filter_by(
             deck_item_id=deck_item_id,

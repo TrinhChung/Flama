@@ -21,6 +21,7 @@ from models.flashcard import Card, Note, NoteType
 from models.field_def import FieldDef
 from models.study_application import StudyApplication
 from models.template import Template
+from app.services.note_base_context import published_base_enabled
 
 
 TEXT_FIELD_TYPES = {"text", "richtext", "markdown", "array"}
@@ -141,6 +142,8 @@ def clone_effective_field_text_expression(
     base_text = literal("")
 
     if (
+        not published_base_enabled()
+        and
         deck_item_id
         and target_release_sequence is not None
         and normalized_field_id
@@ -232,7 +235,7 @@ def clone_effective_field_text_expression(
         )
         base_text = func.coalesce(latest_value, checkpoint_value)
     elif normalized_field_id:
-        base_text = note_field_text_expression(normalized_field_id)
+        base_text = note_field_text_expression(normalized_field_id, include_draft=False)
 
     note_override = aliased(DeckCloneNoteFieldOverride)
     override_filters = (

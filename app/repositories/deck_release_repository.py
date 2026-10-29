@@ -34,6 +34,9 @@ def get_deck_item(
     query = DeckMarketplaceItem.query.filter_by(id=deck_item_id)
     if for_update:
         query = query.with_for_update()
+        from app.services.note_base_context import published_base_enabled
+        if published_base_enabled():
+            query = query.populate_existing()
     return query.first()
 
 

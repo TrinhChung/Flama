@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.services.effective_note_reader import install_release_id
+
 import hashlib
 import hmac
 import json
@@ -613,8 +615,8 @@ def open_study_session(
             status=404,
         )
     release_pins = {}
-    if clone_scope is not None and getattr(clone_scope.install, "applied_release_id", None):
-        release_pins = template_release_repository.deck_pins(db.session, clone_scope.install.applied_release_id)
+    if clone_scope is not None and install_release_id(clone_scope.install):
+        release_pins = template_release_repository.deck_pins(db.session, install_release_id(clone_scope.install))
     template_overrides = template_release_repository.load_effective_template_overrides(
         db.session, user_id=int(user.id),
         source_template_ids=[str(card.template_id) for card in cards],

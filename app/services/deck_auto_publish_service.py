@@ -45,6 +45,14 @@ def get_auto_publish_status(
         )
 
     current_release = item.current_release
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        preview = deck_release_service.preview_release(deck_item_id=item.id, user_id=user_id, limit=1)
+        return {"deck_item_id": item.id, "content_model": "published_base",
+            "auto_publish_enabled": False, "last_auto_published_at": None, "last_auto_publish_error": None,
+            "current_release": deck_release_service.serialize_release(current_release),
+            "pending_changes_count": preview["summary"]["change_count"],
+            "working_revision": int(item.working_revision or 0)}
     working_revision = int(item.working_revision or 0)
     current_release_rev = (
         int(current_release.source_working_revision or 0)
@@ -160,6 +168,9 @@ def trigger_auto_publish_for_deck_item(
     subscriber writes cannot escape the caller's transaction. Restore the
     previous scope even on failure; neither session is closed or committed.
     """
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        return None
     if session is not None:
         registry = db.session.registry
         previous = registry() if registry.has() else None

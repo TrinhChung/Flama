@@ -23,6 +23,8 @@ def check_note_write_preconditions(note: Note, payload) -> None:
         expected[key] = value
     if not expected:
         return
+    from app.services.note_draft_service import lock_and_bump_note_listings
+    lock_and_bump_note_listings(db.session, [note], bump=False)
     # The same parent -> Note ordering is used by canonical flush and cutover.
     schema_revision = db.session.execute(select(NoteType.field_schema_revision)
         .where(NoteType.id == note.note_type_id).with_for_update()).scalar_one()

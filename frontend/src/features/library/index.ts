@@ -1,1 +1,2 @@
-export { InstalledDecksPage } from './pages/InstalledDecksPage'
+export { getInstalledDecks } from './api/libraryApi'
+export { InstalledDecksFilterBar } from './components/InstalledDecksFilterBar'

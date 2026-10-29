@@ -29,6 +29,8 @@ export type BrowseCardRow = {
   tags: string[]
   status: string
   due_label: string
+  /** A personal override is still active while its published source changed. */
+  base_changed?: boolean
 }
 
 export type BrowseCardsResponse = {

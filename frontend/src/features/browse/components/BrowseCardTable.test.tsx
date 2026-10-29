@@ -170,4 +170,13 @@ describe('BrowseCardTable', () => {
     expect(onToggleCardSelected).toHaveBeenCalledWith('7', true)
     expect(onActivateCard).toHaveBeenCalledTimes(1)
   })
+
+  it('marks changed published content while retaining the personal display value', async () => {
+    const card = { ...makeCard('7', 'Personal word'), base_changed: true }
+    await render(makeProps({ cards: [card], total: 1 }))
+    expect(container.querySelector('tbody')?.textContent).toContain('Personal word')
+    expect(container.querySelector('tbody [title="Bản gốc đã thay đổi"]')).not.toBeNull()
+    await render(makeProps({ cards: [{ ...card, base_changed: false }], total: 1 }))
+    expect(container.querySelector('tbody [title="Bản gốc đã thay đổi"]')).toBeNull()
+  })
 })

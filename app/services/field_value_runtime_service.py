@@ -128,7 +128,9 @@ def canonical_field_schema_for_note(note, session=None):
                     continue
                 if field.id is None:
                     field.id = uuid_str()
-                if field in session.deleted or field.note_type is None and inspect(field).attrs.note_type.history.has_changes():
+                from app.services.note_base_context import published_base_enabled
+                if (field in session.deleted or field.note_type is None and inspect(field).attrs.note_type.history.has_changes()
+                        or published_base_enabled() and field.deleted_at is not None):
                     records.pop(field.id, None)
                 else:
                     records[field.id] = dict(id=field.id, name=field.name, note_type_id=type_id)
@@ -164,8 +166,14 @@ def read_note_named_values(note):
     if note.field_values_codec != FIELD_VALUE_CODEC:
         raise FieldIdentityError("Note is not in the canonical Field ID codec; run the offline cutover")
     schema = canonical_field_schema_for_note(note)
-    values = _json_object(note.field_values_by_id, "ID values")
-    result = deepcopy(_json_object(note.field_values_extras or {}, "Retained undeclared values"))
+    from app.services.note_draft_service import apply_draft_values
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        values, extras = apply_draft_values(note)
+    else:
+        values, extras = note.field_values_by_id, note.field_values_extras
+    values = _json_object(values, "ID values")
+    result = deepcopy(_json_object(extras or {}, "Retained undeclared values"))
     if result.keys() & schema.names.keys():
         raise FieldIdentityError("Undeclared value collides with a declared label; explicit disposition required")
     for identity, label in schema.fields:
@@ -218,7 +226,10 @@ def encode_pending_note_values(session, note, schema):
         return False
     _reject_stale_labels(session, note, schema, pending)
     encoded = encode_named_values(schema, pending)
-    current = _json_object(note.field_values_by_id or {}, "Existing ID values")
+    from app.services.note_base_context import published_base_enabled
+    from app.services.note_draft_service import apply_draft_values
+    current_values = apply_draft_values(note)[0] if published_base_enabled() else note.field_values_by_id
+    current = _json_object(current_values or {}, "Existing ID values")
     retained = {identity: deepcopy(value) for identity, value in current.items() if identity not in schema.ids}
     note.field_values_by_id = dict(retained, **encoded.by_id)
     note.field_values_extras = encoded.extras

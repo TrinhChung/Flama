@@ -566,6 +566,9 @@ def _validate_request_base_release(
     install: DeckInstall,
 ) -> None:
     """Keep contribution comparison anchored to one immutable applied release."""
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        return  # Contributions compare the current Base; no per-install pin.
 
     request_base_id = str(request_obj.base_release_id or "").strip() or None
     install_base_id = str(install.applied_release_id or "").strip() or None
@@ -594,6 +597,9 @@ def _validate_install_release_for_contribution(
     install: DeckInstall,
     deck_item: DeckMarketplaceItem,
 ) -> None:
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        return
     release_id = str(install.applied_release_id or "").strip() or None
     if str(install.version_mode or "") == "release" and release_id is None:
         raise ChangeRequestError(

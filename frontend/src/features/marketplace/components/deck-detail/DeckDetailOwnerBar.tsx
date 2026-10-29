@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useTranslation } from 'react-i18next'
-import type { AutoPublishStatus } from '@/features/deck-collaboration/types'
+import type { AutoPublishStatus } from '@/entities/deck-publication'
 
 interface DeckDetailOwnerBarProps {
   id: string
@@ -48,7 +48,9 @@ export function DeckDetailOwnerBar({
         >
           <Link to={`/creator/decks/${id}/releases/new`}>
             <GitCompare className="mr-1.5 size-3.5 text-primary" />
-            {t('detail.owner_admin.release_builder', 'Tạo bản phát hành (Release)')}
+            {autoPublishData?.content_model === 'published_base'
+              ? t('detail.owner_admin.publish_drafts', 'Phát hành bản nháp')
+              : t('detail.owner_admin.release_builder', 'Tạo bản phát hành (Release)')}
           </Link>
         </Button>
 
@@ -127,7 +129,7 @@ export function DeckDetailOwnerBar({
       </div>
 
       {/* Creator Auto-Publish Management Panel */}
-      {autoPublishData ? (
+      {autoPublishData && autoPublishData.content_model !== 'published_base' ? (
         <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-4.5 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">

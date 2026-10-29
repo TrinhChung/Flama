@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from app.services.effective_note_reader import install_release_id as _contribution_release_id
 
 from app.repositories import deck_change_request_repository, flashcards_share_repository
 from app.services import flashcards_share
@@ -162,7 +163,7 @@ def build_or_refresh_draft_request(
             requester_user_id=requester_user_id,
             owner_user_id=owner_user_id,
             overlay_fingerprint=fingerprint,
-            base_release_id=install.applied_release_id,
+            base_release_id=_contribution_release_id(install),
         )
         db.session.add(request_obj)
         db.session.flush()
@@ -190,7 +191,7 @@ def build_or_refresh_draft_request(
     request_obj.description = description or None
     request_obj.status = REQUEST_STATUS_NEEDS_SYNC
     request_obj.install_snapshot_at = _install_snapshot_at(install)
-    request_obj.base_release_id = install.applied_release_id
+    request_obj.base_release_id = _contribution_release_id(install)
     request_obj.revision = int(request_obj.revision or 0) + 1
     request_obj.overlay_fingerprint = fingerprint
     request_obj.last_synced_overlay_fingerprint = None

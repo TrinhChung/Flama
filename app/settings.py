@@ -391,6 +391,9 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
 
 
 def _apply_startup_defaults(config: dict[str, Any]) -> None:
+    # One-way deployment cutover after the expansion migration and reviewed
+    # data conversion. Never turn this on merely to repair an old database.
+    config.setdefault("NOTE_PUBLISHED_BASE_ENABLED", coerce_bool_env("NOTE_PUBLISHED_BASE_ENABLED", default=False))
     testing = bool(config.get("TESTING", False))
     default_cutover_fail_on_mismatch = os.getenv("FLASK_ENV", "").strip().lower() not in {
         "development",

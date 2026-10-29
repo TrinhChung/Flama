@@ -77,6 +77,11 @@ from models.taxonomy import (
 )
 from models.template import Template
 from models.user import User
+from app.services.note_base_context import published_base_enabled
+from app.services.effective_note_reader import (
+    current_release_for_install, install_release_id, published_field_defs,
+    published_note_membership, published_note_values_for_ids, expanded_source_deck_mapping,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -307,11 +312,15 @@ def _clone_deck_subtree_batched(
 
 
 def _install_snapshot_at(install: DeckInstall) -> datetime | None:
+    if published_base_enabled():
+        return None
     return install.base_snapshot_at or install.installed_at
 
 
 
 def _install_uses_release(install: DeckInstall) -> bool:
+    if published_base_enabled():
+        return False
     return bool(
         str(getattr(install, "version_mode", "") or "").strip() == "release"
         and getattr(install, "applied_release_id", None)
@@ -323,6 +332,8 @@ def _install_uses_release(install: DeckInstall) -> bool:
 def release_note_membership_filter(install: DeckInstall, note_id_column):
     """Build the note-membership predicate for an install's applied release."""
 
+    if published_base_enabled():
+        return published_note_membership(note_id_column)
     if not _install_uses_release(install):
         return None
     target_sequence = int(install.applied_release.sequence_no or 0)
@@ -370,6 +381,13 @@ def resolve_clone_scope_for_local_deck(
     if not local_scope_ids:
         return None
 
+    if published_base_enabled():
+        mapping = expanded_source_deck_mapping(install, allowed_local_ids=local_scope_ids)
+        return CloneDeckScope(install=install, local_scope_deck_id=local_deck_id,
+            local_deck_ids=local_scope_ids, source_deck_ids=sorted(mapping),
+            source_to_local_deck_id=mapping, source_owner_user_id=install.source_owner_user_id,
+            base_snapshot_at=None)
+
     map_rows = flashcards_share_repository.get_clone_deck_maps(install.id, local_scope_ids)
     if not map_rows:
         if install.local_deck_id != local_deck_id or install.source_deck_id is None:
@@ -410,7 +428,7 @@ def query_clone_scope_cards(scope: CloneDeckScope):
     source_conditions = [Note.deck_id.in_(scope.source_deck_ids)]
     if scope.source_owner_user_id is not None:
         source_conditions.append(Note.user_id == scope.source_owner_user_id)
-    release = getattr(scope.install, "applied_release", None)
+    release = current_release_for_install(scope.install)
     if release is not None and release.template_pins_initialized:
         from app.repositories.template_release_repository import deck_pins
         pins = deck_pins(db.session, release.id)
@@ -466,6 +484,16 @@ def resolve_clone_scope_for_card(
         return None
 
     source_deck_id = int(card_obj.note.deck_id)
+    if published_base_enabled():
+        installs = DeckInstall.query.filter_by(user_id=user_id, clone_mode="logical_overlay").all()
+        for install in installs:
+            if install.local_deck_id is None:
+                continue
+            scope = resolve_clone_scope_for_local_deck(user_id=user_id, local_deck_id=install.local_deck_id)
+            if scope is not None and source_deck_id in scope.source_deck_ids and query_clone_scope_cards(scope).filter(
+                Card.note_id == card_obj.note_id, Card.application_id == card_obj.application_id).first() is not None:
+                return scope
+        return None
     rows = flashcards_share_repository.find_logical_overlay_installs_for_card(user_id, source_deck_id)
     for install, local_deck_id in rows:
         if install.source_owner_user_id is not None and card_obj.note.user_id != install.source_owner_user_id:
@@ -499,6 +527,9 @@ def resolve_local_clone_deck_id_for_source_deck(
 ) -> int | None:
     if source_deck_id is None:
         return None
+    if published_base_enabled():
+        install = db.session.get(DeckInstall, install_id)
+        return expanded_source_deck_mapping(install).get(int(source_deck_id)) if install else None
     row = flashcards_share_repository.get_clone_deck_map(install_id, source_deck_id)
     if not row or row.local_deck_id is None:
         return None
@@ -513,7 +544,7 @@ def build_clone_schema_view(
     cache = None
     cache_key = (
         str(install.id),
-        str(getattr(install, "applied_release_id", None) or "legacy"),
+        str(install_release_id(install) or "legacy"),
         int(getattr(install, "overlay_revision", 0) or 0),
         str(source_note_type_id),
     )
@@ -532,12 +563,11 @@ def build_clone_schema_view(
         cache = None
 
     snapshot_at = _install_snapshot_at(install)
-    if _install_uses_release(install):
+    if published_base_enabled() or _install_uses_release(install):
         from app.services import deck_release_service
 
-        release_field_defs = deck_release_service.get_field_defs_at_release(
-            install.applied_release
-        )
+        release_field_defs = (published_field_defs(install) if published_base_enabled()
+            else deck_release_service.get_field_defs_at_release(install.applied_release))
         source_defs = [
             SimpleNamespace(
                 id=field_id,
@@ -673,8 +703,12 @@ def apply_clone_note_field_overrides(
     base_field_values: dict[str, Any] | None = None,
     note_override_rows: list[DeckCloneNoteFieldOverride] | None = None,
 ) -> dict[str, Any]:
+    if published_base_enabled() and (source_note.published_at is None or source_note.deleted_at is not None):
+        return {}
     if base_field_values is not None:
         values = dict(base_field_values)
+    elif published_base_enabled():
+        values = published_note_values_for_ids(install, [source_note.id]).get(str(source_note.id), {})
     elif _install_uses_release(install):
         from app.services import deck_release_service
 
@@ -780,14 +814,13 @@ def upsert_clone_overlay(
     source_fields_by_id: dict[str, FieldDef] = {}
     source_fields_by_name: dict[str, FieldDef] = {}
     if source_note_type_id:
-        if _install_uses_release(deck_install):
+        if published_base_enabled() or _install_uses_release(deck_install):
             from app.services import deck_release_service
 
             source_fields_by_id = {
                 str(field_id): SimpleNamespace(id=field_id, **dict(properties or {}))
-                for field_id, properties in deck_release_service.get_field_defs_at_release(
-                    deck_install.applied_release
-                ).items()
+                for field_id, properties in (published_field_defs(deck_install) if published_base_enabled()
+                    else deck_release_service.get_field_defs_at_release(deck_install.applied_release)).items()
             }
         else:
             source_field_rows = FieldDef.query.filter(
@@ -986,9 +1019,10 @@ def upsert_clone_overlay(
                 deck_install_id=deck_install.id,
                 source_deck_id=source_note.deck_id,
             ).first()
-            if source_map_exists is None:
+            if source_map_exists is None and not (published_base_enabled() and
+                resolve_local_clone_deck_id_for_source_deck(install_id=deck_install.id, source_deck_id=source_note.deck_id) is not None):
                 return {}, "note_field_overrides source note is outside clone scope."
-            if _install_uses_release(deck_install) and not _note_is_member_of_applied_release(
+            if (published_base_enabled() or _install_uses_release(deck_install)) and not _note_is_member_of_applied_release(
                 install=deck_install,
                 note_id=source_note.id,
             ):

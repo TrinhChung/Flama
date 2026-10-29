@@ -69,6 +69,7 @@ export type ReleaseRef = {
 }
 
 export type ReleasePreviewPage = CursorDiffPage & {
+  content_model?: 'published_base'
   deck_item_id: string
   deck_title?: string | null
   base_release: ReleaseRef | null
@@ -93,15 +94,7 @@ export type DeckRelease = ReleaseRef & {
   summary?: DiffSummary
 }
 
-export type AutoPublishStatus = {
-  deck_item_id: string
-  auto_publish_enabled: boolean
-  last_auto_published_at?: string | null
-  last_auto_publish_error?: string | null
-  current_release?: DeckRelease | null
-  pending_changes_count: number
-  working_revision: number
-}
+export type { AutoPublishStatus } from '@/entities/deck-publication'
 
 export type DeckReleaseList = {
   items: DeckRelease[]
@@ -142,6 +135,7 @@ export type InstalledDeckRef = {
 }
 
 export type InstalledDeckUpdates = {
+  content_model?: 'published_base'
   installation: InstalledDeckRef
   items: ReleaseRef[]
   update_available: boolean

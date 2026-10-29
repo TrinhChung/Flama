@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from sqlalchemy import event, inspect, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, with_loader_criteria
 from sqlalchemy.orm.attributes import set_committed_value
 
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
@@ -24,6 +24,16 @@ from app.services.field_value_runtime_service import (
     added_field_identity_key, canonical_field_schema_for_note, clear_field_runtime_caches,
     clone_install_for_note, encode_pending_note_values, extra_field_identity_key, note_type_scope_id,
 )
+
+
+@event.listens_for(Note.tags, "set")
+@event.listens_for(Note.deck_id, "set")
+def _capture_note_metadata_intent(note, value, old_value, initiator):
+    from app.services.note_base_context import base_write_authority, published_base_enabled
+    if published_base_enabled() and not base_write_authority() and inspect(note).persistent and note.published_at is not None:
+        from sqlalchemy.orm.attributes import flag_dirty
+        note.__dict__.setdefault("_pending_note_metadata", {})[initiator.key] = value
+        flag_dirty(note)
 
 
 def _changed(row, names):
@@ -74,6 +84,29 @@ def _media_note(session, asset):
 
 @event.listens_for(Session, "before_flush")
 def maintain_field_identity(session, _context, _instances):
+    from app.services.note_base_context import base_write_authority, published_base_enabled
+    enabled = published_base_enabled()
+    authority = base_write_authority()
+    if enabled and not authority:
+        from models.note_draft import NoteDraft
+        from app.services.note_draft_service import lock_and_bump_note_listings
+        changed_notes = {row for row in session.new | session.dirty | session.deleted if isinstance(row, Note)}
+        for row in session.new | session.dirty | session.deleted:
+            if isinstance(row, NoteDraft):
+                note = session.get(Note, row.note_id, execution_options={
+                    "include_deleted_notes": True, "include_deleted_drafts": True})
+                if note is not None:
+                    changed_notes.add(note)
+        schema_types = {_field_scope(row) for row in session.new | session.dirty | session.deleted
+            if isinstance(row, FieldDef) and (row in session.new or row in session.deleted
+                or session.is_modified(row, include_collections=False))}
+        lock_and_bump_note_listings(session, changed_notes, schema_type_ids=schema_types)
+    if enabled and not authority:
+        for row in session.new | session.dirty:
+            if isinstance(row, Note) and (
+                    row in session.new and (row.published_at is not None or row.deleted_at is not None)
+                    or row not in session.new and _changed(row, ("published_at", "deleted_at"))):
+                raise FieldIdentityError("Only atomic publish or audited maintenance may change Note publication state")
     for row in session.new:
         if isinstance(row, (NoteType, FieldDef, DeckCloneAddedFieldDef, DeckInstall)) and row.id is None:
             row.id = uuid_str()
@@ -82,6 +115,16 @@ def maintain_field_identity(session, _context, _instances):
         if isinstance(parent, NoteType):
             deleted_fields.update(row for row in inspect(parent).attrs.field_defs.history.deleted
                                   if row.note_type is None)
+    if enabled and not authority:
+        from datetime import datetime
+        # A schema deletion changes one definition, never every Note value.
+        # Reattach delete-orphans to their original parent to retain identity.
+        for field in deleted_fields:
+            scope = _field_scope(field)
+            session.add(field)
+            if field.note_type is None and scope:
+                field.note_type = session.get(NoteType, scope)
+            field.deleted_at = datetime.utcnow()
     fields = {row for row in session.new | session.dirty | session.deleted
               if isinstance(row, FieldDef) and (row in session.new or row in session.deleted
                   or session.is_modified(row, include_collections=False)
@@ -91,9 +134,11 @@ def maintain_field_identity(session, _context, _instances):
                         or session.is_modified(row, include_collections=False))}
     overrides = [row for row in session.new | session.dirty if isinstance(row, DeckCloneNoteFieldOverride)
                  and (row in session.new or _changed(row, ("field_identity_key", "deck_install_id", "source_note_id", "source_field_def_id")))]
-    content_names = ("field_values_by_id", "field_values_extras", "note_type_id", "note_type", "tags", "deck_id", "user_id")
-    notes = [row for row in session.new | session.dirty if isinstance(row, Note)
-             and (row in session.new or "_pending_named_field_values" in row.__dict__ or _changed(row, content_names))]
+    content_names = ("field_values_by_id", "field_values_extras", "note_type_id", "note_type", "tags", "deck_id", "user_id", "published_at", "deleted_at")
+    notes = [row for row in session.new | session.dirty | session.deleted if isinstance(row, Note)
+             and (row in session.new or "_pending_named_field_values" in row.__dict__
+                  or "_pending_note_metadata" in row.__dict__ or _changed(row, content_names))]
+    notes.extend(row for row in session.deleted if isinstance(row, Note) and row not in notes)
     media = [row for row in session.new | session.dirty if isinstance(row, MediaAsset)
              and (row in session.new or _changed(row, ("_field_name", "note_id", "note", "field_def_id", "field_identity_key")))]
     if not fields and not added_fields and not notes and not media and not overrides:
@@ -140,7 +185,7 @@ def maintain_field_identity(session, _context, _instances):
         old_name = inspect(field).attrs.name.history.deleted
         definition = retain_field_definition(session, identity_key=field.id, identity_kind="owned",
             field_id=field.id, note_type_id=scope, name=old_name[0] if old_name else field.name,
-            retired=field in deleted_fields or field in session.deleted)
+            retired=field in deleted_fields or field in session.deleted or enabled and field.deleted_at is not None)
         if field.name not in definition.label_history:
             definition.label_history = [*definition.label_history, field.name]
     for field in added_fields:
@@ -185,7 +230,7 @@ def maintain_field_identity(session, _context, _instances):
         for field in fields:
             if _field_scope(field) != type_id:
                 continue
-            if field in deleted_fields or field in session.deleted:
+            if field in deleted_fields or field in session.deleted or enabled and field.deleted_at is not None:
                 records.pop(field.id, None)
             else:
                 records[field.id] = dict(id=field.id, name=field.name, note_type_id=type_id)
@@ -220,6 +265,8 @@ def maintain_field_identity(session, _context, _instances):
             note.content_revision = int(note.content_revision or 0)
         elif _changed(note, content_names):
             note.content_revision = int(note.content_revision) + 1
+    from app.services.note_draft_service import redirect_published_note_writes
+    redirect_published_note_writes(session, notes)
     for asset in media:
         note = _media_note(session, asset)
         if note is None:
@@ -252,32 +299,62 @@ def maintain_field_identity(session, _context, _instances):
 
 @event.listens_for(Session, "after_flush_postexec")
 def _finish_encoded_notes(session, _context):
+    for row in session.identity_map.values():
+        if isinstance(row, Note):
+            row.__dict__.pop("_pending_note_metadata", None)
     for note in session.info.pop("flama.field_identity.encoded_notes", set()):
         note.__dict__.pop("_pending_named_field_values", None)
         note.__dict__.pop("_pending_field_schema_revision", None)
         note.__dict__.pop("_client_field_schema_revision", None)
     clear_field_runtime_caches(session)
+    from app.services.note_draft_service import clear_note_draft_cache
+    clear_note_draft_cache(session)
 
 
 @event.listens_for(Session, "after_soft_rollback")
 def _discard_pending_names(session, _transaction):
     for note in list(session.identity_map.values()) + list(session.new):
         if isinstance(note, Note):
+            note.__dict__.pop("_pending_note_metadata", None)
             note.__dict__.pop("_pending_named_field_values", None)
             note.__dict__.pop("_pending_field_schema_revision", None)
             note.__dict__.pop("_client_field_schema_revision", None)
     session.info.pop("flama.field_identity.encoded_notes", None)
     clear_field_runtime_caches(session)
+    from app.services.note_draft_service import clear_note_draft_cache
+    clear_note_draft_cache(session)
 
 
 @event.listens_for(Session, "after_transaction_end")
 def _end_field_transaction(session, transaction):
     if transaction.parent is None:
         clear_field_runtime_caches(session)
+        from app.services.note_draft_service import clear_note_draft_cache
+        clear_note_draft_cache(session)
 
 
 @event.listens_for(Session, "do_orm_execute")
 def guard_bulk_identity_writes(state):
+    from app.services.note_base_context import author_view_user_id, base_write_authority, published_base_enabled
+    enabled = published_base_enabled()
+    if enabled and state.is_select:
+        if not state.execution_options.get("include_deleted_notes"):
+            state.statement = state.statement.options(with_loader_criteria(
+                Note, lambda cls: cls.deleted_at.is_(None), include_aliases=True))
+        if not state.execution_options.get("include_deleted_fields"):
+            state.statement = state.statement.options(with_loader_criteria(
+                FieldDef, lambda cls: cls.deleted_at.is_(None), include_aliases=True))
+        actor = author_view_user_id()
+        if actor is not None and not state.execution_options.get("include_deleted_drafts"):
+            from models.note_draft import NoteDraft
+            deleted = select(NoteDraft.note_id).where(NoteDraft.op == "delete")
+            state.statement = state.statement.options(with_loader_criteria(
+                Note, lambda cls: (cls.user_id != actor) | cls.id.not_in(deleted), include_aliases=True))
+    if enabled and state.is_delete and getattr(getattr(state.statement, "table", None), "name", None) == "notes" and not base_write_authority():
+        raise FieldIdentityError("Bulk Note deletion must use the draft/retention repository adapter")
+    table_name = getattr(getattr(state.statement, "table", None), "name", None)
+    if enabled and (state.is_update or state.is_insert) and table_name == "notes" and not base_write_authority():
+        raise FieldIdentityError("Bulk Published Note writes require atomic publish or audited maintenance")
     if state.execution_options.get("field_identity_scoped_schema"):
         return
     text = getattr(state.statement, "text", None)

@@ -470,6 +470,16 @@ def resolve_browse_queue_due(
     return NEW_QUEUE, None
 
 
+def _browse_note_metadata(note, *, author_view):
+    if note is None:
+        return {"deck_id": None, "tags": []}
+    from app.services.note_base_context import published_base_enabled
+    if author_view and published_base_enabled():
+        from app.services.note_draft_service import effective_note_metadata
+        return effective_note_metadata(note)
+    return {"deck_id": note.deck_id, "tags": note.tags or []}
+
+
 def build_browse_row(
     card_obj: Card,
     deck_name_lookup: dict[int, str],
@@ -479,9 +489,11 @@ def build_browse_row(
     *,
     raw_values: Mapping[str, Any] | None = None,
     display_triplet: Mapping[str, str] | None = None,
+    author_view: bool | None = None,
 ) -> dict[str, Any]:
     """``display_triplet`` replaces the Note's own (a clone overlay supplies its values)."""
     note_obj = card_obj.note
+    metadata = _browse_note_metadata(note_obj, author_view=(display_triplet is None if author_view is None else author_view))
     if display_triplet is None:
         display_triplet = note_display_triplet(note_obj, raw_values=raw_values)
     word = display_triplet["word"]
@@ -491,7 +503,7 @@ def build_browse_row(
     note_type_name = note_obj.note_type.name if note_obj and note_obj.note_type else "Unknown"
     template_name = card_obj.template.name if card_obj.template else "Card"
     card_type = f"{note_type_name} / {template_name}" if template_name else note_type_name
-    deck_name = deck_name_lookup.get((note_obj.deck_id or 0) if note_obj else 0, "")
+    deck_name = deck_name_lookup.get(metadata["deck_id"] or 0, "")
     queue_value, due_at_value = resolve_browse_queue_due(
         progress_obj=progress_obj,
         now=now,
@@ -510,12 +522,12 @@ def build_browse_row(
         "status": status_code,
         "due_at": due_at_value.isoformat() if due_at_value else None,
         "due_label": browse_due_label(queue=queue_value, due_at=due_at_value),
-        "deck_id": note_obj.deck_id if note_obj else None,
+        "deck_id": metadata["deck_id"],
         "deck_name": deck_name,
         "word": word,
         "reading": reading,
         "meaning": meaning,
-        "tags": (note_obj.tags or []) if note_obj else [],
+        "tags": metadata["tags"] or [],
         "updated_at": note_obj.updated_at.isoformat() if note_obj and note_obj.updated_at else None,
     }
 
@@ -526,10 +538,13 @@ def build_browse_card_detail(
     now: datetime,
     progress_obj: Any | None = None,
     timezone_name: str = "UTC",
+    *,
+    author_view: bool = True,
 ) -> dict[str, Any]:
     note_obj = card_obj.note
+    metadata = _browse_note_metadata(note_obj, author_view=author_view)
     note_type_obj = note_obj.note_type if note_obj else None
-    raw_values = note_obj.field_values if note_obj else None
+    raw_values = note_obj.field_values if note_obj and author_view else None
     field_values = raw_values if isinstance(raw_values, dict) else {}
     field_defs = (
         sorted(note_type_obj.field_defs, key=lambda fd: int(fd.position or 0))
@@ -584,17 +599,18 @@ def build_browse_card_detail(
             progress_obj=progress_obj,
             timezone_name=timezone_name,
             raw_values=field_values,
+            author_view=author_view,
         ),
         "note": {
             "id": note_obj.id if note_obj else None,
             "note_type_id": note_obj.note_type_id if note_obj else None,
             "note_type_name": note_type_obj.name if note_type_obj and note_type_obj.name else "NoteType",
-            "deck_id": note_obj.deck_id if note_obj else None,
-            "deck_name": deck_name_lookup.get((note_obj.deck_id or 0) if note_obj else 0, ""),
+            "deck_id": metadata["deck_id"],
+            "deck_name": deck_name_lookup.get(metadata["deck_id"] or 0, ""),
             "field_values": field_values,
             "content_revision": int(note_obj.content_revision or 0) if note_obj else 0,
             "field_schema_revision": int(note_type_obj.field_schema_revision or 0) if note_type_obj else 0,
-            "tags": (note_obj.tags or []) if note_obj else [],
+            "tags": metadata["tags"] or [],
             "updated_at": note_obj.updated_at.isoformat() if note_obj and note_obj.updated_at else None,
         },
         "fields": fields,
