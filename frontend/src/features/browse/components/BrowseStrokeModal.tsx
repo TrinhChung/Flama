@@ -84,8 +84,8 @@ export function BrowseStrokeModal(props: BrowseStrokeModalProps) {
           />
         </div>
 
-        <DialogFooter className="px-5 py-3 border-t bg-muted/20 flex flex-row items-center justify-end gap-2 shrink-0">
-          <Button variant="outline" size="sm" onClick={onClose} className="h-9 text-xs rounded-xl">
+        <DialogFooter className="m-0 px-4 sm:px-5 py-3.5 sm:py-4 pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))] sm:pb-4 border-t border-border/60 bg-muted/20 flex flex-row items-center justify-end gap-2.5 sm:gap-3 shrink-0 rounded-b-2xl">
+          <Button variant="outline" size="sm" onClick={onClose} className="h-9 text-xs rounded-xl shrink-0">
             {t('stroke_modal.close')}
           </Button>
 
@@ -94,7 +94,7 @@ export function BrowseStrokeModal(props: BrowseStrokeModalProps) {
               size="sm"
               onClick={handleApplySingle}
               disabled={!targetField || !previewQuery.data?.items?.length}
-              className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs"
+              className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs shrink-0"
             >
               <Check className="size-3.5" />
               <span>{t('stroke_modal.add_to_card')}</span>
@@ -104,12 +104,12 @@ export function BrowseStrokeModal(props: BrowseStrokeModalProps) {
               size="sm"
               onClick={() => batchMutation.mutate()}
               disabled={!targetField || batchMutation.isPending || isMixedNoteTypes || summaryPending}
-              className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs"
+              className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs shrink-0 max-w-[calc(100vw-120px)] sm:max-w-none"
             >
               {batchMutation.isPending ? (
                 <>
                   <LoaderCircle className="size-3.5 animate-spin" />
-                  <span>
+                  <span className="truncate">
                     {t('stroke_modal.generating', {
                       eta: estimateQuery.data?.estimated_human ? `(${estimateQuery.data.estimated_human})` : '',
                     })}
@@ -118,7 +118,7 @@ export function BrowseStrokeModal(props: BrowseStrokeModalProps) {
               ) : (
                 <>
                   <PenTool className="size-3.5" />
-                  <span>
+                  <span className="truncate">
                     {t('stroke_modal.generate_for_cards', {
                       target: typeof targetCount === 'number' ? t('stroke_modal.cards_count', { count: targetCount }) : targetCount,
                     })}

@@ -631,6 +631,21 @@ def ensure_note_type_install_for_user(
         if installed_copy:
             return install_row
 
+    from app.repositories import note_type_release_repository, template_release_repository
+
+    # Match receipt lock order: installer, source, then install. Lock the source
+    # before any child FK flush can take an S lock and require an S-to-X upgrade.
+    with db.session.no_autoflush:
+        template_release_repository.lock_user(db.session, user_id)
+        note_type_release_repository.lock_source(db.session, source_note_type.id)
+        # A concurrent install may have committed after our initial snapshot.
+        install_row = note_type_release_repository.install(db.session, source_note_type.id, user_id)
+    if install_row and (install_row.installed_note_type_id or "").strip():
+        # The receipt's copy can also be newer than this transaction's RR view.
+        installed_copy = db.session.get(NoteType, install_row.installed_note_type_id, with_for_update=True)
+        if installed_copy:
+            return install_row
+
     installed_copy = clone_note_type_for_user(source_note_type, user_id, copy_legacy_templates=copy_legacy_templates)
     now = installed_at or _utcnow()
     purchase_amount_minor = int(source_note_type.price_amount_minor or 0) if source_note_type.pricing_mode == "paid" else 0

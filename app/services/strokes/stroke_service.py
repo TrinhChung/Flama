@@ -138,14 +138,8 @@ def ensure_stroke_shared_asset(image_key: str, upload_root: Path | None = None) 
 
 def check_stroke_svg_exists(locale: str, hex_code: str, static_root: Path | None = None) -> bool:
     """Check if stroke SVG exists on disk (media library or static)."""
-    upload_root = _get_upload_root()
-    folder = normalize_locale(locale).replace("-", "_")
-    
-    # Check media library storage
-    lib_file = upload_root / "library" / "strokes" / folder / f"{hex_code}.svg"
-    if lib_file.exists():
-        return True
-        
+    # The bundled dataset is the common case. Avoid resolving the upload root
+    # once per character when a static SVG already answers this existence check.
     root = static_root or _get_static_root()
     folder_static = normalize_locale(locale)
     svg_file = root / "strokes" / folder_static / f"{hex_code}.svg"
@@ -157,7 +151,9 @@ def check_stroke_svg_exists(locale: str, hex_code: str, static_root: Path | None
         if padded_file.exists():
             return True
 
-    return False
+    upload_root = _get_upload_root()
+    folder = normalize_locale(locale).replace("-", "_")
+    return (upload_root / "library" / "strokes" / folder / f"{hex_code}.svg").exists()
 
 
 def resolve_stroke_items(
