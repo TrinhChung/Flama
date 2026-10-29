@@ -20,6 +20,8 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_draft import NoteDraft
 from models.note_type import NoteType
+from models.deck_install import DeckInstall
+from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
 from scripts.note_base_cutover import (
     _json_default, apply_manifest, build_manifest, checksum, manifest_checksum, rollback_manifest,
     manual_draft_review,
@@ -153,6 +155,64 @@ class NoteBaseCutoverMySQLTests(NoteBaseMySQLTestCase):
             apply_manifest(db.session, manifest, approved_sha256=manifest["sha256"],
                            backup_reference="test", writers_stopped=True)
         db.session.rollback()
+
+    def _personal_override(self, ids):
+        learner = create_note_user(db.session, username="cutover-learner", email="cutover-learner@example.invalid")
+        item = db.session.get(DeckMarketplaceItem, ids["item"])
+        install = DeckInstall(deck_item_id=item.id, user_id=learner.id, clone_mode="logical_overlay",
+            source_deck_id=item.source_deck_id, source_note_type_id=item.source_note_type_id,
+            source_owner_user_id=item.owner_user_id, applied_release_id=ids["release"])
+        db.session.add(install)
+        db.session.flush()
+        row = DeckCloneNoteFieldOverride(deck_install_id=install.id, source_note_id=ids["note"],
+            field_identity_key=ids["word"], field_name="Word", source_field_def_id=ids["word"],
+            operation="set", value="personal", base_release_id=ids["release"])
+        db.session.add(row)
+        db.session.commit()
+        return install, row
+
+    def test_existing_personal_override_hash_backfill_and_rollback_preserve_edits(self):
+        from app.services.note_base_comparison_service import base_value_hash
+        ids = self.seed()
+        install, row = self._personal_override(ids)
+        row_id, original_time = row.id, row.updated_at
+        manifest = build_manifest(db.session)
+        self.assertEqual(manual_draft_review(manifest)["personal_overrides"]["base_hash_backfills"], 1)
+        for edit_during_soak in (False, True):
+            receipt = apply_manifest(db.session, manifest, approved_sha256=manifest["sha256"],
+                backup_reference="disposable-rehearsal", writers_stopped=True)
+            db.session.commit()
+            row = db.session.get(DeckCloneNoteFieldOverride, row_id)
+            self.assertEqual(row.base_hash, base_value_hash("old published", exists=True))
+            self.assertEqual(row.value, "personal")
+            self.assertEqual(row.updated_at, original_time)
+            if edit_during_soak:
+                row.value = "personal after cutover"
+                db.session.commit()
+            rollback_manifest(db.session, manifest, receipt, backup_reference="disposable-rehearsal", writers_stopped=True)
+            db.session.commit()
+            db.session.expire_all()
+            row = db.session.get(DeckCloneNoteFieldOverride, row_id)
+            self.assertEqual(row.value, "personal after cutover" if edit_during_soak else "personal")
+            self.assertEqual(row.base_hash, base_value_hash("old published", exists=True) if edit_during_soak else None)
+
+    def test_cutover_refuses_personal_or_install_changes_since_review(self):
+        ids = self.seed()
+        install, row = self._personal_override(ids)
+        manifest = build_manifest(db.session)
+        row.value = "new personal edit"
+        db.session.commit()
+        with self.assertRaisesRegex(RuntimeError, "Personal override changed"):
+            apply_manifest(db.session, manifest, approved_sha256=manifest["sha256"],
+                backup_reference="test", writers_stopped=True)
+        db.session.rollback()
+        manifest = build_manifest(db.session)
+        install.auto_update_enabled = not bool(install.auto_update_enabled)
+        db.session.commit()
+        with self.assertRaisesRegex(RuntimeError, "Install changed"):
+            apply_manifest(db.session, manifest, approved_sha256=manifest["sha256"],
+                backup_reference="test", writers_stopped=True)
+        db.session.rollback()
         self.assertEqual(NoteDraft.query.count(), 0)
 
     def test_exact_script_receipt_wins_over_unknown_timestamp(self):
@@ -192,6 +252,45 @@ class NoteBaseCutoverMySQLTests(NoteBaseMySQLTestCase):
         with self.assertRaisesRegex(RuntimeError, "publish occurred"):
             rollback_manifest(db.session, manifest, receipt, backup_reference="test", writers_stopped=True)
         db.session.rollback()
+
+    def test_rollback_preserves_new_install_using_the_runtime_release_default(self):
+        from models.deck_clone_deck_map import DeckCloneDeckMap
+        from models.deck_clone_added_note import DeckCloneAddedNote
+        ids = self.seed()
+        manifest = build_manifest(db.session)
+        receipt = apply_manifest(db.session, manifest, approved_sha256=manifest["sha256"],
+            backup_reference="disposable", writers_stopped=True)
+        db.session.commit()
+        learner = create_note_user(db.session, username="new-soak-learner", email="new-soak@example.invalid")
+        item = db.session.get(DeckMarketplaceItem, ids["item"])
+        local = Deck(name="Private folder", owner_user_id=learner.id, note_type_id=item.source_note_type_id)
+        db.session.add(local)
+        db.session.flush()
+        install = DeckInstall(deck_item_id=item.id, user_id=learner.id, local_deck_id=local.id,
+            clone_mode="logical_overlay", source_deck_id=item.source_deck_id,
+            source_note_type_id=item.source_note_type_id, source_owner_user_id=item.owner_user_id,
+            applied_release_id=item.current_release_id, seen_release_id=item.current_release_id,
+            version_mode="release")  # share/install.py's actual current constructor
+        db.session.add(install)
+        db.session.flush()
+        mapping = DeckCloneDeckMap(deck_install_id=install.id, source_deck_id=item.source_deck_id, local_deck_id=local.id)
+        note = Note(user_id=learner.id, note_type_id=item.source_note_type_id, deck_id=local.id,
+            field_values={"Word": "personal local note"})
+        db.session.add_all([mapping, note])
+        db.session.flush()
+        db.session.add(DeckCloneAddedNote(deck_install_id=install.id, note_id=note.id))
+        db.session.commit()
+        install_id, local_id, note_id = install.id, local.id, note.id
+        rollback_manifest(db.session, manifest, receipt, backup_reference="disposable", writers_stopped=True)
+        db.session.commit()
+        db.session.expire_all()
+        install = db.session.get(DeckInstall, install_id)
+        self.assertEqual(install.applied_release_id, ids["release"])
+        self.assertEqual(install.seen_release_id, ids["release"])
+        self.assertEqual(install.local_deck_id, local_id)
+        self.assertEqual(db.session.get(Note, note_id).field_values["Word"], "personal local note")
+        self.assertEqual(DeckCloneDeckMap.query.filter_by(deck_install_id=install_id).count(), 1)
+        self.assertEqual(DeckCloneAddedNote.query.filter_by(deck_install_id=install_id).count(), 1)
 
     def test_rollback_preserves_latest_soak_draft_and_rebuilds_dirty_evidence(self):
         ids = self.seed()

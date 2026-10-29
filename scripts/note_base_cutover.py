@@ -30,6 +30,7 @@ from models.deck_release import DeckRelease
 from models.deck_release_entity_membership import DeckReleaseEntityMembership
 from models.deck_working_dirty_entity import DeckWorkingDirtyEntity
 from models.deck_install import DeckInstall
+from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
 from models.model_uuid import uuid_str
 
 FORMAT = "flama.note-base-cutover.v1"
@@ -71,8 +72,13 @@ def manual_draft_review(manifest):
             fields.append({**field, "base_exists": identity in base, "published_base": base.get(identity),
                 "author_exists": identity in author, "author_draft": author.get(identity)})
         notes.append({"note_id": plan["id"], "deck_item_id": plan["item_id"], "fields": fields})
+    overrides = manifest.get("overrides", [])
     return {"database": manifest["database"], "manifest_sha256": manifest["sha256"],
-        "manual_notes": len(notes), "notes": notes}
+        "manual_notes": len(notes), "notes": notes, "personal_overrides": {
+            "total": len(overrides),
+            "base_hash_backfills": sum(row["base_hash_before"] != row["base_hash_after"] for row in overrides),
+            "unobserved_legacy_base": sum(row["evidence"] == "unobserved_legacy_base" for row in overrides),
+            "personal_values_modified": False}}
 
 
 def _note_image(row):
@@ -119,6 +125,34 @@ def _select_rows(session, model, *where):
     return session.connection().execute(sa.select(model.__table__).where(*where)).mappings().all()
 
 
+def _override_plans(session):
+    from app.services.deck_release_service import _get_note_field_values_by_id_for_ids_at_release
+    from app.services.note_base_comparison_service import base_value_hash
+    rows = _select_rows(session, DeckCloneNoteFieldOverride)
+    releases = {}
+    for row in rows:
+        if row["base_hash"] is None and row["base_release_id"] and not row["field_identity_key"].startswith(("extra:", "added:")):
+            releases.setdefault(row["base_release_id"], set()).add(row["source_note_id"])
+    values = {release: _get_note_field_values_by_id_for_ids_at_release(release, ids)[0]
+        for release, ids in releases.items()}
+    plans = []
+    for row in sorted(rows, key=lambda value: value["id"]):
+        after, evidence = row["base_hash"], "already_recorded"
+        if after is None:
+            if row["base_release_id"] in values and not row["field_identity_key"].startswith(("extra:", "added:")):
+                fields = values[row["base_release_id"]].get(row["source_note_id"], {})
+                identity = row["field_identity_key"]
+                after = base_value_hash(fields.get(identity), exists=identity in fields)
+                evidence = "recorded_release"
+            else:
+                evidence = "unobserved_legacy_base"
+        image = dict(row)
+        plans.append({"id": row["id"], "before_hash": checksum(image),
+            "base_hash_before": row["base_hash"], "base_hash_after": after,
+            "after_hash": checksum({**image, "base_hash": after}), "evidence": evidence})
+    return plans
+
+
 def build_manifest(session, *, script_receipts=()):
     """Build a private review artifact without changing any database row.
 
@@ -162,6 +196,7 @@ def build_manifest(session, *, script_receipts=()):
                              "deleted_at": _json_default(field["deleted_at"]) if field["deleted_at"] else None}
                   for identity, field in fields.items() if field["note_type_id"] == item["source_note_type_id"]}
         item_plan = {"id": item["id"], "owner_user_id": item["owner_user_id"],
+                     "source_note_type_id": item["source_note_type_id"], "source_deck_id": item["source_deck_id"],
                      "current_release_id": item["current_release_id"],
                      "working_revision": item["working_revision"],
                      "published_schema_json": item["published_schema_json"],
@@ -220,6 +255,7 @@ def build_manifest(session, *, script_receipts=()):
                         manual_fields.append({"field_id": identity, "field_name": (change["metadata_json"] or {}).get("field_name"),
                                               "last_written_at": change["updated_at"]})
                 plan = {"id": row["id"], "item_id": item["id"], "before_hash": checksum(before),
+                        "user_id": row["user_id"], "note_type_id": row["note_type_id"],
                         "published_at_before": row["published_at"],
                         "published_at_after": row["published_at"] or release["published_at"],
                         "content_revision": row["content_revision"], "delta": delta,
@@ -235,6 +271,7 @@ def build_manifest(session, *, script_receipts=()):
     manifest["installs"] = [{key: deepcopy(row[key]) for key in (
         "id", "deck_item_id", "applied_release_id", "seen_release_id", "version_mode", "auto_update_enabled",
     )} for row in _select_rows(session, DeckInstall)]
+    manifest["overrides"] = _override_plans(session)
     manifest["sha256"] = manifest_checksum(manifest)
     return manifest
 
@@ -260,11 +297,29 @@ def apply_manifest(session, manifest, *, approved_sha256, backup_reference, writ
     receipt = {"format": FORMAT, "manifest_sha256": approved_sha256,
                "database": manifest["database"], "backup_reference": backup_reference,
                "created_at": now.isoformat(timespec="microseconds"), "cutover_releases": {}, "base_note_updates": 0}
+    current_items = list(connection.execute(sa.select(DeckMarketplaceItem.id).order_by(
+        DeckMarketplaceItem.id).with_for_update()).scalars())
+    if current_items != sorted(item["id"] for item in manifest["items"]):
+        raise RuntimeError("Listing scope changed since review; regenerate the cutover manifest.")
+    installs = connection.execute(sa.select(DeckInstall.__table__).order_by(DeckInstall.id).with_for_update()).mappings().all()
+    install_keys = ("id", "deck_item_id", "applied_release_id", "seen_release_id", "version_mode", "auto_update_enabled")
+    current_installs = [{key: row[key] for key in install_keys} for row in installs]
+    if checksum(current_installs) != checksum(sorted(manifest["installs"], key=lambda row: row["id"])):
+        raise RuntimeError("Install changed since review; regenerate the cutover manifest.")
+    overrides = connection.execute(sa.select(DeckCloneNoteFieldOverride.__table__).order_by(
+        DeckCloneNoteFieldOverride.id).with_for_update()).mappings().all()
+    planned_overrides = manifest.get("overrides", [])
+    if [(row["id"], checksum(dict(row))) for row in overrides] != [
+            (row["id"], row["before_hash"]) for row in planned_overrides]:
+        raise RuntimeError("Personal override changed since review; regenerate the cutover manifest.")
     for item in manifest["items"]:
         current = connection.execute(sa.select(DeckMarketplaceItem.__table__).where(
             DeckMarketplaceItem.id == item["id"]).with_for_update()).mappings().one()
         if current["current_release_id"] != item["current_release_id"] or current["working_revision"] != item["working_revision"]:
             raise RuntimeError("Listing changed since review; regenerate the cutover manifest.")
+        if current["owner_user_id"] != item["owner_user_id"] or any(
+                key in item and current[key] != item[key] for key in ("source_note_type_id", "source_deck_id")):
+            raise RuntimeError("Listing source changed since review; regenerate the cutover manifest.")
         from models.note_type import NoteType
         if current["source_note_type_id"]:
             connection.execute(sa.select(NoteType.id).where(NoteType.id == current["source_note_type_id"])
@@ -285,6 +340,8 @@ def apply_manifest(session, manifest, *, approved_sha256, backup_reference, writ
             current = current_rows.get(plan["id"])
             if current is None or checksum(_note_image(current)) != plan["before_hash"] or current["published_at"] != _date(plan["published_at_before"]):
                 raise RuntimeError("Note changed since review; regenerate the cutover manifest.")
+            if any(key in plan and current[key] != plan[key] for key in ("user_id", "note_type_id")):
+                raise RuntimeError("Note owner/type changed since review; regenerate the cutover manifest.")
             values = {}
             if current["published_at"] != _date(plan["published_at_after"]):
                 values["published_at"] = _date(plan["published_at_after"])
@@ -320,6 +377,12 @@ def apply_manifest(session, manifest, *, approved_sha256, backup_reference, writ
     for item_id, release_id in receipt["cutover_releases"].items():
         connection.execute(sa.update(DeckInstall.__table__).where(DeckInstall.deck_item_id == item_id).values(
             applied_release_id=release_id, seen_release_id=release_id, version_mode="published_base", auto_update_enabled=False))
+    by_id = {row["id"]: row for row in overrides}
+    for plan in planned_overrides:
+        if plan["base_hash_before"] != plan["base_hash_after"]:
+            connection.execute(sa.update(DeckCloneNoteFieldOverride.__table__).where(
+                DeckCloneNoteFieldOverride.id == plan["id"]).values(
+                base_hash=plan["base_hash_after"], updated_at=by_id[plan["id"]]["updated_at"]))
     session.add(AuditLog(action="note_base_cutover", payload={"manifest_sha256": approved_sha256,
                     "backup_reference": backup_reference, "notes": len(manifest["notes"]),
                     "drafts": sum(bool(row["delta"]) for row in manifest["notes"])}))
@@ -398,13 +461,24 @@ def rollback_manifest(session, manifest, receipt, *, backup_reference, writers_s
             dirty_tracking_revision=-1))  # Legacy publish must use its full-diff fallback.
         # Installs created during the no-publish soak retain their local content
         # and mapping, but need a valid legacy head before the cutover head is removed.
+        cutover_id = receipt["cutover_releases"].get(item["id"])
         connection.execute(sa.update(DeckInstall.__table__).where(
-            DeckInstall.deck_item_id == item["id"], DeckInstall.version_mode == "published_base").values(
+            DeckInstall.deck_item_id == item["id"], sa.or_(DeckInstall.version_mode == "published_base",
+                DeckInstall.applied_release_id == cutover_id if cutover_id else False)).values(
                 applied_release_id=item["current_release_id"], seen_release_id=item["current_release_id"],
                 version_mode="release" if item["current_release_id"] else "legacy_snapshot", auto_update_enabled=False))
     for install in manifest["installs"]:
         connection.execute(sa.update(DeckInstall.__table__).where(DeckInstall.id == install["id"]).values(
             **{key: value for key, value in install.items() if key not in {"id", "deck_item_id"}}))
+    # Restore only the migration's untouched hash backfill. Learner edits or
+    # deletions during the soak remain authoritative and are never recreated.
+    for plan in manifest.get("overrides", []):
+        row = connection.execute(sa.select(DeckCloneNoteFieldOverride.__table__).where(
+            DeckCloneNoteFieldOverride.id == plan["id"]).with_for_update()).mappings().first()
+        if row and checksum(dict(row)) == plan["after_hash"] and plan["base_hash_before"] != plan["base_hash_after"]:
+            connection.execute(sa.update(DeckCloneNoteFieldOverride.__table__).where(
+                DeckCloneNoteFieldOverride.id == plan["id"]).values(
+                base_hash=plan["base_hash_before"], updated_at=row["updated_at"]))
     for release_id in receipt["cutover_releases"].values():
         connection.execute(sa.delete(DeckRelease.__table__).where(DeckRelease.id == release_id))
     session.add(AuditLog(action="note_base_cutover_rollback", payload={"manifest_sha256": receipt["manifest_sha256"],

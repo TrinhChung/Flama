@@ -5,6 +5,46 @@ Operations: [cutover runbook](../runbooks/NOTE_PUBLISHED_BASE_CUTOVER_20261029.m
 Production has not been changed. This report establishes local readiness and
 records the remaining P4/P6 gates; it does not approve a production manifest.
 
+## Fresh production-copy rehearsal, 29 October
+
+After the initial local qualification, a read-only SSH check found production at
+release `c627ec49`, Alembic 75, MySQL 8.0.46, with 41,874 Notes, 32 installs and
+four personal overrides. A new consistent dump (236,718,401 compressed bytes;
+1,466,418,326 SQL bytes) was restored into generated local schema
+`flama_note_base_fresh_20261029_fe2cefe0` in 145.279 s. No production migration,
+runtime flag change or application data write was performed.
+
+The fresh data supersedes the earlier seven-Note review below: **six Notes** now
+need author drafts, containing 31 effective Field differences. All four personal
+overrides have a recorded original release. Cutover backfills only their Base
+observation hashes from that release and keeps their values, operations, identities
+and last-edit times unchanged.
+
+| Operation | Seconds | Δ logical page requests | Δ disk page reads |
+|---|---:|---:|---:|
+| Expansion 75 → 76 | 3.338 | 296,541 | 1,010 |
+| Read-only manifest | 7.801 | 287,157 | 126 |
+| Apply | 4.723 | 72,275 | 28 |
+| Author parity | 3.635 | 48,731 | 0 |
+| Rollback | 2.772 | 66,531 | 56 |
+| Reapply | 4.628 | 69,833 | 2 |
+
+31,080 Notes became Published Base; all 41,874 author Notes had zero parity
+mismatches. All four override rows matched their exact expected post-backfill
+images. Rollback restored Note hashes and protected-table checksums, including
+the nonempty override table. Three additional MySQL cases verify preserving learner edits and new installs
+during the soak, and rejecting personal/install changes since review; the distinct
+new integration test count is now 56.
+
+Fresh rehearsal manifest SHA-256:
+`6caa20555b3c7adad2667af74edc65f8d785f9032bbe94df4b091e84cbb9b381`.
+The private six-Note review and receipt are under ignored
+`output/note-base-rehearsal/fresh/`. This manifest names the generated local schema;
+it cannot be applied directly to production. Production target/state and the
+reviewed contents must be validated before executing the P4 runbook.
+
+The following sections retain the first qualification as historical evidence.
+
 ## Environment and isolation
 
 - Branch `feat/note-published-base-20261029`, isolated worktree

@@ -28,6 +28,10 @@ must stay outside Git and public reports. The tool refuses to overwrite an artif
 The approved plan §7.1 explicitly requires: “Xuất danh sách note sẽ thành nháp để
 chủ dự án duyệt.” Approval is for the exact manifest checksum on the fresh target,
 not the old rehearsal manifest. Resolve any unexpected classification before apply.
+Review the override census as well. A legacy override with a recorded original
+release receives a hash of that release's value/presence; its personal value,
+operation, identity and last-edit time are preserved. Unobserved legacy bases are
+explicitly reported, never guessed from the author's current content.
 
 ## Apply
 
@@ -41,7 +45,9 @@ not the old rehearsal manifest. Resolve any unexpected classification before app
 
 The command validates target, checksum, listing heads/revisions, Note hashes,
 schema and template state. It preserves manual edits in one sparse draft per Note,
-uses current script-normalized data as Base, captures current template pins, and
+and rejects a changed listing scope, install census or personal override since
+review. Hash backfills are part of the same transaction; no learner value is
+rewritten. It uses current script-normalized data as Base, captures current template pins, and
 moves install metadata to the new Base once. It writes intent before COMMIT and
 a receipt after COMMIT. If acknowledgment is lost, inspect intent and actual DB
 state; never assume rollback or rerun blindly.
