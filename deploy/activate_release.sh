@@ -195,6 +195,22 @@ switch_runtime_venv() {
   fi
 }
 
+# Every second the review timer starts its ExecCondition, about 80k Python
+# processes a day while the writer is off. Disable it only when the active
+# environment says off; a failed check keeps it enabled behind ExecCondition.
+sync_review_analytics_timer() {
+  if systemd-run --quiet --wait --collect \
+    --unit="flama-review-analytics-gate-$RELEASE_ID" \
+    --property=User=flama \
+    --property=Group=flama \
+    --property="EnvironmentFile=$environment_file" \
+    "$PROJECT_DIR/venv/bin/python" -c "import os; raise SystemExit(1 if os.getenv('REVIEW_ANALYTICS_WRITE_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'} else 0)"; then
+    systemctl disable flama-review-analytics-worker.timer
+  else
+    systemctl enable --now flama-review-analytics-worker.timer
+  fi
+}
+
 cleanup() {
   status=$?
   trap - EXIT
@@ -329,7 +345,7 @@ systemctl restart flama-connect.service
 # The oneshot ExecCondition skips disabled/unconfigured writers;
 # readers stay independently gated until parity/latency qualification.
 systemctl enable --now flama-analytics-counts.timer
-systemctl enable --now flama-review-analytics-worker.timer
+sync_review_analytics_timer
 
 phase=health
 record_state running
