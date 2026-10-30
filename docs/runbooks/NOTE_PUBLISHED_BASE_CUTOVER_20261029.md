@@ -1,6 +1,8 @@
 # Published Base cutover and rollback
 
-Status: local rehearsal verified; production not executed.
+Status: production cutover completed on 2026-10-30; Published Base is enabled and
+the no-publish soak is in progress. The approved conversion retained six Notes /
+23 draft Fields. See the [production result](../architecture/NOTE_PUBLISHED_BASE_PRODUCTION_CUTOVER_2026-10-30.md).
 Contract and limits: [implementation ADR](../architecture/NOTE_PUBLISHED_BASE_IMPLEMENTATION_2026-10-29.md).
 
 ## Prepare and review
@@ -119,8 +121,9 @@ its cursor, and a completed sweep resets to the beginning for newly eligible
 tombstones. Per-batch and total counts are JSON lines in
 `journalctl -u flama-note-base-retention.service`. Activation installs the units,
 stops the timer/oneshot with other writers before migration, and restores the
-previous timer's enablement on safe code rollback. No unit has been installed
-or activated on production as part of the local rehearsal.
+previous timer's enablement on safe code rollback. The Note retention units were
+installed by the 30 October production deployment and the timer is active.
+The existing Study retention timer was quiesced and resumed with its prior state.
 
 The manual CLI defaults to dry run. Media asset/file GC is a separate future batch and
 must account for Base, author drafts and learner overrides.

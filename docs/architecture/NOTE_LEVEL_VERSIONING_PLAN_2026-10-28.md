@@ -1,10 +1,12 @@
 # Kế hoạch: `notes` là Published Base, tác giả và learner cùng "Base + phần mình sửa"
 
-Ngày: 2026-10-28. Cập nhật 2026-10-29: **đã có implementation sau cờ và diễn tập
-MySQL local; chưa cutover production**. Xem [ADR triển khai](NOTE_PUBLISHED_BASE_IMPLEMENTATION_2026-10-29.md)
-và [bằng chứng diễn tập](NOTE_PUBLISHED_BASE_REHEARSAL_2026-10-29.md).
-P4 production và P6 thu gọn lịch sử còn chờ gate vận hành; các quyết định bên dưới
-giữ nguyên. Không thêm index phụ.
+Ngày: 2026-10-28. Cập nhật 2026-10-30: **đã cutover production và bật Published Base**
+với 6 note / 23 field nháp đã được chủ dự án duyệt. Đang soak không publish; P6
+thu gọn lịch sử còn chờ gate. Xem [biên bản production](NOTE_PUBLISHED_BASE_PRODUCTION_CUTOVER_2026-10-30.md),
+[ADR triển khai](NOTE_PUBLISHED_BASE_IMPLEMENTATION_2026-10-29.md) và
+[bằng chứng diễn tập](NOTE_PUBLISHED_BASE_REHEARSAL_2026-10-29.md).
+Các số liệu gốc bên dưới là snapshot lúc lập kế hoạch; số liệu cutover thực tế nằm
+trong biên bản. Các quyết định sản phẩm giữ nguyên. Không thêm index phụ.
 
 Hợp đồng sản phẩm nằm ở [TrinhChung/Flama#263](https://github.com/TrinhChung/Flama/issues/263),
 bản viết lại ngày 2026-10-28 với tiêu đề "single published base + persistent user

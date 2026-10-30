@@ -1,5 +1,10 @@
 # Published Base: review corrections and evidence
 
+Subsequent execution: exact script receipts reduced the draft proposal to six
+Notes / 23 Fields, the owner approved it, and production cutover completed.
+See the [production result](NOTE_PUBLISHED_BASE_PRODUCTION_CUTOVER_2026-10-30.md).
+This document retains the earlier review/rehearsal record below.
+
 The pre-cutover review corrections are verified locally. The owner requested
 continued deployment and explicitly approved all six manual Notes / 31 Fields.
 Production data conversion is not yet executed in this record; P6 follows
