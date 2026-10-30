@@ -77,16 +77,16 @@ def _build_local_change_payloads(
         source_note_type_id=source_note_type_id,
     )
     base_field_defs: dict[str, dict[str, Any]] = {}
+    from app.services.effective_note_reader import current_release_for_install, install_release_id
+    base_release = current_release_for_install(install)
     uses_release_base = bool(
-        install.version_mode == "release"
-        and install.applied_release_id
-        and install.applied_release is not None
+        install_release_id(install) and base_release is not None
     )
     if uses_release_base:
         from app.services import deck_release_service
 
         base_field_defs = deck_release_service.get_field_defs_at_release(
-            install.applied_release
+            base_release
         )
     base_field_ids_by_name = {
         str(payload.get("name") or ""): str(field_id)
@@ -286,7 +286,7 @@ def _build_local_change_payloads(
         from app.services import deck_release_service
 
         base_note_values = deck_release_service.get_note_values_for_ids_at_release(
-            install.applied_release,
+            base_release,
             {str(row.source_note_id) for row in note_override_rows},
         )
     source_notes_by_id = _load_notes_by_ids(

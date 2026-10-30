@@ -692,7 +692,8 @@ def delete_field(
             "Clear or reassign the primary identity field before deleting it.",
             status=409,
         )
-    if deck_working_tree_service.note_type_has_shared_release_dependents(
+    from app.services.note_base_context import published_base_enabled
+    if not published_base_enabled() and deck_working_tree_service.note_type_has_shared_release_dependents(
         note_type_id=note_type.id,
         owner_user_id=user_id,
     ):
@@ -701,7 +702,13 @@ def delete_field(
             "Published shared fields must be retired through a release-safe operation.",
             status=409,
         )
-    db.session.delete(field)
+    if published_base_enabled():
+        from datetime import datetime, timezone
+        field.deleted_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        deck_working_tree_service.mark_field_def_changed(field_def=field,
+            owner_user_id=user_id, property_keys=["deleted_at"], operation="remove")
+    else:
+        db.session.delete(field)
     _audit(
         user_id,
         "field.delete",
@@ -1319,7 +1326,8 @@ def update_note(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     note = _owned_note(user_id=user_id, note_id=note_id)
-    original_deck_id = note.deck_id
+    from app.services.note_draft_service import effective_note_metadata
+    original_deck_id = effective_note_metadata(note)["deck_id"]
     note_type = _owned_note_type(
         user_id=user_id,
         note_type_id=note.note_type_id,
@@ -1409,13 +1417,20 @@ def update_note(
     return {
         "id": note.id,
         "field_values": note.field_values,
-        "tags": note.tags,
+        "tags": effective_note_metadata(note)["tags"],
         **note_revision_payload(note),
     }
 
 
 def delete_note(*, user_id: int, note_id: str) -> dict[str, bool]:
     note = _owned_note(user_id=user_id, note_id=note_id)
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled() and note.published_at is not None:
+        from app.services.note_draft_service import stage_note_delete
+        stage_note_delete(note)
+        _audit(user_id, "note.delete.draft", {"note_id": note.id})
+        db.session.commit()
+        return {"success": True}
     if deck_working_tree_service.note_has_shared_release_dependents(note):
         raise ContentApiError(
             "SHARED_ENTITY_RETIRE_REQUIRED",
@@ -1620,13 +1635,15 @@ def _preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
 
 
 def _serialize_note(note: Note) -> dict[str, Any]:
+    from app.services.note_draft_service import effective_note_metadata
+    metadata = effective_note_metadata(note)
     return {
         "id": note.id,
         "note_type_id": note.note_type_id,
-        "deck_id": note.deck_id,
+        "deck_id": metadata["deck_id"],
         "field_values": note.field_values or {},
         **note_revision_payload(note),
-        "tags": note.tags or [],
+        "tags": metadata["tags"] or [],
         "created_at": note.created_at.isoformat() if note.created_at else None,
         "updated_at": note.updated_at.isoformat() if note.updated_at else None,
     }

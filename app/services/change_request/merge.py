@@ -63,6 +63,9 @@ def _cleanup_install_overlay_rows(
     install: DeckInstall,
     request_obj: DeckChangeRequest,
 ) -> None:
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        return  # Contributions never erase the learner's persistent personal edits.
     override_ids: set[str] = set()
     added_ids: set[str] = set()
     order_ids: set[str] = set()
@@ -414,7 +417,11 @@ def approve_and_merge_request(
         field_obj = FieldDef.query.get(str(metadata.get("source_field_def_id") or item.source_ref_id or "").strip())
         if field_obj is None:
             continue
-        db.session.delete(field_obj)
+        from app.services.note_base_context import published_base_enabled
+        if published_base_enabled():
+            field_obj.deleted_at = _utcnow()
+        else:
+            db.session.delete(field_obj)
 
     if field_order_item is not None:
         desired_order = _effective_after_value(field_order_item)

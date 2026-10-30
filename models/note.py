@@ -4,6 +4,7 @@ from models import db
 from models.model_uuid import uuid_str
 
 LIVE_FIELD_VALUE_CODEC = "field-id.v1"
+LIVE_NOTE_CONTENT_MODEL = "published-base.v1"
 
 
 class Note(db.Model):
@@ -18,6 +19,9 @@ class Note(db.Model):
     field_values_codec = db.Column(db.String(32), nullable=False, default="field-id.v1", server_default="field-id.v1")
     field_values_extras = db.Column(db.JSON, nullable=False, default=dict)
     content_revision = db.Column(db.BigInteger, nullable=False, default=0, server_default="0")
+    # Published content is the shared Base; unpublished edits live in NoteDraft.
+    published_at = db.Column(db.DateTime, nullable=True)
+    deleted_at = db.Column(db.DateTime, nullable=True)
     tags = db.Column(db.JSON, nullable=False, default=list)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -40,3 +44,7 @@ class Note(db.Model):
     def field_values(self, values):
         from app.services.field_value_runtime_service import write_note_named_values
         write_note_named_values(self, values)
+
+
+# Register the one-to-one table in isolated model/test harnesses as well.
+from models.note_draft import NoteDraft  # noqa: E402,F401

@@ -115,6 +115,16 @@ def stage_clone_note_field_override(*, install, source_note, field_name, operati
     from app.services import flashcards_share_service
     from app.services.field_value_runtime_service import extra_field_identity_key
     from models.field_value_identity_definition import FieldValueIdentityDefinition
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        # Serialize an edit with publication/retention of its source identity.
+        from models.note_type import NoteType
+        db.session.execute(select(NoteType.id).where(NoteType.id == source_note.note_type_id)
+            .with_for_update()).first()
+        source_note = db.session.execute(select(Note).where(Note.id == source_note.id)
+            .with_for_update().execution_options(populate_existing=True)).scalar_one_or_none()
+        if source_note is None or source_note.published_at is None or source_note.deleted_at is not None:
+            raise FieldIdentityError("This source Note is no longer in the Published Base")
     if identity_labels is None:
         schema = flashcards_share_service.build_clone_schema_view(install=install,
             source_note_type_id=install.source_note_type_id or source_note.note_type_id)
@@ -156,4 +166,12 @@ def stage_clone_note_field_override(*, install, source_note, field_name, operati
         db.session.add(row)
     row.operation = operation
     row.value = None if operation == "remove" else value
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        from app.services.note_base_comparison_service import base_value_hash
+        from app.services.effective_note_reader import install_release_id
+        source = source_note.field_values_extras or {} if identity.startswith("extra:") else source_note.field_values_by_id or {}
+        key = field_name if identity.startswith("extra:") else identity
+        row.base_hash = base_value_hash(source.get(key), exists=key in source)
+        row.base_release_id = install_release_id(install)
     return row

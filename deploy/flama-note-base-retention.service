@@ -1,0 +1,27 @@
+[Unit]
+Description=Flama bounded 90-day Published Base retention
+After=network-online.target mysql.service
+
+[Service]
+Type=oneshot
+User=flama
+Group=flama
+WorkingDirectory=/opt/flama/current
+EnvironmentFile=/etc/flama/flama.env
+Environment=STARTUP_RUN_MAINTENANCE=0
+Environment=STARTUP_CHECK_DB_CONNECTIVITY=0
+Environment=PYTHONDONTWRITEBYTECODE=1
+RuntimeDirectory=flama-note-base-retention
+StateDirectory=flama-note-base-retention
+StateDirectoryMode=0700
+ExecCondition=/opt/flama/venv/bin/python -c "import os; raise SystemExit(0 if os.getenv('NOTE_PUBLISHED_BASE_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'} else 1)"
+ExecStart=/usr/bin/flock --nonblock /run/flama-note-base-retention/runner.lock /opt/flama/venv/bin/python deploy/run_note_base_retention.py --cursor-file /var/lib/flama-note-base-retention/cursor.json --limit 200 --max-batches 200 --max-seconds 60
+TimeoutStartSec=120
+TimeoutStopSec=90
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/flama /var/lib/flama-note-base-retention /run/flama-note-base-retention

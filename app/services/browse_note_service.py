@@ -8,13 +8,18 @@ from app.repositories import browse_note_repository as repository
 from app.services import browse_card_service as shared
 from models import db
 from models.note import Note
+from app.services.note_base_context import published_base_enabled
+from app.services.effective_note_reader import install_release_id, base_note_values_for_ids
 
 
 _ROW_FIELDS = ("note_id", "deck_id", "deck_name", "word", "reading", "meaning", "tags", "status", "due_label")
 
 
 def _row(payload):
-    return {key: payload[key] for key in _ROW_FIELDS}
+    row = {key: payload[key] for key in _ROW_FIELDS}
+    if "base_changed" in payload:
+        row["base_changed"] = bool(payload["base_changed"])
+    return row
 
 
 def _detail(payload):
@@ -37,8 +42,8 @@ def list_notes(*, user_id, admin_mode, timezone_name, query_args):
             "total": 0, "pages": 0, "has_next": False}
     scope_cases = [(condition, str(scope.install.id)) for scope, condition in context.clone_scope_conditions]
     scope_id = case(*scope_cases, else_=None) if scope_cases else db.literal(None)
-    pinned_installs = {str(scope.install.id) for scope in context.clone_scopes if scope.install.applied_release_id}
-    if context.keyword:
+    pinned_installs = {str(scope.install.id) for scope in context.clone_scopes if scope.install.applied_release_id and not published_base_enabled()}
+    if context.keyword or published_base_enabled():
         pagination = repository.search_note_page(context, install_id=scope_id.label('browse_install_id'),
             user_id=user_id, pinned_installs=pinned_installs)
         total = pagination.total
@@ -79,13 +84,18 @@ def list_notes(*, user_id, admin_mode, timezone_name, query_args):
         if ref.clone_scope:
             install = ref.clone_scope.install
             overlay = shared._clone_overlay_fields(card_obj=ref, clone_scope=ref.clone_scope,
-                base_field_values=release_values.get((str(install.applied_release_id or ""), ref.note_id)),
+                base_field_values=release_values.get((str(install_release_id(install) or ""), ref.note_id)),
                 note_override_rows=overrides.get((str(install.id), ref.note_id), []), schema_views=schemas)
         row = shared.vocabulary_ctrl.build_browse_row(ref, context.deck_lookup, context.now,
             progress_obj=shared._authority_progress_view(reads[ref.id]), timezone_name=timezone_name,
             display_triplet=overlay.display_triplet if overlay else None)
         if overlay:
             shared._apply_clone_card_fields(row, overlay=overlay, deck_lookup=context.deck_lookup)
+            if published_base_enabled():
+                from app.services.note_base_comparison_service import overrides_base_changed
+                row["base_changed"] = overrides_base_changed(install,
+                    release_values.get((str(install_release_id(install) or ""), ref.note_id), {}),
+                    overrides.get((str(install.id), ref.note_id), []))
         rows.append(_row(row))
     return {"items": rows, "page": context.page, "per_page": context.per_page,
         "total": total, "pages": pagination.pages, "has_next": pagination.has_next}
@@ -104,15 +114,15 @@ def _page_overlay_values(references):
         install = ref.clone_scope.install
         clone_installs.add(str(install.id))
         clone_note_ids.add(ref.note_id)
-        if install.applied_release_id:
-            release_id = str(install.applied_release_id)
+        if published_base_enabled() or install.applied_release_id:
+            release_id = str(install_release_id(install) or "")
             release_notes.setdefault(release_id, set()).add(ref.note_id)
             installs[release_id] = install
     overrides = flashcards_share_repository.get_clone_note_field_overrides_batch(
         sorted(clone_installs), sorted(clone_note_ids)) if clone_installs else {}
     values = {}
     for release_id, note_ids in release_notes.items():
-        resolved = deck_release_service.get_note_values_for_ids_at_release(installs[release_id].applied_release, note_ids)
+        resolved = base_note_values_for_ids(installs[release_id], note_ids)
         values.update({(release_id, str(note_id)): payload for note_id, payload in resolved.items()})
     return overrides, values
 
@@ -132,7 +142,7 @@ def selected_note_values(*, user_id, admin_mode, timezone_name, note_ids):
     install_id = case(*scope_cases, else_=None) if scope_cases else db.literal(None)
     page = repository.note_page(context.query.filter(Note.id.in_(ids)).order_by(Note.id),
         page=1, per_page=len(ids), install_id=install_id, user_id=user_id,
-        pinned_installs={str(scope.install.id) for scope in context.clone_scopes if scope.install.applied_release_id})
+        pinned_installs={str(scope.install.id) for scope in context.clone_scopes if scope.install.applied_release_id and not published_base_enabled()})
     scopes = {str(scope.install.id): scope for scope in context.clone_scopes}
     references = {str(note.id): repository.BrowseNoteReference(note,
         None if admin_mode or note.user_id == user_id else scopes.get(scope)) for note, scope in page.items}
@@ -145,17 +155,24 @@ def selected_note_values(*, user_id, admin_mode, timezone_name, note_ids):
         ref = references[note_id]
         note = ref.note
         values, note_type, deck_id = None, note.note_type, note.deck_id
+        tags = note.tags
+        updated_at = note.updated_at
+        if published_base_enabled() and not ref.clone_scope:
+            from app.services.note_draft_service import effective_note_metadata, effective_note_updated_at
+            metadata = effective_note_metadata(note)
+            deck_id, tags = metadata["deck_id"], metadata["tags"]
+            updated_at = effective_note_updated_at(note)
         if ref.clone_scope:
             install = ref.clone_scope.install
             overlay = shared._clone_overlay_fields(card_obj=ref, clone_scope=ref.clone_scope,
-                base_field_values=release_values.get((str(install.applied_release_id or ""), note_id)),
+                base_field_values=release_values.get((str(install_release_id(install) or ""), note_id)),
                 note_override_rows=overrides.get((str(install.id), note_id), []), schema_views=schemas)
             values = overlay.values
             note_type = SimpleNamespace(id=note.note_type_id, name=note.note_type.name, field_defs=overlay.ordered_defs)
             deck_id = overlay.local_deck_id
         result.append(SimpleNamespace(id=note_id, note_type_id=note.note_type_id, note_type=note_type,
             deck_id=deck_id, field_values=values if values is not None else dict(note.field_values or {}),
-            tags=note.tags, created_at=note.created_at, updated_at=note.updated_at))
+            tags=tags, created_at=note.created_at, updated_at=updated_at))
     return result
 
 
@@ -165,6 +182,10 @@ def authorized_note(*, user_id, admin_mode, timezone_name, note_id, include_medi
     if note is None:
         raise shared.BrowseApiError("Note not found", status=404)
     if admin_mode or note.user_id == user_id:
+        if published_base_enabled():
+            from app.services.note_draft_service import effective_note_metadata
+            if effective_note_metadata(note).get("op") == "delete":
+                raise shared.BrowseApiError("Note not found", status=404)
         # The ownership check already authorizes this Note. Resolving every
         # installed deck again would add unrelated scope queries to each edit.
         if defer_clone_values:
@@ -178,7 +199,7 @@ def authorized_note(*, user_id, admin_mode, timezone_name, note_id, include_medi
     for root_id in repository.clone_scope_roots_for_note(user_id=user_id, source_deck_id=note.deck_id):
         scope = flashcards_share.resolve_clone_scope_for_local_deck(user_id=user_id, local_deck_id=root_id)
         if scope and scope.source_deck_ids and repository.note_matches_clone_scope(note_id=note.id, scope=scope):
-            if defer_clone_values and not (scope.install.version_mode == 'release' and scope.install.applied_release_id):
+            if defer_clone_values and (published_base_enabled() or not (scope.install.version_mode == 'release' and scope.install.applied_release_id)):
                 repository.ensure_live_values(note)
             return repository.BrowseNoteReference(note, scope), None
     raise shared.BrowseApiError("Note not found", status=404)
@@ -192,7 +213,7 @@ def _editor_detail(*, reference, user_id, admin_mode, timezone_name):
         overrides, release_values = _page_overlay_values([reference])
         install = reference.clone_scope.install
         overlay = shared._clone_overlay_fields(card_obj=reference, clone_scope=reference.clone_scope,
-            base_field_values=release_values.get((str(install.applied_release_id or ''), reference.note_id)),
+            base_field_values=release_values.get((str(install_release_id(install) or ''), reference.note_id)),
             note_override_rows=overrides.get((str(install.id), reference.note_id), []))
     values = overlay.values if overlay else dict(note.field_values or {})
     definitions = overlay.ordered_defs if overlay else note.note_type.field_defs
@@ -212,7 +233,11 @@ def _editor_detail(*, reference, user_id, admin_mode, timezone_name):
     if overlay:
         shared._apply_clone_card_fields(row, overlay=overlay, deck_lookup=deck_lookup)
     note_payload = {'id': note.id, 'note_type_id': note.note_type_id, 'note_type_name': note.note_type.name or 'NoteType',
-        'deck_id': row['deck_id'], 'deck_name': row['deck_name'], 'field_values': values, 'tags': note.tags or []}
+        'deck_id': row['deck_id'], 'deck_name': row['deck_name'], 'field_values': values, 'tags': note.tags or [],
+        'updated_at': row['updated_at']}
+    if published_base_enabled() and not overlay:
+        from app.services.note_draft_service import effective_note_metadata
+        note_payload['tags'] = effective_note_metadata(note)['tags']
     if overlay:
         note_payload.update(deck_install_id=install.id, overlay_revision=int(install.overlay_revision or 0))
     else:

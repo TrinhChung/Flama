@@ -21,6 +21,7 @@ class FieldDef(db.Model):
     position = db.Column(db.Integer, nullable=False, default=0)
     required = db.Column(db.Boolean, nullable=False, default=False)
     identity_role = db.Column(db.String(32), nullable=True)
+    deleted_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

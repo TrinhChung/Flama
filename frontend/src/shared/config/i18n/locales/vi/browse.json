@@ -65,6 +65,7 @@
     "view_mode_code_tooltip": "Chế độ xem code mảng (Array JSON)"
   },
   "card_table": {
+    "base_changed": "Bản gốc đã thay đổi",
     "searching": "Đang tìm thẻ...",
     "no_cards_found": "Không tìm thấy thẻ nào",
     "columns": {

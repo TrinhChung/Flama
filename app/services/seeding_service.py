@@ -740,7 +740,7 @@ def _seed_rows_to_deck(
         )
         if existing_note_ids:
             forget_card_identities(db.session, existing_note_ids)
-            Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
+            _delete_replaced_notes(existing_note_ids)
         click.echo(f"  Replace seeded deck: {source_label}")
 
     notes: list[Note] = []
@@ -1293,7 +1293,7 @@ def _seed_quiz_dump_for_user(
             operation_key=f"seed-quiz-replace:{quiz_deck.id}:{dump_filename}",
         )
         forget_card_identities(db.session, existing_note_ids)
-        Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
+        _delete_replaced_notes(existing_note_ids)
         stats.replaced_files += 1
 
     notes: list[Note] = []
@@ -1324,6 +1324,15 @@ def _seed_quiz_dump_for_user(
     return quiz_deck, len(notes)
 
 
+def _delete_replaced_notes(note_ids):
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        for note in Note.query.filter(Note.id.in_(note_ids)).all():
+            db.session.delete(note)  # Published Notes become deletion drafts at flush.
+    else:
+        Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
+
+
 def _tombstone_replaced_notes(*, card_ids, note_ids, source_path: str, operation_key: str) -> None:
     """Fence every learner of the replaced Notes and tombstone their progress."""
 
@@ -1331,6 +1340,13 @@ def _tombstone_replaced_notes(*, card_ids, note_ids, source_path: str, operation
 
     card_ids = [str(value) for value in card_ids]
     note_ids = [str(value) for value in note_ids]
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        note_ids = [str(row[0]) for row in db.session.query(Note.id).filter(
+            Note.id.in_(note_ids), Note.published_at.is_(None)).all()]
+        if not note_ids:
+            return
+        card_ids = [str(row[0]) for row in db.session.query(Card.id).filter(Card.note_id.in_(note_ids)).all()]
     routes = content_delete.lock_content_delete_routes(
         db.session, actor_user_ids=(), card_ids=card_ids, deleted_note_ids=note_ids
     )

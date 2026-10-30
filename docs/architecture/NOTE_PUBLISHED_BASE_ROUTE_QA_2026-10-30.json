@@ -1,0 +1,1446 @@
+{
+  "baseline_commit": "690933ab",
+  "candidate_commit": "3471d7cf plus uncommitted review fixes",
+  "app_source_sha256": "d85f177ad0863e5495ba1bede0b38ee0cbe0a2296cff23d5b5f93393bc16ce1e",
+  "runtime_flag": false,
+  "database": "generated disposable local MySQL; same API for both builds",
+  "profile": "isolated task profile; personal Chrome profile untouched",
+  "routes": 82,
+  "viewports": {
+    "desktop": [
+      1440,
+      1000
+    ],
+    "mobile": [
+      390,
+      844
+    ]
+  },
+  "screenshots": 328,
+  "comparisons": 164,
+  "pixel_exact_pairs": 144,
+  "new_error_boundaries": 0,
+  "unsettled_views": 0,
+  "page_errors": 0,
+  "comparisons_detail": [
+    {
+      "route": "/",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        1335,
+        861,
+        1385,
+        960
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0028,
+      "mean_channel_delta": 0.0005
+    },
+    {
+      "route": "/",
+      "viewport": "mobile",
+      "pixel_exact": false,
+      "difference_bbox": [
+        330,
+        762,
+        362,
+        826
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0194,
+      "mean_channel_delta": 0.0042
+    },
+    {
+      "route": "/oauth/consent",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/oauth/consent",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/login",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/login",
+      "viewport": "mobile",
+      "pixel_exact": false,
+      "difference_bbox": [
+        290,
+        16,
+        367,
+        48
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0001
+    },
+    {
+      "route": "/register",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/register",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/forgot-password",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/forgot-password",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/reset-password",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/reset-password",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/verify-email",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/verify-email",
+      "viewport": "mobile",
+      "pixel_exact": false,
+      "difference_bbox": [
+        290,
+        16,
+        367,
+        48
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0001
+    },
+    {
+      "route": "/auth/verify-email",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/auth/verify-email",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/support",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/support",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/support-donation",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/support-donation",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/support-donation/result",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/support-donation/result",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/payments/marketplace-result",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/payments/marketplace-result",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/payments/result",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/payments/result",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guide",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guide",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/help",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/help",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guides",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guides",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guide/tts-key",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guide/tts-key",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guides/tts-key",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guides/tts-key",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/help/tts-key",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/help/tts-key",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guide/flama-audio",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guide/flama-audio",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guides/flama-audio",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/guides/flama-audio",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/help/flama-audio",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/help/flama-audio",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/terms",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/terms",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/privacy",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/privacy",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/cookies",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/cookies",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace-guidelines",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace-guidelines",
+      "viewport": "mobile",
+      "pixel_exact": false,
+      "difference_bbox": [
+        290,
+        16,
+        367,
+        48
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0001
+    },
+    {
+      "route": "/community-guidelines",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/community-guidelines",
+      "viewport": "mobile",
+      "pixel_exact": false,
+      "difference_bbox": [
+        290,
+        16,
+        367,
+        48
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0001
+    },
+    {
+      "route": "/dashboard",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        1326,
+        873,
+        1393,
+        964
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0449,
+      "mean_channel_delta": 0.024
+    },
+    {
+      "route": "/dashboard",
+      "viewport": "mobile",
+      "pixel_exact": false,
+      "difference_bbox": [
+        324,
+        772,
+        367,
+        827
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0817,
+      "mean_channel_delta": 0.0249
+    },
+    {
+      "route": "/statistics",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        414,
+        884,
+        444,
+        886
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0042,
+      "mean_channel_delta": 0.0046
+    },
+    {
+      "route": "/statistics",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/browse",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/browse",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/vocabulary/browse",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/vocabulary/browse",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/study",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/study",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/study",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/study",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/note-types",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/note-types",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/card-templates",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/card-templates",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/note-types/guide",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/note-types/guide",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/note-types",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/note-types",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/note-types/guide",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/note-types/guide",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/installed-decks",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/installed-decks",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/installed-decks",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/installed-decks",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/change-requests/incoming",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/change-requests/incoming",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/worksheets",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/worksheets",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/audio/generate",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        317,
+        104,
+        1389,
+        548
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0001
+    },
+    {
+      "route": "/audio/generate",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/audio",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/audio",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/audio",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        775,
+        542,
+        787,
+        548
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/audio",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/sync",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/sync",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/sync",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/sync",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/import",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/flashcards/import",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/import",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/import",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/settings/goals",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/settings/goals",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/goals",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/goals",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/settings/mcp-tokens",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/settings/mcp-tokens",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/settings/yomitan",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/settings/yomitan",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/settings/asbplayer",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/settings/asbplayer",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/asbplayer",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/asbplayer",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/feedback",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        589,
+        463,
+        597,
+        472
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0038,
+      "mean_channel_delta": 0.0044
+    },
+    {
+      "route": "/feedback",
+      "viewport": "mobile",
+      "pixel_exact": false,
+      "difference_bbox": [
+        159,
+        498,
+        166,
+        506
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0128,
+      "mean_channel_delta": 0.0143
+    },
+    {
+      "route": "/tickets",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/tickets",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/support/feedback",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        589,
+        463,
+        597,
+        472
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0038,
+      "mean_channel_delta": 0.0044
+    },
+    {
+      "route": "/support/feedback",
+      "viewport": "mobile",
+      "pixel_exact": false,
+      "difference_bbox": [
+        159,
+        498,
+        166,
+        506
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0128,
+      "mean_channel_delta": 0.0143
+    },
+    {
+      "route": "/mcp-tokens",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/mcp-tokens",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/decks",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        10,
+        241,
+        374,
+        283
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/decks",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/decks/publish",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/decks/publish",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/note-types",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/note-types",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/note-types/publish",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/note-types/publish",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/templates",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/marketplace/templates",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/orders",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/orders",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/profile",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/profile",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/wallet",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/wallet",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        550,
+        821,
+        594,
+        823
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0061,
+      "mean_channel_delta": 0.0067
+    },
+    {
+      "route": "/admin",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/analytics",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        619,
+        821,
+        635,
+        823
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0022,
+      "mean_channel_delta": 0.0024
+    },
+    {
+      "route": "/admin/analytics",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/users",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/users",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/payments",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/payments",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/fees",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/fees",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/quotas",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/quotas",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/tts",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/tts",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/image-library",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/image-library",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/permissions",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/permissions",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/mcp-tokens",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/mcp-tokens",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/support",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/support",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/tickets",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/tickets",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/taxonomy",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/admin/taxonomy",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/home",
+      "viewport": "desktop",
+      "pixel_exact": false,
+      "difference_bbox": [
+        1328,
+        864,
+        1391,
+        962
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.0368,
+      "mean_channel_delta": 0.0147
+    },
+    {
+      "route": "/home",
+      "viewport": "mobile",
+      "pixel_exact": false,
+      "difference_bbox": [
+        325,
+        763,
+        366,
+        827
+      ],
+      "pixels_changed_by_at_least_12_percent": 0.2804,
+      "mean_channel_delta": 0.1167
+    },
+    {
+      "route": "/maintenance",
+      "viewport": "desktop",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    },
+    {
+      "route": "/maintenance",
+      "viewport": "mobile",
+      "pixel_exact": true,
+      "difference_bbox": null,
+      "pixels_changed_by_at_least_12_percent": 0.0,
+      "mean_channel_delta": 0.0
+    }
+  ],
+  "notes": [
+    "The audit found and fixed 43 feature route wrappers resolving a second React.lazy object.",
+    "Static CSS source was unchanged. Non-exact regions were inspected: animated mascot/charts, minor transient paint, and the QA origin port in feedback fields.",
+    "The shared API fixture delivered the current SPA for /auth/verify-email; this alias was rechecked with each build's own real SPA shell. API responses were not mocked.",
+    "Static routes and legacy aliases are covered; parameterized detail/editor flows need their focused domain checks.",
+    "Generated UI database, servers and isolated browser were closed after capture."
+  ]
+}

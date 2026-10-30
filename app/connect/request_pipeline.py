@@ -139,6 +139,8 @@ def handle_request(*, standard=False, url_token=None):
         token, user = authenticated
         scopes = tokens.parse_scopes(token)
         _required_scope(payload, scopes, standard=standard)
+        # Keep the verified token identity through the final UoW flush.
+        request.environ["flama.note_author_user_id"] = int(user.id)
         nested = _batch(payload, key, scopes, standard=standard) if payload["action"] == "multi" else None
         cost = max(1, len(nested)) if nested is not None else 1
         for rate_key, setting, default in ((f"token:{token.id}", "CONNECT_TOKEN_RATE_LIMIT", 60), (f"user:{user.id}", "CONNECT_USER_RATE_LIMIT", 120)):

@@ -6,6 +6,7 @@ history finalization, where adding dirty ORM rows would recursively flush.
 
 from datetime import datetime
 from copy import deepcopy
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 from sqlalchemy import and_, exists, func, insert, or_, select, update
@@ -27,11 +28,32 @@ from models.template_version import TemplateVersion
 from models.user import User
 
 
+@contextmanager
+def current_publication_reads(session):
+    """Publication must not reconstruct sources from a pre-lock RR snapshot."""
+    key = "flama.template.current_publication_reads"
+    previous = session.info.get(key)
+    session.info[key] = True
+    try:
+        yield
+    finally:
+        if previous is None:
+            session.info.pop(key, None)
+        else:
+            session.info[key] = previous
+
+
+def _execute(session, statement, *args, **kwargs):
+    if session.info.get("flama.template.current_publication_reads") and getattr(statement, "is_select", False):
+        statement = statement.with_for_update()
+    return session.execute(statement, *args, **kwargs)
+
+
 def one(session, model, *conditions, lock=False):
     statement = select(model.__table__).where(*conditions)
     if lock:
         statement = statement.with_for_update()
-    row = session.execute(statement).mappings().first()
+    row = _execute(session, statement).mappings().first()
     return dict(row) if row else None
 
 
@@ -50,7 +72,7 @@ def publication(session, template_id, *, lock=False):
 def ensure_publication(session, template_id):
     row = publication(session, template_id, lock=True)
     if row is None:
-        session.execute(insert(TemplatePublication.__table__).values(template_id=template_id, auto_publish_enabled=False))
+        _execute(session, insert(TemplatePublication.__table__).values(template_id=template_id, auto_publish_enabled=False))
         row = publication(session, template_id, lock=True)
     return row
 
@@ -73,11 +95,11 @@ def releases(session, template_id, *, limit=100, before_sequence=None):
     statement = select(TemplateRelease.__table__).where(TemplateRelease.template_id == template_id)
     if before_sequence is not None:
         statement = statement.where(TemplateRelease.sequence_no < before_sequence)
-    return [dict(row) for row in session.execute(statement.order_by(TemplateRelease.sequence_no.desc()).limit(limit)).mappings()]
+    return [dict(row) for row in _execute(session, statement.order_by(TemplateRelease.sequence_no.desc()).limit(limit)).mappings()]
 
 
 def update_row(session, model, conditions, values):
-    session.execute(update(model.__table__).where(*conditions).values(**values))
+    _execute(session, update(model.__table__).where(*conditions).values(**values))
     # Keep already-loaded objects coherent without enrolling them in a flush.
     for obj in list(session.identity_map.values()):
         if isinstance(obj, model):
@@ -113,7 +135,7 @@ def source_access(session, *, user_id, source_template_id):
             template_ids=[source_template_id], current_read=True):
         return True
     now = datetime.utcnow()
-    rights = session.execute(select(PaymentEntitlement.status, PaymentEntitlement.effective_from,
+    rights = _execute(session, select(PaymentEntitlement.status, PaymentEntitlement.effective_from,
         PaymentEntitlement.expires_at).where(PaymentEntitlement.user_id == user_id,
             PaymentEntitlement.resource_type == "template",
             PaymentEntitlement.resource_ref_id == source_template_id).with_for_update()).all()
@@ -126,7 +148,7 @@ def source_access(session, *, user_id, source_template_id):
         DeckInstall.user_id == user_id, DeckInstall.source_note_type_id.in_(note_types),
         DeckMarketplaceItem.owner_user_id == template_row["owner_user_id"],
     ).limit(1)
-    if not negative_right and template_row.get("origin") == "authored" and not template_row.get("source_template_id") and session.execute(installed_deck).first():
+    if not negative_right and template_row.get("origin") == "authored" and not template_row.get("source_template_id") and _execute(session, installed_deck).first():
         return True
     from app.repositories import template_marketplace_repository
     return template_marketplace_repository.marketplace_access(session, user_id=user_id, template_id=source_template_id)
@@ -145,7 +167,7 @@ def source_applications(session, note_type_ids):
         StudyApplication.note_type_id.in_(sorted(set(note_type_ids))),
         StudyApplication.status_code == "ACTIVE",
     ).order_by(StudyApplication.template_id, StudyApplication.id)
-    return [dict(row) for row in session.execute(statement).mappings()]
+    return [dict(row) for row in _execute(session, statement).mappings()]
 
 
 def active_templates(session, note_type_id):
@@ -156,11 +178,11 @@ def active_templates(session, note_type_id):
         StudyApplication.note_type_id == note_type_id,
         StudyApplication.status_code == "ACTIVE",
     ).distinct().order_by(Template.id)
-    return [dict(row) for row in session.execute(statement).mappings()]
+    return [dict(row) for row in _execute(session, statement).mappings()]
 
 
 def deck_pins(session, deck_release_id):
-    return {row["source_template_id"]: dict(row) for row in session.execute(
+    return {row["source_template_id"]: dict(row) for row in _execute(session,
         select(DeckReleaseTemplatePin.__table__).where(DeckReleaseTemplatePin.deck_release_id == deck_release_id)
     ).mappings()}
 
@@ -176,7 +198,7 @@ def load_effective_template_overrides(session, *, user_id, source_template_ids, 
     pins = release_pins or {}
     rows = []
     for offset in range(0, len(ids), 500):
-        rows.extend(session.execute(select(
+        rows.extend(_execute(session, select(
             TemplateSubscription.__table__,
             Template.__table__.c.front_html.label("effective_front_html"),
             Template.__table__.c.back_html.label("effective_back_html"),
@@ -197,7 +219,7 @@ def load_effective_template_overrides(session, *, user_id, source_template_ids, 
     releases_by_id = {}
     release_ids = sorted(value for value in release_ids if value)
     for offset in range(0, len(release_ids), 500):
-        releases_by_id.update({row["id"]: dict(row) for row in session.execute(select(
+        releases_by_id.update({row["id"]: dict(row) for row in _execute(session, select(
             TemplateRelease.__table__, TemplateVersion.front_html, TemplateVersion.back_html,
             TemplateVersion.shared_css, TemplateVersion.input_schema,
         ).join(TemplateVersion.__table__, TemplateVersion.id == TemplateRelease.version_id).where(

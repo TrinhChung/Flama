@@ -17,6 +17,16 @@ marketplace_deck_releases_bp = Blueprint(
 )
 
 
+@marketplace_deck_releases_bp.before_request
+def retire_history_and_auto_publish():
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled() and current_user.is_authenticated and request.endpoint.rsplit(".", 1)[-1] in {
+        "list_deck_release_changes", "update_deck_auto_publish_setting",
+    }:
+        return error_response("DECK_VERSION_HISTORY_RETIRED",
+            "Publish explicitly to update the current content. Historical content selection has been retired.", status=410)
+
+
 def _handle_release_error(exc: DeckReleaseError):
     return error_response(
         exc.error,

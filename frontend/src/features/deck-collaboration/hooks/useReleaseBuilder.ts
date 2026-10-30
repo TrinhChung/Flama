@@ -89,8 +89,10 @@ export function useReleaseBuilder() {
         {
           id: 'deck-publish',
           description: t(
-            'release.toast_publishing_desc',
-            'Hệ thống đang snapshot toàn bộ flashcard và cấu trúc deck.',
+            firstPage?.content_model === 'published_base' ? 'release.base_publishing_desc' : 'release.toast_publishing_desc',
+            firstPage?.content_model === 'published_base'
+              ? 'Đang áp dụng bản nháp vào bộ thẻ đã phát hành.'
+              : 'Hệ thống đang snapshot toàn bộ flashcard và cấu trúc deck.',
           ),
         },
       )

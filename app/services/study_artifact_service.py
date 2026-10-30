@@ -106,16 +106,19 @@ def build_effective_study_card(
     Without those contexts the existing clone content helpers resolve them.
     """
     note = card.note
-    field_defs = list(note.note_type.field_defs)
-    field_values = dict(note.field_values or {})
-    if clone_scope is not None and (
+    local_added = clone_scope is not None and (
         str(note.id) in clone_added_note_ids
         if clone_added_note_ids is not None
         else flashcards_share_service.is_clone_added_note(
             scope=clone_scope,
             note_id=note.id,
         )
-    ):
+    )
+    # Only author/local Notes use the mutable property. Source Notes are
+    # decoded from raw Published Base and its captured schema below.
+    field_defs = list(note.note_type.field_defs) if clone_scope is None or local_added else []
+    field_values = dict(note.field_values or {}) if clone_scope is None or local_added else {}
+    if local_added:
         return apply_binding_projection(EffectiveStudyCard(
             card=card,
             note=note,

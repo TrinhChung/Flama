@@ -6,6 +6,10 @@ Welcome to the central documentation portal for **Flama** (Nihongo Flashcard Lea
 
 ## 🏛️ Master Architecture & Codebase Reality Audit
 
+- [Single Published Base implementation](architecture/NOTE_PUBLISHED_BASE_IMPLEMENTATION_2026-10-29.md): #263 author drafts, persistent learner overlays, soft deletion, local MySQL rehearsal and production cutover gates. [Runbook](runbooks/NOTE_PUBLISHED_BASE_CUTOVER_20261029.md).
+- [Published Base review corrections](architecture/NOTE_PUBLISHED_BASE_REVIEW_RESPONSE_2026-10-30.md): ownership/cache/locking fixes, sequential MySQL evidence and desktop/mobile route audit. [P6 checklist](architecture/NOTE_PUBLISHED_BASE_P6_CHECKLIST_2026-10-30.md).
+- [Published Base production preflight](architecture/NOTE_PUBLISHED_BASE_PRODUCTION_PREFLIGHT_2026-10-30.md): restored current backup, exact native-array receipts, updated six-Note / 23-Field proposal and deployment writer inventory.
+
 - [MCP NoteType and template workflow](backend/MCP_AUTHORING_WORKFLOW.md): capability review, reusable template tools, typed fields/inputs, creation sequence, preview diagnostics and deferred array work.
 - [MCP template authoring implementation](plans/MCP_TEMPLATE_AUTHORING_IMPLEMENTATION_PLAN_2026-10-25.md): #248/#116 candidate diagnostics, Study artifacts, browser fixtures and MCP App packaging; includes local verification and host rollout limits.
 - [Publish scope and release UX proposal](plans/PUBLISH_SCOPE_AND_RELEASE_UX_IMPLEMENTATION_PLAN_2026-10-25.md): proposed Deck, Note Type and Template publication boundaries, review flows and acceptance checks; implementation remains pending.

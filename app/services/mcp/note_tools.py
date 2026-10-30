@@ -40,6 +40,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.study_progress_subject import StudyProgressSubject
 from models.user import User
+from app.services.note_draft_service import effective_note_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +83,12 @@ def list_notes(
         items.append(
             {
                 "note_id": str(note.id),
-                "deck_id": int(note.deck_id) if note.deck_id else None,
+                "deck_id": effective_note_metadata(note)["deck_id"],
                 "deck_name": decks_map.get(note.deck_id) if note.deck_id else None,
                 "note_type_id": str(note.note_type_id),
                 "note_type_name": note_types_map.get(note.note_type_id),
                 "fields": dict(note.field_values or {}),
-                "tags": list(note.tags or []),
+                "tags": list(effective_note_metadata(note)["tags"] or []),
                 "card_count": len(note.cards),
                 "created_at": note.created_at.isoformat() if note.created_at else None,
                 "updated_at": note.updated_at.isoformat() if note.updated_at else None,
@@ -195,13 +196,13 @@ def get_note(*, user_id: int, note_id: str) -> dict[str, Any]:
 
     return {
         "note_id": str(note.id),
-        "deck_id": int(note.deck_id) if note.deck_id else None,
+        "deck_id": effective_note_metadata(note)["deck_id"],
         "deck_name": deck.name if deck else None,
         "note_type_id": str(note.note_type_id),
         "note_type_name": note_type.name if note_type else None,
         "fields": dict(note.field_values or {}),
         **note_revision_payload(note),
-        "tags": list(note.tags or []),
+        "tags": list(effective_note_metadata(note)["tags"] or []),
         "cards": cards_data,
         "created_at": note.created_at.isoformat() if note.created_at else None,
         "updated_at": note.updated_at.isoformat() if note.updated_at else None,
@@ -232,7 +233,7 @@ def find_notes(
     matching_notes: list[dict[str, Any]] = []
     for note in notes:
         field_values = dict(note.field_values or {})
-        tags = list(note.tags or [])
+        tags = list(effective_note_metadata(note)["tags"] or [])
 
         if tag_filter and not any(tag_filter == t.lower() for t in tags):
             continue
@@ -249,7 +250,7 @@ def find_notes(
             matching_notes.append(
                 {
                     "note_id": str(note.id),
-                    "deck_id": int(note.deck_id) if note.deck_id else None,
+                    "deck_id": effective_note_metadata(note)["deck_id"],
                     "deck_name": decks_map.get(note.deck_id) if note.deck_id else None,
                     "note_type_id": str(note.note_type_id),
                     "note_type_name": note_types_map.get(note.note_type_id),
@@ -535,7 +536,7 @@ def update_note(
         **({"expected_content_revision": expected_content_revision} if expected_content_revision is not None else {}),
         **({"expected_field_schema_revision": expected_field_schema_revision} if expected_field_schema_revision is not None else {}),
     })
-    original_deck_id = note.deck_id
+    original_deck_id = effective_note_metadata(note)["deck_id"]
     original_fields = dict(note.field_values or {})
 
     target_deck = (
@@ -612,9 +613,9 @@ def update_note(
         "success": True,
         "note_id": str(note.id),
         **note_revision_payload(note),
-        "deck_id": int(note.deck_id) if note.deck_id else None,
+        "deck_id": effective_note_metadata(note)["deck_id"],
         "fields": dict(note.field_values or {}),
-        "tags": list(note.tags or []),
+        "tags": list(effective_note_metadata(note)["tags"] or []),
     }
 
 
@@ -623,7 +624,7 @@ def _ensure_note_tags_version_safe(
     note: Note,
     next_tags: list[str],
 ) -> None:
-    if list(note.tags or []) == list(next_tags or []):
+    if list(effective_note_metadata(note)["tags"] or []) == list(next_tags or []):
         return
     from app.services import deck_working_tree_service
 
@@ -667,10 +668,10 @@ def delete_note(*, user_id: int, note_id: str, confirm: bool = False) -> dict[st
             "action": "delete_note",
             "note_id": str(note_id),
             "impact": {
-                "deck_id": int(note.deck_id) if note.deck_id else None,
+                "deck_id": effective_note_metadata(note)["deck_id"],
                 "deck_name": deck.name if deck else None,
                 "fields": dict(note.field_values or {}),
-                "tags": list(note.tags or []),
+                "tags": list(effective_note_metadata(note)["tags"] or []),
                 "cards_to_delete": len(card_ids),
             },
             "warning": (
@@ -728,7 +729,7 @@ def add_tags(*, user_id: int, note_ids: list[str], tags: list[str]) -> dict[str,
     changed_tags_by_note_id: dict[str, list[str]] = {}
 
     for note in notes:
-        current_tags = list(note.tags or [])
+        current_tags = list(effective_note_metadata(note)["tags"] or [])
         modified = False
         for tag in clean_new_tags:
             if tag not in current_tags:
@@ -769,7 +770,7 @@ def remove_tags(*, user_id: int, note_ids: list[str], tags: list[str]) -> dict[s
     changed_tags_by_note_id: dict[str, list[str]] = {}
 
     for note in notes:
-        current_tags = list(note.tags or [])
+        current_tags = list(effective_note_metadata(note)["tags"] or [])
         remaining = [t for t in current_tags if t not in tags_to_remove]
         if len(remaining) != len(current_tags):
             _ensure_note_tags_version_safe(note=note, next_tags=remaining)
@@ -910,6 +911,21 @@ def batch_delete_notes(*, user_id: int, note_ids: list[str], confirm: bool = Fal
     from app.services import study_content_delete_service as content_delete
 
     deleted_note_ids = tuple(sorted(found_note_ids))
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        from app.services.note_draft_service import stage_note_delete
+        drafts = [note for note in notes if note.published_at is not None]
+        ordinary = [note for note in notes if note.published_at is None]
+        for note in drafts:
+            stage_note_delete(note)
+        # The ordinary lifecycle must never tombstone a published subject.
+        deleted_note_ids = tuple(sorted(str(note.id) for note in ordinary))
+        all_card_ids = [card.id for note in ordinary for card in note.cards]
+        if not ordinary:
+            db.session.commit()
+            return {"success": True, "deleted_count": len(drafts), "deleted_cards_count": 0,
+                "deleted_note_ids": sorted(found_note_ids), "failed_note_ids": failed_ids,
+                "message": "Published Note deletions are saved as drafts until Publish."}
     operation_key = "mcp-note-batch-delete:" + hashlib.sha256(
         "\n".join(deleted_note_ids).encode("utf-8")
     ).hexdigest()
@@ -999,7 +1015,7 @@ def batch_move_notes(*, user_id: int, note_ids: list[str], deck_id: int) -> dict
 
     dirty_mutations: list[dict[str, Any]] = []
     for note in notes:
-        original_deck_id = note.deck_id
+        original_deck_id = effective_note_metadata(note)["deck_id"]
         note.deck_id = target_deck.id
         if original_deck_id == note.deck_id:
             continue

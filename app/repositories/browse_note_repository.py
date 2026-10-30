@@ -39,7 +39,10 @@ class BrowseNoteReference:
 
     @property
     def updated_at(self):
-        return self.note.updated_at
+        if self.clone_scope:
+            return self.note.updated_at
+        from app.services.note_draft_service import effective_note_updated_at
+        return effective_note_updated_at(self.note)
 
 
 _LIVE_VALUE_COLUMNS = (Note.field_values_by_id, Note.field_values_codec, Note.field_values_extras)
@@ -150,6 +153,10 @@ def clone_scope_roots_for_note(*, user_id, source_deck_id):
     filters = (DeckInstall.user_id == user_id, DeckInstall.clone_mode == 'logical_overlay',
         DeckInstall.local_deck_id.isnot(None))
     roots = db.session.query(DeckInstall.local_deck_id).filter(*filters).distinct().all()
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        # New source subdecks deliberately have no local map yet.
+        return [int(root) for (root,) in roots]
     mapped = select(DeckCloneDeckMap.id).where(DeckCloneDeckMap.deck_install_id == DeckInstall.id)
     matches = set(db.session.execute(select(DeckInstall.local_deck_id).where(*filters,
         or_(mapped.where(DeckCloneDeckMap.source_deck_id == source_deck_id).exists(), ~mapped.exists()))).scalars())
@@ -159,6 +166,10 @@ def clone_scope_roots_for_note(*, user_id, source_deck_id):
 def detail_deck_lookup(*, reference):
     deck_id = (reference.clone_scope.source_to_local_deck_id.get(int(reference.note.deck_id or 0))
         or reference.clone_scope.install.local_deck_id) if reference.clone_scope else reference.note.deck_id
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled() and not reference.clone_scope:
+        from app.services.note_draft_service import effective_note_metadata
+        deck_id = effective_note_metadata(reference.note)["deck_id"]
     rows = db.session.query(Deck.id, Deck.name).filter(Deck.id == deck_id, Deck.deleted_at.is_(None)).all()
     return dict(rows)
 
@@ -224,8 +235,14 @@ def search_note_page(context, *, install_id, user_id, pinned_installs):
     page = select(ranked.c.note_id, ranked.c.user_id, ranked.c.browse_install_id,
         ranked.c.browse_rank).where(ranked.c.browse_rank > start,
             ranked.c.browse_rank <= start + context.per_page).subquery()
-    rows = db.session.execute(select(page.c.note_id, page.c.user_id, page.c.browse_install_id,
-        totals.c.total).select_from(totals.outerjoin(page, true())).order_by(page.c.browse_rank)).all()
+    statement = select(page.c.note_id, page.c.user_id, page.c.browse_install_id,
+        totals.c.total).select_from(totals.outerjoin(page, true())).order_by(page.c.browse_rank)
+    if getattr(context, 'author_draft', None) is not None:
+        # Query execution options do not survive conversion into a CTE. The
+        # scope already enforces these predicates; keep the global guard from
+        # adding a second per-Note Draft anti-lookup to the outer SELECT.
+        statement = statement.execution_options(include_deleted_drafts=True, include_deleted_notes=True)
+    rows = db.session.execute(statement).all()
     total = int(rows[0].total)
     pagination = SimpleNamespace(items=[tuple(row[:3]) for row in rows if row.note_id is not None],
         total=total, page=context.page, per_page=context.per_page,
@@ -258,18 +275,26 @@ def _hydrate_page(pagination, *, user_id, pinned_installs):
 
 def order_notes(context, *, user_id, query=None, with_rank=False):
     query = context.query if query is None else query
+    draft = getattr(context, 'author_draft', None)
     order = []
     descending = context.sort_dir == "desc"
     if context.sort_by == "deck":
         names = [(db.and_(Note.user_id != user_id, condition, Note.deck_id == source), literal(context.deck_lookup[local]))
             for scope, condition in context.clone_scope_conditions
             for source, local in sorted(scope.source_to_local_deck_id.items()) if local in context.deck_lookup]
-        query = query.outerjoin(Deck, Note.deck_id == Deck.id)
+        from app.repositories.field_value_query_repository import author_note_column
+        own_deck = case((Note.user_id == user_id, author_note_column("deck_id", draft_model=draft)), else_=Note.deck_id)
+        query = query.outerjoin(Deck, own_deck == Deck.id)
         expression = case(*names, else_=Deck.name) if names else Deck.name
         order.append(expression.desc() if descending else expression.asc())
     elif context.sort_by == "word":
-        from app.repositories.browse_card_repository import owned_note_word_expression
-        own = owned_note_word_expression()
+        from app.repositories.browse_card_repository import owned_note_word_expression, owned_text_field_ids
+        fields = None
+        if draft is not None:
+            if not hasattr(context, 'owned_text_fields'):
+                context.owned_text_fields = owned_text_field_ids(user_id)
+            fields = context.owned_text_fields
+        own = owned_note_word_expression(draft_model=draft, field_ids_by_type=fields)
         values = []
         if context.owned_visibility_condition is not None:
             values.append((context.owned_visibility_condition, own))
@@ -281,7 +306,9 @@ def order_notes(context, *, user_id, query=None, with_rank=False):
         due = context.progress_alias.due_at
         order.extend((day.is_(None), day.desc() if descending else day.asc(),
                       due.is_(None), due.desc() if descending else due.asc()))
-    order.extend((Note.updated_at.desc(), Note.id.asc()))
+    from app.repositories.field_value_query_repository import author_note_column
+    updated = case((Note.user_id == user_id, author_note_column('updated_at', draft_model=draft)), else_=Note.updated_at)
+    order.extend((updated.desc(), Note.id.asc()))
     if with_rank:
         return query.add_columns(func.row_number().over(order_by=order).label('browse_rank'))
     return query.order_by(*order)
@@ -292,6 +319,16 @@ def deck_counts(context, *, user_id, admin_mode, today_day_index, day_cutoff_utc
     from app.repositories import note_analytics_read_repository as reads
     deck_ids = sorted(context.deck_by_id)
     owned = select(Note.id.label("note_id"), Note.deck_id.label("deck_id")).where(Note.deck_id.in_(deck_ids))
+    from app.repositories.field_value_query_repository import author_note_column, author_note_visible
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        from sqlalchemy.orm import aliased
+        from models.note_draft import NoteDraft
+        from app.repositories.field_value_query_repository import join_author_draft
+        draft = aliased(NoteDraft, name='browse_count_draft')
+        deck = author_note_column("deck_id", draft_model=draft)
+        owned = join_author_draft(select(Note.id.label("note_id"), deck.label("deck_id")), draft, user_id).where(
+            deck.in_(deck_ids), author_note_visible(draft_model=draft))
     if not admin_mode:
         owned = owned.where(Note.user_id == user_id)
     branches = [owned]

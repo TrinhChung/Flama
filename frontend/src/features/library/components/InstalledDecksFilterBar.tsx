@@ -20,6 +20,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface InstalledDecksFilterBarProps {
+  showVersionUpdates?: boolean
   queryText: string
   setQueryText: (val: string) => void
   searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -48,6 +49,7 @@ interface InstalledDecksFilterBarProps {
 }
 
 export function InstalledDecksFilterBar({
+  showVersionUpdates = true,
   queryText,
   setQueryText,
   searchInputRef,
@@ -157,7 +159,7 @@ export function InstalledDecksFilterBar({
               onValueChange={(val) => setStatusFilter(val as any)}
               className="w-full sm:w-auto"
             >
-              <TabsList className="grid grid-cols-3 w-full sm:w-auto h-10 p-1 rounded-lg bg-muted/60">
+              <TabsList className={`grid ${showVersionUpdates ? 'grid-cols-3' : 'grid-cols-2'} w-full sm:w-auto h-10 p-1 rounded-lg bg-muted/60`}>
                 <TabsTrigger
                   value="all"
                   className="text-xs font-semibold px-2 sm:px-3.5 py-1.5 rounded-md"
@@ -170,12 +172,12 @@ export function InstalledDecksFilterBar({
                 >
                   {t('search_filter.tabs.using_now', { defaultValue: 'Đang dùng' })}
                 </TabsTrigger>
-                <TabsTrigger
+                {showVersionUpdates ? <TabsTrigger
                   value="update_available"
                   className="text-xs font-semibold px-2 sm:px-3.5 py-1.5 rounded-md"
                 >
                   {t('search_filter.tabs.update_available', { defaultValue: 'Có bản mới' })}
-                </TabsTrigger>
+                </TabsTrigger> : null}
               </TabsList>
             </Tabs>
 
@@ -215,8 +217,8 @@ export function InstalledDecksFilterBar({
                   <SelectItem value="using_now">{t('search_filter.advanced.status_using_now', { defaultValue: 'Đang sử dụng' })}</SelectItem>
                   <SelectItem value="installed">{t('search_filter.advanced.status_installed', { defaultValue: 'Đã cài đặt' })}</SelectItem>
                   <SelectItem value="owned">{t('search_filter.advanced.status_owned', { defaultValue: 'Deck của bạn' })}</SelectItem>
-                  <SelectItem value="update_available">{t('search_filter.advanced.status_update_available', { defaultValue: 'Có bản cập nhật' })}</SelectItem>
-                  <SelectItem value="conflict">{t('search_filter.advanced.status_conflict', { defaultValue: 'Có xung đột' })}</SelectItem>
+                  {showVersionUpdates ? <SelectItem value="update_available">{t('search_filter.advanced.status_update_available', { defaultValue: 'Có bản cập nhật' })}</SelectItem> : null}
+                  {showVersionUpdates ? <SelectItem value="conflict">{t('search_filter.advanced.status_conflict', { defaultValue: 'Có xung đột' })}</SelectItem> : null}
                 </SelectContent>
               </Select>
             </div>

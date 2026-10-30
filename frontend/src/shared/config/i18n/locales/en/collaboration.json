@@ -144,7 +144,10 @@
     "toast_publishing": "Packaging and publishing release…",
     "toast_publishing_desc": "System is snapshotting all flashcards and deck structure.",
     "toast_publish_success": "Published version {{version}}.",
-    "toast_publish_error": "Failed to publish new release."
+    "toast_publish_error": "Failed to publish new release.",
+    "base_description": "Review your drafts before publishing. Learners receive the new content as soon as you publish; their personal overrides are preserved.",
+    "base_content_desc": "Drafts remain private until you publish. These are the changes that will be applied to the shared deck.",
+    "base_publishing_desc": "Applying drafts to the published deck."
   },
   "update": {
     "title": "View Deck Update",
@@ -243,5 +246,22 @@
     "toast_sync_success": "Draft synced with base deck.",
     "toast_submit_success": "Submitted contribution to deck owner.",
     "loading": "Loading local changes…"
+  },
+  "base_comparison": {
+    "loading": "Loading your personal changes…",
+    "title": "Compare personal changes",
+    "absent": "No value",
+    "priority_title": "Your personal changes are preserved",
+    "priority_description": "You receive new content as soon as the author publishes. Your personal value takes priority for fields you have edited. Remove an override to use the latest published value.",
+    "empty": "You have no personal overrides. You are using the latest content published by the author.",
+    "base_changed": "Original has changed",
+    "note_deleted": "Author deleted this note",
+    "field_deleted": "Author deleted this field",
+    "reset": "Remove personal override",
+    "keep": "Keep my version",
+    "latest_base": "Latest published value",
+    "your_value": "Your personal value",
+    "removed_value": "You removed this value",
+    "pagination": "Personal changes pagination"
   }
 }

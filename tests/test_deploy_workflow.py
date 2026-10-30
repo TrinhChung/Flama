@@ -175,6 +175,13 @@ class DeployWorkflowTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(gate_status, 1 - unit_status)
 
+    def test_existing_study_retention_is_quiesced_and_only_resumed_if_previously_enabled(self):
+        activation = ACTIVATION_PATH.read_text(encoding="utf-8")
+        quiesce = activation[activation.index("phase=quiescing"):activation.index("phase=migrating")]
+        self.assertIn("flama-study-retention.timer flama-study-retention.service", quiesce)
+        health = activation[activation.index("phase=health"):]
+        self.assertIn('if [ "$previous_study_retention_timer_enabled" -eq 1 ]; then\n      systemctl enable --now flama-study-retention.timer', health)
+
 
 class DeployRollbackShellTests(unittest.TestCase):
     @classmethod
@@ -186,7 +193,8 @@ class DeployRollbackShellTests(unittest.TestCase):
             raise unittest.SkipTest("Bash is required for the stubbed deploy-shell rehearsal.")
 
     def _rollback(self, *, check_exit=0, quiesce_exit=0, consumer_stop_exit=0,
-                  history_exit=0, field_exit=0, previous_worker=True, venv_switched=0):
+                  history_exit=0, field_exit=0, previous_worker=True, venv_switched=0,
+                  study_retention_stop_exit=0):
         workflow = deployment_source()
         function = workflow[workflow.index("rollback_activation() {"):workflow.index("cleanup() {")]
         with tempfile.TemporaryDirectory() as directory:
@@ -218,10 +226,12 @@ class DeployRollbackShellTests(unittest.TestCase):
                 f"CHECK_EXIT={check_exit}", f"QUIESCE_EXIT={quiesce_exit}", f"CONSUMER_STOP_EXIT={consumer_stop_exit}",
                 f"HISTORY_EXIT={history_exit}",
                 f"FIELD_EXIT={field_exit}",
+                f"STUDY_RETENTION_STOP_EXIT={study_retention_stop_exit}",
                 '''systemctl() {
                   printf '%s\\n' "systemctl $*"
                   if [ "$*" = 'stop flama.service flama-connect.service' ]; then return "$QUIESCE_EXIT"; fi
                   if [ "$*" = 'stop flama-study-worker.service' ]; then return "$CONSUMER_STOP_EXIT"; fi
+                  if [ "$*" = 'stop flama-study-retention.timer flama-study-retention.service' ]; then return "$STUDY_RETENTION_STOP_EXIT"; fi
                   return 0
                 }
                 systemd-run() {
@@ -264,6 +274,13 @@ class DeployRollbackShellTests(unittest.TestCase):
         self.assertNotIn("cp ", output)
         self.assertNotIn("ln ", output)
         self.assertIn("consumer did not stop", errors)
+
+    def test_cannot_stop_study_retention_blocks_rollback_before_inspection(self):
+        output, errors = self._rollback(study_retention_stop_exit=1)
+        self.assertNotIn("systemd-run", output)
+        self.assertNotIn("cp ", output)
+        self.assertNotIn("ln ", output)
+        self.assertIn("Study retention writer did not stop", errors)
 
     def test_safe_rollback_restores_consumer_with_previous_release(self):
         output, errors = self._rollback()

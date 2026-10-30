@@ -10,6 +10,9 @@ Counts read progress rows as stored; the offline ``study-authority-read-audit``
 re-derives them. Study and Browse keep their own bounded evidence checks.
 """
 
+
+from app.repositories.flashcards_share_repository import source_deck_map_condition
+from app.repositories.field_value_query_repository import author_note_column, author_note_visible
 from sqlalchemy import and_, func, literal, not_, null, or_, select, union_all
 from sqlalchemy.orm import aliased
 
@@ -44,7 +47,8 @@ def owned_note_scope(
     A Card is a Note shown through one ACTIVE application of its NoteType
     (ADR P11), so a Note's multiplicity is its type's ACTIVE application count.
     """
-    notes = select(Note.id, Note.deck_id, Note.note_type_id)
+    deck_id = author_note_column("deck_id")
+    notes = select(Note.id, deck_id.label("deck_id"), Note.note_type_id).where(author_note_visible())
     if not owned_by_any_user:
         notes = (
             notes
@@ -52,9 +56,9 @@ def owned_note_scope(
             .where(Note.user_id == int(learner_user_id))
         )
     if deck_ids is not None:
-        notes = notes.where(Note.deck_id.in_(deck_ids))
+        notes = notes.where(deck_id.in_(deck_ids))
     elif require_deck:
-        notes = notes.where(Note.deck_id.isnot(None))
+        notes = notes.where(deck_id.isnot(None))
     notes = notes.subquery("analytics_owned_notes")
     application = StudyApplication.__table__
     active_count = literal(1) if by_note else func.count()
@@ -102,7 +106,7 @@ def _installed_source(*, learner_user_id, deck_ids=None, by_note=False):
         visible = clone_source_card_visibility(DeckInstall, card=Card, note=Note, release=rel)
     statement = (
         statement
-        .join(DeckCloneDeckMap, DeckCloneDeckMap.source_deck_id == Note.deck_id)
+        .join(DeckCloneDeckMap, source_deck_map_condition(user_id=learner_user_id))
         .join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id)
         .outerjoin(rel, rel.id == DeckInstall.applied_release_id)
         .where(

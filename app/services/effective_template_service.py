@@ -7,6 +7,8 @@ does not query per Card or mutate the source model.
 
 from __future__ import annotations
 
+from app.services.effective_note_reader import install_release_id
+
 from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any, Mapping
@@ -70,7 +72,7 @@ def resolve_effective_template(
         from app.repositories import template_release_repository as repository
         template_overrides = repository.load_effective_template_overrides(
             db.session, user_id=clone_scope.install.user_id, source_template_ids=[template_id],
-            release_pins=repository.deck_pins(db.session, clone_scope.install.applied_release_id),
+            release_pins=repository.deck_pins(db.session, install_release_id(clone_scope.install)),
         )
     source = template_overrides.get(template_id) if template_overrides is not None else None
     source = source if source is not None else template

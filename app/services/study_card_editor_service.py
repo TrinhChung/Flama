@@ -7,6 +7,7 @@ from typing import Any, Mapping
 from app.repositories import study_card_editor_repository as study_edit_repo
 from app.repositories.vocabulary_repository import note_display_triplet, note_field_values_as_strings
 from app.services import deck_working_tree_service
+from app.services.note_draft_service import effective_note_metadata
 from app.services.effective_template_service import resolve_effective_template
 from app.services.flashcard_renderer import (
     TemplateCompileError,
@@ -70,7 +71,8 @@ def update_study_card_note(
         ) from exc
 
     original_values = dict(note.field_values or {})
-    original_deck_id = note.deck_id
+    metadata = effective_note_metadata(note)
+    original_deck_id = metadata["deck_id"]
     next_values = dict(original_values)
     for key_name, value in validated.field_updates.items():
         next_values[key_name] = value
@@ -81,7 +83,7 @@ def update_study_card_note(
     }
     tags_changed = bool(
         validated.update_tags
-        and list(note.tags or []) != list(validated.tags or [])
+        and list(metadata["tags"] or []) != list(validated.tags or [])
     )
     deck_changed = bool(
         validated.update_deck and original_deck_id != validated.deck_id
@@ -174,8 +176,8 @@ def update_study_card_note(
         "success": True,
         "card_id": card.id,
         "note_id": note.id,
-        "deck_id": note.deck_id,
-        "tags": note.tags or [],
+        "deck_id": effective_note_metadata(note)["deck_id"],
+        "tags": effective_note_metadata(note)["tags"] or [],
         "field_values": note_field_values_as_strings(note),
         **note_revision_payload(note),
         "word": display_triplet.get("word", ""),

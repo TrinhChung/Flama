@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+from app.repositories.flashcards_share_repository import effective_install_release_id_expression
+
 from sqlalchemy import select, text
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -84,7 +86,7 @@ def read_installed_scope_dependencies(session, *, deck_ids):
         DeckInstall.source_note_type_id.label("source_note_type_id"),
         DeckInstall.deck_item_id.label("deck_item_id"),
         DeckInstall.clone_mode.label("clone_mode"),
-        DeckInstall.applied_release_id.label("applied_release_id"),
+        effective_install_release_id_expression().label("applied_release_id"),
         DeckInstall.version_mode.label("version_mode"),
         DeckInstall.overlay_revision.label("overlay_revision"),
         DeckInstall.base_snapshot_at.label("base_snapshot_at"),
@@ -97,7 +99,7 @@ def read_installed_scope_dependencies(session, *, deck_ids):
         DeckRelease.manifest_hash.label("release_manifest_hash"),
     ).select_from(DeckCloneDeckMap).join(
         DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id,
-    ).outerjoin(DeckRelease, DeckRelease.id == DeckInstall.applied_release_id).where(
+    ).outerjoin(DeckRelease, DeckRelease.id == effective_install_release_id_expression()).where(
         DeckCloneDeckMap.local_deck_id.in_(ids),
     )
     return {int(row["local_deck_id"]): dict(row) for row in session.execute(statement).mappings()}

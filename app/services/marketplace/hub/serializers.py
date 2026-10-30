@@ -230,7 +230,9 @@ def _serialize_deck_install_library_row(
         saved_ids=saved_ids,
         pending_owned_ids=set(),
     )
-    applied_release = install.applied_release
+    from app.services.note_base_context import published_base_enabled
+    base_mode = published_base_enabled()
+    applied_release = deck_item.current_release if base_mode else install.applied_release
     available_release = deck_item.current_release
     applied_sequence = int(applied_release.sequence_no or 0) if applied_release else 0
     available_sequence = int(available_release.sequence_no or 0) if available_release else 0
@@ -238,6 +240,7 @@ def _serialize_deck_install_library_row(
     payload.update(
         {
             "deck_install_id": install.id,
+            "content_model": "published_base" if base_mode else "release",
             "auto_update_enabled": bool(getattr(install, "auto_update_enabled", False)),
             "sync_mode": getattr(install, "sync_mode", "manual") or "manual",
             "last_auto_updated_at": (

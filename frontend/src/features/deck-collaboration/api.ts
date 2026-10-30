@@ -1,9 +1,8 @@
-import { appApi } from '@/app/api'
-import { apiRequest } from '@/shared/api/client'
+import { apiJson, apiRequest } from '@/shared/api/client'
+export { getAutoPublishStatus, updateAutoPublishSetting } from '@/entities/deck-publication'
 import type {
   AppliedInstalledUpdate,
   ApplyInstalledUpdateInput,
-  AutoPublishStatus,
   ChangeRequestInbox,
   ChangeRequestItem,
   ConflictResolutionInput,
@@ -74,6 +73,7 @@ type RawRelease = {
 }
 
 type RawReleasePreviewPage = {
+  content_model?: 'published_base'
   deck_item_id: string
   deck_title?: string | null
   base_release: RawRelease | null
@@ -97,6 +97,7 @@ type RawReleaseChanges = {
 }
 
 type RawInstalledDeckUpdates = {
+  content_model?: 'published_base'
   install_id: string | number
   deck_item_id?: string | number | null
   version_mode?: string | null
@@ -252,6 +253,7 @@ export function getReleasePreview(
     query,
   )
   return apiRequest<RawReleasePreviewPage>(path, { signal }).then((payload) => ({
+    content_model: payload.content_model,
     deck_item_id: payload.deck_item_id,
     deck_title: payload.deck_title,
     base_release: payload.base_release ? normalizeRelease(payload.base_release) : null,
@@ -292,27 +294,6 @@ export function createDeckRelease(
       body: JSON.stringify(input),
     },
   ).then((payload) => normalizeRelease(payload.release))
-}
-
-export function getAutoPublishStatus(
-  itemId: string,
-  signal?: AbortSignal,
-): Promise<AutoPublishStatus> {
-  return apiRequest<AutoPublishStatus>(
-    `/api/marketplace/decks/${encodeSegment(itemId)}/auto-publish`,
-    { signal },
-  )
-}
-
-export function updateAutoPublishSetting(
-  itemId: string,
-  autoPublishEnabled: boolean,
-): Promise<AutoPublishStatus> {
-  return appApi.mutate<AutoPublishStatus>(
-    `/api/marketplace/decks/${encodeSegment(itemId)}/auto-publish`,
-    'POST',
-    { auto_publish_enabled: autoPublishEnabled },
-  )
 }
 
 export function getReleaseChanges(
@@ -400,6 +381,7 @@ function normalizeInstalledDeckUpdates(payload: RawInstalledDeckUpdates) {
     ? normalizeRelease(payload.available_release)
     : null
   return {
+    content_model: payload.content_model,
     installation: {
       id: String(payload.install_id),
       deck_item_id: payload.deck_item_id === null || payload.deck_item_id === undefined
@@ -431,7 +413,7 @@ export function markInstalledDeckUpdateSeen(
   installId: string,
   releaseId: string,
 ) {
-  return appApi.mutate<RawInstalledDeckUpdates>(
+  return apiJson<RawInstalledDeckUpdates>(
     `/api/marketplace/installations/${encodeSegment(installId)}/updates/${encodeSegment(releaseId)}/mark-seen`,
     'POST',
     {},
@@ -487,7 +469,7 @@ export function prepareInstalledDeckUpdate(
     idempotency_key: string
   },
 ) {
-  return appApi.mutate<RawPreparedInstalledUpdateEnvelope>(
+  return apiJson<RawPreparedInstalledUpdateEnvelope>(
     `/api/marketplace/installations/${encodeSegment(installId)}/updates/${encodeSegment(releaseId)}/prepare`,
     'POST',
     body,
@@ -525,7 +507,7 @@ export function applyInstalledDeckUpdate(
   releaseId: string,
   body: ApplyInstalledUpdateInput,
 ) {
-  return appApi.mutate<RawPreparedInstalledUpdateEnvelope>(
+  return apiJson<RawPreparedInstalledUpdateEnvelope>(
     `/api/marketplace/installations/${encodeSegment(installId)}/updates/${encodeSegment(releaseId)}/apply`,
     'POST',
     body,
@@ -542,7 +524,7 @@ export function resolveInstalledUpdateConflict(
   conflictId: string,
   resolutionMode: 'keep_mine' | 'keep_upstream',
 ) {
-  return appApi.mutate<RawPreparedInstalledUpdateEnvelope>(
+  return apiJson<RawPreparedInstalledUpdateEnvelope>(
     `/api/marketplace/rebases/${encodeSegment(rebaseId)}/conflicts/${encodeSegment(conflictId)}/resolve`,
     'POST',
     { resolution_mode: resolutionMode },
@@ -550,7 +532,7 @@ export function resolveInstalledUpdateConflict(
 }
 
 export function applyPreparedInstalledUpdate(rebaseId: string) {
-  return appApi.mutate<RawPreparedInstalledUpdateEnvelope>(
+  return apiJson<RawPreparedInstalledUpdateEnvelope>(
     `/api/marketplace/rebases/${encodeSegment(rebaseId)}/apply`,
     'POST',
     {},
@@ -579,7 +561,7 @@ export function updateInstalledDeckSettings(
   installId: string,
   autoUpdateEnabled: boolean,
 ): Promise<InstalledDeckUpdates> {
-  return appApi.mutate<RawInstalledDeckUpdates>(
+  return apiJson<RawInstalledDeckUpdates>(
     `/api/marketplace/installations/${encodeSegment(installId)}/settings`,
     'POST',
     { auto_update_enabled: autoUpdateEnabled },
@@ -589,7 +571,7 @@ export function updateInstalledDeckSettings(
 export function detachInstalledDeck(
   installId: string,
 ): Promise<{ install_id: string; version_mode: string; status: string }> {
-  return appApi.mutate<{ install_id: string; version_mode: string; status: string }>(
+  return apiJson<{ install_id: string; version_mode: string; status: string }>(
     `/api/marketplace/installations/${encodeSegment(installId)}/detach`,
     'POST',
     {},
@@ -600,7 +582,7 @@ export function resolveAllInstalledUpdateConflicts(
   rebaseId: string,
   resolutionMode: 'keep_mine' | 'keep_upstream',
 ) {
-  return appApi.mutate<RawPreparedInstalledUpdateEnvelope>(
+  return apiJson<RawPreparedInstalledUpdateEnvelope>(
     `/api/marketplace/rebases/${encodeSegment(rebaseId)}/conflicts/resolve-all`,
     'POST',
     { resolution_mode: resolutionMode },
@@ -786,7 +768,7 @@ export function buildDeckChangeRequestDraft(
   deckItemId: string,
   body: { title: string; description: string },
 ) {
-  return appApi.mutate<DeckChangeRequest>(
+  return apiJson<DeckChangeRequest>(
     `/api/shared/decks/${encodeSegment(deckItemId)}/change-requests/draft`,
     'POST',
     body,
@@ -794,7 +776,7 @@ export function buildDeckChangeRequestDraft(
 }
 
 export function syncDeckChangeRequest(deckItemId: string, requestId: string) {
-  return appApi.mutate<DeckChangeRequest>(
+  return apiJson<DeckChangeRequest>(
     `/api/shared/decks/${encodeSegment(deckItemId)}/change-requests/${encodeSegment(requestId)}/sync`,
     'POST',
     {},
@@ -807,7 +789,7 @@ export function resolveDeckChangeRequestConflict(
   conflictId: string,
   input: ConflictResolutionInput,
 ) {
-  return appApi.mutate<DeckChangeRequest>(
+  return apiJson<DeckChangeRequest>(
     `/api/shared/decks/${encodeSegment(deckItemId)}/change-requests/${encodeSegment(requestId)}/conflicts/${encodeSegment(conflictId)}/resolve`,
     'POST',
     input,
@@ -815,7 +797,7 @@ export function resolveDeckChangeRequestConflict(
 }
 
 export function submitDeckChangeRequest(deckItemId: string, requestId: string) {
-  return appApi.mutate<DeckChangeRequest>(
+  return apiJson<DeckChangeRequest>(
     `/api/shared/decks/${encodeSegment(deckItemId)}/change-requests/${encodeSegment(requestId)}/submit`,
     'POST',
     {},
@@ -854,7 +836,7 @@ export function getDeckChangeRequest(
 }
 
 export function approveDeckChangeRequest(requestId: string, reviewComment: string) {
-  return appApi.mutate<DeckChangeRequest>(
+  return apiJson<DeckChangeRequest>(
     `/api/change-requests/${encodeSegment(requestId)}/approve`,
     'POST',
     { review_comment: reviewComment },
@@ -862,7 +844,7 @@ export function approveDeckChangeRequest(requestId: string, reviewComment: strin
 }
 
 export function rejectDeckChangeRequest(requestId: string, reviewComment: string) {
-  return appApi.mutate<DeckChangeRequest>(
+  return apiJson<DeckChangeRequest>(
     `/api/change-requests/${encodeSegment(requestId)}/reject`,
     'POST',
     { review_comment: reviewComment },

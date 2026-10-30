@@ -3,6 +3,8 @@
 import hashlib
 import json
 
+from app.repositories.flashcards_share_repository import effective_install_release_id_expression
+
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -42,10 +44,10 @@ def dependency_hash(session, *, user_id, deck_ids):
         DeckInstall.id, DeckInstall.user_id, DeckInstall.local_deck_id,
         DeckInstall.clone_mode, DeckInstall.source_deck_id, DeckInstall.source_note_type_id,
         DeckInstall.source_owner_user_id, DeckInstall.base_snapshot_at, DeckInstall.installed_at,
-        DeckInstall.applied_release_id, DeckInstall.version_mode, DeckInstall.overlay_revision,
+        effective_install_release_id_expression().label("applied_release_id"), DeckInstall.version_mode, DeckInstall.overlay_revision,
         DeckInstall.deck_item_id, DeckRelease.id, DeckRelease.sequence_no,
         DeckRelease.status, DeckRelease.manifest_hash, DeckRelease.template_pins_initialized,
-    ).outerjoin(DeckRelease, DeckRelease.id == DeckInstall.applied_release_id).where(
+    ).outerjoin(DeckRelease, DeckRelease.id == effective_install_release_id_expression()).where(
         DeckInstall.user_id == user_id,
     ).order_by(DeckInstall.id)).all()
     maps = session.execute(select(

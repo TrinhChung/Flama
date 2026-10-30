@@ -12,10 +12,25 @@ if str(ROOT) not in sys.path:
 
 
 def check_field_code_rollback(engine, *, previous_release=None):
-    from sqlalchemy import inspect
+    from sqlalchemy import inspect, text
     inspector = inspect(engine)
     if not inspector.has_table("notes"):
         return {"ok": True, "field_storage": "absent"}
+    base_active = False
+    if inspector.has_table("deck_releases") and "publish_mode" in {
+            column["name"] for column in inspector.get_columns("deck_releases")}:
+        with engine.connect() as connection:
+            base_active = connection.execute(text(
+                "SELECT 1 FROM deck_releases WHERE publish_mode='base_cutover' LIMIT 1")).first() is not None
+    if base_active:
+        previous = Path(previous_release).resolve() if previous_release else None
+        model = previous / "models" / "note.py" if previous else None
+        capable = model is not None and model.is_file() and 'LIVE_NOTE_CONTENT_MODEL = "published-base.v1"' in model.read_text(encoding="utf-8")
+        capable = capable and all((previous / "app" / "services" / filename).is_file() for filename in (
+            "note_base_context.py", "note_draft_service.py", "effective_note_reader.py"))
+        if not capable:
+            return {"ok": False, "field_storage": "field-id.v1", "content_model": "published_base",
+                "error": "NOTE_BASE_CODE_ROLLBACK_UNSUPPORTED"}
     legacy = "field_values" in {column["name"] for column in inspector.get_columns("notes")}
     if legacy:
         return {"ok": True, "field_storage": "pre_contract"}

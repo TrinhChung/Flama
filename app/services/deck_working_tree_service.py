@@ -20,6 +20,7 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.study_application import StudyApplication
 from models.template import Template
+from app.services.note_base_context import published_base_enabled
 
 _PRESENTATION_PENDING = "flama.deck_presentation.pending"
 _PRESENTATION_ITEMS = "flama.deck_presentation.items"
@@ -83,6 +84,8 @@ def _record_presentation_mutations(session, _context):
 
 @event.listens_for(Session, "before_commit")
 def _publish_presentation_mutations(session):
+    if published_base_enabled():
+        return
     if session.in_nested_transaction():
         return
     session.flush()
@@ -165,6 +168,8 @@ def _upsert_dirty(
     source_deck_id: int | None,
     metadata: dict[str, Any] | None = None,
 ) -> None:
+    if published_base_enabled():
+        return
     row = DeckWorkingDirtyEntity.query.filter_by(
         deck_item_id=item.id,
         entity_kind=entity_kind,
@@ -215,6 +220,8 @@ def mark_note_fields_changed(
     operation: str = "set",
     deck_id: int | None = None,
 ) -> int:
+    if published_base_enabled():
+        return 0  # The flush adapter owns draft tracking and its revision fence.
     resolved_deck_id = note.deck_id if deck_id is None else deck_id
     items = _items_covering_deck(
         deck_id=resolved_deck_id,
@@ -254,6 +261,8 @@ def mark_note_fields_changed(
 
 
 def _trigger_auto_publish_for_items(items: Iterable[DeckMarketplaceItem]) -> None:
+    if published_base_enabled():
+        return
     for item in items:
         if bool(getattr(item, "auto_publish_enabled", False)):
             try:
@@ -272,6 +281,8 @@ def mark_field_def_changed(
     property_keys: Iterable[str],
     operation: str = "set",
 ) -> int:
+    if published_base_enabled():
+        return 0  # The common schema flush fence advances affected listings.
     items = _items_for_note_type(
         note_type_id=str(field_def.note_type_id),
         owner_user_id=owner_user_id,
@@ -322,6 +333,8 @@ def mark_note_field_batches_changed(
     owner/deck and note type once, then delegates one atomic sparse batch to
     every affected marketplace item.
     """
+    if published_base_enabled():
+        return 0
 
     normalized: list[dict[str, Any]] = []
     note_type_ids: set[str] = set()
@@ -469,6 +482,9 @@ def mark_deck_item_batch_changed(
     field, while manually advancing it would leave sparse release tracking
     incomplete.  This helper keeps the whole merge at one logical revision.
     """
+    if published_base_enabled():
+        item.working_revision = int(item.working_revision or 0) + 1
+        return 0
 
     normalized: dict[tuple[str, str, str], dict[str, Any]] = {}
     for raw_change in changes:
@@ -536,6 +552,8 @@ def mark_deck_item_batch_changed(
 
 
 def note_has_shared_release_dependents(note: Note) -> bool:
+    if published_base_enabled():
+        return False  # Published notes now support draft metadata and deletion.
     # Historical membership is authoritative after a note moves out of the
     # current source subtree.  Learners may still have an older release
     # applied, so hard delete/tag/card guards must not rely only on Note.deck_id.
