@@ -41,7 +41,9 @@ explicitly reported, never guessed from the author's current content.
 ## Apply
 
 1. Stop all writers, including HTTP, MCP/Connect, workers, scheduled imports and
-   scripts. Stop **both** `flama-note-base-retention.timer` and
+   scripts. Include the existing `flama-study-retention.timer` and
+   `flama-study-retention.service`; deployment preserves its previous enablement.
+   Stop **both** `flama-note-base-retention.timer` and
    `flama-note-base-retention.service`; verify the oneshot is inactive before
    acknowledging quiescence. Take a verified DB dump and retain its backup reference.
 2. Regenerate/review the manifest if any Note, schema or template changed. Run:

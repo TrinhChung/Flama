@@ -32,6 +32,7 @@ deployment_succeeded=0
 previous_analytics_timer_enabled=0
 previous_review_timer_enabled=0
 previous_note_retention_timer_enabled=0
+previous_study_retention_timer_enabled=0
 runtime_venv=""
 previous_venv=""
 venv_switched=0
@@ -43,6 +44,9 @@ if systemctl is-enabled --quiet flama-review-analytics-worker.timer; then
 fi
 if systemctl is-enabled --quiet flama-note-base-retention.timer; then
   previous_note_retention_timer_enabled=1
+fi
+if systemctl is-enabled --quiet flama-study-retention.timer; then
+  previous_study_retention_timer_enabled=1
 fi
 
 rollback_activation() {
@@ -57,6 +61,12 @@ rollback_activation() {
   if ! systemctl stop flama.service flama-connect.service; then
     echo "Automatic rollback blocked: HTTP/Connect writers did not stop." >&2
     return
+  fi
+  if systemctl cat flama-study-retention.timer >/dev/null 2>&1; then
+    if ! systemctl stop flama-study-retention.timer flama-study-retention.service; then
+      echo "Automatic rollback blocked: Study retention writer did not stop." >&2
+      return
+    fi
   fi
   systemctl stop flama-analytics-counts.timer flama-analytics-counts.service || true
   systemctl stop flama-review-analytics-worker.timer flama-review-analytics-worker.service || true
@@ -158,6 +168,9 @@ rollback_activation() {
       systemctl enable --now flama-note-base-retention.timer || true
     else
       systemctl disable flama-note-base-retention.timer || true
+    fi
+    if [ "${previous_study_retention_timer_enabled:-0}" -eq 1 ]; then
+      systemctl enable --now flama-study-retention.timer || true
     fi
     if [ "$previous_worker_available" -eq 1 ]; then
       systemctl restart flama-study-worker.service || true
@@ -294,7 +307,8 @@ activation_started=1
 for unit in flama.service flama-connect.service flama-study-worker.service \
   flama-analytics-counts.timer flama-analytics-counts.service \
   flama-review-analytics-worker.timer flama-review-analytics-worker.service \
-  flama-note-base-retention.timer flama-note-base-retention.service; do
+  flama-note-base-retention.timer flama-note-base-retention.service \
+  flama-study-retention.timer flama-study-retention.service; do
   # A first deployment has no application units yet. A loaded unit
   # must stop successfully; never acknowledge quiescence on failure.
   if systemctl cat "$unit" >/dev/null 2>&1; then
@@ -373,6 +387,11 @@ for attempt in $(seq 1 20); do
       "$PROJECT_DIR/venv/bin/python" study_worker.py --check-ready; then
     touch "$release_dir/.deployment_succeeded"
     deployment_succeeded=1
+    # This older, separately approved maintenance job is not enabled by deploy.
+    # Resume it only when the operator had already enabled it before quiescence.
+    if [ "$previous_study_retention_timer_enabled" -eq 1 ]; then
+      systemctl enable --now flama-study-retention.timer
+    fi
     "$runtime_python" "$release_dir/deploy/prune_releases.py" \
       --releases-dir "$PROJECT_DIR/releases" \
       --current-release "$release_dir" \
