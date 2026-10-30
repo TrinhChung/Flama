@@ -472,12 +472,12 @@ def resolve_browse_queue_due(
 
 def _browse_note_metadata(note, *, author_view):
     if note is None:
-        return {"deck_id": None, "tags": []}
+        return {"deck_id": None, "tags": [], "updated_at": None}
     from app.services.note_base_context import published_base_enabled
     if author_view and published_base_enabled():
-        from app.services.note_draft_service import effective_note_metadata
-        return effective_note_metadata(note)
-    return {"deck_id": note.deck_id, "tags": note.tags or []}
+        from app.services.note_draft_service import effective_note_metadata, effective_note_updated_at
+        return {**effective_note_metadata(note), 'updated_at': effective_note_updated_at(note)}
+    return {"deck_id": note.deck_id, "tags": note.tags or [], "updated_at": note.updated_at}
 
 
 def build_browse_row(
@@ -528,7 +528,7 @@ def build_browse_row(
         "reading": reading,
         "meaning": meaning,
         "tags": metadata["tags"] or [],
-        "updated_at": note_obj.updated_at.isoformat() if note_obj and note_obj.updated_at else None,
+        "updated_at": metadata['updated_at'].isoformat() if metadata['updated_at'] else None,
     }
 
 
@@ -611,7 +611,7 @@ def build_browse_card_detail(
             "content_revision": int(note_obj.content_revision or 0) if note_obj else 0,
             "field_schema_revision": int(note_type_obj.field_schema_revision or 0) if note_type_obj else 0,
             "tags": metadata["tags"] or [],
-            "updated_at": note_obj.updated_at.isoformat() if note_obj and note_obj.updated_at else None,
+            "updated_at": metadata['updated_at'].isoformat() if metadata['updated_at'] else None,
         },
         "fields": fields,
         "note_type_fields": note_type_fields,

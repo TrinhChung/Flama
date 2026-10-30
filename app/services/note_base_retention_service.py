@@ -82,9 +82,8 @@ def run_retention(*, apply=False, limit=200, now=None, after=None):
     # Simulate expired-override removal when deciding which Notes are eligible.
     expired_override_ids = {row.id for row in overrides}
     note_ids = [row.id for row in notes]
-    from models.study_progress_subject import StudyProgressSubject
-    referenced = set(census(select(StudyProgressSubject.live_note_id).where(
-        StudyProgressSubject.live_note_id.in_(note_ids)))) if note_ids else set()
+    from app.repositories.note_base_repository import progress_referenced_note_ids
+    referenced = progress_referenced_note_ids(note_ids, lock=apply)
     if note_ids:
         referenced.update(census(select(DeckCloneNoteFieldOverride.source_note_id).where(
             DeckCloneNoteFieldOverride.source_note_id.in_(note_ids),

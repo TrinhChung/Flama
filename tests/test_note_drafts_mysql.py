@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from sqlalchemy import event, select, update
 
-from app.services.field_value_identity_service import FieldIdentityError
+from app.services.field_value_identity_service import FieldIdentityConflict, FieldIdentityError
 from app.services.note_base_context import base_maintenance, note_author_view, published_base_write
 from app.services.note_draft_service import effective_note_metadata, stage_note_delete
 from models import db
@@ -60,6 +60,127 @@ class NoteDraftMySQLTests(NoteBaseMySQLTestCase):
             db.session.commit()
             self.assertEqual(self.note.field_values["Word"], value)
         self.assertIsNone(db.session.get(NoteDraft, self.note.id))
+
+    def test_current_draft_metadata_survives_an_old_reader_snapshot(self):
+        self.note.field_values = {**self.note.field_values, "Word": "old draft"}
+        db.session.commit()
+        draft = db.session.get(NoteDraft, self.note.id)
+        self.assertEqual(draft.tags, None)  # establish an older RR snapshot
+        with db.engine.begin() as connection:
+            connection.execute(NoteDraft.__table__.update().where(NoteDraft.note_id == self.note.id)
+                .values(tags=["concurrent metadata"]))
+        self.note.field_values = {**self.note.field_values, "Word": "my field edit"}
+        db.session.commit()
+        self.assertEqual(effective_note_metadata(self.note)['tags'], ["concurrent metadata"])
+        self.assertEqual(self.note.field_values['Word'], "my field edit")
+
+    def test_metadata_save_does_not_revert_a_base_published_after_read_snapshot(self):
+        other = Deck(owner_user_id=self.owner.id, note_type_id=self.note_type.id, name='Published destination')
+        db.session.add(other); db.session.commit()
+        self.note.field_values = {**self.note.field_values, 'Word': 'old private draft'}
+        db.session.commit()
+        self.assertEqual(self.note.field_values['Word'], 'old private draft')
+        destination, note_id = other.id, self.note.id
+        current = {**self.note.field_values_by_id, self.word.id: 'new published word'}
+        with db.engine.begin() as connection:
+            connection.execute(Note.__table__.update().where(Note.id == note_id).values(
+                field_values_by_id=current, deck_id=destination, tags=['new published tags'],
+                content_revision=Note.content_revision+1))
+            connection.execute(NoteDraft.__table__.delete().where(NoteDraft.note_id == note_id))
+        self.note.tags = ['my tag edit']
+        db.session.commit()
+        self.assertEqual(self.note.field_values['Word'], 'new published word')
+        self.assertEqual(effective_note_metadata(self.note)['deck_id'], destination)
+        draft = db.session.get(NoteDraft, note_id)
+        self.assertEqual(draft.field_values_by_id, {})
+        self.assertIsNone(draft.deck_id)
+        self.assertEqual(draft.tags, ['my tag edit'])
+
+    def test_direct_author_timestamp_cannot_mutate_published_base(self):
+        from datetime import timedelta
+        timestamp = self.note.updated_at
+        self.note.updated_at = timestamp + timedelta(days=1)
+        db.session.commit()
+        self.assertEqual(self.note.updated_at, timestamp)
+        self.assertIsNone(db.session.get(NoteDraft, self.note.id))
+
+    def test_direct_draft_edit_retains_current_untouched_columns(self):
+        self.note.field_values = {**self.note.field_values, "Word": "old draft"}
+        db.session.commit()
+        draft = db.session.get(NoteDraft, self.note.id)
+        replacement = {self.word.id: {"op": "set", "value": "concurrent field"}}
+        with db.engine.begin() as connection:
+            connection.execute(NoteDraft.__table__.update().where(NoteDraft.note_id == self.note.id)
+                .values(field_values_by_id=replacement))
+        draft.tags = ["my metadata"]
+        db.session.commit()
+        self.assertEqual(self.note.field_values['Word'], "concurrent field")
+        self.assertEqual(effective_note_metadata(self.note)['tags'], ["my metadata"])
+
+    def test_direct_metadata_edit_after_publication_does_not_restore_consumed_fields(self):
+        self.note.field_values = {**self.note.field_values, 'Word': 'old draft'}
+        db.session.commit()
+        draft = db.session.get(NoteDraft, self.note.id)
+        current = {**self.note.field_values_by_id, self.word.id: 'new publication'}
+        with db.engine.begin() as connection:
+            connection.execute(Note.__table__.update().where(Note.id == self.note.id).values(
+                field_values_by_id=current, content_revision=Note.content_revision+1))
+            connection.execute(NoteDraft.__table__.delete().where(NoteDraft.note_id == self.note.id))
+        draft.tags = ['my metadata']
+        db.session.flush()
+        self.assertEqual(self.note.field_values['Word'], 'new publication')
+        db.session.commit()
+        self.assertEqual(self.note.field_values['Word'], 'new publication')
+        self.assertEqual(db.session.get(NoteDraft, self.note.id).field_values_by_id, {})
+
+    def test_direct_draft_assignment_preserves_boolean_number_type_change(self):
+        self.note.field_values = {**self.note.field_values, 'Word': True}
+        db.session.commit()
+        draft = db.session.get(NoteDraft, self.note.id)
+        draft.field_values_by_id = {self.word.id: {'op': 'set', 'value': 1}}
+        db.session.commit()
+        self.assertIs(type(db.session.get(NoteDraft, self.note.id).field_values_by_id[self.word.id]['value']), int)
+
+    def test_draft_created_after_an_old_empty_snapshot_is_reconciled(self):
+        from app.services.note_draft_service import get_note_draft
+        self.assertIsNone(get_note_draft(self.note))
+        with db.engine.begin() as connection:
+            connection.execute(NoteDraft.__table__.insert().values(note_id=self.note.id,
+                field_values_by_id={}, tags=["concurrent metadata"]))
+        self.note.field_values = {**self.note.field_values, "Word": "my edit"}
+        db.session.commit()
+        self.assertEqual(effective_note_metadata(self.note)['tags'], ["concurrent metadata"])
+        self.assertEqual(self.note.field_values['Word'], "my edit")
+
+    def test_existing_draft_keeps_boolean_and_number_distinct(self):
+        for value in (True, 1, False, 0):
+            self.note.field_values = {**self.note.field_values, "Extra": value}
+            db.session.commit()
+            self.assertIs(type(self.note.field_values['Extra']), type(value))
+            self.assertEqual(self.note.field_values['Extra'], value)
+
+    def test_draft_relationship_and_explicit_detach_keep_lookup_consistent(self):
+        row = NoteDraft(note=self.note, field_values_by_id={self.word.id: {'op': 'set', 'value': 'related'}})
+        db.session.add(row)
+        db.session.flush()
+        self.assertEqual(self.note.field_values['Word'], 'related')
+        db.session.expunge(row)
+        self.assertEqual(self.note.field_values['Word'], 'related')
+        self.note.field_values = {**self.note.field_values, 'Word': 'after detach'}
+        db.session.commit()
+        self.assertEqual(self.note.field_values['Word'], 'after detach')
+
+    def test_locked_schema_cache_is_refreshed_after_savepoint_rollback(self):
+        self.note.field_values = {**self.note.field_values, 'Word': 'first edit'}
+        db.session.flush()
+        savepoint = db.session.begin_nested()
+        self.word.name = 'Temporary label'
+        db.session.flush()
+        savepoint.rollback()
+        self.note.field_values = {**self.note.field_values, 'Word': 'second edit'}
+        db.session.commit()
+        self.assertEqual(self.note.field_values['Word'], 'second edit')
+        self.assertNotIn('Temporary label', self.note.field_values)
 
     def test_metadata_can_be_reverted_to_base_after_prior_draft(self):
         self.note.tags = ["changed"]
@@ -189,3 +310,93 @@ class NoteDraftMySQLTests(NoteBaseMySQLTestCase):
             db.session.commit()
             self.assertEqual(self.note.field_values_by_id[self.word.id], "legacy")
             self.assertIsNone(db.session.get(NoteDraft, self.note.id))
+
+    def test_large_session_loads_drafts_in_bounded_batches_and_reuses_after_flush(self):
+        notes = [self.note] + [Note(user_id=self.owner.id, note_type_id=self.note_type.id,
+            deck_id=self.deck.id, field_values={"Word": str(index)}) for index in range(1999)]
+        db.session.add_all(notes[1:])
+        db.session.flush()
+        with published_base_write():
+            for note in notes:
+                note.published_at = datetime.utcnow()
+            db.session.flush()
+        db.session.commit()
+        page = db.session.execute(select(Note).order_by(Note.id)).scalars().all()
+        draft_selects = []
+        def capture(_conn, _cursor, statement, params, *_args):
+            if statement.lstrip().lower().startswith('select') and 'from note_drafts' in statement.lower():
+                draft_selects.append((statement, len(params)))
+        event.listen(db.engine, 'before_cursor_execute', capture)
+        try:
+            first = [note.field_values for note in page]
+            self.assertEqual(len(draft_selects), 4)
+            self.assertTrue(all(count <= 500 for _, count in draft_selects))
+            # A changed Note creates its own Draft; an unrelated cached miss
+            # remains known across that flush and must not reload the page.
+            page[0].field_values = {**first[0], 'Word': 'changed'}
+            db.session.flush()
+            before = len(draft_selects)
+            self.assertEqual(page[0].field_values['Word'], 'changed')
+            self.assertEqual([note.field_values for note in page[1:]], first[1:])
+            self.assertEqual(len(draft_selects), before)
+        finally:
+            event.remove(db.engine, 'before_cursor_execute', capture)
+
+    def test_draft_cache_tracks_pending_removal_and_rollback(self):
+        self.assertEqual(self.note.field_values['Word'], 'base')
+        draft = NoteDraft(note_id=self.note.id, field_values_by_id={self.word.id:{'op':'set','value':'pending'}})
+        db.session.add(draft)
+        self.assertEqual(self.note.field_values['Word'], 'pending')
+        db.session.flush()
+        db.session.delete(draft)
+        self.assertEqual(self.note.field_values['Word'], 'base')
+        db.session.flush()
+        self.assertEqual(self.note.field_values['Word'], 'base')
+        db.session.rollback()
+        self.assertEqual(self.note.field_values['Word'], 'base')
+
+    def test_property_only_exposes_drafts_to_owner_or_trusted_job(self):
+        from flask import g, request
+        learner = create_note_user(db.session, username='draft-learner', email='draft-learner@example.invalid')
+        self.note.field_values = {**self.note.field_values, 'Word':'private draft'}
+        db.session.commit()
+        owner_id, learner_id = self.owner.id, learner.id
+        for user, expected in ((self.owner,'private draft'),(learner,'base'),(None,'base')):
+            with self.app.test_request_context('/published-note'):
+                g.pop('_login_user',None)
+                if user is not None:
+                    g._login_user = user
+                self.assertEqual(self.note.field_values['Word'],expected)
+        with note_author_view(owner_id):
+            self.assertEqual(self.note.field_values['Word'],'private draft')
+        with note_author_view(learner_id):
+            self.assertEqual(self.note.field_values['Word'],'base')
+        with self.app.test_request_context('/connect-token'):
+            g.pop('_login_user',None)
+            request.environ['flama.note_author_user_id'] = owner_id
+            self.assertEqual(self.note.field_values['Word'],'private draft')
+        with self.app.test_request_context('/anonymous'):
+            g.pop('_login_user',None)
+            self.assertEqual(self.note.field_values['Word'],'base')
+
+    def test_foreign_property_or_direct_draft_write_cannot_replace_author_draft(self):
+        learner = create_note_user(db.session, username='foreign-writer', email='foreign-writer@example.invalid')
+        self.note.field_values = {**self.note.field_values, 'Word':'private draft'}
+        db.session.commit()
+        learner_id, note_id = learner.id, self.note.id
+        with note_author_view(learner_id), self.assertRaises(FieldIdentityConflict):
+            self.note.field_values = {'Word':'intruder'}
+        db.session.rollback()
+        with note_author_view(learner_id), self.assertRaises(FieldIdentityConflict):
+            draft = db.session.get(NoteDraft,note_id)
+            draft.field_values_by_id = {self.word.id:{'op':'set','value':'intruder'}}
+            db.session.flush()
+        db.session.rollback()
+        from sqlalchemy import delete, insert
+        for statement in (update(NoteDraft).where(NoteDraft.note_id == note_id).values(op='delete'),
+                delete(NoteDraft).where(NoteDraft.note_id == note_id),
+                insert(NoteDraft).values(note_id=note_id,field_values_by_id={})):
+            with note_author_view(learner_id), self.assertRaises(FieldIdentityConflict):
+                db.session.execute(statement)
+            db.session.rollback()
+        self.assertEqual(self.note.field_values['Word'],'private draft')

@@ -159,17 +159,20 @@ def canonical_field_schema_for_note(note, session=None):
 def read_note_named_values(note):
     pending = note.__dict__.get("_pending_named_field_values")
     if pending is not None:
-        return deepcopy(pending)
+        from app.services.note_base_context import author_drafts_visible, published_base_enabled
+        if not published_base_enabled() or note.published_at is None or author_drafts_visible(note.user_id):
+            return deepcopy(pending)
     state = inspect(note)
     if state.transient and note.field_values_by_id is None:
         return {}
     if note.field_values_codec != FIELD_VALUE_CODEC:
         raise FieldIdentityError("Note is not in the canonical Field ID codec; run the offline cutover")
     schema = canonical_field_schema_for_note(note)
-    from app.services.note_draft_service import apply_draft_values
+    from app.services.note_draft_service import apply_draft_values, get_note_draft
     from app.services.note_base_context import published_base_enabled
-    if published_base_enabled():
-        values, extras = apply_draft_values(note)
+    draft = get_note_draft(note) if published_base_enabled() else None
+    if draft is not None:
+        values, extras = apply_draft_values(note, draft)
     else:
         values, extras = note.field_values_by_id, note.field_values_extras
     values = _json_object(values, "ID values")
@@ -186,6 +189,9 @@ def read_note_named_values(note):
 
 
 def write_note_named_values(note, values):
+    from app.services.note_base_context import published_base_enabled, require_note_author_write
+    if published_base_enabled() and inspect(note).persistent and note.published_at is not None:
+        require_note_author_write(note.user_id)
     values = deepcopy(_json_object(values, "Field values"))
     session = object_session(note)
     if session is not None and inspect(note).persistent:

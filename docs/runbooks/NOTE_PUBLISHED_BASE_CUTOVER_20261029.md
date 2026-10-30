@@ -26,8 +26,13 @@ Note/Field and its proposed Base/draft. Private manifests contain note content a
 must stay outside Git and public reports. The tool refuses to overwrite an artifact.
 
 The approved plan §7.1 explicitly requires: “Xuất danh sách note sẽ thành nháp để
-chủ dự án duyệt.” Approval is for the exact manifest checksum on the fresh target,
-not the old rehearsal manifest. Resolve any unexpected classification before apply.
+chủ dự án duyệt.” Record the reviewed Note/Field content and classification together
+with the manifest checksum. Before applying on the fresh target, compare its manual
+draft export to that reviewed list. Request renewed owner review when Note/Field
+values or classification change; database-name/timestamp-only manifest metadata
+does not change a content approval. The operator must still pass the exact fresh
+target checksum to `--approved-sha256` and retain both artifacts in the receipt.
+Resolve any unexpected classification before apply.
 Review the override census as well. A legacy override with a recorded original
 release receives a hash of that release's value/presence; its personal value,
 operation, identity and last-edit time are preserved. Unobserved legacy bases are
@@ -36,7 +41,9 @@ explicitly reported, never guessed from the author's current content.
 ## Apply
 
 1. Stop all writers, including HTTP, MCP/Connect, workers, scheduled imports and
-   scripts. Take a verified DB dump and retain its backup reference.
+   scripts. Stop **both** `flama-note-base-retention.timer` and
+   `flama-note-base-retention.service`; verify the oneshot is inactive before
+   acknowledging quiescence. Take a verified DB dump and retain its backup reference.
 2. Regenerate/review the manifest if any Note, schema or template changed. Run:
 
 ```powershell
@@ -68,7 +75,7 @@ state; never assume rollback or rerun blindly.
 
 ## Rollback before the first new publish
 
-Stop writers again and retain a fresh backup reference. Use the matching manifest
+Stop writers again, including the retention timer and active oneshot, and retain a fresh backup reference. Use the matching manifest
 and active receipt:
 
 ```powershell
@@ -91,15 +98,29 @@ After successful production soak and a retained operational backup, remove obsol
 runtime paths and the six history/rebase tables in a separately reviewed P6 change.
 The current implementation keeps them for rollback and does not run destructive
 history cleanup automatically.
+The owner, operational entry checks and removal inventory are recorded in the
+[P6 checklist](../architecture/NOTE_PUBLISHED_BASE_P6_CHECKLIST_2026-10-30.md).
 
 ```powershell
 .\.venv\Scripts\python.exe -m flask --app wsgi.py note-base-retention --limit 200
 .\.venv\Scripts\python.exe -m flask --app wsgi.py note-base-retention --limit 200 --apply
 ```
 
-Resume with `--after NEXT_CURSOR` until `next_cursor` is null. Each new scheduled
-pass starts without a cursor to pick up newly eligible tombstones. Retention
-defaults to dry run. Media asset/file GC is a separate future batch and
+Resume a manual run with `--after NEXT_CURSOR` until `next_cursor` is null.
+The daily systemd timer runs at 04:30 UTC with up to 15 minutes of jitter. It
+skips flag-off releases before importing Flask or connecting to MySQL. Each
+invocation uses `flock`, batches of 200, at most 200 batches and a 60-second
+budget checked between batches. A batch commits before atomically advancing
+`/var/lib/flama-note-base-retention/cursor.json`; interruption repeats a committed
+batch safely if the cursor was not yet written. An incomplete daily run resumes
+its cursor, and a completed sweep resets to the beginning for newly eligible
+tombstones. Per-batch and total counts are JSON lines in
+`journalctl -u flama-note-base-retention.service`. Activation installs the units,
+stops the timer/oneshot with other writers before migration, and restores the
+previous timer's enablement on safe code rollback. No unit has been installed
+or activated on production as part of the local rehearsal.
+
+The manual CLI defaults to dry run. Media asset/file GC is a separate future batch and
 must account for Base, author drafts and learner overrides.
 
 ## Publish listings sharing a NoteType

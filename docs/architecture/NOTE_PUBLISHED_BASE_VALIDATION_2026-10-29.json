@@ -205,5 +205,70 @@
     },
     "active_current_base": true,
     "status": "PASS"
+  },
+  "review_20261030": {
+    "owner_manual_review": {
+      "approved": true,
+      "notes": 6,
+      "fields": 31
+    },
+    "backend_deployment": {
+      "tests_run": 130,
+      "skipped": 1,
+      "success": true,
+      "manifest_sha256": null
+    },
+    "readonly_fresh_copy": {
+      "database": "flama_note_base_fresh_20261029_fe2cefe0",
+      "production_modified": false,
+      "mysql_read_only_session": true,
+      "named_notes_checked": 41874,
+      "named_mismatches": 0,
+      "published_hashes_checked": 31080,
+      "published_hash_mismatches": 0,
+      "foreign_draft_privacy_checks": 6,
+      "foreign_draft_privacy_mismatches": 0,
+      "elapsed_seconds": 15.016,
+      "status": "PASS"
+    },
+    "wsgi": {
+      "entry_point": "wsgi.py",
+      "database": "flama_note_base_fresh_20261029_fe2cefe0",
+      "production_modified": false,
+      "commands": {
+        "retention_dry_run": {
+          "exit_code": 0,
+          "exception_type": null
+        },
+        "note_type_publish_dry_run": {
+          "exit_code": 0,
+          "exception_type": null
+        }
+      },
+      "mysql_read_only_session": true,
+      "startup_maintenance": false,
+      "session_http_status": 200,
+      "status": "PASS"
+    },
+    "routes": {
+      "static_routes": 82,
+      "screenshots": 328,
+      "pixel_exact_pairs": 144,
+      "total_pairs": 164,
+      "page_errors": 0
+    },
+    "frontend": {
+      "initial_tests": 593,
+      "initial_passed": 592,
+      "initial_timeouts": 1,
+      "focused_retry_tests_passed": 7,
+      "typecheck_build": "PASS"
+    },
+    "benchmark": {
+      "status": "PASS",
+      "runtime_source_sha256": "3f0cb0be33b4723bf88ec34bb5e6bfb9b74cd2642e5aeea75033d8729d24fb1d",
+      "record": "NOTE_PUBLISHED_BASE_REVIEW_BENCHMARK_2026-10-30.json"
+    },
+    "production_data_cutover_executed": false
   }
 }

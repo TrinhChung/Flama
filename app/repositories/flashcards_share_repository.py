@@ -10,7 +10,7 @@ from typing import Any, List, Optional
 from datetime import datetime
 from collections import defaultdict
 
-from sqlalchemy import and_, case, literal, or_, select
+from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.functions import GenericFunction
@@ -418,6 +418,18 @@ def find_logical_overlay_installs_for_card(user_id: int, source_deck_id: int) ->
         .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
         .all()
     )
+
+def find_published_base_installs_for_note(*, user_id, source_owner_id, note_type_id, ancestor_ids):
+    """Filter before materializing any source tree or learner folder scope."""
+    if not ancestor_ids:
+        return []
+    return (DeckInstall.query.join(DeckMarketplaceItem, DeckMarketplaceItem.id == DeckInstall.deck_item_id)
+        .filter(DeckInstall.user_id == user_id, DeckInstall.clone_mode == 'logical_overlay',
+            DeckInstall.local_deck_id.isnot(None), DeckInstall.source_deck_id.in_(ancestor_ids),
+            func.coalesce(DeckInstall.source_owner_user_id, DeckMarketplaceItem.owner_user_id) == source_owner_id,
+            func.coalesce(DeckInstall.source_note_type_id, DeckMarketplaceItem.source_note_type_id) == note_type_id)
+        .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc()).all())
+
 
 def get_notes_for_user_and_deck(user_id: int, deck_id: int) -> List[Note]:
     """Retrieves all notes created by a user in a specific deck."""

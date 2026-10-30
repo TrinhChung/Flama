@@ -1,5 +1,10 @@
 # Published Base local validation, 2026-10-29
 
+The [30 October review response](NOTE_PUBLISHED_BASE_REVIEW_RESPONSE_2026-10-30.md)
+and its sequential/process metrics supersede this report's initial 10-thread
+latency table. That table is retained as historical evidence, not a current p95
+or capacity claim. Production approval/cutover and the P6 soak gates remain open.
+
 Implementation: [ADR](NOTE_PUBLISHED_BASE_IMPLEMENTATION_2026-10-29.md).
 Operations: [cutover runbook](../runbooks/NOTE_PUBLISHED_BASE_CUTOVER_20261029.md).
 Production has not been changed. This report establishes local readiness and

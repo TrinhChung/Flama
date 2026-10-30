@@ -26,9 +26,9 @@ def _change(*, kind, identity, before, after, deck_id=None, field_id=None, field
     )
 
 
-def build_plan(item, *, lock=False):
-    pending = repository.pending_notes(item, lock=lock)
-    schema = repository.schema_snapshot(item, lock=lock)
+def build_plan(item, *, lock=False, scoped=False):
+    pending = repository.pending_notes(item, lock=lock, scoped=scoped)
+    schema = repository.schema_snapshot(item, lock=lock, scoped=scoped)
     changes = []
     old_schema = item.published_schema_json or {}
     for field_id in sorted(set(schema) | set(old_schema)):
@@ -76,7 +76,8 @@ def build_plan(item, *, lock=False):
             changes.append(_change(kind="template", identity=identity, before=before.get(identity),
                 after=after.get(identity), before_exists=identity in before, after_exists=identity in after,
                 property_key="presentation"))
-    return {"pending": pending, "schema": schema, "changes": sorted(changes, key=lambda row: (row["sort_key"], row["change_key"]))}
+    return {"pending": pending, "schema": schema, "listing_fenced": scoped,
+        "changes": sorted(changes, key=lambda row: (row["sort_key"], row["change_key"]))}
 
 
 def preview_release(*, deck_item_id, user_id, cursor=None, limit=None, entity_kind=None,
@@ -128,10 +129,11 @@ class PublishedBaseAdapter(legacy._DeckPublishAdapter):
                 DeckRelease.id == self.item.current_release_id).with_for_update()).scalar_one_or_none()
             if status != "published":
                 self.fail("RELEASE_HEAD_INVALID", "The current release is not published.")
-        if self.item.source_note_type_id:
+        scoped = repository.snapshot_head_matches(self.item)
+        if not scoped and self.item.source_note_type_id:
             db.session.execute(select(NoteType.id).where(
                 NoteType.id == self.item.source_note_type_id).with_for_update()).first()
-        return build_plan(self.item, lock=True)
+        return build_plan(self.item, lock=True, scoped=scoped)
 
     def has_changes(self, plan):
         return bool(plan["changes"])
@@ -142,7 +144,8 @@ class PublishedBaseAdapter(legacy._DeckPublishAdapter):
         removed = [note.id for note, draft in plan["pending"] if draft is not None and draft.op == "delete"]
         referenced = repository.referenced_note_ids(removed)
         deck_ids = set()
-        with published_base_write(reason="publish", session=db.session):
+        with published_base_write(reason="publish", session=db.session,
+                listing_field_ids=plan['schema'].keys() if plan.get('listing_fenced') else None):
             for note, draft in plan["pending"]:
                 if note.deck_id is not None:
                     deck_ids.add(note.deck_id)

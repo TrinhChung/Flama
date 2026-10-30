@@ -51,12 +51,29 @@ def _json_scalar_text(json_expr):
     return _json_extract_text(json_expr, literal("$"))
 
 
-def owned_note_word_expression():
+def owned_text_field_ids(user_id):
+    """Small request-local schema read, independent of the number of Notes."""
+    rows = db.session.execute(select(FieldDef.note_type_id, FieldDef.id).join(
+        NoteType, NoteType.id == FieldDef.note_type_id).where(NoteType.user_id == user_id,
+            FieldDef.field_type.in_(sorted(TEXT_FIELD_TYPES)), FieldDef.deleted_at.is_(None))
+        .order_by(FieldDef.position, func.lower(FieldDef.name), FieldDef.id).limit(201)).all()
+    if len(rows) > 200:
+        # Bound generated SQL for owners with many schemas. Partial schemas
+        # must never become a different first-field policy; use the existing
+        # scoped SQL fallback for the whole request instead.
+        return {}
+    result = {}
+    for type_id, identity in rows:
+        result.setdefault(type_id, []).append(identity)
+    return result
+
+
+def owned_note_word_expression(*, draft_model=None, field_ids_by_type=None):
     """Return the first non-empty live text field without loading Note rows."""
 
     field_def = aliased(FieldDef)
-    value_expr = note_field_text_expression(field_def.id)
-    return (
+    value_expr = note_field_text_expression(field_def.id, draft_model=draft_model)
+    fallback = (
         select(value_expr)
         .where(
             field_def.note_type_id == Note.note_type_id,
@@ -70,9 +87,20 @@ def owned_note_word_expression():
             field_def.id.asc(),
         )
         .limit(1)
-        .correlate(Note)
+        .correlate(Note, *([draft_model] if draft_model is not None else []))
         .scalar_subquery()
     )
+    if not field_ids_by_type:
+        return fallback
+    choices = []
+    for type_id, identities in field_ids_by_type.items():
+        values = [note_field_text_expression(identity, draft_model=draft_model) for identity in identities]
+        # Keep original text (including leading spaces); only the emptiness
+        # predicate trims. This matches the existing correlated field reader.
+        candidates = [case((func.trim(value) != '', value), else_=None) for value in values]
+        expression = func.coalesce(*candidates) if len(candidates) > 1 else candidates[0]
+        choices.append((Note.note_type_id == type_id, expression))
+    return case(*choices, else_=fallback)
 
 
 def load_initial_release_field_names(

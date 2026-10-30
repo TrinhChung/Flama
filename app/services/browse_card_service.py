@@ -492,8 +492,15 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
             scoped_ids = set(deck_by_id)
 
     query = Note.query if notes_only else Card.query.join(Note, Card.note_id == Note.id)
+    author_draft = None
     if published_base_enabled():
-        query = query.filter(Note.deleted_at.is_(None), db.or_(Note.user_id != user_id, author_note_visible()))
+        from sqlalchemy.orm import aliased
+        from models.note_draft import NoteDraft
+        from app.repositories.field_value_query_repository import join_author_draft
+        author_draft = aliased(NoteDraft, name='browse_author_draft')
+        query = join_author_draft(query, author_draft, user_id)
+        query = query.filter(Note.deleted_at.is_(None), db.or_(Note.user_id != user_id,
+            author_note_visible(draft_model=author_draft))).execution_options(include_deleted_drafts=True)
     # Status and due order come from the learner's Note row (verified
     # on the returned page), NULL for pristine Notes.
     query, progress_alias = _join_note_availability(query, learner_user_id=user_id, note_id_column=Note.id if notes_only else Card.note_id)
@@ -583,8 +590,8 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
         if local_scope_ids:
             owned_visibility_condition = db.and_(
                 Note.user_id == user_id,
-                author_note_column("deck_id").in_(local_scope_ids),
-                author_note_visible(),
+                author_note_column("deck_id", draft_model=author_draft).in_(local_scope_ids),
+                author_note_visible(draft_model=author_draft),
             )
             visibility_filters.append(owned_visibility_condition)
         for clone_scope in clone_scopes:
@@ -753,7 +760,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
         keyword_like = f"%{escape_like_pattern(keyword.lower())}%"
         if admin_mode:
             query = query.filter(
-                note_values_search_condition(keyword_like=keyword_like)
+                note_values_search_condition(keyword_like=keyword_like, draft_model=author_draft)
             )
         else:
             from sqlalchemy import select, union
@@ -763,11 +770,14 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
             if owned_visibility_condition is not None:
                 owned_search = db.and_(
                         owned_visibility_condition,
-                        note_values_search_condition(keyword_like=keyword_like),
+                        note_values_search_condition(keyword_like=keyword_like, draft_model=author_draft),
                     )
                 effective_search_conditions.append(owned_search)
                 if notes_only:
-                    search_branches.append(select(Note.id.label('note_id')).where(owned_search))
+                    branch = select(Note.id.label('note_id'))
+                    if author_draft is not None:
+                        branch = join_author_draft(branch, author_draft, user_id)
+                    search_branches.append(branch.where(owned_search))
             for projection in clone_projections:
                 if notes_only and projection.get('field_specs'):
                     search_branches.append(clone_note_search_ids(
@@ -792,7 +802,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
     if tag:
         tag_like = f"%{escape_like_pattern(tag.lower())}%"
         query = query.filter(
-            func.lower(db.cast(db.case((Note.user_id == user_id, author_note_column("tags")), else_=Note.tags), db.Text)).like(tag_like, escape="\\")
+            func.lower(db.cast(db.case((Note.user_id == user_id, author_note_column("tags", draft_model=author_draft)), else_=Note.tags), db.Text)).like(tag_like, escape="\\")
         )
 
     now = _utcnow()
@@ -826,6 +836,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
         keyword=keyword,
         sort_by=sort_by, sort_dir=sort_dir,
         query=query,
+        author_draft=author_draft,
         progress_alias=progress_alias,
         source_to_local_deck_id=source_to_local_deck_id,
         deck_lookup=deck_lookup,

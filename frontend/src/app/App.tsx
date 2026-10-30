@@ -42,7 +42,7 @@ const BrowsePage = lazy(() =>
 )
 const StudyPage = lazy(() =>
   import('@/features/study').then((module) => ({
-    default: module.StudyPage,
+    default: () => <module.StudyPage />,
   })),
 )
 const NoteTypeManagerPage = lazy(() =>
@@ -52,17 +52,17 @@ const NoteTypeManagerPage = lazy(() =>
 )
 const NoteTypeFieldsPage = lazy(() =>
   import('@/features/note-types').then((module) => ({
-    default: module.NoteTypeFieldsPage,
+    default: () => <module.NoteTypeFieldsPage />,
   })),
 )
 const NoteTypeDetailPage = lazy(() =>
   import('@/features/note-types').then((module) => ({
-    default: module.NoteTypeDetailPage,
+    default: () => <module.NoteTypeDetailPage />,
   })),
 )
 const NoteTypeGuidePage = lazy(() =>
   import('@/features/note-types').then((module) => ({
-    default: module.NoteTypeGuidePage,
+    default: () => <module.NoteTypeGuidePage />,
   })),
 )
 const NoteTypeTemplatesPage = lazy(() =>
@@ -77,28 +77,28 @@ const InstalledDecksPage = lazy(() =>
   })),
 )
 const TemplateLibraryPage = lazy(() =>
-  import('@/features/template-library').then((module) => ({ default: module.TemplateLibraryPage })),
+  import('@/features/template-library').then((module) => ({ default: () => <module.TemplateLibraryPage /> })),
 )
 const TemplateDetailPage = lazy(() =>
-  import('@/features/template-library').then((module) => ({ default: module.TemplateDetailPage })),
+  import('@/features/template-library').then((module) => ({ default: () => <module.TemplateDetailPage /> })),
 )
 const InstallTemplatesPage = lazy(() =>
   import('@/pages/installed-deck-templates').then((module) => ({ default: module.InstallTemplatesPage })),
 )
 const AnkiSyncPage = lazy(() =>
   import('@/features/import').then((module) => ({
-    default: module.AnkiSyncPage,
+    default: () => <module.AnkiSyncPage />,
   })),
 )
 const FileImportPage = lazy(() =>
   import('@/features/import').then((module) => ({
-    default: module.FileImportPage,
+    default: () => <module.FileImportPage />,
   })),
 )
 
 const SharedDecksPage = lazy(() =>
   import('@/features/marketplace').then((module) => ({
-    default: module.SharedDecksPage,
+    default: () => <module.SharedDecksPage />,
   })),
 )
 const SharedDeckDetailPage = lazy(() =>
@@ -108,7 +108,7 @@ const SharedDeckDetailPage = lazy(() =>
 )
 const SharedNoteTypesPage = lazy(() =>
   import('@/features/marketplace').then((module) => ({
-    default: module.SharedNoteTypesPage,
+    default: () => <module.SharedNoteTypesPage />,
   })),
 )
 const SharedNoteTypeDetailPage = lazy(() =>
@@ -117,54 +117,54 @@ const SharedNoteTypeDetailPage = lazy(() =>
   })),
 )
 const TemplateMarketplacePage = lazy(() =>
-  import('@/features/template-marketplace').then((module) => ({ default: module.TemplateMarketplacePage })),
+  import('@/features/template-marketplace').then((module) => ({ default: () => <module.TemplateMarketplacePage /> })),
 )
 const TemplateMarketDetailPage = lazy(() =>
-  import('@/features/template-marketplace').then((module) => ({ default: module.TemplateMarketDetailPage })),
+  import('@/features/template-marketplace').then((module) => ({ default: () => <module.TemplateMarketDetailPage /> })),
 )
 const PaymentResultPage = lazy(() =>
   import('@/features/marketplace').then((module) => ({
-    default: module.PaymentResultPage,
+    default: () => <module.PaymentResultPage />,
   })),
 )
 const OrdersPage = lazy(() =>
   import('@/features/orders').then((module) => ({
-    default: module.OrdersPage,
+    default: () => <module.OrdersPage />,
   })),
 )
 const AdminAnalyticsPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminAnalyticsPage,
+    default: () => <module.AdminAnalyticsPage />,
   })),
 )
 const AdminUsersPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminUsersPage,
+    default: () => <module.AdminUsersPage />,
   })),
 )
 const AdminPaymentsPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminPaymentsPage,
+    default: () => <module.AdminPaymentsPage />,
   })),
 )
 const AdminFeesPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminFeesPage,
+    default: () => <module.AdminFeesPage />,
   })),
 )
 const AdminQuotasPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminQuotasPage,
+    default: () => <module.AdminQuotasPage />,
   })),
 )
 const AdminTtsPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminTtsPage,
+    default: () => <module.AdminTtsPage />,
   })),
 )
 const AdminMcpTokensPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminMcpTokensPage,
+    default: () => <module.AdminMcpTokensPage />,
   })),
 )
 const StudyGoalsPage = lazy(() =>
@@ -173,47 +173,47 @@ const StudyGoalsPage = lazy(() =>
     import('@/features/settings'),
     loadRequiredNamespaces(i18n, ['onboarding']),
   ]).then(([module]) => ({
-    default: module.StudyGoalsPage,
+    default: () => <module.StudyGoalsPage />,
   })),
 )
 const McpTokensPage = lazy(() =>
   import('@/features/settings').then((module) => ({
-    default: module.McpTokensPage,
+    default: () => <module.McpTokensPage />,
   })),
 )
 const YomitanTokensPage = lazy(() =>
   import('@/features/settings').then((module) => ({
-    default: module.YomitanTokensPage,
+    default: () => <module.YomitanTokensPage />,
   })),
 )
 const AsbplayerTokensPage = lazy(() =>
   import('@/features/settings').then((module) => ({
-    default: module.AsbplayerTokensPage,
+    default: () => <module.AsbplayerTokensPage />,
   })),
 )
 const FeedbackPage = lazy(() =>
   import('@/features/support').then((module) => ({
-    default: module.FeedbackPage,
+    default: () => <module.FeedbackPage />,
   })),
 )
 const DeckAudioGeneratorPage = lazy(() =>
   import('@/features/audio').then((module) => ({
-    default: module.DeckAudioGeneratorPage,
+    default: () => <module.DeckAudioGeneratorPage />,
   })),
 )
 const WorksheetsPage = lazy(() =>
   import('@/features/worksheets').then((module) => ({
-    default: module.WorksheetsPage,
+    default: () => <module.WorksheetsPage />,
   })),
 )
 const AdminImageLibraryPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminImageLibraryPage,
+    default: () => <module.AdminImageLibraryPage />,
   })),
 )
 const MarketplacePublishDeckPage = lazy(() =>
   import('@/features/marketplace').then((module) => ({
-    default: module.MarketplacePublishDeckPage,
+    default: () => <module.MarketplacePublishDeckPage />,
   })),
 )
 const MarketplacePublishNoteTypePage = lazy(() =>
@@ -233,47 +233,47 @@ const InstalledDeckUpdatePage = lazy(() =>
 )
 const DeckChangeRequestPage = lazy(() =>
   import('@/features/deck-collaboration').then((module) => ({
-    default: module.DeckChangeRequestPage,
+    default: () => <module.DeckChangeRequestPage />,
   })),
 )
 const ChangeRequestInboxPage = lazy(() =>
   import('@/features/deck-collaboration').then((module) => ({
-    default: module.ChangeRequestInboxPage,
+    default: () => <module.ChangeRequestInboxPage />,
   })),
 )
 const ChangeRequestDetailPage = lazy(() =>
   import('@/features/deck-collaboration').then((module) => ({
-    default: module.ChangeRequestDetailPage,
+    default: () => <module.ChangeRequestDetailPage />,
   })),
 )
 const AdminPermissionsPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminPermissionsPage,
+    default: () => <module.AdminPermissionsPage />,
   })),
 )
 const AdminSupportConfigPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminSupportConfigPage,
+    default: () => <module.AdminSupportConfigPage />,
   })),
 )
 const AdminTicketsPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminTicketsPage,
+    default: () => <module.AdminTicketsPage />,
   })),
 )
 const AdminTicketDetailPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminTicketDetailPage,
+    default: () => <module.AdminTicketDetailPage />,
   })),
 )
 const AdminTaxonomyPage = lazy(() =>
   import('@/features/admin').then((module) => ({
-    default: module.AdminTaxonomyPage,
+    default: () => <module.AdminTaxonomyPage />,
   })),
 )
 const UserTicketDetailPage = lazy(() =>
   import('@/features/support').then((module) => ({
-    default: module.UserTicketDetailPage,
+    default: () => <module.UserTicketDetailPage />,
   })),
 )
 const SupportPage = lazy(() =>
@@ -288,7 +288,7 @@ const FlamaAudioGuidePage = lazy(() =>
 )
 const GuidePage = lazy(() =>
   import('@/features/guide').then((module) => ({
-    default: module.GuidePage,
+    default: () => <module.GuidePage />,
   })),
 )
 const TermsPage = lazy(() =>
@@ -318,17 +318,17 @@ const CommunityGuidelinesPage = lazy(() =>
 )
 const OAuthConsentPage = lazy(() =>
   import('@/features/oauth').then((module) => ({
-    default: module.OAuthConsentPage,
+    default: () => <module.OAuthConsentPage />,
   })),
 )
 const ProfilePage = lazy(() =>
   import('@/features/profile').then((module) => ({
-    default: module.ProfilePage,
+    default: () => <module.ProfilePage />,
   })),
 )
 const WalletPage = lazy(() =>
   import('@/features/wallet').then((module) => ({
-    default: module.WalletPage,
+    default: () => <module.WalletPage />,
   })),
 )
 

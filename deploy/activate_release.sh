@@ -31,6 +31,7 @@ activation_started=0
 deployment_succeeded=0
 previous_analytics_timer_enabled=0
 previous_review_timer_enabled=0
+previous_note_retention_timer_enabled=0
 runtime_venv=""
 previous_venv=""
 venv_switched=0
@@ -39,6 +40,9 @@ if systemctl is-enabled --quiet flama-analytics-counts.timer; then
 fi
 if systemctl is-enabled --quiet flama-review-analytics-worker.timer; then
   previous_review_timer_enabled=1
+fi
+if systemctl is-enabled --quiet flama-note-base-retention.timer; then
+  previous_note_retention_timer_enabled=1
 fi
 
 rollback_activation() {
@@ -56,6 +60,12 @@ rollback_activation() {
   fi
   systemctl stop flama-analytics-counts.timer flama-analytics-counts.service || true
   systemctl stop flama-review-analytics-worker.timer flama-review-analytics-worker.service || true
+  if systemctl cat flama-note-base-retention.service >/dev/null 2>&1; then
+    if ! systemctl stop flama-note-base-retention.timer flama-note-base-retention.service; then
+      echo "Automatic rollback blocked: Published Base retention did not stop." >&2
+      return
+    fi
+  fi
   if ! systemd-run --quiet --wait --collect \
     --unit="flama-study-rollback-check-$RELEASE_ID" \
     --property=User=flama \
@@ -125,6 +135,10 @@ rollback_activation() {
       install -m 0644 "$previous_release/deploy/flama-review-analytics-worker.service" /etc/systemd/system/flama-review-analytics-worker.service
       install -m 0644 "$previous_release/deploy/flama-review-analytics-worker.timer" /etc/systemd/system/flama-review-analytics-worker.timer
     fi
+    if [ -f "$previous_release/deploy/flama-note-base-retention.service" ] && [ -f "$previous_release/deploy/flama-note-base-retention.timer" ]; then
+      install -m 0644 "$previous_release/deploy/flama-note-base-retention.service" /etc/systemd/system/flama-note-base-retention.service
+      install -m 0644 "$previous_release/deploy/flama-note-base-retention.timer" /etc/systemd/system/flama-note-base-retention.timer
+    fi
     if [ "${venv_switched:-0}" -eq 1 ]; then
       ln -sfn "$previous_venv" "$PROJECT_DIR/venv"
     fi
@@ -139,6 +153,11 @@ rollback_activation() {
       systemctl enable --now flama-review-analytics-worker.timer || true
     else
       systemctl disable flama-review-analytics-worker.timer || true
+    fi
+    if [ "${previous_note_retention_timer_enabled:-0}" -eq 1 ] && [ -f "$previous_release/deploy/flama-note-base-retention.timer" ]; then
+      systemctl enable --now flama-note-base-retention.timer || true
+    else
+      systemctl disable flama-note-base-retention.timer || true
     fi
     if [ "$previous_worker_available" -eq 1 ]; then
       systemctl restart flama-study-worker.service || true
@@ -173,6 +192,7 @@ rollback_activation() {
   systemctl disable flama-study-worker.service || true
   systemctl disable flama-analytics-counts.timer || true
   systemctl disable flama-review-analytics-worker.timer || true
+  systemctl disable flama-note-base-retention.timer || true
   echo "No previous release was available; stopped flama.service." >&2
 }
 
@@ -273,7 +293,8 @@ record_state running
 activation_started=1
 for unit in flama.service flama-connect.service flama-study-worker.service \
   flama-analytics-counts.timer flama-analytics-counts.service \
-  flama-review-analytics-worker.timer flama-review-analytics-worker.service; do
+  flama-review-analytics-worker.timer flama-review-analytics-worker.service \
+  flama-note-base-retention.timer flama-note-base-retention.service; do
   # A first deployment has no application units yet. A loaded unit
   # must stop successfully; never acknowledge quiescence on failure.
   if systemctl cat "$unit" >/dev/null 2>&1; then
@@ -307,6 +328,8 @@ install -m 0644 "$release_dir/deploy/flama-analytics-counts.service" /etc/system
 install -m 0644 "$release_dir/deploy/flama-analytics-counts.timer" /etc/systemd/system/flama-analytics-counts.timer
 install -m 0644 "$release_dir/deploy/flama-review-analytics-worker.service" /etc/systemd/system/flama-review-analytics-worker.service
 install -m 0644 "$release_dir/deploy/flama-review-analytics-worker.timer" /etc/systemd/system/flama-review-analytics-worker.timer
+install -m 0644 "$release_dir/deploy/flama-note-base-retention.service" /etc/systemd/system/flama-note-base-retention.service
+install -m 0644 "$release_dir/deploy/flama-note-base-retention.timer" /etc/systemd/system/flama-note-base-retention.timer
 
 cp -p "$environment_file" /etc/flama/flama.env.bak
 # Stop the previous consumer under its original environment before
@@ -315,6 +338,7 @@ systemctl daemon-reload
 systemctl stop flama-study-worker.service
 systemctl stop flama-analytics-counts.timer flama-analytics-counts.service || true
 systemctl stop flama-review-analytics-worker.timer flama-review-analytics-worker.service || true
+systemctl stop flama-note-base-retention.timer flama-note-base-retention.service
 activation_started=1
 mv -f "$desired_environment_file" "$environment_file"
 ln -sfn "$release_dir" "$PROJECT_DIR/current"
@@ -330,6 +354,7 @@ systemctl restart flama-connect.service
 # readers stay independently gated until parity/latency qualification.
 systemctl enable --now flama-analytics-counts.timer
 systemctl enable --now flama-review-analytics-worker.timer
+systemctl enable --now flama-note-base-retention.timer
 
 phase=health
 record_state running

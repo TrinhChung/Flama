@@ -43,7 +43,7 @@ def list_notes(*, user_id, admin_mode, timezone_name, query_args):
     scope_cases = [(condition, str(scope.install.id)) for scope, condition in context.clone_scope_conditions]
     scope_id = case(*scope_cases, else_=None) if scope_cases else db.literal(None)
     pinned_installs = {str(scope.install.id) for scope in context.clone_scopes if scope.install.applied_release_id and not published_base_enabled()}
-    if context.keyword:
+    if context.keyword or published_base_enabled():
         pagination = repository.search_note_page(context, install_id=scope_id.label('browse_install_id'),
             user_id=user_id, pinned_installs=pinned_installs)
         total = pagination.total
@@ -156,10 +156,12 @@ def selected_note_values(*, user_id, admin_mode, timezone_name, note_ids):
         note = ref.note
         values, note_type, deck_id = None, note.note_type, note.deck_id
         tags = note.tags
+        updated_at = note.updated_at
         if published_base_enabled() and not ref.clone_scope:
-            from app.services.note_draft_service import effective_note_metadata
+            from app.services.note_draft_service import effective_note_metadata, effective_note_updated_at
             metadata = effective_note_metadata(note)
             deck_id, tags = metadata["deck_id"], metadata["tags"]
+            updated_at = effective_note_updated_at(note)
         if ref.clone_scope:
             install = ref.clone_scope.install
             overlay = shared._clone_overlay_fields(card_obj=ref, clone_scope=ref.clone_scope,
@@ -170,7 +172,7 @@ def selected_note_values(*, user_id, admin_mode, timezone_name, note_ids):
             deck_id = overlay.local_deck_id
         result.append(SimpleNamespace(id=note_id, note_type_id=note.note_type_id, note_type=note_type,
             deck_id=deck_id, field_values=values if values is not None else dict(note.field_values or {}),
-            tags=tags, created_at=note.created_at, updated_at=note.updated_at))
+            tags=tags, created_at=note.created_at, updated_at=updated_at))
     return result
 
 
@@ -231,7 +233,8 @@ def _editor_detail(*, reference, user_id, admin_mode, timezone_name):
     if overlay:
         shared._apply_clone_card_fields(row, overlay=overlay, deck_lookup=deck_lookup)
     note_payload = {'id': note.id, 'note_type_id': note.note_type_id, 'note_type_name': note.note_type.name or 'NoteType',
-        'deck_id': row['deck_id'], 'deck_name': row['deck_name'], 'field_values': values, 'tags': note.tags or []}
+        'deck_id': row['deck_id'], 'deck_name': row['deck_name'], 'field_values': values, 'tags': note.tags or [],
+        'updated_at': row['updated_at']}
     if published_base_enabled() and not overlay:
         from app.services.note_draft_service import effective_note_metadata
         note_payload['tags'] = effective_note_metadata(note)['tags']

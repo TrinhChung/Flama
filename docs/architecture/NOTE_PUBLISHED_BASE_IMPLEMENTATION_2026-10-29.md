@@ -6,6 +6,9 @@ Date: 2026-10-29. Contract: [#263](https://github.com/TrinhChung/Flama/issues/26
 Status: implementation behind `NOTE_PUBLISHED_BASE_ENABLED=false` by default.
 Production has not been migrated. P4 deployment and P6 removal of historical
 tables/code remain separate operational steps after the reviewed cutover and soak.
+The [30 October review response](NOTE_PUBLISHED_BASE_REVIEW_RESPONSE_2026-10-30.md)
+supersedes the initial performance/route qualification with ownership guards,
+transaction-local caches, narrow publication fences and full static-route captures.
 The deployment pipeline accepts the optional GitHub Environment flag and preserves
 an operator-set value when it is unset. The read-only code rollback guard checks
 for a `base_cutover` release and rejects a binary without the declared Published
@@ -46,6 +49,22 @@ restores stored Base columns before SQL is emitted. Bulk/raw writes remain fence
 explicit technical maintenance. These contexts do not commit and require flushing
 inside the context. Maintenance callers must intentionally choose that authority;
 an ordinary normalizer call follows the author draft path.
+
+HTTP actor checks are also enforced at the property/flush boundary: an anonymous
+or foreign reader sees Base, and a foreign writer cannot replace a published
+Note's draft. Admin views of another owner's Note use Base as well. Trusted
+Connect bearer identities are carried to final transaction flush; jobs should
+select `note_author_view(owner_id)` explicitly when reading private drafts.
+Draft caches and schema lookups are transaction-local, never process caches.
+
+Normal publication validates the locked head against its read snapshot, discovers
+sparse Draft IDs, locks only those Note/Draft PKs and reads new Notes through the
+existing owner/deck index. Shared field locks and the covering listing fence
+protect schema without blocking a sibling's ordinary Note save. A pre-existing
+stale snapshot retains a conservative serialized current-read fallback. Late
+scope discovery uses NOWAIT to avoid waiting in reversed head/Note lock order;
+deck reparenting fences the affected ancestor listings. These paths retain the
+same caller-owned transaction and preserve explicit Base-write authority.
 
 | Boundary | Concrete consumers | New behavior |
 |---|---|---|

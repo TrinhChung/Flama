@@ -485,7 +485,10 @@ def resolve_clone_scope_for_card(
 
     source_deck_id = int(card_obj.note.deck_id)
     if published_base_enabled():
-        installs = DeckInstall.query.filter_by(user_id=user_id, clone_mode="logical_overlay").all()
+        from app.repositories.deck_tree_query import collect_ancestor_ids
+        installs = flashcards_share_repository.find_published_base_installs_for_note(
+            user_id=user_id, source_owner_id=card_obj.note.user_id,
+            note_type_id=card_obj.note.note_type_id, ancestor_ids=collect_ancestor_ids(source_deck_id))
         for install in installs:
             if install.local_deck_id is None:
                 continue

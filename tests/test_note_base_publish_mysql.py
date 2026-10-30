@@ -51,6 +51,149 @@ class NoteBasePublishTests(NoteBaseMySQLTestCase):
             version_label=label, changelog="Changes", expected_current_release_id=self.item.current_release_id,
             expected_working_revision=self.item.working_revision, idempotency_key=key or label)
 
+    def test_publication_of_one_listing_allows_sibling_draft_save(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        from tests.study_note_fixtures import attach_template
+        attach_template(db.session, note_type_id=self.nt.id, owner_user_id=self.owner.id,
+            name='Shared template', front_html='{{Word}}', back_html='{{Word}}', shared_css='')
+        db.session.commit()
+        self.publish('parallel-a-v1')
+        deck = Deck(name='Sibling', owner_user_id=self.owner.id, note_type_id=self.nt.id)
+        db.session.add(deck); db.session.flush()
+        note = Note(user_id=self.owner.id, note_type_id=self.nt.id, deck_id=deck.id, field_values={'Word': ['sibling base']})
+        item = DeckMarketplaceItem(owner_user_id=self.owner.id, source_deck_id=deck.id,
+            source_note_type_id=self.nt.id, title='Sibling', publish_status='published')
+        db.session.add_all([note, item]); db.session.commit()
+        owner_id, sibling_note_id, sibling_id = self.owner.id, note.id, item.id
+        releases.publish_release_and_commit(deck_item_id=sibling_id, user_id=owner_id, version_label='sibling-v1',
+            changelog=None, expected_current_release_id=None, expected_working_revision=item.working_revision,
+            idempotency_key='sibling-v1')
+        sibling_revision = db.session.get(DeckMarketplaceItem, sibling_id).working_revision
+        self.note.field_values = {'Word': ['draft A']}
+        db.session.commit()
+        self.assertEqual(db.session.get(DeckMarketplaceItem, sibling_id).working_revision, sibling_revision)
+        request = dict(deck_item_id=self.item.id, user_id=owner_id, version_label='parallel-a-v2',
+            changelog=None, expected_current_release_id=self.item.current_release_id,
+            expected_working_revision=self.item.working_revision, idempotency_key='parallel-a-v2')
+        ready, finish = Event(), Event()
+        def publisher():
+            with self.app.app_context():
+                try:
+                    result = releases.publish_release(**request)
+                    ready.set()
+                    if not finish.wait(10):
+                        raise TimeoutError('Concurrent writer did not finish')
+                    db.session.commit()
+                    return result.release.id
+                finally:
+                    db.session.remove()
+        def writer():
+            with self.app.app_context():
+                try:
+                    db.session.connection().exec_driver_sql('SET SESSION innodb_lock_wait_timeout=2')
+                    other = db.session.get(Note, sibling_note_id)
+                    other.field_values = {'Word': ['concurrent sibling edit']}
+                    db.session.commit()
+                    return db.session.get(NoteDraft, sibling_note_id).field_values_by_id
+                finally:
+                    db.session.remove()
+        db.session.remove()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            published = pool.submit(publisher)
+            try:
+                self.assertTrue(ready.wait(6), 'Publisher did not reach its commit boundary')
+                value = pool.submit(writer).result(timeout=6)
+                self.assertTrue(value)
+            finally:
+                finish.set()
+            published.result(timeout=6)
+
+    def test_deck_reparent_fences_a_newly_covered_listing_after_old_snapshot(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.publish('tree-v1')
+        root_id, owner_id, type_id, item_id = self.deck.id, self.owner.id, self.nt.id, self.item.id
+        head, before = self.item.current_release_id, self.item.working_revision
+        # Establish the old consistent read before another transaction creates
+        # a draft outside A and then reparents its deck into A.
+        db.session.execute(select(Note.id)).all()
+        def reparent():
+            with self.app.app_context():
+                try:
+                    deck = Deck(name='Moved branch', owner_user_id=owner_id, note_type_id=type_id)
+                    db.session.add(deck); db.session.flush()
+                    note = Note(user_id=owner_id, note_type_id=type_id, deck_id=deck.id,
+                        field_values={'Word': ['branch base']})
+                    db.session.add(note); db.session.flush()
+                    from app.services.note_base_context import published_base_write
+                    with published_base_write():
+                        from datetime import datetime
+                        note.published_at = datetime.utcnow()
+                        db.session.flush()
+                    db.session.commit()
+                    note.field_values = {'Word': ['branch draft']}
+                    db.session.commit()
+                    deck.parent_id = root_id
+                    db.session.commit()
+                    return note.id, db.session.get(DeckMarketplaceItem, item_id).working_revision
+                finally:
+                    db.session.remove()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            note_id, revision = pool.submit(reparent).result(timeout=10)
+        self.assertGreater(revision, before)
+        releases.publish_release_and_commit(deck_item_id=item_id, user_id=owner_id, version_label='tree-v2',
+            changelog=None, expected_current_release_id=head, expected_working_revision=revision,
+            idempotency_key='tree-v2')
+        self.assertIsNone(db.session.get(NoteDraft, note_id))
+        self.assertEqual(db.session.get(Note, note_id).field_values['Word'], ['branch draft'])
+
+    def test_old_reader_fails_fast_when_current_draft_moved_into_locked_listing(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        from time import perf_counter
+        from app.services.field_value_identity_service import FieldIdentityConflict
+        self.publish('late-fence-v1')
+        deck = Deck(name='Destination', owner_user_id=self.owner.id, note_type_id=self.nt.id)
+        db.session.add(deck); db.session.flush()
+        item = DeckMarketplaceItem(owner_user_id=self.owner.id, source_deck_id=deck.id,
+            source_note_type_id=self.nt.id, title='Destination')
+        db.session.add(item); db.session.commit()
+        note_id, target, target_item = self.note.id, deck.id, item.id
+        self.assertEqual(self.note.field_values['Word'], ['base', ['nested']])
+        engine = db.engine
+        def move():
+            with self.app.app_context():
+                try:
+                    db.session.get(Note, note_id).deck_id = target
+                    db.session.commit()
+                finally:
+                    db.session.remove()
+        ready, finish = Event(), Event()
+        def hold_head():
+            with engine.begin() as connection:
+                connection.execute(select(DeckMarketplaceItem.id).where(
+                    DeckMarketplaceItem.id == target_item).with_for_update())
+                ready.set()
+                if not finish.wait(10):
+                    raise TimeoutError('Late fence test did not finish')
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(move).result(timeout=6)
+            held = pool.submit(hold_head)
+            try:
+                self.assertTrue(ready.wait(6))
+                started = perf_counter()
+                self.note.tags = ['stale reader edit']
+                with self.assertRaises(FieldIdentityConflict):
+                    db.session.commit()
+                self.assertLess(perf_counter()-started, 1.5)
+                db.session.rollback()
+            finally:
+                finish.set()
+            held.result(timeout=6)
+        draft = db.session.get(NoteDraft, note_id)
+        self.assertEqual(draft.deck_id, target)
+        self.assertIsNone(draft.tags)
+
     def test_publish_is_incremental_preserves_identity_and_replays(self):
         note_id = self.note.id
         first = self.publish("v1")
@@ -148,6 +291,33 @@ class NoteBasePublishTests(NoteBaseMySQLTestCase):
         self.assertEqual(report["notes"], 1)
         self.assertIsNone(db.session.execute(select(Note).where(Note.id == note_id)
             .execution_options(include_deleted_notes=True)).scalar_one_or_none())
+
+    def test_delete_and_retention_keep_logical_progress_when_live_fk_is_null(self):
+        from datetime import datetime, timedelta
+        from models.study_progress_subject import StudyProgressSubject
+        from app.services.note_base_retention_service import run_retention
+        from app.services.note_base_context import base_maintenance
+        from app.services.note_draft_service import stage_note_delete
+        self.publish('logical-v1')
+        note_id = self.note.id
+        subject = StudyProgressSubject(learner_user_id=self.learner.id,
+            logical_note_key=note_id.encode('utf-8'), live_note_id=None,
+            created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+        db.session.add(subject); db.session.commit()
+        stage_note_delete(self.note); db.session.commit()
+        self.publish('logical-v2')
+        note = db.session.execute(select(Note).where(Note.id == note_id).execution_options(
+            include_deleted_notes=True, include_deleted_drafts=True)).scalar_one()
+        self.assertIsNotNone(note.deleted_at)
+        with base_maintenance('Logical-reference retention fixture'):
+            note.deleted_at = datetime.utcnow() - timedelta(days=91)
+            db.session.flush()
+        db.session.commit()
+        report = run_retention(apply=True)
+        self.assertEqual(report['notes'], 0)
+        self.assertEqual(report['notes_retained_for_references'], 1)
+        self.assertEqual(db.session.get(StudyProgressSubject, subject.id).logical_note_key,
+            note_id.encode('utf-8'))
 
     def test_note_type_batch_publishes_schema_for_each_owned_listing(self):
         from app.services.note_base_batch_publish_service import publish_note_type_listings
