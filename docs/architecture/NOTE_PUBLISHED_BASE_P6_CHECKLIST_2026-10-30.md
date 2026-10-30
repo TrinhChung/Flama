@@ -20,6 +20,15 @@ repository skill mirrors match. The local receipt and initial caller inventory
 are recorded under `output/note-base-branch-integration-20261031.json` and that
 integration backup directory.
 
+The owner subsequently requested removal of redundant code/data backups and
+explicitly approved deleting **all pre-cutover production dumps**. On 31 October
+the integration backup, two completed rehearsal worktrees, 27 disposable local
+schemas and completed VPS backup directories were removed. The unique untracked
+Claude review was moved into the active checkout; existing Connect/audio work
+was preserved. See the [cleanup record](NOTE_PUBLISHED_BASE_CLEANUP_2026-10-31.md)
+for sizes, verification and the recovery limitations. The integration backup
+paths above describe the earlier merge operation and no longer exist.
+
 Use this table as the cleanup queue. Each completed batch needs its commit and
 validation evidence recorded here and its corresponding checkboxes updated below.
 The paths identify candidates for inspection; their presence does not establish
@@ -28,11 +37,12 @@ that every function in a file is obsolete.
 | Batch | State | Scope and acceptance evidence |
 |---|---|---|
 | I0 | Done: `123195ec` | Bring the deployed implementation and reports into the active branch; preserve local work and retain an integration backup. |
+| B0 | Done: 2026-10-31; see cleanup record | Dispose of approved dumps, completed rehearsal schemas/worktrees and unused release copies. Retain Git history and sanitized evidence. Live Note/draft hashes and services verified after deletion. |
 | C0 | Initial inventory captured; caller audit pending | Capture flag/history/rebase callers before each removal. Trace runtime, CLI, tests, dynamic imports and retained template consumers. |
 | C1 | Pending entry checks | Remove obsolete Note reconstruction, atoms/checkpoints, dirty journals, automatic publication and subscriber fanout in `deck_release_service.py`, `deck_release_repository.py`, `deck_working_tree_service.py` and `deck_auto_publish_service.py`. Preserve active Base publication and template pins. |
 | C2 | Pending entry checks | Retire install rebase/conflict paths in `deck_install_rebase_service.py`, marketplace installation routes and `frontend/src/features/deck-collaboration/` / `frontend/src/pages/installed-deck-update/`. Preserve personal overrides, local additions, comparison and authenticated compatibility responses. |
 | C3 | After C1/C2 | Remove `NOTE_PUBLISHED_BASE_ENABLED` and its flag-off branches together across readers, codecs, settings, managed environment and deployment configuration. Verify every remaining runtime caller against the Base contract. |
-| C4 | After runtime consumers and rollback disposition | Contract the six tables listed below, their ORM relationships/exports and dependent consumers. Verify fresh upgrade and production-copy migration on local MySQL, with retained backup and parity evidence. |
+| C4 | After runtime consumers and rollback disposition | Contract the six tables listed below, their ORM relationships/exports and dependent consumers. Verify fresh upgrade and representative-data migration on disposable local MySQL, with the owner's recovery disposition and parity evidence. |
 | C5 | With C4 | Update the code rollback capability guard and the cutover/rollback operator tools for the final schema. Keep historical migration chains executable and preserve their required historical definitions. |
 | C6 | Final qualification | Run focused domain/MySQL checks, Study commit/process-concurrency qualification, desktop/mobile checks and before/after workload measurements; deploy and record the final result. |
 
@@ -54,11 +64,14 @@ by this branch-integration step.
 
 - [x] Owner approved six Notes / 23 manual Fields and eight receipt-backed script
   Fields retained in Base. Fresh production content/classification matched;
-  applied manifest/receipt and verified pre-cutover backup are retained privately.
+  the cutover report records the approval/checksums. Content-bearing manifests,
+  receipts and pre-cutover dumps were subsequently deleted at the owner's request.
 - [ ] Production cutover and no-publish soak completed; owner accepted author,
   learner, Connect, render/media, progress and override smoke results.
   Cutover and initial smoke passed; operational soak/owner acceptance remain open.
-- [ ] Rollback disposition is explicit before removing historical storage.
+- [x] Owner explicitly waived pre-cutover dump and redundant release retention.
+  Their deletion does not complete historical storage contraction or remove the
+  compatibility guards; use the cleanup record when planning recovery.
 - [ ] End-to-end study/review commits and a process-isolated concurrency matrix
   are qualified. Read-only page benchmarks do not satisfy this check.
 - [ ] Runtime buffer pool/configured target and any approved measurement scope

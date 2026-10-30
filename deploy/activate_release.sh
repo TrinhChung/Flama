@@ -395,7 +395,7 @@ for attempt in $(seq 1 20); do
     "$runtime_python" "$release_dir/deploy/prune_releases.py" \
       --releases-dir "$PROJECT_DIR/releases" \
       --current-release "$release_dir" \
-      --keep 2 || echo "Warning: failed to prune old releases." >&2
+      --keep 1 || echo "Warning: failed to prune old releases." >&2
     systemctl --no-pager --full status flama.service || true
     systemctl --no-pager --full status flama-connect.service || true
     systemctl --no-pager --full status flama-study-worker.service || true

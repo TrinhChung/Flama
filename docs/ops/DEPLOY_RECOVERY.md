@@ -31,6 +31,15 @@ rollback env and payload files for recovery; these contain secrets and must stay
 restricted to root and the service account where needed. Successful deployment
 cleans them up.
 
+After successful health/readiness checks, the deployment script prunes Git-SHA
+release directories with `--keep 1`, retaining the current release. The owner
+requested this policy on 2026-10-31; see the
+[Published Base cleanup record](../architecture/NOTE_PUBLISHED_BASE_CLEANUP_2026-10-31.md).
+An unsuccessful activation still retains the prior release for the guarded
+rollback path. After successful pruning, recovering older code requires rebuilding
+its Git commit and checking schema compatibility. Git does not restore database
+rows; the pre-cutover production dumps have been explicitly discarded.
+
 Before retrying a failed attempt, confirm that its coordinator and migration units
 have both stopped. A migration child is a separate systemd unit. Do not kill a
 coordinator to cancel a migration, start a second migration over it, or infer DB

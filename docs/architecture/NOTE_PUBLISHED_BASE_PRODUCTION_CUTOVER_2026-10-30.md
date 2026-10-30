@@ -8,9 +8,11 @@ The runtime and schema expansion were delivered by
 consumer. All three services and the four existing/new maintenance timers are
 active. The deployment lock used during maintenance has been released.
 
-Soak started at **2026-10-30 13:01:18 UTC**. P6 has not run: historical tables,
-legacy rollback paths and both backup copies remain available. Do not publish
-new content during the coordinated soak. Its completion requires the recorded
+Soak started at **2026-10-30 13:01:18 UTC**. P6 runtime/storage contraction has
+not run: historical tables and legacy rollback paths remain available. The owner
+subsequently approved deletion of both backup copies and completed rehearsal
+artifacts; see the [31 October cleanup](NOTE_PUBLISHED_BASE_CLEANUP_2026-10-31.md).
+Do not publish new content during the coordinated soak. Its completion requires the recorded
 [P6 exit checks](NOTE_PUBLISHED_BASE_P6_CHECKLIST_2026-10-30.md), including owner
 acceptance and the outstanding Study write/concurrency qualification.
 
@@ -60,9 +62,12 @@ complete dump footer and the transferred compressed hash were verified:
 The earlier pre-expansion dump was actually restored on isolated local MySQL and
 rehearsed before this maintenance window. The final quiesced dump was checked for
 integrity and identical off-host transfer; it has not been separately restored.
-Private operator artifacts are under `output/note-base-production/live/` locally
-and the restricted VPS directory recorded in `operator-target-private.json`.
-The server's pre-enable environment backup remains restricted on the VPS.
+At cutover, private operator artifacts were stored under
+`output/note-base-production/live/` in the implementation worktree and the
+restricted VPS directory recorded in `operator-target-private.json`.
+Those artifacts, both dumps and that directory's pre-enable environment backup
+were deleted during the owner-approved 31 October cleanup. The hashes above are
+historical verification evidence, not references to available restore files.
 
 Cutover apply used the exact approved SHA and backup reference. It committed an
 intent/receipt pair. Before resuming services, the operator verified:
