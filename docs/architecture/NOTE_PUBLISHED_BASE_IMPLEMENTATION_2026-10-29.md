@@ -3,9 +3,11 @@
 Date: 2026-10-29. Contract: [#263](https://github.com/TrinhChung/Flama/issues/263),
 [approved plan](NOTE_LEVEL_VERSIONING_PLAN_2026-10-28.md).
 
-Status: implementation behind `NOTE_PUBLISHED_BASE_ENABLED=false` by default.
-Production has not been migrated. P4 deployment and P6 removal of historical
-tables/code remain separate operational steps after the reviewed cutover and soak.
+Status: `NOTE_PUBLISHED_BASE_ENABLED` defaults to false; production was migrated
+and explicitly enabled on 2026-10-30 after the approved six-Note / 23-Field cutover.
+The [production result](NOTE_PUBLISHED_BASE_PRODUCTION_CUTOVER_2026-10-30.md)
+records activation and the ongoing no-publish soak. P6 removal of historical
+tables/code remains gated by the soak and its exit checks.
 The [30 October review response](NOTE_PUBLISHED_BASE_REVIEW_RESPONSE_2026-10-30.md)
 supersedes the initial performance/route qualification with ownership guards,
 transaction-local caches, narrow publication fences and full static-route captures.

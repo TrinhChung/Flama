@@ -1,5 +1,10 @@
 # Published Base production preflight — 2026-10-30
 
+Historical preflight snapshot. The updated six-Note / 23-Field classification was
+subsequently approved and cutover completed; see the
+[production result](NOTE_PUBLISHED_BASE_PRODUCTION_CUTOVER_2026-10-30.md).
+The statuses below describe the preparation stage before that approval/deployment.
+
 Status: no production schema, content or flag change has been made. PR #265
 remains gated by CI. Production is running `cab65807` at Alembic
 `20261025_000075`; the Base flag is unset and resolves to false.

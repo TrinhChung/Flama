@@ -2,16 +2,19 @@
 
 Owner: project owner for cutover/soak acceptance; implementation: Codex.
 Schedule: the first separately reviewed implementation after the recorded soak
-ends and its exit checks pass. There is no calendar date yet because production
-cutover has not happened. Record the actual dates in the production receipt;
-do not infer soak completion from elapsed local rehearsal time.
+ends and its exit checks pass. Production cutover completed and soak started at
+2026-10-30 13:01:18 UTC; its end has not been accepted or scheduled. See the
+[production result](NOTE_PUBLISHED_BASE_PRODUCTION_CUTOVER_2026-10-30.md).
+Do not infer soak completion from elapsed local rehearsal time or initial smoke.
 
 ## Entry checks
 
-- [ ] Owner reviewed the six manual Notes on the fresh production manifest;
+- [x] Owner approved six Notes / 23 manual Fields and eight receipt-backed script
+  Fields retained in Base. Fresh production content/classification matched;
   applied manifest/receipt and verified pre-cutover backup are retained privately.
 - [ ] Production cutover and no-publish soak completed; owner accepted author,
   learner, Connect, render/media, progress and override smoke results.
+  Cutover and initial smoke passed; operational soak/owner acceptance remain open.
 - [ ] Rollback disposition is explicit before removing historical storage.
 - [ ] End-to-end study/review commits and a process-isolated concurrency matrix
   are qualified. Read-only page benchmarks do not satisfy this check.

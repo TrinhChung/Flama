@@ -1,0 +1,114 @@
+{
+  "status": "active_no_publish_soak",
+  "release": "afbd29eec304ebb970e759f40273b421892b4acc",
+  "pull_request": "https://github.com/TrinhChung/Flama/pull/265",
+  "ci_run": "https://github.com/TrinhChung/Flama/actions/runs/41056615905",
+  "alembic": "20261029_000076",
+  "soak_started_utc": "2026-10-30T13:01:18.934557+00:00",
+  "soak_completed": false,
+  "p6_completed": false,
+  "owner_approved": {
+    "draft_notes": 6,
+    "draft_fields": 23,
+    "script_fields_retained_in_base": 8
+  },
+  "manifest_sha256": "8863d43894124334ee00bfee47b2d90d79aec3bacace0cbb3970c28849cd7f72",
+  "conversion": {
+    "published_notes": 31080,
+    "raw_note_payload_updates": 6,
+    "cutover_heads": 22,
+    "installs": 32,
+    "published_base_installs": 32,
+    "automatic_publication_enabled": 0
+  },
+  "parity": {
+    "status": "PASS",
+    "author_notes_checked": 41874,
+    "author_mismatches": 0,
+    "base_mismatches": 0,
+    "override_rows_checked": 4,
+    "override_mismatches": 0,
+    "install_mismatches": 0,
+    "note_count_matches": true,
+    "draft_set_matches": true,
+    "protected_checksums_match": true,
+    "override_set_matches": true,
+    "install_count_matches": true
+  },
+  "validation": {
+    "master_backend_tests": 2966,
+    "master_backend_skips": 85,
+    "published_base_mysql_tests": 80,
+    "production_in_process_http_gets": 35,
+    "production_note_learner_audits": 35,
+    "production_public_authenticated_gets": 4,
+    "public_comparison_content_model": "published_base",
+    "reviewed_note_template_pairs": 32,
+    "reviewed_note_dom_faces": 64,
+    "render_mismatches": 0,
+    "raw_dollar_faces": 0,
+    "empty_faces": 0,
+    "reviewed_note_media_files_checked": 10,
+    "reviewed_note_media_hash_mismatches": 0,
+    "public_media_samples": 4,
+    "public_media_samples_passed": 4,
+    "public_login_browser_console_errors": 0,
+    "public_login_browser_console_warnings": 0,
+    "authentication_staged_without_persisting_cookie": true,
+    "password_and_google_login_flow_qualified_by_this_rollout": false
+  },
+  "frontend": {
+    "worker": "flama-frontend1001",
+    "build_uuid": "a3d8e60f-3f3e-4b60-bef7-4fda117c17d7",
+    "worker_version": "77b046ac-7339-4f3b-9d0d-1102a5ba29ce",
+    "traffic_percentage": 100,
+    "entry": "/assets/index-BVIFABaC.js",
+    "entry_source_modules_matched": 30,
+    "entry_source_mismatches": 0,
+    "css_bytes_equal_pre_rollout": true,
+    "entry_bundle_byte_reproducibility_claimed": false
+  },
+  "backup": {
+    "compressed_sha256": "7ce3fad16657755bde3930d9701b6a442044794d76b50b9a54e74d61de6cc4f9",
+    "sql_sha256": "8d5f195cc587325a3206adb59d1db3a0302ef4b19836f209a136b03fb22e12a5",
+    "compressed_bytes": 237090951,
+    "sql_bytes": 1468129385,
+    "gzip_crc_and_complete_footer_verified": true
+  },
+  "backup_off_host_transfer_matches": true,
+  "final_observation": {
+    "observed_at_utc": "2026-10-30T13:09:47.284673+00:00",
+    "published_base_enabled": true,
+    "notes": 41874,
+    "draft_notes": 6,
+    "draft_fields": 23,
+    "personal_overrides": 4,
+    "override_base_hashes": 4,
+    "cutover_heads_unchanged": true,
+    "legacy_tables_retained": true,
+    "units_active": {
+      "flama.service": true,
+      "flama-connect.service": true,
+      "flama-study-worker.service": true,
+      "flama-note-base-retention.timer": true,
+      "flama-study-retention.timer": true,
+      "flama-analytics-counts.timer": true,
+      "flama-review-analytics-worker.timer": true
+    },
+    "deployment_guard_released": true
+  },
+  "journal_observation": {
+    "since_utc": "2026-10-30T13:01:18.934557+00:00",
+    "observed_at_utc": "2026-10-30T13:13:51.240769+00:00",
+    "query_exit_code": 0,
+    "journal_messages_read": 12,
+    "matched_error_or_traceback_messages": 0
+  },
+  "index_changes": false,
+  "buffer_pool_changes": false,
+  "remaining_gates": [
+    "owner operational soak acceptance",
+    "Study write/process-concurrency qualification",
+    "reviewed P6 runtime/storage contraction"
+  ]
+}
