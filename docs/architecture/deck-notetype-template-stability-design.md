@@ -24,7 +24,7 @@ This implements the authorized fixes from [the investigation](deck-notetype-temp
 | `template_releases`, `template_versions` | Exact published template content | Existing release service; manifests and render resolver |
 | `deck_release_template_pins` | Per-deck immutable presentation and occurrences | Deck publish; installed source-card resolver |
 | `template_subscriptions` | One editable received definition per user/source | Template editor and opt-in subscriber sync |
-| `template_sync_jobs` | Dispatcher cursor and independent recipient delivery/retry state | Publish outbox; study consumer or explicit drain CLI |
+| `template_sync_jobs` | Dispatcher cursor and independent recipient delivery/retry state | Publish outbox; study consumer (every pass while jobs remain, otherwise every 5 s) or explicit drain CLI |
 
 Release manifests reference exact template releases in JSON. The service validates source identity and availability when reading them. Mutable source and installation pointers have relational foreign keys; the manifest is a complete read snapshot, not a collection of mutable ORM relationships.
 
