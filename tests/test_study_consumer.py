@@ -31,6 +31,9 @@ CONFIG = {
     "REDIS_URL": "", "STUDY_QUEUE_NAMESPACE": "consumer-test", "WTF_CSRF_ENABLED": False,
 }
 EMPTY_COUNTS = dict(processed_count=0, failed_count=0, retrying_count=0, skipped_count=0)
+EMPTY_TEMPLATE_SYNC = dict.fromkeys(
+    ("dispatched_count", "delivered_count", "conflict_count", "skipped_count", "retrying_count", "failed_count"), 0,
+)
 
 
 class StudyConsumerTests(unittest.TestCase):
@@ -151,6 +154,38 @@ class StudyConsumerTests(unittest.TestCase):
         self.assertEqual(len(cursors), 5)
         self.assertEqual([cursor.batch_sequence if cursor else None for cursor in cursors], [1, 2, 3, None, 1])
 
+    def _template_sync_claims(self, ticks, results):
+        clock = [0.0]
+        consumer = StudyBatchConsumer(clock=lambda: clock[0])
+        claimed_at = []
+        def claim(**_kwargs):
+            claimed_at.append(clock[0])
+            result = results.pop(0)
+            if isinstance(result, Exception):
+                raise result
+            return result
+        with patch.object(consumer_service, "drain_study_queue", return_value=EMPTY_COUNTS) as drain, patch.object(
+            consumer_service, "drain_template_sync_jobs", side_effect=claim,
+        ):
+            for tick in ticks:
+                clock[0] = tick
+                consumer.step()
+        self.assertEqual(drain.call_count, len(ticks))
+        return claimed_at
+
+    def test_idle_template_sync_claims_once_per_interval_while_queue_is_polled_every_pass(self):
+        claimed_at = self._template_sync_claims((0, 0.25, 0.5, 4.75, 5.0, 5.25), [EMPTY_TEMPLATE_SYNC] * 2)
+        self.assertEqual(claimed_at, [0, 5.0])
+
+    def test_template_sync_keeps_claiming_every_pass_while_jobs_remain(self):
+        busy = {**EMPTY_TEMPLATE_SYNC, "delivered_count": 3}
+        claimed_at = self._template_sync_claims((0, 0.25, 0.5, 0.75, 5.75), [busy, busy, EMPTY_TEMPLATE_SYNC, EMPTY_TEMPLATE_SYNC])
+        self.assertEqual(claimed_at, [0, 0.25, 0.5, 5.75])
+
+    def test_template_sync_outage_backs_off_without_failing_the_pass(self):
+        claimed_at = self._template_sync_claims((0, 0.25, 5.0), [RuntimeError("queue down"), EMPTY_TEMPLATE_SYNC])
+        self.assertEqual(claimed_at, [0, 5.0])
+
     def test_probe_is_read_only_and_checks_empty_note_tables(self):
         statements = []
         def capture(_conn, _cursor, statement, *_args):
@@ -214,7 +249,7 @@ class StudyConsumerTests(unittest.TestCase):
         withdraw.assert_called_once()
 
     def test_worker_options_reject_unbounded_or_invalid_settings(self):
-        for args in ({"idle_interval": 0}, {"recovery_interval": float("inf")}, {"heartbeat_interval": 15}, {"jobs_per_pass": True}, {"recovery_page_size": 1001}):
+        for args in ({"idle_interval": 0}, {"template_sync_interval": 0}, {"recovery_interval": float("inf")}, {"heartbeat_interval": 15}, {"jobs_per_pass": True}, {"recovery_page_size": 1001}):
             with self.subTest(args=args), self.assertRaises(ValueError):
                 StudyConsumerOptions(**args)
 
