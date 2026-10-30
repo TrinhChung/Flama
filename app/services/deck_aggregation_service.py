@@ -7,6 +7,8 @@ Queries take no locks and can run in ``analytics_read_transaction()``.
 
 from __future__ import annotations
 
+from app.repositories.flashcards_share_repository import source_deck_map_condition
+
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, Tuple
@@ -156,7 +158,7 @@ def _overlay_scope(
         visible = clone_source_card_visibility(DeckInstall, card=Card, note=Note, release=rel)
     overlay = (
         overlay
-        .join(DeckCloneDeckMap, DeckCloneDeckMap.source_deck_id == Note.deck_id)
+        .join(DeckCloneDeckMap, source_deck_map_condition(user_id=learner_user_id))
         .join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id)
         .outerjoin(rel, rel.id == DeckInstall.applied_release_id)
         .where(

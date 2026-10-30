@@ -44,6 +44,9 @@ def has_active_template(note_type_id: str) -> bool:
 
 def _source_conditions(install, source_deck_id: int, *, uses_release: bool):
     conditions = [Note.deck_id == source_deck_id]
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        conditions.extend([Note.published_at.isnot(None), Note.deleted_at.is_(None)])
     if install.source_owner_user_id is not None:
         conditions.append(Note.user_id == install.source_owner_user_id)
     snapshot_at = install.base_snapshot_at or install.installed_at

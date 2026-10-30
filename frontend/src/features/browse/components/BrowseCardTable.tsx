@@ -5,7 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, ArrowUpDown, RotateCcw } from 'lucide-react'
+import { AlertTriangle, ArrowUpDown, RefreshCcw, RotateCcw } from 'lucide-react'
 import { isValidArrayJson } from '@/entities/flashcard/fields'
 import type { BrowseCardRow, BrowseSortBy, BrowseSortDir } from '../types'
 import { statusLabel, statusVariant } from '../utils/formatter'
@@ -59,6 +59,7 @@ const BrowseCardTableRow = memo(function BrowseCardTableRow({
   onToggleSelected,
 }: BrowseCardTableRowProps) {
   const cardId = String(card.card_id)
+  const { t } = useTranslation('browse')
 
   return (
     <TableRow
@@ -73,7 +74,14 @@ const BrowseCardTableRow = memo(function BrowseCardTableRow({
           onCheckedChange={(checked) => onToggleSelected(cardId, checked === true)}
         />
       </TableCell>
-      <TableCell className="font-semibold text-foreground truncate max-w-48">{card.word}</TableCell>
+      <TableCell className="font-semibold text-foreground truncate max-w-48">
+        {card.word}
+        {card.base_changed ? <span className="ml-1.5 inline-flex align-middle text-primary"
+          title={t('card_table.base_changed', 'Bản gốc đã thay đổi')}>
+          <RefreshCcw className="size-3" aria-hidden="true" />
+          <span className="sr-only">{t('card_table.base_changed', 'Bản gốc đã thay đổi')}</span>
+        </span> : null}
+      </TableCell>
       <TableCell className="text-muted-foreground truncate max-w-48">{card.reading}</TableCell>
       <TableCell className="text-muted-foreground truncate max-w-72 leading-relaxed">
         {arrayViewMode === 'code' ? (

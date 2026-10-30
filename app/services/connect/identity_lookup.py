@@ -41,9 +41,10 @@ class NoteIdentityLookup:
         from app.services import deck_release_service, flashcards_share_service
 
         install = clone_map.deck_install
+        from app.services.effective_note_reader import current_release_for_install, install_release_id
         key = (
             install.id, clone_map.source_deck_id, field_name,
-            install.applied_release_id, install.overlay_revision,
+            install_release_id(install), install.overlay_revision,
         )
         if key not in self.clone_indexes:
             index: dict[str, list[NoteIdentityMatch]] = {}
@@ -59,7 +60,7 @@ class NoteIdentityLookup:
                 )
                 release_values = (
                     deck_release_service.get_note_values_for_ids_at_release(
-                        install.applied_release, [row.id for row in rows],
+                        current_release_for_install(install), [row.id for row in rows],
                     )
                     if uses_release and rows else {}
                 )

@@ -144,7 +144,10 @@
     "toast_publishing": "Đang tạo và đóng gói bản phát hành…",
     "toast_publishing_desc": "Hệ thống đang snapshot toàn bộ flashcard và cấu trúc deck.",
     "toast_publish_success": "Đã phát hành phiên bản {{version}}.",
-    "toast_publish_error": "Không thể phát hành phiên bản mới."
+    "toast_publish_error": "Không thể phát hành phiên bản mới.",
+    "base_description": "Kiểm tra bản nháp trước khi phát hành. Người học sẽ thấy nội dung mới ngay sau khi bạn bấm Publish; phần sửa riêng của họ được giữ nguyên.",
+    "base_content_desc": "Bản nháp được giữ riêng cho tới khi bạn phát hành. Đây là những thay đổi sẽ áp dụng cho bộ thẻ.",
+    "base_publishing_desc": "Đang áp dụng bản nháp vào bộ thẻ đã phát hành."
   },
   "update": {
     "title": "Xem bản cập nhật deck",
@@ -243,5 +246,22 @@
     "toast_sync_success": "Bản nháp đã đồng bộ với deck gốc.",
     "toast_submit_success": "Đã gửi đóng góp tới chủ sở hữu deck.",
     "loading": "Đang tải các thay đổi local…"
+  },
+  "base_comparison": {
+    "loading": "Đang tải phần bạn sửa riêng…",
+    "title": "So sánh phần sửa riêng",
+    "absent": "Không có giá trị",
+    "priority_title": "Phần bạn sửa riêng luôn được giữ",
+    "priority_description": "Bạn nhận nội dung mới ngay khi tác giả phát hành. Ở field bạn đã sửa, giá trị riêng của bạn được ưu tiên. Bỏ phần sửa riêng để dùng bản tác giả mới nhất.",
+    "empty": "Bạn chưa có phần sửa riêng. Nội dung đang dùng là bản tác giả đã phát hành mới nhất.",
+    "base_changed": "Bản gốc đã thay đổi",
+    "note_deleted": "Tác giả đã xoá note",
+    "field_deleted": "Tác giả đã xoá field",
+    "reset": "Bỏ phần sửa riêng",
+    "keep": "Giữ bản của tôi",
+    "latest_base": "Bản tác giả mới nhất",
+    "your_value": "Phần bạn sửa riêng",
+    "removed_value": "Bạn đã xoá giá trị này",
+    "pagination": "Phân trang phần sửa riêng"
   }
 }

@@ -98,6 +98,7 @@ class DeckMarketplaceItem(db.Model):
     )
     preview_samples_schema_version = db.Column(db.SmallInteger, nullable=True)
     preview_samples_json = db.Column(db.JSON, nullable=True)
+    published_schema_json = db.Column(db.JSON, nullable=True)
     working_revision = db.Column(
         db.BigInteger,
         nullable=False,

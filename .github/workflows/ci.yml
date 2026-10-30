@@ -414,6 +414,28 @@ jobs:
       # schema and share no server state, so they run two at a time, longest
       # first (plan 6.3.1). Concurrency probes and probes that use the ci
       # schema keep their own sequential steps.
+      - name: Qualify Published Base drafts, readers, publication and cutover on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+          FLAMA_MYSQL_TESTS: '1'
+          STUDY_WIRE_V4_ENABLED: ''
+          STUDY_ASYNC_BATCH_ENABLED: ''
+          STUDY_NEW_LEARNER_NOTE_ENABLED: ''
+          STUDY_NOTE_COUNT_ENABLED: ''
+          STUDY_PROGRESS_SHADOW_WRITE_ENABLED: ''
+          STUDY_PROGRESS_SHADOW_READ_ENABLED: ''
+          STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED: ''
+          STUDY_PROGRESS_SHADOW_COMPARE_ENABLED: ''
+        run: >-
+          python scripts/run_tests.py
+          --file tests/test_note_drafts_mysql.py tests/test_note_base_reader_mysql.py
+          tests/test_note_base_publish_mysql.py tests/test_note_base_cutover_mysql.py
+          --backend-only --manifest output/note-base-mysql-ci.json
+
       - name: Run schema-owning NOTE, field value, forecast, outbox and retention contracts on MySQL
         env:
           DB_HOST: 127.0.0.1

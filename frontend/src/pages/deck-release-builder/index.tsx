@@ -11,8 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import '@/shared/config/i18n'
-import { DiffWorkspace } from '../components/DiffWorkspace'
-import { useReleaseBuilder } from '../hooks/useReleaseBuilder'
+import { DiffWorkspace, useReleaseBuilder } from '@/features/deck-collaboration'
 
 export function ReleaseBuilderPage() {
   const { t } = useTranslation('collaboration')
@@ -64,7 +63,9 @@ export function ReleaseBuilderPage() {
     )
   }
 
-  const pageDescription = firstPage.deck_title
+  const pageDescription = firstPage.content_model === 'published_base'
+    ? t('release.base_description', 'Kiểm tra bản nháp trước khi phát hành. Người học sẽ thấy nội dung mới ngay sau khi bạn bấm Publish; phần sửa riêng của họ được giữ nguyên.')
+    : firstPage.deck_title
     ? t('release.description_deck', {
         title: firstPage.deck_title,
         defaultValue: `Kiểm tra diff của “${firstPage.deck_title}” trước khi tạo release bất biến.`,
@@ -112,8 +113,10 @@ export function ReleaseBuilderPage() {
             <CardTitle>{t('release.content_title', 'Nội dung phát hành')}</CardTitle>
             <CardDescription>
               {t(
-                'release.content_desc',
-                'Owner edit chỉ nằm trong working tree. Chỉ thao tác này mới tạo cập nhật cho người đã cài deck.',
+                firstPage.content_model === 'published_base' ? 'release.base_content_desc' : 'release.content_desc',
+                firstPage.content_model === 'published_base'
+                  ? 'Bản nháp được giữ riêng cho tới khi bạn phát hành. Đây là những thay đổi sẽ áp dụng cho bộ thẻ.'
+                  : 'Owner edit chỉ nằm trong working tree. Chỉ thao tác này mới tạo cập nhật cho người đã cài deck.',
               )}
             </CardDescription>
           </CardHeader>

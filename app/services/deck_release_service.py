@@ -663,6 +663,11 @@ def get_field_defs_at_release(
     release_or_id: DeckRelease | str,
 ) -> dict[str, dict[str, Any]]:
     """Return active field-definition properties keyed by stable FieldDef ID."""
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        from app.services.effective_note_reader import published_field_defs
+        release = _resolve_published_release(release_or_id)
+        return published_field_defs(db.session.get(DeckMarketplaceItem, release.deck_item_id))
     _history, fields = _release_field_context(_resolve_published_release(release_or_id))
     return deepcopy(fields)
 
@@ -811,6 +816,15 @@ def get_note_field_values_by_id_for_ids_at_release(
     note_ids: list[str] | tuple[str, ...] | set[str],
 ) -> dict[str, dict[str, Any]]:
     """Return selected release note values keyed by stable FieldDef ID."""
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        release = _resolve_published_release(release_or_id)
+        item = db.session.get(DeckMarketplaceItem, release.deck_item_id)
+        from app.services.effective_note_reader import published_note_values_for_ids, published_field_defs
+        schema = published_field_defs(item)
+        fields = {payload["name"]: identity for identity, payload in schema.items()}
+        return {note_id: {fields[name]: value for name, value in values.items() if name in fields}
+            for note_id, values in published_note_values_for_ids(item, note_ids).items()}
 
     values_by_note, _ = _get_note_field_values_by_id_for_ids_at_release(
         release_or_id,
@@ -824,6 +838,11 @@ def get_note_values_for_ids_at_release(
     note_ids: list[str] | tuple[str, ...] | set[str],
 ) -> dict[str, dict[str, Any]]:
     """Return selected visible notes keyed by their names at the release."""
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        from app.services.effective_note_reader import published_note_values_for_ids
+        release = _resolve_published_release(release_or_id)
+        return published_note_values_for_ids(db.session.get(DeckMarketplaceItem, release.deck_item_id), note_ids)
 
     values_by_note, target_field_defs = (
         _get_note_field_values_by_id_for_ids_at_release(
@@ -1557,6 +1576,11 @@ def preview_release(
     source_deck_id: Any = None,
     query_text: str | None = None,
 ) -> dict[str, Any]:
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        from app.services.note_base_publish_service import preview_release as preview_base
+        return preview_base(deck_item_id=deck_item_id, user_id=user_id, cursor=cursor, limit=limit,
+            entity_kind=entity_kind, operation=operation, source_deck_id=source_deck_id, query_text=query_text)
     item = _get_owned_item(deck_item_id=deck_item_id, user_id=user_id)
     normalized_kind = (entity_kind or "").strip() or None
     if normalized_kind and normalized_kind not in VISIBLE_ENTITY_KINDS:
@@ -1968,7 +1992,20 @@ def publish_release(
         normalized_version, normalized_key, normalized_expected_head,
         normalized_expected_revision, normalized_changelog, normalized_publish_mode,
     )
-    release, replayed = release_core.publish(_DeckPublishAdapter(item, user_id), request)
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        from app.services.note_base_publish_service import PublishedBaseAdapter
+        if normalized_publish_mode != "manual":
+            raise DeckReleaseError("AUTO_PUBLISH_RETIRED", "Publish explicitly to update the shared Base.", status=410)
+        adapter = PublishedBaseAdapter(item, user_id)
+    else:
+        adapter = _DeckPublishAdapter(item, user_id)
+    if published_base_enabled():
+        from app.repositories.template_release_repository import current_publication_reads
+        with current_publication_reads(db.session):
+            release, replayed = release_core.publish(adapter, request)
+    else:
+        release, replayed = release_core.publish(adapter, request)
     return PublishReleaseResult(release, replayed=replayed)
 
 
@@ -1984,22 +2021,29 @@ def publish_release_and_commit(
     publish_mode: str = "manual",
 ) -> PublishReleaseResult:
     """Build, stage, and commit an immutable release in a committed transaction."""
-    try:
-        result = publish_release(
-            deck_item_id=deck_item_id,
-            user_id=user_id,
-            version_label=version_label,
-            changelog=changelog,
-            expected_current_release_id=expected_current_release_id,
-            expected_working_revision=expected_working_revision,
-            idempotency_key=idempotency_key,
-            publish_mode=publish_mode,
-        )
-        db.session.commit()
-        return result
-    except Exception:
-        db.session.rollback()
-        raise
+    def operation():
+        try:
+            result = publish_release(
+                deck_item_id=deck_item_id,
+                user_id=user_id,
+                version_label=version_label,
+                changelog=changelog,
+                expected_current_release_id=expected_current_release_id,
+                expected_working_revision=expected_working_revision,
+                idempotency_key=idempotency_key,
+                publish_mode=publish_mode,
+            )
+            db.session.commit()
+            return result
+        except Exception:
+            db.session.rollback()
+            raise
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled():
+        from app.services.db_errors import run_with_deadlock_retry
+        return run_with_deadlock_retry(operation, session=db.session, label="published Base publish")
+    return operation()
+
 
 
 class _DeckPublishAdapter:

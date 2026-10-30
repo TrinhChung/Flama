@@ -1,0 +1,685 @@
+{
+  "buffer_pool_bytes": 1073741824,
+  "buffer_pool_chunk_bytes": 134217728,
+  "buffer_pool_instances": 8,
+  "configured_buffer_pool_lines": [
+    "innodb_buffer_pool_size=128M",
+    "innodb_buffer_pool_instances=8"
+  ],
+  "configured_database_modified": false,
+  "generated_database": "flama_note_base_test_7292_be8292a22511",
+  "generated_database_dropped": true,
+  "limitations": [
+    "Synthetic content and generated users; no production traffic claim.",
+    "Study covers effective page reads, not session creation/review commits.",
+    "Global MySQL counters include any concurrent work on the shared server.",
+    "Only the runtime buffer pool is measured; no 128 MiB/2 GiB comparison unless independently configured.",
+    "Short runs are qualification samples, not sustained capacity measurements."
+  ],
+  "measurements": [
+    {
+      "elapsed_seconds": 347.4367325999774,
+      "errors": [],
+      "installs": 100,
+      "iterations_per_vu": 1,
+      "mode": "legacy",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 151,
+        "Innodb_buffer_pool_read_requests": 1703922076,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 552148077,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 345478.1532001216,
+          "p50_ms": 235261.7091999855,
+          "p95_ms": 345478.1532001216,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 2556.5132999327034,
+          "p50_ms": 2007.3727000271901,
+          "p95_ms": 2556.5132999327034,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 791.5660999715328,
+          "p50_ms": 657.7099000569433,
+          "p95_ms": 791.5660999715328,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 0,
+      "python_cpu_seconds": 2.578125,
+      "python_rss_peak_sampled_bytes": 183431168,
+      "response_signatures": {
+        "browse": [
+          "955c4b7e91bfef574939216a081feb678a190d49abcad8d96ea76e64fc618dfb",
+          "db04cd955733478e406c73d398ca741d66b7964a2ad9451aa2670cbb7ab0e701"
+        ],
+        "search": [
+          "0d3b7ac4b9ce459597aa869ba072c3714cd7b8707a861110c5ef5d992d21d04c"
+        ],
+        "study_page_query": [
+          "be07006d74e3e61bcfc1befaf32842229b9b55a8c1548f33cb8ea2ca0452f32a"
+        ]
+      },
+      "sql_statements": 802,
+      "throughput_requests_per_second": 0.08634665590912234,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 4.267546699848026,
+      "errors": [],
+      "installs": 100,
+      "iterations_per_vu": 1,
+      "legacy_response_signature_parity": true,
+      "mode": "published_base",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 101,
+        "Innodb_buffer_pool_read_requests": 2917191,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 1501997,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 1028.8674000184983,
+          "p50_ms": 956.8225000984967,
+          "p95_ms": 1028.8674000184983,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 2254.442000063136,
+          "p50_ms": 1842.8932499373332,
+          "p95_ms": 2254.442000063136,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 1226.2985999695957,
+          "p50_ms": 1057.5548500055447,
+          "p95_ms": 1226.2985999695957,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 0,
+      "python_cpu_seconds": 2.984375,
+      "python_rss_peak_sampled_bytes": 185925632,
+      "response_signatures": {
+        "browse": [
+          "955c4b7e91bfef574939216a081feb678a190d49abcad8d96ea76e64fc618dfb",
+          "db04cd955733478e406c73d398ca741d66b7964a2ad9451aa2670cbb7ab0e701"
+        ],
+        "search": [
+          "0d3b7ac4b9ce459597aa869ba072c3714cd7b8707a861110c5ef5d992d21d04c"
+        ],
+        "study_page_query": [
+          "be07006d74e3e61bcfc1befaf32842229b9b55a8c1548f33cb8ea2ca0452f32a"
+        ]
+      },
+      "sql_statements": 842,
+      "throughput_requests_per_second": 7.02980004906996,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 6.299232100136578,
+      "errors": [],
+      "installs": 100,
+      "iterations_per_vu": 1,
+      "mode": "legacy",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 151,
+        "Innodb_buffer_pool_read_requests": 9801094,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 2202274,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 1272.037500049919,
+          "p50_ms": 1032.1996500715613,
+          "p95_ms": 1272.037500049919,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 4317.8284000605345,
+          "p50_ms": 3687.484900117852,
+          "p95_ms": 4317.8284000605345,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 1042.0154000166804,
+          "p50_ms": 927.7523999335244,
+          "p95_ms": 1042.0154000166804,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 20,
+      "python_cpu_seconds": 2.953125,
+      "python_rss_peak_sampled_bytes": 190119936,
+      "response_signatures": {
+        "browse": [
+          "80233749917bfcbbeb16bcb0d4a7f1d065e549db5784eb8eb9f076b8fb4f3977",
+          "db04cd955733478e406c73d398ca741d66b7964a2ad9451aa2670cbb7ab0e701"
+        ],
+        "search": [
+          "675f243d9863290536b2285399aeb7d2035e7bda04ff7d864e4c3065f0f4a891"
+        ],
+        "study_page_query": [
+          "befa66b12800e873d54f67c8ac3384fe4ff6ff82b877ede983d2225c140a9ce8"
+        ]
+      },
+      "sql_statements": 801,
+      "throughput_requests_per_second": 4.762485255837699,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 4.540903999935836,
+      "errors": [],
+      "installs": 100,
+      "iterations_per_vu": 1,
+      "legacy_response_signature_parity": true,
+      "mode": "published_base",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 101,
+        "Innodb_buffer_pool_read_requests": 3682041,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 1501994,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 1152.8447000309825,
+          "p50_ms": 911.6054000332952,
+          "p95_ms": 1152.8447000309825,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 2843.6137000098825,
+          "p50_ms": 2265.703549957834,
+          "p95_ms": 2843.6137000098825,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 924.9698000494391,
+          "p50_ms": 832.3954000370577,
+          "p95_ms": 924.9698000494391,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 20,
+      "python_cpu_seconds": 3.03125,
+      "python_rss_peak_sampled_bytes": 191188992,
+      "response_signatures": {
+        "browse": [
+          "80233749917bfcbbeb16bcb0d4a7f1d065e549db5784eb8eb9f076b8fb4f3977",
+          "db04cd955733478e406c73d398ca741d66b7964a2ad9451aa2670cbb7ab0e701"
+        ],
+        "search": [
+          "675f243d9863290536b2285399aeb7d2035e7bda04ff7d864e4c3065f0f4a891"
+        ],
+        "study_page_query": [
+          "befa66b12800e873d54f67c8ac3384fe4ff6ff82b877ede983d2225c140a9ce8"
+        ]
+      },
+      "sql_statements": 841,
+      "throughput_requests_per_second": 6.60661401351447,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 6.655260700033978,
+      "errors": [],
+      "installs": 100,
+      "iterations_per_vu": 1,
+      "mode": "legacy",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 151,
+        "Innodb_buffer_pool_read_requests": 9353476,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 2133275,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 1433.917400194332,
+          "p50_ms": 1236.5547500085086,
+          "p95_ms": 1433.917400194332,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 4394.032400101423,
+          "p50_ms": 3934.2381499009207,
+          "p95_ms": 4394.032400101423,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 1000.1415000297129,
+          "p50_ms": 916.3960000732914,
+          "p95_ms": 1000.1415000297129,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 1000,
+      "python_cpu_seconds": 2.859375,
+      "python_rss_peak_sampled_bytes": 190296064,
+      "response_signatures": {
+        "browse": [
+          "80233749917bfcbbeb16bcb0d4a7f1d065e549db5784eb8eb9f076b8fb4f3977",
+          "db04cd955733478e406c73d398ca741d66b7964a2ad9451aa2670cbb7ab0e701"
+        ],
+        "search": [
+          "295069adc7994d4b178a8b7deb19db58b164306ca78251314d65f990a9f92bd7"
+        ],
+        "study_page_query": [
+          "befa66b12800e873d54f67c8ac3384fe4ff6ff82b877ede983d2225c140a9ce8"
+        ]
+      },
+      "sql_statements": 801,
+      "throughput_requests_per_second": 4.5077122222795625,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 5.709357699844986,
+      "errors": [],
+      "installs": 100,
+      "iterations_per_vu": 1,
+      "legacy_response_signature_parity": true,
+      "mode": "published_base",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 101,
+        "Innodb_buffer_pool_read_requests": 3548988,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 1472195,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 1065.47150015831,
+          "p50_ms": 894.0883501200005,
+          "p95_ms": 1065.47150015831,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 3423.260899959132,
+          "p50_ms": 3124.087500036694,
+          "p95_ms": 3423.260899959132,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 1477.52399998717,
+          "p50_ms": 1333.7174500338733,
+          "p95_ms": 1477.52399998717,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 1000,
+      "python_cpu_seconds": 3.34375,
+      "python_rss_peak_sampled_bytes": 190767104,
+      "response_signatures": {
+        "browse": [
+          "80233749917bfcbbeb16bcb0d4a7f1d065e549db5784eb8eb9f076b8fb4f3977",
+          "db04cd955733478e406c73d398ca741d66b7964a2ad9451aa2670cbb7ab0e701"
+        ],
+        "search": [
+          "295069adc7994d4b178a8b7deb19db58b164306ca78251314d65f990a9f92bd7"
+        ],
+        "study_page_query": [
+          "befa66b12800e873d54f67c8ac3384fe4ff6ff82b877ede983d2225c140a9ce8"
+        ]
+      },
+      "sql_statements": 841,
+      "throughput_requests_per_second": 5.254531521262808,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 264.5131851998158,
+      "errors": [],
+      "installs": 1000,
+      "iterations_per_vu": 1,
+      "mode": "legacy",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 151,
+        "Innodb_buffer_pool_read_requests": 1549632083,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 502153077,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 262107.22050000913,
+          "p50_ms": 258001.67319993488,
+          "p95_ms": 262107.22050000913,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 2710.8144001103938,
+          "p50_ms": 2362.7299499930814,
+          "p95_ms": 2710.8144001103938,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 872.9968999978155,
+          "p50_ms": 675.3489500842988,
+          "p95_ms": 872.9968999978155,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 0,
+      "python_cpu_seconds": 2.140625,
+      "python_rss_peak_sampled_bytes": 191340544,
+      "response_signatures": {
+        "browse": [
+          "7f4f5d71d53553d05e5f9ba58a65b2912723eac87464d9814c830c10a379d569",
+          "de49a90558d4124f950f30722dc6d47c90e124c73debe7e6da20ef1f0e8fc6b3"
+        ],
+        "search": [
+          "0d3b7ac4b9ce459597aa869ba072c3714cd7b8707a861110c5ef5d992d21d04c"
+        ],
+        "study_page_query": [
+          "be07006d74e3e61bcfc1befaf32842229b9b55a8c1548f33cb8ea2ca0452f32a"
+        ]
+      },
+      "sql_statements": 802,
+      "throughput_requests_per_second": 0.11341589636576231,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 4.641388999996707,
+      "errors": [],
+      "installs": 1000,
+      "iterations_per_vu": 1,
+      "legacy_response_signature_parity": true,
+      "mode": "published_base",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 101,
+        "Innodb_buffer_pool_read_requests": 2959281,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 1501997,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 1126.3381000608206,
+          "p50_ms": 948.5392499482259,
+          "p95_ms": 1126.3381000608206,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 2396.6868999414146,
+          "p50_ms": 2164.2701500095427,
+          "p95_ms": 2396.6868999414146,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 1368.2614001445472,
+          "p50_ms": 1213.8641000492498,
+          "p95_ms": 1368.2614001445472,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 0,
+      "python_cpu_seconds": 3.03125,
+      "python_rss_peak_sampled_bytes": 192978944,
+      "response_signatures": {
+        "browse": [
+          "7f4f5d71d53553d05e5f9ba58a65b2912723eac87464d9814c830c10a379d569",
+          "de49a90558d4124f950f30722dc6d47c90e124c73debe7e6da20ef1f0e8fc6b3"
+        ],
+        "search": [
+          "0d3b7ac4b9ce459597aa869ba072c3714cd7b8707a861110c5ef5d992d21d04c"
+        ],
+        "study_page_query": [
+          "be07006d74e3e61bcfc1befaf32842229b9b55a8c1548f33cb8ea2ca0452f32a"
+        ]
+      },
+      "sql_statements": 842,
+      "throughput_requests_per_second": 6.463582345720491,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 7.088048200123012,
+      "errors": [],
+      "installs": 1000,
+      "iterations_per_vu": 1,
+      "mode": "legacy",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 151,
+        "Innodb_buffer_pool_read_requests": 9794633,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 2202274,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 1259.4119999557734,
+          "p50_ms": 1129.6058499719948,
+          "p95_ms": 1259.4119999557734,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 5018.598599825054,
+          "p50_ms": 4344.196500023827,
+          "p95_ms": 5018.598599825054,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 1258.786299964413,
+          "p50_ms": 1040.1166999945417,
+          "p95_ms": 1258.786299964413,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 20,
+      "python_cpu_seconds": 2.546875,
+      "python_rss_peak_sampled_bytes": 195313664,
+      "response_signatures": {
+        "browse": [
+          "de49a90558d4124f950f30722dc6d47c90e124c73debe7e6da20ef1f0e8fc6b3",
+          "ff2fb994fb2837c9fe6765ac39cf3258e9657b60a9b5952119906d09797ac216"
+        ],
+        "search": [
+          "675f243d9863290536b2285399aeb7d2035e7bda04ff7d864e4c3065f0f4a891"
+        ],
+        "study_page_query": [
+          "befa66b12800e873d54f67c8ac3384fe4ff6ff82b877ede983d2225c140a9ce8"
+        ]
+      },
+      "sql_statements": 801,
+      "throughput_requests_per_second": 4.232476861469332,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 4.60375010012649,
+      "errors": [],
+      "installs": 1000,
+      "iterations_per_vu": 1,
+      "legacy_response_signature_parity": true,
+      "mode": "published_base",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 101,
+        "Innodb_buffer_pool_read_requests": 3690906,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 1501994,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 964.4299000501633,
+          "p50_ms": 904.8116500489414,
+          "p95_ms": 964.4299000501633,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 2795.063399942592,
+          "p50_ms": 2146.114050061442,
+          "p95_ms": 2795.063399942592,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 1279.8945000395179,
+          "p50_ms": 1019.0196500625461,
+          "p95_ms": 1279.8945000395179,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 20,
+      "python_cpu_seconds": 2.8125,
+      "python_rss_peak_sampled_bytes": 193462272,
+      "response_signatures": {
+        "browse": [
+          "de49a90558d4124f950f30722dc6d47c90e124c73debe7e6da20ef1f0e8fc6b3",
+          "ff2fb994fb2837c9fe6765ac39cf3258e9657b60a9b5952119906d09797ac216"
+        ],
+        "search": [
+          "675f243d9863290536b2285399aeb7d2035e7bda04ff7d864e4c3065f0f4a891"
+        ],
+        "study_page_query": [
+          "befa66b12800e873d54f67c8ac3384fe4ff6ff82b877ede983d2225c140a9ce8"
+        ]
+      },
+      "sql_statements": 841,
+      "throughput_requests_per_second": 6.516426684232,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 7.099558899877593,
+      "errors": [],
+      "installs": 1000,
+      "iterations_per_vu": 1,
+      "mode": "legacy",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 151,
+        "Innodb_buffer_pool_read_requests": 9387583,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 2133275,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 1201.2285001110286,
+          "p50_ms": 1073.4613499371335,
+          "p95_ms": 1201.2285001110286,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 4937.8039999865,
+          "p50_ms": 4157.1693499572575,
+          "p95_ms": 4937.8039999865,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 1370.783400023356,
+          "p50_ms": 1204.6849998878315,
+          "p95_ms": 1370.783400023356,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 1000,
+      "python_cpu_seconds": 2.703125,
+      "python_rss_peak_sampled_bytes": 195018752,
+      "response_signatures": {
+        "browse": [
+          "de49a90558d4124f950f30722dc6d47c90e124c73debe7e6da20ef1f0e8fc6b3",
+          "ff2fb994fb2837c9fe6765ac39cf3258e9657b60a9b5952119906d09797ac216"
+        ],
+        "search": [
+          "295069adc7994d4b178a8b7deb19db58b164306ca78251314d65f990a9f92bd7"
+        ],
+        "study_page_query": [
+          "befa66b12800e873d54f67c8ac3384fe4ff6ff82b877ede983d2225c140a9ce8"
+        ]
+      },
+      "sql_statements": 801,
+      "throughput_requests_per_second": 4.225614636497663,
+      "vus": 10
+    },
+    {
+      "elapsed_seconds": 4.954160700086504,
+      "errors": [],
+      "installs": 1000,
+      "iterations_per_vu": 1,
+      "legacy_response_signature_parity": true,
+      "mode": "published_base",
+      "mysql_global_counter_delta": {
+        "Created_tmp_disk_tables": 0,
+        "Created_tmp_tables": 101,
+        "Innodb_buffer_pool_read_requests": 3617866,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_rows_read": 1472195,
+        "Rows_sent": 0
+      },
+      "operations": {
+        "browse": {
+          "max_ms": 887.5223000068218,
+          "p50_ms": 856.0943000484258,
+          "p95_ms": 887.5223000068218,
+          "requests": 10
+        },
+        "search": {
+          "max_ms": 3217.0999001245946,
+          "p50_ms": 2901.2770500266925,
+          "p95_ms": 3217.0999001245946,
+          "requests": 10
+        },
+        "study_page_query": {
+          "max_ms": 1039.165899856016,
+          "p50_ms": 868.9689000602812,
+          "p95_ms": 1039.165899856016,
+          "requests": 10
+        }
+      },
+      "overrides_per_active_install": 1000,
+      "python_cpu_seconds": 2.484375,
+      "python_rss_peak_sampled_bytes": 196067328,
+      "response_signatures": {
+        "browse": [
+          "de49a90558d4124f950f30722dc6d47c90e124c73debe7e6da20ef1f0e8fc6b3",
+          "ff2fb994fb2837c9fe6765ac39cf3258e9657b60a9b5952119906d09797ac216"
+        ],
+        "search": [
+          "295069adc7994d4b178a8b7deb19db58b164306ca78251314d65f990a9f92bd7"
+        ],
+        "study_page_query": [
+          "befa66b12800e873d54f67c8ac3384fe4ff6ff82b877ede983d2225c140a9ce8"
+        ]
+      },
+      "sql_statements": 841,
+      "throughput_requests_per_second": 6.055516123947326,
+      "vus": 10
+    }
+  ],
+  "mysql_settings_changed": false,
+  "mysql_version": "8.0.40",
+  "notes": 10000,
+  "payload_padding_bytes": 1800,
+  "persisted_buffer_pool": {},
+  "publish": [
+    {
+      "changed_notes": 1,
+      "elapsed_ms": 207.1205999236554,
+      "install_table_statements": 0,
+      "installs": 100,
+      "sql_statements": 47
+    },
+    {
+      "changed_notes": 1,
+      "elapsed_ms": 102.53869998268783,
+      "install_table_statements": 0,
+      "installs": 1000,
+      "sql_statements": 47
+    }
+  ],
+  "status": "PASS"
+}

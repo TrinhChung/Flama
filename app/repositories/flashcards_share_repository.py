@@ -10,13 +10,14 @@ from typing import Any, List, Optional
 from datetime import datetime
 from collections import defaultdict
 
-from sqlalchemy import and_, case, literal, or_, select
+from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.functions import GenericFunction
 from sqlalchemy.types import Boolean
 
 from models import db
+from models.deck import Deck
 from models.card import PresentationAlias, greatest
 from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
@@ -24,6 +25,7 @@ from models.study_application import StudyApplication
 from models.deck_release import DeckRelease
 from models.deck_release_entity_membership import DeckReleaseEntityMembership
 from models.deck_release_template_pin import DeckReleaseTemplatePin
+from app.services.note_base_context import published_base_enabled
 from models.flashcard import (
     Card,
     DeckCloneAddedFieldDef,
@@ -72,6 +74,12 @@ class _CloneVisibility:
 
         self.release_id = column("applied_release_id")
         self.deck_item_id = column("deck_item_id")
+        if published_base_enabled():
+            items = DeckMarketplaceItem.__table__
+            self.release_id = select(items.c.current_release_id).where(items.c.id == self.deck_item_id).correlate_except(items).scalar_subquery()
+            # The caller may have joined a legacy release alias. Resolve the
+            # current metadata here instead of trusting that old join.
+            release = None
         self.release_obj = release
         releases = DeckRelease.__table__
         if release is not None:
@@ -100,6 +108,8 @@ class _CloneVisibility:
         )
 
     def membership(self, note):
+        if published_base_enabled():
+            return and_(note.published_at.isnot(None), note.deleted_at.is_(None))
         memberships = DeckReleaseEntityMembership.__table__
         if self.release_obj is not None:
             return select(memberships.c.id).where(
@@ -128,6 +138,13 @@ class _CloneVisibility:
         )
 
 
+def effective_install_release_id_expression(install=DeckInstall):
+    if not published_base_enabled():
+        return install.applied_release_id
+    items = DeckMarketplaceItem.__table__
+    return select(items.c.current_release_id).where(items.c.id == install.deck_item_id).correlate_except(items).scalar_subquery()
+
+
 def clone_source_card_visibility(install, *, card=Card, note=Note, release=None):
     """Set-wise source membership for installed releases and timestamp fallback.
 
@@ -137,6 +154,8 @@ def clone_source_card_visibility(install, *, card=Card, note=Note, release=None)
     """
     terms = _CloneVisibility(install, release=release)
     presentation = terms.presentation(card.template_id, card.application_id, card.application_status)
+    if published_base_enabled():
+        return and_(presentation, terms.membership(note))
     return and_(presentation, or_(
         and_(terms.release_mode, terms.membership(note)),
         and_(~terms.release_mode, terms.before_snapshot(note, card.created_at)),
@@ -185,6 +204,8 @@ def clone_source_note_visibility(install, *, note=Note, release=None, active_not
         and_(terms.initialized, pinned_app_exists),
         and_(~terms.initialized, active_app_exists),
     )
+    if published_base_enabled():
+        return and_(terms.membership(note), release_shown)
     shown = and_(
         application.c.note_type_id == note.note_type_id,
         terms.presentation(application.c.template_id, application.c.id, application.c.status_code),
@@ -203,6 +224,36 @@ def clone_source_note_visibility(install, *, note=Note, release=None, active_not
         and_(terms.release_mode, terms.membership(note), release_shown),
         and_(~terms.release_mode, snapshot_card),
     )
+
+
+def source_deck_map_condition(*, user_id, note=Note, mapping=DeckCloneDeckMap):
+    """Join a source deck to its nearest persisted map, including new branches.
+
+    The recursive relation stores deck identities only. Each explicit map is
+    an anchor and traversal stops at a more specific map for the same install,
+    so descendants have exactly one inherited map and no read creates folders.
+    """
+    if not published_base_enabled():
+        return mapping.source_deck_id == note.deck_id
+    maps = DeckCloneDeckMap.__table__
+    installs = DeckInstall.__table__
+    decks = Deck.__table__
+    anchor = select(maps.c.id.label("mapping_id"), maps.c.deck_install_id,
+        maps.c.source_deck_id, installs.c.source_owner_user_id).join(
+            installs, installs.c.id == maps.c.deck_install_id).where(installs.c.user_id == int(user_id))
+    inherited = anchor.cte(recursive=True)
+    child = decks.alias()
+    explicit = maps.alias()
+    step = select(inherited.c.mapping_id, inherited.c.deck_install_id,
+        child.c.id, inherited.c.source_owner_user_id).join(
+            child, child.c.parent_id == inherited.c.source_deck_id).where(
+                child.c.deleted_at.is_(None),
+                or_(inherited.c.source_owner_user_id.is_(None), child.c.owner_user_id == inherited.c.source_owner_user_id),
+                ~select(explicit.c.id).where(explicit.c.deck_install_id == inherited.c.deck_install_id,
+                    explicit.c.source_deck_id == child.c.id).correlate(child, inherited).exists())
+    inherited = inherited.union_all(step)
+    return select(inherited.c.mapping_id).where(inherited.c.mapping_id == mapping.id,
+        inherited.c.source_deck_id == note.deck_id).correlate_except(inherited).exists()
 
 
 def get_note_type_by_user_and_name(user_id: int, name: str) -> Optional[NoteType]:
@@ -368,6 +419,18 @@ def find_logical_overlay_installs_for_card(user_id: int, source_deck_id: int) ->
         .all()
     )
 
+def find_published_base_installs_for_note(*, user_id, source_owner_id, note_type_id, ancestor_ids):
+    """Filter before materializing any source tree or learner folder scope."""
+    if not ancestor_ids:
+        return []
+    return (DeckInstall.query.join(DeckMarketplaceItem, DeckMarketplaceItem.id == DeckInstall.deck_item_id)
+        .filter(DeckInstall.user_id == user_id, DeckInstall.clone_mode == 'logical_overlay',
+            DeckInstall.local_deck_id.isnot(None), DeckInstall.source_deck_id.in_(ancestor_ids),
+            func.coalesce(DeckInstall.source_owner_user_id, DeckMarketplaceItem.owner_user_id) == source_owner_id,
+            func.coalesce(DeckInstall.source_note_type_id, DeckMarketplaceItem.source_note_type_id) == note_type_id)
+        .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc()).all())
+
+
 def get_notes_for_user_and_deck(user_id: int, deck_id: int) -> List[Note]:
     """Retrieves all notes created by a user in a specific deck."""
     return (
@@ -398,6 +461,14 @@ def get_source_notes_for_clone_scope(
 def delete_notes_by_ids(note_ids: List[str]) -> None:
     """Deletes notes matching the specified IDs without synchronizing session state."""
     if note_ids:
+        if published_base_enabled():
+            from app.services.note_draft_service import stage_note_delete
+            for note in Note.query.filter(Note.id.in_(note_ids)).all():
+                if note.published_at is not None:
+                    stage_note_delete(note)
+                else:
+                    db.session.delete(note)
+            return
         Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
 
 def _card_reps_query(user_id: int):

@@ -2291,5 +2291,9 @@ def call_mcp_tool(*, tool_name: str, user_id: int | None = None, arguments: Any)
     tool_definition = get_mcp_tool(tool_name)
     if tool_definition is None:
         raise KeyError(str(tool_name or "").strip())
+    if user_id is not None:
+        from app.services.note_base_context import note_author_view
+        with note_author_view(user_id):
+            return tool_definition.execute(user_id=user_id, arguments=arguments)
     return tool_definition.execute(user_id=user_id, arguments=arguments)
 

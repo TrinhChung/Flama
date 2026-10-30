@@ -509,7 +509,10 @@ def delete_media(
         values[asset.field_name] = next_value
         note.field_values = values
         cleared_field = True
-    db.session.delete(asset)
+    from app.services.note_base_context import published_base_enabled
+    retain_asset = published_base_enabled()
+    if not retain_asset:
+        db.session.delete(asset)
     db.session.add(
         AuditLog(
             user_id=user_id,
@@ -528,7 +531,7 @@ def delete_media(
             ],
         )
     db.session.commit()
-    if full_path is not None and full_path.exists():
+    if not retain_asset and full_path is not None and full_path.exists():
         try:
             full_path.unlink()
         except OSError:

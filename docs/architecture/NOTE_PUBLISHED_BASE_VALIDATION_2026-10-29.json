@@ -1,0 +1,274 @@
+{
+  "date": "2026-10-29",
+  "production_modified": false,
+  "backend": {
+    "published_base_mysql": {
+      "tests_run": 53,
+      "success": true,
+      "complete": true,
+      "manifest_sha256": "49c997a99ffbb4c08d70d6d6e1d2e7e9e3375de9e59ab92afc4b60d6eb27b9cd"
+    },
+    "legacy_regressions": {
+      "tests_run": 115,
+      "success": true,
+      "complete": true,
+      "manifest_sha256": "48bae8fb84184cabd61e26386236ffbde451db90a5f7f66514dc81217b08c13d"
+    },
+    "count_regressions": {
+      "tests_run": 47,
+      "success": true,
+      "complete": true,
+      "manifest_sha256": "ed75b3d5211ca82a1e0e7e05f011f493f5f5db73eeeff6e3f777f1e398c4dac7"
+    },
+    "deployment_regressions": {
+      "tests_run": 43,
+      "success": true,
+      "complete": true,
+      "manifest_sha256": "e96139f3dda0e87b9001f5d59fc4cd003e465b66d58fb3fd753ff291cc232867",
+      "skipped": 1,
+      "skip_reason": "POSIX symlinks with matching path spelling; Windows host"
+    },
+    "cutover_existing_overrides": {
+      "tests_run": 13,
+      "success": true,
+      "complete": true,
+      "manifest_sha256": "f2fe9e28f734de2876d6673a405e27de35634edbfd8a1ad7bc1b3efa99e4089e",
+      "replaces_previous_cutover_cases": 10,
+      "distinct_published_base_tests": 56
+    }
+  },
+  "frontend": {
+    "tests": 83,
+    "files": 16,
+    "passed": true,
+    "build": "TypeScript + Vite SPA + MCP build passed"
+  },
+  "render": {
+    "database": "flama_note_base_rehearsal_20261029_8c374786",
+    "read_only": true,
+    "templates": 6,
+    "html_mismatches": 0,
+    "native_array_values": 49,
+    "errors": [],
+    "dom": {
+      "faces_compared": 12,
+      "mismatched_cases": [],
+      "raw_dollar_faces": 0,
+      "empty_faces": 0,
+      "media_availability_verified": false
+    }
+  },
+  "http_cli": {
+    "database": "flama_note_base_rehearsal_20261029_8c374786",
+    "entry_point": "wsgi.py",
+    "startup_maintenance": false,
+    "session_http_status": 200,
+    "commands": {
+      "retention_dry_run": {
+        "exit_code": 0
+      },
+      "note_type_publish_dry_run": {
+        "exit_code": 0
+      }
+    },
+    "owned_ui_database_absent_after_cleanup": true
+  },
+  "rehearsal": {
+    "database": "flama_note_base_rehearsal_20261029_8c374786",
+    "source_modified": false,
+    "buffer_pool_changed": false,
+    "expand": {
+      "seconds": 0.15623510000295937,
+      "read_requests": 56,
+      "disk_reads": 0
+    },
+    "protected_before": {
+      "study_progress_subjects": 4239374805,
+      "review_events": 3894585596,
+      "deck_clone_note_field_overrides": 0,
+      "deck_clone_added_notes": 0,
+      "deck_clone_deck_maps": 1350227590
+    },
+    "plan": {
+      "seconds": 8.40203440003097,
+      "read_requests": 376977,
+      "disk_reads": 0
+    },
+    "manifest_sha256": "7a303807cd2bf508221c7442385e350ae4ce84b51e3b6d80d045a24232c67df7",
+    "published_notes": 30834,
+    "manual_drafts": 7,
+    "classification": {
+      "script_fields": 250708,
+      "manual_fields": 39
+    },
+    "apply": {
+      "seconds": 4.3414519999641925,
+      "read_requests": 69173,
+      "disk_reads": 4
+    },
+    "parity": {
+      "seconds": 3.3721063998527825,
+      "read_requests": 48231,
+      "disk_reads": 0
+    },
+    "author_parity": {
+      "notes_checked": 41623,
+      "mismatches": 0
+    },
+    "rollback": {
+      "seconds": 2.474736300064251,
+      "read_requests": 65446,
+      "disk_reads": 7
+    },
+    "rollback_note_hashes_equal": true,
+    "protected_after_rollback": {
+      "study_progress_subjects": 4239374805,
+      "review_events": 3894585596,
+      "deck_clone_note_field_overrides": 0,
+      "deck_clone_added_notes": 0,
+      "deck_clone_deck_maps": 1350227590
+    },
+    "protected_hashes_equal": true,
+    "reapply": {
+      "seconds": 4.3753990000113845,
+      "read_requests": 67439,
+      "disk_reads": 2
+    },
+    "active_current_base": true,
+    "status": "PASS"
+  },
+  "fresh_production_copy_rehearsal": {
+    "database": "flama_note_base_fresh_20261029_fe2cefe0",
+    "source_modified": false,
+    "buffer_pool_changed": false,
+    "expand": {
+      "seconds": 3.3383146999403834,
+      "read_requests": 296541,
+      "disk_reads": 1010
+    },
+    "protected_before": {
+      "study_progress_subjects": 137304896,
+      "review_events": 2788662019,
+      "deck_clone_note_field_overrides": 1841818865,
+      "deck_clone_added_notes": 0,
+      "deck_clone_deck_maps": 3746963949
+    },
+    "plan": {
+      "seconds": 7.801309899892658,
+      "read_requests": 287157,
+      "disk_reads": 126
+    },
+    "manifest_sha256": "6caa20555b3c7adad2667af74edc65f8d785f9032bbe94df4b091e84cbb9b381",
+    "published_notes": 31080,
+    "manual_drafts": 6,
+    "classification": {
+      "script_fields": 169464,
+      "manual_fields": 41
+    },
+    "apply": {
+      "seconds": 4.7227559001185,
+      "read_requests": 72275,
+      "disk_reads": 28
+    },
+    "override_parity": {
+      "rows_checked": 4,
+      "mismatches": 0,
+      "base_hash_backfills": 4
+    },
+    "parity": {
+      "seconds": 3.635315800085664,
+      "read_requests": 48731,
+      "disk_reads": 0
+    },
+    "author_parity": {
+      "notes_checked": 41874,
+      "mismatches": 0
+    },
+    "rollback": {
+      "seconds": 2.7718869999516755,
+      "read_requests": 66531,
+      "disk_reads": 56
+    },
+    "rollback_note_hashes_equal": true,
+    "protected_after_rollback": {
+      "study_progress_subjects": 137304896,
+      "review_events": 2788662019,
+      "deck_clone_note_field_overrides": 1841818865,
+      "deck_clone_added_notes": 0,
+      "deck_clone_deck_maps": 3746963949
+    },
+    "protected_hashes_equal": true,
+    "reapply": {
+      "seconds": 4.6282227002084255,
+      "read_requests": 69833,
+      "disk_reads": 2
+    },
+    "active_current_base": true,
+    "status": "PASS"
+  },
+  "review_20261030": {
+    "owner_manual_review": {
+      "approved": true,
+      "notes": 6,
+      "fields": 31
+    },
+    "backend_deployment": {
+      "tests_run": 130,
+      "skipped": 1,
+      "success": true,
+      "manifest_sha256": null
+    },
+    "readonly_fresh_copy": {
+      "database": "flama_note_base_fresh_20261029_fe2cefe0",
+      "production_modified": false,
+      "mysql_read_only_session": true,
+      "named_notes_checked": 41874,
+      "named_mismatches": 0,
+      "published_hashes_checked": 31080,
+      "published_hash_mismatches": 0,
+      "foreign_draft_privacy_checks": 6,
+      "foreign_draft_privacy_mismatches": 0,
+      "elapsed_seconds": 15.016,
+      "status": "PASS"
+    },
+    "wsgi": {
+      "entry_point": "wsgi.py",
+      "database": "flama_note_base_fresh_20261029_fe2cefe0",
+      "production_modified": false,
+      "commands": {
+        "retention_dry_run": {
+          "exit_code": 0,
+          "exception_type": null
+        },
+        "note_type_publish_dry_run": {
+          "exit_code": 0,
+          "exception_type": null
+        }
+      },
+      "mysql_read_only_session": true,
+      "startup_maintenance": false,
+      "session_http_status": 200,
+      "status": "PASS"
+    },
+    "routes": {
+      "static_routes": 82,
+      "screenshots": 328,
+      "pixel_exact_pairs": 144,
+      "total_pairs": 164,
+      "page_errors": 0
+    },
+    "frontend": {
+      "initial_tests": 593,
+      "initial_passed": 592,
+      "initial_timeouts": 1,
+      "focused_retry_tests_passed": 7,
+      "typecheck_build": "PASS"
+    },
+    "benchmark": {
+      "status": "PASS",
+      "runtime_source_sha256": "3f0cb0be33b4723bf88ec34bb5e6bfb9b74cd2642e5aeea75033d8729d24fb1d",
+      "record": "NOTE_PUBLISHED_BASE_REVIEW_BENCHMARK_2026-10-30.json"
+    },
+    "production_data_cutover_executed": false
+  }
+}

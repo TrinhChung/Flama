@@ -1,5 +1,7 @@
 """User/deck presentation preferences, validated against the effective scope."""
 
+
+from app.services.effective_note_reader import install_release_id
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from types import SimpleNamespace
@@ -58,7 +60,7 @@ def binding_context(composition, *, clone_scope=None, template_overrides=None, t
             template_overrides = template_release_repository.load_effective_template_overrides(
                 db.session, user_id=clone_scope.install.user_id,
                 source_template_ids=[template.id],
-                release_pins=template_release_repository.deck_pins(db.session, clone_scope.install.applied_release_id),
+                release_pins=template_release_repository.deck_pins(db.session, install_release_id(clone_scope.install)),
             )
     if template_overrides is not None:
         template = template_overrides.get(template.id, template)
@@ -90,8 +92,8 @@ def template_inputs_for_compositions(compositions, *, user_id, clone_scope=None)
         note_types.update({item.id: item for item in db.session.scalars(select(NoteType).where(
             NoteType.id.in_(note_type_ids[offset:offset + 500]),
         ).options(selectinload(NoteType.field_defs)))})
-    pins = template_release_repository.deck_pins(db.session, clone_scope.install.applied_release_id) if (
-        clone_scope is not None and clone_scope.install.applied_release_id
+    pins = template_release_repository.deck_pins(db.session, install_release_id(clone_scope.install)) if (
+        clone_scope is not None and install_release_id(clone_scope.install)
     ) else {}
     overrides = template_release_repository.load_effective_template_overrides(
         db.session, user_id=user_id, source_template_ids=template_ids, release_pins=pins,

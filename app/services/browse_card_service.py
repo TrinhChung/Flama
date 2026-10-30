@@ -15,7 +15,9 @@ from sqlalchemy.orm import aliased
 UTC = timezone.utc
 
 from app.repositories import browse_card_repository, note_analytics_read_repository
-from app.repositories.field_value_query_repository import note_values_search_condition
+from app.repositories.field_value_query_repository import note_values_search_condition, author_note_visible, author_note_column
+from app.services.note_base_context import published_base_enabled
+from app.services.effective_note_reader import install_release_id, base_note_values_for_ids
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
@@ -490,6 +492,15 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
             scoped_ids = set(deck_by_id)
 
     query = Note.query if notes_only else Card.query.join(Note, Card.note_id == Note.id)
+    author_draft = None
+    if published_base_enabled():
+        from sqlalchemy.orm import aliased
+        from models.note_draft import NoteDraft
+        from app.repositories.field_value_query_repository import join_author_draft
+        author_draft = aliased(NoteDraft, name='browse_author_draft')
+        query = join_author_draft(query, author_draft, user_id)
+        query = query.filter(Note.deleted_at.is_(None), db.or_(Note.user_id != user_id,
+            author_note_visible(draft_model=author_draft))).execution_options(include_deleted_drafts=True)
     # Status and due order come from the learner's Note row (verified
     # on the returned page), NULL for pristine Notes.
     query, progress_alias = _join_note_availability(query, learner_user_id=user_id, note_id_column=Note.id if notes_only else Card.note_id)
@@ -579,7 +590,8 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
         if local_scope_ids:
             owned_visibility_condition = db.and_(
                 Note.user_id == user_id,
-                Note.deck_id.in_(local_scope_ids),
+                author_note_column("deck_id", draft_model=author_draft).in_(local_scope_ids),
+                author_note_visible(draft_model=author_draft),
             )
             visibility_filters.append(owned_visibility_condition)
         for clone_scope in clone_scopes:
@@ -657,7 +669,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
             target_sequence = int(release.sequence_no) if release is not None else None
             deck_item_id = str(release.deck_item_id) if release is not None else None
             initial_field_names: dict[str, str] = {}
-            if release is not None:
+            if release is not None and not published_base_enabled():
                 initial_cache_key = (deck_item_id, target_sequence)
                 initial_field_names = initial_field_names_cache.get(
                     initial_cache_key,
@@ -748,7 +760,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
         keyword_like = f"%{escape_like_pattern(keyword.lower())}%"
         if admin_mode:
             query = query.filter(
-                note_values_search_condition(keyword_like=keyword_like)
+                note_values_search_condition(keyword_like=keyword_like, draft_model=author_draft)
             )
         else:
             from sqlalchemy import select, union
@@ -758,11 +770,14 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
             if owned_visibility_condition is not None:
                 owned_search = db.and_(
                         owned_visibility_condition,
-                        note_values_search_condition(keyword_like=keyword_like),
+                        note_values_search_condition(keyword_like=keyword_like, draft_model=author_draft),
                     )
                 effective_search_conditions.append(owned_search)
                 if notes_only:
-                    search_branches.append(select(Note.id.label('note_id')).where(owned_search))
+                    branch = select(Note.id.label('note_id'))
+                    if author_draft is not None:
+                        branch = join_author_draft(branch, author_draft, user_id)
+                    search_branches.append(branch.where(owned_search))
             for projection in clone_projections:
                 if notes_only and projection.get('field_specs'):
                     search_branches.append(clone_note_search_ids(
@@ -787,7 +802,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
     if tag:
         tag_like = f"%{escape_like_pattern(tag.lower())}%"
         query = query.filter(
-            func.lower(db.cast(Note.tags, db.Text)).like(tag_like, escape="\\")
+            func.lower(db.cast(db.case((Note.user_id == user_id, author_note_column("tags", draft_model=author_draft)), else_=Note.tags), db.Text)).like(tag_like, escape="\\")
         )
 
     now = _utcnow()
@@ -821,6 +836,7 @@ def _build_browse_query(*, user_id: int, admin_mode: bool, timezone_name: str, q
         keyword=keyword,
         sort_by=sort_by, sort_dir=sort_dir,
         query=query,
+        author_draft=author_draft,
         progress_alias=progress_alias,
         source_to_local_deck_id=source_to_local_deck_id,
         deck_lookup=deck_lookup,
@@ -997,8 +1013,8 @@ def list_browse_cards(
             clone_scope_by_card_id[str(card_obj.id)] = matching_scope
             clone_install_ids.add(str(matching_scope.install.id))
             clone_source_note_ids.add(str(note_obj.id))
-            release_id = str(matching_scope.install.applied_release_id or "")
-            if matching_scope.install.version_mode == "release" and release_id:
+            release_id = str(install_release_id(matching_scope.install) or "")
+            if (published_base_enabled() or matching_scope.install.version_mode == "release") and release_id:
                 release_note_ids.setdefault(release_id, set()).add(str(note_obj.id))
                 release_install_by_id[release_id] = matching_scope.install
 
@@ -1016,8 +1032,8 @@ def list_browse_cards(
         from app.services import deck_release_service
 
         for release_id, note_ids in release_note_ids.items():
-            resolved_values = deck_release_service.get_note_values_for_ids_at_release(
-                release_install_by_id[release_id].applied_release,
+            resolved_values = base_note_values_for_ids(
+                release_install_by_id[release_id],
                 note_ids,
             )
             for note_id, values in resolved_values.items():
@@ -1037,7 +1053,7 @@ def list_browse_cards(
                 timezone_name=timezone_name,
             ))
             continue
-        release_id = str(clone_scope.install.applied_release_id or "")
+        release_id = str(install_release_id(clone_scope.install) or "")
         override_key = (str(clone_scope.install.id), str(card_obj.note.id))
         overlay = _clone_overlay_fields(
             card_obj=card_obj,
@@ -1126,6 +1142,7 @@ def get_browse_card_detail(
         _utcnow(),
         progress_obj=progress,
         timezone_name=timezone_name,
+        author_view=clone_scope is None,
     )
     if clone_scope is not None:
         payload = _apply_clone_overlay_to_browse_payload(
@@ -1152,6 +1169,16 @@ def _stage_browse_card_removal(
     removal and are tombstoned when their Note loses its last Card.
     """
     from app.services import study_content_delete_service as content_delete
+
+    if published_base_enabled():
+        published_ids = {str(note.id) for note in Note.query.filter(
+            Note.id.in_(deleted_note_ids), Note.published_at.isnot(None)).all()}
+        if published_ids:
+            deleted_note_ids = [identity for identity in deleted_note_ids if str(identity) not in published_ids]
+            card_ids = [str(card.id) for card in load_cards(db.session, card_ids).values()
+                if str(card.note_id) not in published_ids]
+        if not deleted_note_ids and not card_ids:
+            return
 
     actor_user_ids = {int(user_id), *(int(value) for value in owner_user_ids if value)}
     try:
@@ -1252,6 +1279,10 @@ def _delete_browse_notes(note_ids) -> None:
     for note_id in sorted(set(note_ids)):
         note_obj = db.session.get(Note, note_id)
         if note_obj is None:
+            continue
+        if published_base_enabled() and note_obj.published_at is not None:
+            from app.services.note_draft_service import stage_note_delete
+            stage_note_delete(note_obj)
             continue
         deck_working_tree_service.mark_note_field_batches_changed(
             mutations=[
@@ -1671,6 +1702,7 @@ def _build_browse_detail_payload(
         now,
         progress_obj=progress,
         timezone_name=timezone_name,
+        author_view=admin_mode or card_obj.note.user_id == user_id,
     )
 
 
@@ -1718,7 +1750,7 @@ def _clone_overlay_fields(
             )
             if schema_views is not None:
                 schema_views[schema_key] = schema_view
-        overlay_field_defs = schema_view.field_defs or (note_obj.note_type.field_defs if note_obj.note_type else [])
+        overlay_field_defs = (schema_view.field_defs if published_base_enabled() else schema_view.field_defs or (note_obj.note_type.field_defs if note_obj.note_type else []))
         overlay_field_values = share_ctrl.apply_clone_note_field_overrides(
             install=clone_scope.install,
             source_note=note_obj,

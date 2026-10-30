@@ -90,7 +90,8 @@
     "contribute_edit": "Đóng góp chỉnh sửa",
     "installed_badge": "Đã cài đặt",
     "buy_deck": "Mua bộ deck",
-    "author": "Tác giả"
+    "author": "Tác giả",
+    "compare_personal_changes": "So sánh phần sửa riêng"
   },
   "sync_status": {
     "needs_sync": "Đóng góp cần đồng bộ",
@@ -209,7 +210,8 @@
       "published_at": "Đã phát hành",
       "last_error": "Lỗi phát hành gần nhất",
       "auto_publish_enabled_toast": "Đã bật chế độ tự động phát hành phiên bản mới.",
-      "auto_publish_disabled_toast": "Đã tắt chế độ tự động phát hành."
+      "auto_publish_disabled_toast": "Đã tắt chế độ tự động phát hành.",
+      "publish_drafts": "Phát hành bản nháp"
     },
     "notetype_source": "NoteType nguồn",
     "btn_change_request": "Đóng góp chỉnh sửa",

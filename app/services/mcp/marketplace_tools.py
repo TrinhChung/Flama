@@ -153,12 +153,25 @@ def list_shared_deck_notes(
         Note.deck_id.in_(subtree_ids),
         Note.user_id == deck_item.owner_user_id,
     )
+    from app.services.note_base_context import published_base_enabled
+    base_view = published_base_enabled() and user_id != deck_item.owner_user_id
+    if base_view:
+        notes_query = notes_query.filter(Note.published_at.isnot(None), Note.deleted_at.is_(None))
+    elif published_base_enabled():
+        from app.repositories.field_value_query_repository import author_note_visible
+        notes_query = notes_query.filter(author_note_visible())
 
     if query:
         search_term = f"%{escape_like_pattern(query.lower())}%"
+        value_condition = note_values_search_condition(keyword_like=search_term)
+        if base_view:
+            from app.services.effective_note_reader import published_field_defs
+            from app.repositories.field_value_query_repository import published_note_values_search_condition
+            value_condition = published_note_values_search_condition(field_ids=published_field_defs(deck_item),
+                keyword_like=search_term)
         notes_query = notes_query.filter(
             or_(
-                note_values_search_condition(keyword_like=search_term),
+                value_condition,
                 Note.tags.cast(db.String).ilike(search_term, escape="\\"),
             )
         )
@@ -167,7 +180,13 @@ def list_shared_deck_notes(
     notes = notes_query.order_by(Note.id.asc()).offset(offset).limit(limit).all()
 
     decks_map = {d.id: d.name for d in Deck.query.filter(Deck.id.in_(subtree_ids)).all()}
-    note_types_map = {nt.id: nt.name for nt in NoteType.query.all()}
+    note_types_map = {nt.id: nt.name for nt in NoteType.query.filter(
+        NoteType.id.in_({note.note_type_id for note in notes})).all()}
+
+    base_values = {}
+    if base_view:
+        from app.services.effective_note_reader import published_note_values_for_ids
+        base_values = published_note_values_for_ids(deck_item, [note.id for note in notes])
 
     note_items: list[dict[str, Any]] = []
     for note in notes:
@@ -178,7 +197,7 @@ def list_shared_deck_notes(
                 "deck_name": decks_map.get(note.deck_id),
                 "note_type_id": str(note.note_type_id),
                 "note_type_name": note_types_map.get(note.note_type_id),
-                "fields": dict(note.field_values or {}),
+                "fields": base_values.get(note.id, {}) if base_view else dict(note.field_values or {}),
                 "tags": list(note.tags or []),
                 "card_count": len(note.cards),
                 "created_at": note.created_at.isoformat() if note.created_at else None,

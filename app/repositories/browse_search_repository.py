@@ -11,6 +11,7 @@ from models.deck_release import DeckRelease
 from models.deck_release_change import DeckReleaseChange
 from models.deck_release_note_checkpoint import DeckReleaseNoteCheckpoint
 from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
+from app.services.note_base_context import published_base_enabled
 
 
 def _field_relation(specs):
@@ -82,7 +83,7 @@ def clone_note_search_ids(*, scope_condition, field_specs, deck_install_id,
         source_id = source_id.collate('utf8mb4_unicode_ci')
         identity = identity.collate('utf8mb4_unicode_ci')
     query = select(Note.id.label('note_id')).select_from(Note)
-    if deck_item_id and target_sequence is not None:
+    if not published_base_enabled() and deck_item_id and target_sequence is not None:
         scope_notes, baseline, latest = _release_relations(deck_item_id=deck_item_id,
             target_sequence=target_sequence, scope_condition=scope_condition)
         checkpoint_content = aliased(DeckReleaseNoteCheckpoint)
@@ -98,7 +99,7 @@ def clone_note_search_ids(*, scope_condition, field_specs, deck_install_id,
         )
     else:
         query = query.where(scope_condition).outerjoin(fields, true())
-        base = note_field_text_expression(fields.c.source_field_id)
+        base = note_field_text_expression(fields.c.source_field_id, include_draft=False)
     override = aliased(DeckCloneNoteFieldOverride)
     query = query.outerjoin(override, and_(
         override.deck_install_id == str(deck_install_id), override.source_note_id == Note.id,

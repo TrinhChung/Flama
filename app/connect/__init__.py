@@ -106,6 +106,7 @@ def _authenticate_direct_request(required_scope: str):
         logger.info("Connect package authentication rejected status=%s", status)
         db.session.rollback()
         return None, (jsonify({"error": "AUTHENTICATION_FAILED", "message": "authentication failed"}), 401)
+    request.environ["flama.note_author_user_id"] = int(authenticated[1].id)
     return authenticated, None
 
 

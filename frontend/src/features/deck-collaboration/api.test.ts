@@ -5,8 +5,7 @@ const { apiRequest, mutate } = vi.hoisted(() => ({
   mutate: vi.fn(),
 }))
 
-vi.mock('@/shared/api/client', () => ({ apiRequest }))
-vi.mock('@/app/api', () => ({ appApi: { mutate } }))
+vi.mock('@/shared/api/client', () => ({ apiRequest, apiJson: mutate }))
 
 import {
   buildDeckChangeRequestDraft,

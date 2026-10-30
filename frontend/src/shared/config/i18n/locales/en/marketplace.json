@@ -90,7 +90,8 @@
     "contribute_edit": "Contribute edits",
     "installed_badge": "Installed",
     "buy_deck": "Buy deck",
-    "author": "Author"
+    "author": "Author",
+    "compare_personal_changes": "Compare personal changes"
   },
   "sync_status": {
     "needs_sync": "Contribution needs sync",
@@ -209,7 +210,8 @@
       "published_at": "Published",
       "last_error": "Last publication error",
       "auto_publish_enabled_toast": "Automatic publication of new releases enabled.",
-      "auto_publish_disabled_toast": "Automatic publication disabled."
+      "auto_publish_disabled_toast": "Automatic publication disabled.",
+      "publish_drafts": "Publish drafts"
     },
     "notetype_source": "Source Note Type",
     "btn_change_request": "Contribute edits",

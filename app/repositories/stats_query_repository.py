@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from app.repositories.flashcards_share_repository import source_deck_map_condition
+from app.repositories.field_value_query_repository import author_note_column, author_note_visible
+
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
@@ -77,13 +80,14 @@ def learner_presentation_scope(*, learner_user_id: int, scope_deck_ids: list[int
     """
     from app.repositories.flashcards_share_repository import clone_source_card_visibility
 
-    owned = select(Note.deck_id.label("deck_id"), Card.id.label("card_id"),
+    owned_deck_id = author_note_column("deck_id")
+    owned = select(owned_deck_id.label("deck_id"), Card.id.label("card_id"),
                    Card.note_id.label("note_id")).select_from(Card).join(Note, Card.note_id == Note.id).where(
-        Note.user_id == int(learner_user_id), Card.application_status == "ACTIVE",
+        Note.user_id == int(learner_user_id), Card.application_status == "ACTIVE", author_note_visible(),
     )
     installed = select(DeckCloneDeckMap.local_deck_id.label("deck_id"), Card.id.label("card_id"),
                        Card.note_id.label("note_id")).select_from(Card).join(Note, Card.note_id == Note.id).join(
-        DeckCloneDeckMap, DeckCloneDeckMap.source_deck_id == Note.deck_id,
+        DeckCloneDeckMap, source_deck_map_condition(user_id=learner_user_id),
     ).join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id).where(
         DeckInstall.user_id == int(learner_user_id), DeckInstall.clone_mode == "logical_overlay",
         DeckInstall.local_deck_id.isnot(None), DeckCloneDeckMap.local_deck_id.isnot(None),
@@ -91,7 +95,7 @@ def learner_presentation_scope(*, learner_user_id: int, scope_deck_ids: list[int
         clone_source_card_visibility(DeckInstall),
     )
     if scope_deck_ids is not None:
-        owned = owned.where(Note.deck_id.in_(scope_deck_ids))
+        owned = owned.where(owned_deck_id.in_(scope_deck_ids))
         installed = installed.where(DeckCloneDeckMap.local_deck_id.in_(scope_deck_ids))
     rows = union_all(owned, installed).subquery("learner_presentations_all")
     return select(rows.c.deck_id, rows.c.card_id, rows.c.note_id).distinct().subquery("learner_presentations")
@@ -275,7 +279,7 @@ def query_canonical_future_due_day_counts_mysql(
                 DeckInstall.clone_mode == "logical_overlay",
                 DeckInstall.local_deck_id.isnot(None),
                 DeckCloneDeckMap.local_deck_id.isnot(None),
-                DeckCloneDeckMap.source_deck_id == Note.deck_id,
+                source_deck_map_condition(user_id=user_id),
                 or_(
                     DeckInstall.source_owner_user_id.is_(None),
                     Note.user_id == DeckInstall.source_owner_user_id,

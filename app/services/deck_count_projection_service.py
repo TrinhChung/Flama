@@ -65,6 +65,12 @@ def invalidate_all_deck_counts(session):
         _frame(session).content.add(0)
 
 
+def invalidate_learner_deck_counts(session, learner_deck_keys):
+    """Queue a private scope change without invalidating other learners."""
+    if writes_enabled(session):
+        _frame(session).learner.update(learner_deck_keys)
+
+
 def _values(obj, name):
     values = [getattr(obj, name, None)]
     values.extend(inspect(obj).attrs[name].history.deleted)

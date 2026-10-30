@@ -237,6 +237,10 @@ def _purge_deck_subtree(*, deck_obj: Deck, user_id: int, authority_learner_id: i
         scope = _deck_purge_scope(
             tuple(deck_ids_to_delete), fallback_user_id=authority_learner_id
         )
+    from app.services.note_base_context import published_base_enabled
+    if published_base_enabled() and Note.query.filter(
+        Note.id.in_(scope.note_ids), Note.published_at.isnot(None)).first() is not None:
+        raise ValueError("Published Notes must be retired through Publish before their deck can be purged.")
     # Purge spans owner content, installs and shared Card progress. Take all
     # learner fences in ID order before locking/deleting content or provenance.
     authority_routes = tuple(
@@ -397,7 +401,10 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
         is not None
     )
 
-    if marketplace_items or has_overlay_dependents or has_source_installs:
+    from app.services.note_base_context import published_base_enabled
+    has_published_notes = published_base_enabled() and Note.query.filter(
+        Note.deck_id.in_(deck_ids_to_delete), Note.published_at.isnot(None)).first() is not None
+    if marketplace_items or has_overlay_dependents or has_source_installs or has_published_notes:
         # Archival changes no progress or state in either authority mode;
         # installers keep studying the archived source through their overlay.
         lock_study_authority_route(
