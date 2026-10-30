@@ -12,15 +12,16 @@ class SharedDeckDetailUiTests(unittest.TestCase):
             / "src"
             / "features"
             / "marketplace"
-            / "pages"
-            / "SharedDeckDetailPage.tsx"
+            / "ui"
+            / "SharedDeckDetailView.tsx"
         )
         script = script_path.read_text(encoding="utf-8")
+        hook = (script_path.parent.parent / "hooks" / "useSharedDeckDetail.ts").read_text(encoding="utf-8")
         preview = (
             script_path.parent.parent / "components" / "deck-detail" / "DeckCardPreviewSection.tsx"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("/api/shared/decks/${id}/templates/${selectedTemplateId}/preview", script)
+        self.assertIn("/api/shared/decks/${id}/templates/${selectedTemplateId}/preview", hook)
         self.assertIn("<DeckCardPreviewSection", script)
         self.assertIn("previewQuery={previewQuery}", script)
         self.assertIn("<CardDisplay", preview)

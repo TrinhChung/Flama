@@ -546,6 +546,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "models/note_draft.py",
             "scripts/note_base_cutover.py",
             "scripts/bench_note_base_review_mysql.py",
+            "scripts/bench_note_published_base_mysql.py",
             "deploy/run_note_base_retention.py",
             "deploy/flama-note-base-retention.service",
             "deploy/flama-note-base-retention.timer",
