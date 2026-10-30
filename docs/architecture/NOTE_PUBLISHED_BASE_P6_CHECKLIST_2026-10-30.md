@@ -7,6 +7,49 @@ ends and its exit checks pass. Production cutover completed and soak started at
 [production result](NOTE_PUBLISHED_BASE_PRODUCTION_CUTOVER_2026-10-30.md).
 Do not infer soak completion from elapsed local rehearsal time or initial smoke.
 
+## Working branch and cleanup batches — 2026-10-31
+
+The owner's active branch `feat/flama-audio-edge-tts-20261027` now includes
+`origin/master` through `123195ec`: Published Base implementation (#265) and
+the production/soak record (#268). Integration was a fast-forward from `0eaef70f`.
+The existing Connect/audio working edit was preserved byte-for-byte. The older
+untracked plan differed only in its pre-deployment status; its original was
+retained under the ignored `output/branch-merge-20261031-*` integration backup.
+The route/retention integration smoke passed all six targeted tests; both
+repository skill mirrors match. The local receipt and initial caller inventory
+are recorded under `output/note-base-branch-integration-20261031.json` and that
+integration backup directory.
+
+Use this table as the cleanup queue. Each completed batch needs its commit and
+validation evidence recorded here and its corresponding checkboxes updated below.
+The paths identify candidates for inspection; their presence does not establish
+that every function in a file is obsolete.
+
+| Batch | State | Scope and acceptance evidence |
+|---|---|---|
+| I0 | Done: `123195ec` | Bring the deployed implementation and reports into the active branch; preserve local work and retain an integration backup. |
+| C0 | Initial inventory captured; caller audit pending | Capture flag/history/rebase callers before each removal. Trace runtime, CLI, tests, dynamic imports and retained template consumers. |
+| C1 | Pending entry checks | Remove obsolete Note reconstruction, atoms/checkpoints, dirty journals, automatic publication and subscriber fanout in `deck_release_service.py`, `deck_release_repository.py`, `deck_working_tree_service.py` and `deck_auto_publish_service.py`. Preserve active Base publication and template pins. |
+| C2 | Pending entry checks | Retire install rebase/conflict paths in `deck_install_rebase_service.py`, marketplace installation routes and `frontend/src/features/deck-collaboration/` / `frontend/src/pages/installed-deck-update/`. Preserve personal overrides, local additions, comparison and authenticated compatibility responses. |
+| C3 | After C1/C2 | Remove `NOTE_PUBLISHED_BASE_ENABLED` and its flag-off branches together across readers, codecs, settings, managed environment and deployment configuration. Verify every remaining runtime caller against the Base contract. |
+| C4 | After runtime consumers and rollback disposition | Contract the six tables listed below, their ORM relationships/exports and dependent consumers. Verify fresh upgrade and production-copy migration on local MySQL, with retained backup and parity evidence. |
+| C5 | With C4 | Update the code rollback capability guard and the cutover/rollback operator tools for the final schema. Keep historical migration chains executable and preserve their required historical definitions. |
+| C6 | Final qualification | Run focused domain/MySQL checks, Study commit/process-concurrency qualification, desktop/mobile checks and before/after workload measurements; deploy and record the final result. |
+
+Current scope evidence: Base guards remain in `deck_release_service.py`,
+`deck_working_tree_service.py`, `deck_auto_publish_service.py`,
+`deck_install_rebase_service.py` and `deck_release_repository.py`. The six legacy
+models are still exported by `models/flashcard.py` and referenced by relationships
+in `deck_release.py`, `deck_marketplace_item.py` and `deck_install.py`.
+These references require coordinated removal rather than deleting the model files
+alone. `deck_release_template_pin.py` belongs to the retained template contract.
+
+The local uncommitted concurrency report is dated 2026-10-28, before the Base
+cutover. It is useful prior-work evidence; it does not qualify the merged Base
+runtime or close the entry checks below. Keep that stress work and the pending
+Connect/audio change in their own commits. No runtime/schema removal was performed
+by this branch-integration step.
+
 ## Entry checks
 
 - [x] Owner approved six Notes / 23 manual Fields and eight receipt-backed script
