@@ -6,6 +6,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -157,6 +158,22 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertLess(build, quiesce)
         self.assertLess(stop_writers, switch)
         self.assertLess(switch, migrate)
+
+    def test_review_timer_gate_reads_the_activated_environment_like_its_unit(self):
+        activation = ACTIVATION_PATH.read_text(encoding="utf-8")
+        body = activation[activation.index('test -f "$environment_file"'):]
+        self.assertLess(body.index('mv -f "$desired_environment_file" "$environment_file"'), body.index("\nsync_review_analytics_timer\n"))
+        self.assertNotIn("enable --now flama-review-analytics-worker.timer", body)
+        gate = re.search(r'-c "(import os; raise SystemExit\(1 if .*?)"; then', activation).group(1)
+        unit = (WORKFLOW_PATH.parents[2] / "deploy" / "flama-review-analytics-worker.service").read_text(encoding="utf-8")
+        condition = re.search(r'ExecCondition=\S+ -c "(.*)"', unit).group(1)
+        # The gate answers "is the writer off?", so it must invert the unit's answer.
+        for value in ("", "0", "false", "off", "1", "TRUE", " yes ", "on"):
+            env = {**os.environ, "REVIEW_ANALYTICS_WRITE_ENABLED": value}
+            unit_status = subprocess.run([sys.executable, "-c", condition], env=env, timeout=10).returncode
+            gate_status = subprocess.run([sys.executable, "-c", gate], env=env, timeout=10).returncode
+            with self.subTest(value=value):
+                self.assertEqual(gate_status, 1 - unit_status)
 
     def test_existing_study_retention_is_quiesced_and_only_resumed_if_previously_enabled(self):
         activation = ACTIVATION_PATH.read_text(encoding="utf-8")
@@ -323,6 +340,35 @@ class DeployRollbackShellTests(unittest.TestCase):
             output = self._switch_venv(project)
         self.assertNotIn("ln ", output)
         self.assertIn("switched=0", output)
+
+    def _sync_review_timer(self, gate_exit):
+        coordinator = ACTIVATION_PATH.read_text(encoding="utf-8")
+        function = coordinator[coordinator.index("sync_review_analytics_timer() {"):coordinator.index("cleanup() {")]
+        script = "\n".join((
+            "set -Eeuo pipefail",
+            "RELEASE_ID=test", "PROJECT_DIR=/test-project", "environment_file=/test-environment",
+            f"GATE_EXIT={gate_exit}",
+            "systemctl() { printf '%s\\n' \"systemctl $*\"; }",
+            "systemd-run() { printf '%s\\n' \"systemd-run $*\"; return \"$GATE_EXIT\"; }",
+            function, "sync_review_analytics_timer",
+        ))
+        env = {key: value for key, value in os.environ.items() if key not in {"BASH_ENV", "ENV"}}
+        result = subprocess.run([self.bash, "--noprofile", "--norc", "-s"], input=script, text=True, capture_output=True, timeout=10, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_review_timer_is_disabled_when_the_environment_turns_the_writer_off(self):
+        output = self._sync_review_timer(0)
+        self.assertIn("EnvironmentFile=/test-environment", output)
+        self.assertIn("systemctl disable flama-review-analytics-worker.timer", output)
+        self.assertNotIn("enable --now", output)
+
+    def test_review_timer_stays_enabled_when_the_writer_is_on_or_the_check_fails(self):
+        for gate_exit in (1, 203):
+            with self.subTest(gate_exit=gate_exit):
+                output = self._sync_review_timer(gate_exit)
+                self.assertIn("systemctl enable --now flama-review-analytics-worker.timer", output)
+                self.assertNotIn("disable", output)
 
     def test_pending_history_gate_preserves_environment_and_selected_release(self):
         output, errors = self._rollback(history_exit=1)

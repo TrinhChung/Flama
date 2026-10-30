@@ -111,7 +111,7 @@ Maintenance jobs run on isolated schedules managed by systemd timers:
 2. **`flama-review-analytics-worker.service` & `.timer`**:
    - Schedule: Runs every 1 second (`OnUnitInactiveSec=1s`, `OnBootSec=5s`, `AccuracySec=100ms`).
    - Command: `/usr/bin/flock --nonblock /run/flama-review-analytics/runner.lock /opt/flama/venv/bin/flask --app wsgi.py review-analytics-drain --pending --apply --max-users 20 --max-revisions 100` (drains buffered review outbox projection events into analytics store in near real-time).
-   - Execution Condition: Guarded by `ExecCondition` verifying `REVIEW_ANALYTICS_WRITE_ENABLED` is active.
+   - Execution Condition: Deploy (`sync_review_analytics_timer` in `deploy/activate_release.sh`) enables the timer only when the activated `/etc/flama/flama.env` turns `REVIEW_ANALYTICS_WRITE_ENABLED` on, and disables it otherwise; at a 1 s cadence the `ExecCondition` alone would start about 80k Python processes a day. The `ExecCondition` still skips runs if the flag is turned off without a deploy. After turning the flag on directly in `flama.env`, also run `systemctl enable --now flama-review-analytics-worker.timer`.
 3. **`flama-connect-media-cleanup.service` & `.timer`**:
    - Schedule: Runs every 5 minutes (`OnBootSec=5min`, `OnUnitActiveSec=5min`, `Persistent=true`).
    - Command: `/opt/flama/venv/bin/flask --app connect_wsgi:app cleanup-connect-media` (purges orphaned Yomitan temporary audio/image uploads exceeding TTL).
