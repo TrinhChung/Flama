@@ -337,10 +337,10 @@ def maintain_field_identity(session, _context, _instances):
     session.info["flama.field_identity.flush_schemas"] = captured
     encoded_notes = []
     for note in notes:
-        # Hard deletion has no replacement field payload to validate. A deleted
-        # NoteType may already have removed every field from the captured schema.
-        # Published deletions still pass through draft redirection below.
-        if note in session.deleted:
+        # Hard deletion has no replacement payload. A deleted NoteType may have
+        # removed its captured schema already. A published author deletion still
+        # validates its payload because redirection retains it in a live draft.
+        if note in session.deleted and (not enabled or authority or note.published_at is None):
             continue
         type_id = note_type_scope_id(note)
         expected = note.__dict__.get("_pending_field_schema_revision")

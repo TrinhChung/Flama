@@ -239,6 +239,16 @@ class NoteDraftMySQLTests(NoteBaseMySQLTestCase):
         self.assertEqual(db.session.get(NoteDraft, self.note.id).op, "delete")
         self.assertEqual(self._stored()["field_values_by_id"][self.word.id], "base")
 
+    def test_published_delete_cannot_hide_a_foreign_field_payload_in_its_draft(self):
+        from uuid import uuid4
+        db.session.delete(self.note)
+        self.note.field_values_by_id = {**self.note.field_values_by_id, str(uuid4()): 'foreign payload'}
+        with self.assertRaises(FieldIdentityError):
+            db.session.flush()
+        db.session.rollback()
+        self.assertIsNone(db.session.get(NoteDraft, self.note.id))
+        self.assertEqual(self._stored()['field_values_by_id'][self.word.id], 'base')
+
     def test_note_and_field_tombstones_are_hidden_with_explicit_audit_escape(self):
         with published_base_write():
             self.note.deleted_at = datetime.utcnow()

@@ -68,12 +68,17 @@ at actual quiescence; the inspection is not a future-state guarantee.
 
 Hosted CI run 41051500589 passed frontend and MySQL contracts. Its 2,617-case
 backend selection found two NoteType purge errors and two static tooling failures.
-The correction skips canonical payload validation for physically deleted Notes
-while keeping Published Note deletion redirection, points the preview check at
+The correction skips canonical payload validation only when deletion stays physical,
+retains validation before Published Note deletion becomes a draft, points the preview check at
 the extracted hook/view, and maps the original benchmark script to its domain.
 The three focused correction suites passed all 29 cases; the MySQL draft and
 publication suites passed all 48 cases after the hook correction. A fresh hosted run must
 pass before merge; this report does not convert the failed run into a pass.
+
+A further adversarial case verifies that queuing a Published Note deletion cannot
+hide a foreign Field identity in the resulting draft. The final draft/deletion
+selection passed all 54 cases, including both successful multi-learner purges and
+the payload rejection. This adds one MySQL case to the earlier inventory.
 
 P4 activation, no-publish soak and the
 [P6 exit checks](NOTE_PUBLISHED_BASE_P6_CHECKLIST_2026-10-30.md) remain outstanding.
