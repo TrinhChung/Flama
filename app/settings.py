@@ -264,12 +264,6 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         # Empty preserves the legacy test/manual queue, but a continuous worker
         # requires explicit isolation. Changing it does not remove DB admissions.
         "STUDY_QUEUE_NAMESPACE": os.getenv("STUDY_QUEUE_NAMESPACE", "").strip(),
-        # Wire v3 creation is negotiated per client and enabled only after all
-        # HTTP/worker consumers have dual readers. Existing v2 readers remain.
-        "STUDY_WIRE_V3_ENABLED": coerce_bool_env(
-            "STUDY_WIRE_V3_ENABLED",
-            default=False,
-        ),
         # Wire v4 is NOTE-authority-only (Note-token leases). Off by default;
         # it must be enabled before any learner is enrolled in NOTE (R1).
         "STUDY_WIRE_V4_ENABLED": coerce_bool_env(

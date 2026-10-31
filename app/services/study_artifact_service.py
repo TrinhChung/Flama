@@ -98,12 +98,14 @@ def build_effective_study_card(
     clone_added_note_ids: frozenset[str] | None = None,
     note_override_rows_by_note_id: Mapping[str, list] | None = None,
     template_overrides: Mapping[str, Any] | None = None,
+    base_values_by_note_id: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> EffectiveStudyCard:
     """Resolve a Card's effective content, owned or through a clone overlay.
 
     Callers building many Cards of one install may pass the install's added
-    Note IDs, field-override rows, and resolved template sources loaded once.
-    Without those contexts the existing clone content helpers resolve them.
+    Note IDs, field-override rows, source base values
+    (``clone_base_values_for_notes``) and resolved template sources loaded
+    once. Without those contexts the existing clone content helpers resolve them.
     """
     note = card.note
     local_added = clone_scope is not None and (
@@ -141,6 +143,11 @@ def build_effective_study_card(
                 install=clone_scope.install,
                 source_note=note,
                 schema_view=schema_view,
+                base_field_values=(
+                    dict(base_values_by_note_id.get(str(note.id)) or {})
+                    if base_values_by_note_id is not None
+                    else None
+                ),
                 note_override_rows=(
                     list(note_override_rows_by_note_id.get(str(note.id), ()))
                     if note_override_rows_by_note_id is not None
@@ -155,6 +162,41 @@ def build_effective_study_card(
         field_values=field_values,
         clone_scope=clone_scope,
     ))
+
+
+def _field_def_identity(field_defs: list[Any]) -> tuple[tuple[str, str, str, bool, int], ...]:
+    return tuple(
+        (
+            str(getattr(item, "id", "") or ""),
+            str(getattr(item, "name", "") or ""),
+            str(getattr(item, "field_type", "text") or "text"),
+            bool(getattr(item, "required", False)),
+            int(getattr(item, "position", 0) or 0),
+        )
+        for item in field_defs
+    )
+
+
+def template_version_key(context: EffectiveStudyCard) -> tuple[Any, ...]:
+    """Hashable form of every input ``template_version`` digests.
+
+    Equal keys give equal versions, so one issuance can digest each distinct
+    template once instead of once per Card.
+    """
+    context = apply_binding_projection(context)
+    template = context.template
+    projection = projection_metadata(context)
+    return (
+        template.id,
+        template.front_html or "",
+        template.back_html or "",
+        template.shared_css or "",
+        _field_def_identity(context.field_defs),
+        None if projection is None else (
+            tuple(sorted(projection["input_bindings"].items())),
+            _field_def_identity(projection["field_defs"]),
+        ),
+    )
 
 
 def template_version(context: EffectiveStudyCard) -> str:
