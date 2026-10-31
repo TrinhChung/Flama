@@ -211,7 +211,8 @@
       "last_error": "Lỗi phát hành gần nhất",
       "auto_publish_enabled_toast": "Đã bật chế độ tự động phát hành phiên bản mới.",
       "auto_publish_disabled_toast": "Đã tắt chế độ tự động phát hành.",
-      "publish_drafts": "Phát hành bản nháp"
+      "publish_drafts": "Phát hành bản nháp",
+      "publish_btn": "Công khai lên Marketplace"
     },
     "notetype_source": "NoteType nguồn",
     "btn_change_request": "Đóng góp chỉnh sửa",
@@ -229,9 +230,18 @@
     "toast_unsaved": "Đã bỏ lưu bộ deck",
     "toast_saved": "Đã lưu bộ deck vào danh sách yêu thích",
     "toast_revoked": "Đã thu hồi bộ deck khỏi Marketplace.",
-    "toast_republished": "Đã xuất bản lại bộ deck lên Marketplace.",
+    "toast_republished": "Đã công khai bộ deck lên Marketplace.",
     "loading": "Đang tải thông tin bộ thẻ…",
-    "error_load": "Không thể tải thông tin bộ thẻ này."
+    "error_load": "Không thể tải thông tin bộ thẻ này.",
+    "status": {
+      "private": "Bản nháp (Riêng tư)",
+      "unlisted": "Không công khai",
+      "published": "Đã công khai"
+    },
+    "owner_banner": {
+      "private_title": "Bộ thẻ đang ở chế độ Riêng tư (Bản nháp)",
+      "private_desc": "Chỉ bạn mới có thể xem trang này. Người khác khi truy cập liên kết sẽ nhận thông báo không tìm thấy (404) và bộ thẻ chưa hiển thị trên Marketplace. Hãy bấm \"Công khai lên Marketplace\" bên dưới để mọi người có thể tìm thấy và tải về."
+    }
   },
   "notetype_detail": {
     "title_preview": "Xem trước giao diện Note Type",

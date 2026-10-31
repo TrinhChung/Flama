@@ -116,6 +116,9 @@ export type SharedDeckDetail = {
   source_note_type_id?: string | null
   source_note_type?: SourceNoteType | null
   publish_status?: 'private' | 'published' | 'unlisted' | 'archived'
+  current_release_id?: string | null
+  release_versioned?: boolean
+  published_at?: string | null
 }
 
 export type PreviewResponse = {

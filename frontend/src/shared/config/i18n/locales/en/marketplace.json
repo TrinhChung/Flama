@@ -211,7 +211,8 @@
       "last_error": "Last publication error",
       "auto_publish_enabled_toast": "Automatic publication of new releases enabled.",
       "auto_publish_disabled_toast": "Automatic publication disabled.",
-      "publish_drafts": "Publish drafts"
+      "publish_drafts": "Publish drafts",
+      "publish_btn": "Publish to Marketplace"
     },
     "notetype_source": "Source Note Type",
     "btn_change_request": "Contribute edits",
@@ -229,9 +230,18 @@
     "toast_unsaved": "Deck removed from saved items",
     "toast_saved": "Deck saved to your favorites",
     "toast_revoked": "Deck withdrawn from the Marketplace.",
-    "toast_republished": "Deck republished on the Marketplace.",
+    "toast_republished": "Deck published to Marketplace successfully.",
     "loading": "Loading deck information…",
-    "error_load": "Unable to load this deck."
+    "error_load": "Unable to load this deck.",
+    "status": {
+      "private": "Draft (Private)",
+      "unlisted": "Unlisted",
+      "published": "Published"
+    },
+    "owner_banner": {
+      "private_title": "This deck is currently in Private mode (Draft)",
+      "private_desc": "Only you can view this page. Others visiting this link will receive a 404 Not Found and it will not appear in Marketplace search. Click \"Publish to Marketplace\" below to make it publicly accessible."
+    }
   },
   "notetype_detail": {
     "title_preview": "Note Type Live Preview",

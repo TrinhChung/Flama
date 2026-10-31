@@ -3,6 +3,8 @@ import {
   BookOpen,
   CheckCircle,
   Download,
+  EyeOff,
+  Globe,
   ExternalLink,
   FileDiff,
   GraduationCap,
@@ -53,6 +55,7 @@ interface DeckDetailHeaderProps {
     course_description?: string | null
     course_url?: string | null
     course_instructions?: string | null
+    publish_status?: 'private' | 'published' | 'unlisted' | 'archived'
   }
   authorName: string
   deckTitle: string
@@ -111,6 +114,33 @@ export function DeckDetailHeader({
             >
               {deck.primary_category || t('card.general_category', 'Chung')}
             </Badge>
+            {deck.publish_status === 'private' && (
+              <Badge
+                variant="outline"
+                className="text-xs font-bold px-2.5 py-0.5 rounded-full border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 flex items-center gap-1"
+              >
+                <EyeOff className="size-3" />
+                {t('detail.status.private', 'Bản nháp (Riêng tư)')}
+              </Badge>
+            )}
+            {deck.publish_status === 'unlisted' && (
+              <Badge
+                variant="outline"
+                className="text-xs font-bold px-2.5 py-0.5 rounded-full border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400 flex items-center gap-1"
+              >
+                <Globe className="size-3" />
+                {t('detail.status.unlisted', 'Không công khai')}
+              </Badge>
+            )}
+            {deck.publish_status === 'published' && (
+              <Badge
+                variant="outline"
+                className="text-xs font-bold px-2.5 py-0.5 rounded-full border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center gap-1"
+              >
+                <Globe className="size-3" />
+                {t('detail.status.published', 'Đã công khai')}
+              </Badge>
+            )}
             {deck.student_offer_mode && deck.student_offer_mode !== 'none' && (
               <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-300 font-bold shadow-xs">
                 <GraduationCap className="mr-1 size-3 text-emerald-600 dark:text-emerald-400" />
