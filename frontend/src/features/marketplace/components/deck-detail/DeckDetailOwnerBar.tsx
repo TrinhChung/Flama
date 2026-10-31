@@ -11,6 +11,8 @@ interface DeckDetailOwnerBarProps {
   deckSourceDeckId?: number | null
   version?: string
   publishStatus?: 'private' | 'published' | 'unlisted' | 'archived'
+  publishedAt?: string | null
+  currentReleaseId?: string | null
   showKeyManager: boolean
   setShowKeyManager: (val: boolean) => void
   onUpdatePublishStatus: (status: 'private' | 'published') => void
@@ -27,6 +29,8 @@ export function DeckDetailOwnerBar({
   deckSourceDeckId,
   version,
   publishStatus,
+  publishedAt,
+  currentReleaseId,
   showKeyManager,
   setShowKeyManager,
   onUpdatePublishStatus,
@@ -39,6 +43,23 @@ export function DeckDetailOwnerBar({
 
   return (
     <div>
+      {publishStatus === 'private' && (
+        <div className="mb-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 sm:p-4 text-xs sm:text-sm text-amber-900 dark:text-amber-200 flex items-start gap-3">
+          <AlertCircle className="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1">
+            <p className="font-bold text-amber-950 dark:text-amber-100">
+              {t('detail.owner_banner.private_title', 'Bộ thẻ đang ở chế độ Riêng tư (Bản nháp)')}
+            </p>
+            <p className="text-xs text-amber-900/90 dark:text-amber-200/90 leading-relaxed">
+              {t(
+                'detail.owner_banner.private_desc',
+                'Chỉ bạn mới có thể xem trang này. Người khác khi truy cập liên kết sẽ nhận thông báo không tìm thấy (404) và bộ thẻ chưa hiển thị trên Marketplace. Hãy bấm "Công khai lên Marketplace" bên dưới để mọi người có thể tìm thấy và tải về.'
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-2 sm:gap-2.5">
         <Button
           variant="secondary"
@@ -123,7 +144,9 @@ export function DeckDetailOwnerBar({
             disabled={isPublishStatusPending}
           >
             <Globe className="mr-1.5 size-3.5" />
-            {t('detail.owner_admin.republish_btn', 'Xuất bản lại')}
+            {publishedAt || currentReleaseId
+              ? t('detail.owner_admin.republish_btn', 'Xuất bản lại')
+              : t('detail.owner_admin.publish_btn', 'Công khai lên Marketplace')}
           </Button>
         )}
       </div>
