@@ -22,6 +22,15 @@ server {
     client_max_body_size 2m;
     limit_req_status 429;
 
+    # OAuth protected-resource metadata and the OpenAI plugin domain challenge.
+    location ^~ /.well-known/ {
+        limit_except GET { deny all; }
+        proxy_pass http://127.0.0.1:4790;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
     location = /healthz {
         proxy_pass http://127.0.0.1:4790/healthz;
         proxy_set_header Host $host;

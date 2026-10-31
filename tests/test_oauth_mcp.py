@@ -578,6 +578,20 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         self.assertIn("scopes", data)
         self.assertIn("deck:read", data["scopes_string"])
 
+    def test_endpoints_info_hides_default_client_secret_from_anonymous_callers(self):
+        with self.app.app_context():
+            client = OAuthClient.query.filter_by(client_id=self.client_id).one()
+            oauth_service.set_default_client(client.id)
+
+        self._logout()
+        anonymous = self.client.get("/api/oauth/endpoints-info").get_json()
+        self.assertEqual(anonymous["default_client"]["client_id"], self.client_id)
+        self.assertIsNone(anonymous["default_client"]["client_secret"])
+
+        self._login_user()
+        signed_in = self.client.get("/api/oauth/endpoints-info").get_json()
+        self.assertEqual(signed_in["default_client"]["client_secret"], self.client_secret)
+
     def test_oauth_clients_crud_api(self):
         # 1. Non-admin user gets 403 Forbidden on all CRUD operations
         self._login_user()
