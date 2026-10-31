@@ -41,27 +41,37 @@ flask --app wsgi.py clone-cutover-overlay
 ## Contributing saved Note changes
 
 1. Edit a Note in an installed deck and save it. These personal changes remain private.
-2. Open the deck's **Đóng góp chỉnh sửa**, review the changes, and enter a title/description.
-3. Choose **Gửi đóng góp**. Draft preparation and comparison with the original content run automatically.
+2. Open the deck's **Đóng góp chỉnh sửa**. Each changed Note shows side by side (current on the left, proposed on the right), with unchanged fields folded and media rendered. Untick Notes you do not want to send; field-structure changes are one group.
+3. Choose **Gửi đóng góp** (or **Gửi N note đã chọn**). Draft preparation and comparison with the original content run automatically.
 4. If conflicts are found, the detail screen asks for field-level decisions. Save the decisions, then choose **Gửi đóng góp** there. No manual draft/sync step is required.
-5. The owner reviews the contribution; acceptance and publication remain separate owner actions.
+5. The owner sees the contributor's display name and reviews whole Notes. They accept everything, or untick Notes/fields and accept the rest; declined items are recorded per item and stay in the contributor's personal edits. Publication remains a separate owner action.
 
 The send button requires saved content changes; title/description alone do not create
 a contribution. Pending contributions cannot be submitted again from the form.
 If personal changes differ from the reviewed preview, refresh/review is required.
 
 `POST /api/shared/decks/<deck_item_id>/change-requests/send` accepts `title`,
-`description`, and the preview's `expected_overlay_fingerprint`. It owns one
-transaction, preserves matching drafts and conflict resolutions, and returns
-`pending_review` or `has_conflict`. A retry with the same saved edits returns the
-existing pending contribution. The original draft/sync/submit endpoints remain
-available for older clients; the SPA uses the combined action.
+`description`, the preview's `expected_overlay_fingerprint`, and an optional
+`selection` (`{"mode": "all_except" | "only", "note_ids": [...], "include_schema_changes": bool}`).
+It owns one transaction, preserves matching drafts and conflict resolutions, and returns
+`pending_review` or `has_conflict`. A retry with the same saved edits and selection returns the
+existing pending contribution; omitting `selection` keeps a matching draft's own choice.
+`POST /api/change-requests/<id>/approve` accepts the same shape with `item_ids`;
+each item's verdict is stored as `metadata_json.review_decision`. A Note value written
+into a learner-added field always brings that field addition with it. Item pages end on
+whole Notes and carry `field_defs` plus `notes` (each Note's other field values) for
+the side-by-side view. `note_count` is filled only on the first page of a listing (later
+pages return `null`): the distinct count reads every item row because no index covers
+`source_ref_id`. The SPA mounts only Note cards near the viewport, so long contributions
+stay responsive after many "Tải thêm note" loads. The original draft/sync/submit endpoints remain available for
+older clients; the SPA uses the combined action.
 
 Verify with `npm run test:collab` in `frontend/`, and from the repository root:
 
 ```powershell
 $env:FLAMA_MYSQL_TESTS = '1'
 .\.venv\Scripts\python.exe scripts/run_tests.py --file tests/test_contribution_send_mysql.py --backend-only
+.\.venv\Scripts\python.exe scripts/run_tests.py --file tests/test_contribution_selection_mysql.py --backend-only
 ```
 
 The MySQL tests create and remove a generated loopback schema, preserving the

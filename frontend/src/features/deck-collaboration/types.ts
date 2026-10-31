@@ -108,108 +108,6 @@ export type CreateDeckReleaseInput = {
   expected_working_revision?: number | null
 }
 
-export type InstalledDeckSettings = {
-  install_id: string
-  deck_item_id?: string | null
-  auto_update_enabled: boolean
-  sync_mode: string
-  last_auto_updated_at?: string | null
-  last_sync_status?: string | null
-  pending_conflict_count: number
-  version_mode?: string | null
-}
-
-export type InstalledDeckRef = {
-  id: string
-  deck_item_id?: string | null
-  title?: string | null
-  version_mode?: string | null
-  auto_update_enabled?: boolean
-  sync_mode?: string | null
-  last_auto_updated_at?: string | null
-  pending_conflict_count?: number
-  active_rebase_id?: string | null
-  applied_release: ReleaseRef | null
-  available_release?: ReleaseRef | null
-  overlay_revision?: string | number | null
-}
-
-export type InstalledDeckUpdates = {
-  content_model?: 'published_base'
-  installation: InstalledDeckRef
-  items: ReleaseRef[]
-  update_available: boolean
-  unread_update: boolean
-  change_count: number
-  auto_update_enabled?: boolean
-  sync_mode?: string | null
-  last_auto_updated_at?: string | null
-  pending_conflict_count?: number
-  active_rebase_id?: string | null
-}
-
-export type InstalledDeckUpdatePage = CursorDiffPage & {
-  installation: InstalledDeckRef
-  from_release: ReleaseRef | null
-  target_release: ReleaseRef
-  changelog?: string | null
-  already_applied?: boolean
-}
-
-export type UpdateConflictResolution = 'keep_mine' | 'keep_upstream'
-
-export type UpdateConflict = {
-  id: string
-  change_id?: string | null
-  note_label?: string | null
-  field_name?: string | null
-  base_value?: DiffValue
-  local_value?: DiffValue
-  upstream_value?: DiffValue
-  resolution_mode?: UpdateConflictResolution | 'manual' | null
-  resolved_value?: DiffValue
-  resolved_at?: string | null
-}
-
-export type RebaseConflictPageMeta = {
-  limit: number
-  has_more: boolean
-  next_after_id: string | null
-}
-
-export type InstalledUpdateConflictPage = {
-  rebase_id: string
-  status: PreparedInstalledUpdate['status']
-  conflict_count: number
-  resolved_conflict_count: number
-  items: UpdateConflict[]
-  page: RebaseConflictPageMeta
-}
-
-export type PreparedInstalledUpdate = {
-  rebase_id: string
-  status: 'ready' | 'conflicts' | 'applied'
-  mode?: 'manual' | 'automatic' | null
-  conflict_count: number
-  resolved_conflict_count: number
-  conflicts: UpdateConflict[]
-  conflict_page?: RebaseConflictPageMeta
-  expected_overlay_revision?: string | number | null
-}
-
-export type ApplyInstalledUpdateInput = {
-  expected_applied_release_id?: string | null
-  expected_overlay_revision?: string | number | null
-  idempotency_key: string
-}
-
-export type AppliedInstalledUpdate = {
-  status: 'applied'
-  applied_release: ReleaseRef
-  kept_local_count?: number
-  accepted_upstream_count?: number
-}
-
 export type ChangeRequestStatus =
   | 'needs_sync'
   | 'draft'
@@ -221,6 +119,51 @@ export type ChangeRequestStatus =
 export type ChangeRequestActor = {
   id: number
   username: string
+  display_name?: string | null
+  avatar_url?: string | null
+}
+
+export type ReviewDecision = 'accepted' | 'declined'
+
+/** A field as the contributor sees it (their renames and added fields included). */
+export type NoteFieldDef = {
+  name: string
+  field_type: string
+}
+
+/** Whole-note context for the notes on one page; `values` is null when unavailable. */
+/** A sub-deck as the viewer's own library names it. */
+export type NoteDeck = {
+  key: string
+  /** Folder names from the shared deck's root down. */
+  path: string[]
+  /** Rank in folder-tree order. */
+  order: number
+}
+
+export type NoteContext = {
+  label: string
+  values: Record<string, unknown> | null
+  deck?: NoteDeck | null
+}
+
+export type NoteContextPage = {
+  field_defs?: NoteFieldDef[]
+  notes?: Record<string, NoteContext>
+}
+
+/** Every change except `ids`, or only `ids`. */
+export type ChangeSelectionMode = 'all_except' | 'only'
+
+export type ContributionSendSelection = {
+  mode: ChangeSelectionMode
+  note_ids: string[]
+  include_schema_changes: boolean
+}
+
+export type ReviewSelection = {
+  mode: ChangeSelectionMode
+  item_ids: string[]
 }
 
 export type ChangeRequestConflict = {
@@ -249,17 +192,18 @@ export type ChangeRequestItem = {
   metadata: Record<string, unknown>
   is_conflict: boolean
   conflict?: ChangeRequestConflict | null
+  review_decision?: ReviewDecision | null
 }
 
 export type LocalChangeItem = Omit<
   ChangeRequestItem,
-  'id' | 'metadata' | 'is_conflict' | 'conflict' | 'effective_after_value'
+  'id' | 'metadata' | 'is_conflict' | 'conflict' | 'effective_after_value' | 'review_decision'
 > & {
   id?: string
   metadata_json?: Record<string, unknown>
 }
 
-export type DeckChangeRequest = {
+export type DeckChangeRequest = NoteContextPage & {
   id: string
   deck_install_id?: string | null
   deck_item_id: string
@@ -285,6 +229,7 @@ export type DeckChangeRequest = {
   reviewed_by?: ChangeRequestActor | null
   deck_item?: { id: string; title: string } | null
   item_count: number
+  note_count?: number
   unresolved_conflict_count: number
   change_counts: Record<string, number>
   can_submit: boolean
@@ -306,16 +251,18 @@ export type ChangeRequestSummary = Pick<
   | 'requester'
   | 'deck_item'
   | 'item_count'
+  | 'note_count'
   | 'unresolved_conflict_count'
   | 'submitted_at'
   | 'updated_at'
 >
 
-export type LocalChangesPreview = {
+export type LocalChangesPreview = NoteContextPage & {
   deck_install_id: string
   deck_item_id: string
   overlay_fingerprint: string
   item_count: number
+  note_count?: number
   change_counts: Record<string, number>
   items: LocalChangeItem[]
   page?: CursorPageMeta

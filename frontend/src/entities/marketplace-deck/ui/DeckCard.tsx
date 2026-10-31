@@ -3,7 +3,7 @@ import type { ParseKeys, TFunction } from 'i18next'
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Card } from '@/components/ui/card'
+import { Card } from '@/shared/ui'
 import { DeckCardBadges } from './card/DeckCardBadges'
 import { DeckCardStats } from './card/DeckCardStats'
 import { DeckCardActions } from './card/DeckCardActions'
@@ -176,21 +176,10 @@ export function DeckCard({
   const isCourseDeck =
     item.distribution_mode === 'course_key' || Boolean(item.requires_access_key)
 
-  const hasConflict =
-    item.content_model !== 'published_base' && (
-      item.last_sync_status === 'conflict' ||
-      Boolean(item.pending_conflict_count && item.pending_conflict_count > 0)
-    )
-  const targetReleaseId = item.available_release?.id || 'conflict'
-
   return (
     <Card
       data-tour={dataTour}
-      className={`group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md rounded-2xl ${
-        hasConflict
-          ? 'border-amber-500/50 bg-amber-500/5 ring-1 ring-amber-500/20'
-          : ''
-      } ${className}`}
+      className={`group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md rounded-2xl ${className}`}
     >
       {/* Card Main Info Block */}
       <div className="flex flex-col flex-1 space-y-2.5">
@@ -198,7 +187,6 @@ export function DeckCard({
           item={item}
           variant={variant}
           isCourseDeck={isCourseDeck}
-          hasConflict={hasConflict}
           getCategoryBadgeStyle={getCategoryBadgeStyle}
           formatSyncStatus={(val) => formatSyncStatus(val, t)}
         />
@@ -252,8 +240,6 @@ export function DeckCard({
           variant={variant}
           detailUrl={detailUrl}
           isCourseDeck={isCourseDeck}
-          hasConflict={hasConflict}
-          targetReleaseId={targetReleaseId}
           actionDataTour={actionDataTour}
           actions={actions}
         />

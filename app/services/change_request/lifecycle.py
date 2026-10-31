@@ -30,6 +30,7 @@ from app.services.change_request.helpers import (
     REQUEST_STATUS_PENDING_REVIEW,
     REQUEST_STATUS_REJECTED,
     RESOLUTION_MODES,
+    REVIEW_DECISION_DECLINED,
     ChangeRequestError,
     _added_field_snapshot,
     _apply_schema_only_values,
@@ -48,6 +49,7 @@ from app.services.change_request.helpers import (
     _is_missing,
     _item_is_dropped_from_request,
     _item_resolution_mode,
+    _item_review_decision,
     _load_field_defs_by_ids,
     _load_notes_by_ids,
     _make_request_title,
@@ -62,8 +64,11 @@ from app.services.change_request.helpers import (
     _validate_install_release_for_contribution,
     _validate_request_base_release,
     _validate_request_install_binding,
+    change_note_id,
     compute_overlay_fingerprint,
+    end_page_on_note_boundary,
 )
+from app.services.change_request.note_context import build_request_note_context
 from app.services.change_request.preview import (
     _build_local_change_payloads,
     preview_local_changes_for_install,
@@ -137,8 +142,12 @@ def _build_or_refresh_draft_for_install(
     requester_user_id: int,
     title: str,
     description: str,
+    local_changes: tuple[list[dict[str, Any]], str] | None = None,
 ) -> DeckChangeRequest:
-    """Build from an authorized context, including a caller's locked context."""
+    """Build from an authorized context, including a caller's locked context.
+
+    ``local_changes`` is the caller's already selected ``(payloads, fingerprint)``.
+    """
     _validate_install_release_for_contribution(install, deck_item)
     if active_request is not None and active_request.status == REQUEST_STATUS_PENDING_REVIEW:
         raise ChangeRequestError(
@@ -154,7 +163,7 @@ def _build_or_refresh_draft_for_install(
             requester_user_id=requester_user_id,
         )
 
-    item_payloads, fingerprint = _build_local_change_payloads(install)
+    item_payloads, fingerprint = local_changes or _build_local_change_payloads(install)
     if not item_payloads:
         raise ChangeRequestError(
             "No local overlay changes were found for this install.",
@@ -417,6 +426,8 @@ def _item_has_conflict(
     current_state: Any,
     existing_conflict: DeckChangeRequestConflict | None = None,
 ) -> bool:
+    if _item_review_decision(item) == REVIEW_DECISION_DECLINED:
+        return False  # The owner left it out, so upstream drift cannot block the merge.
     if existing_conflict is not None and existing_conflict.resolved_at is not None and _item_is_dropped_from_request(item):
         return False
     if item.change_type == CHANGE_TYPE_FIELD_DEF_DISABLE and _is_missing(current_state):
@@ -795,8 +806,9 @@ def list_incoming_requests(
                 request_obj,
                 item_count=item_count,
                 unresolved_conflict_count=unresolved_count,
+                note_count=note_count,
             )
-            for request_obj, item_count, unresolved_count in rows
+            for request_obj, item_count, unresolved_count, note_count in rows
         ],
         "page": {
             "limit": page_limit,
@@ -863,7 +875,7 @@ def get_serialized_request_page_for_user(
                 field="cursor",
             ) from exc
 
-    item_rows, has_more, filtered_count = deck_change_request_repository.list_request_items_page(
+    item_rows, next_row, filtered_count = deck_change_request_repository.list_request_items_page(
         request_obj.id,
         after_sort_order=after_sort_order,
         after_id=after_id,
@@ -872,6 +884,9 @@ def get_serialized_request_page_for_user(
         query_text=normalized_query,
         conflicts_only=normalized_conflicts_only,
     )
+    has_more = next_row is not None
+    if has_more:
+        item_rows = end_page_on_note_boundary(item_rows, next_row)
     item_count, unresolved_count, change_counts = deck_change_request_repository.get_request_counts(
         request_obj.id
     )
@@ -895,6 +910,11 @@ def get_serialized_request_page_for_user(
         item_count=item_count,
         unresolved_conflict_count=unresolved_count,
         change_counts=change_counts,
+        note_count=_first_page_note_count(
+            request_obj.id, item_rows, cursor_payload,
+            whole_request=not has_more and not (change_types or normalized_query or normalized_conflicts_only),
+        ),
+        note_context=build_request_note_context(request_obj, item_rows, viewer_user_id=user_id),
         page={
             "limit": page_limit,
             "has_more": has_more,
@@ -903,6 +923,25 @@ def get_serialized_request_page_for_user(
             "revision": int(request_obj.revision or 0),
         },
     )
+
+
+def _first_page_note_count(
+    request_id: str,
+    item_rows: list[DeckChangeRequestItem],
+    cursor_payload: dict[str, Any] | None,
+    *,
+    whole_request: bool,
+) -> int | None:
+    """Count notes once per listing: free when an unfiltered page holds everything.
+
+    The distinct count reads every item row (no covering index), so later
+    pages, which the client never asks this of, skip it.
+    """
+    if cursor_payload is not None:
+        return None
+    if whole_request:
+        return len({note_id for item in item_rows if (note_id := change_note_id(item))})
+    return deck_change_request_repository.get_request_note_count(request_id)
 
 
 def get_active_request_for_deck_item(

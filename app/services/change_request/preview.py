@@ -28,12 +28,13 @@ from app.services.change_request.helpers import (
     _decode_cursor,
     _encode_cursor,
     _ensure_requester_access,
+    _note_deck_ids,
     _install_snapshot_at,
     _is_missing,
     _load_field_defs_by_ids,
     _load_notes_by_ids,
     _normalize_item_filters,
-    _note_label,
+    _values_label,
     _order_token,
     _overlay_state_payload,
     _request_schema_context,
@@ -41,8 +42,11 @@ from app.services.change_request.helpers import (
     _stable_json,
     _utcnow,
     _validate_install_release_for_contribution,
+    change_note_id,
     compute_overlay_fingerprint,
+    end_page_on_note_boundary,
 )
+from app.services.change_request.note_context import note_context_payload, viewer_deck_index
 from models import db
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
 from models.deck_clone_field_def_override import DeckCloneFieldDefOverride
@@ -56,7 +60,11 @@ from models.note import Note
 
 def _build_local_change_payloads(
     install: DeckInstall,
+    *,
+    context_sink: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
+    """``context_sink`` receives the schema view and each note's whole Base,
+    so a preview can show full notes without reading the Base twice."""
     if install.clone_mode != "logical_overlay":
         raise ChangeRequestError(
             "This install does not support change requests.",
@@ -76,6 +84,10 @@ def _build_local_change_payloads(
         install=install,
         source_note_type_id=source_note_type_id,
     )
+    base_values_by_note: dict[str, dict[str, Any]] = {}
+    if context_sink is not None:
+        context_sink["schema_view"] = schema_view
+        context_sink["base_values"] = base_values_by_note
     base_field_defs: dict[str, dict[str, Any]] = {}
     from app.services.effective_note_reader import current_release_for_install, install_release_id
     base_release = current_release_for_install(install)
@@ -289,15 +301,43 @@ def _build_local_change_payloads(
             base_release,
             {str(row.source_note_id) for row in note_override_rows},
         )
-    source_notes_by_id = _load_notes_by_ids(
-        {str(row.source_note_id) for row in note_override_rows if row.source_note_id}
+    source_note_ids = {str(row.source_note_id) for row in note_override_rows if row.source_note_id}
+    # A release already supplies the values; then only the Notes' decks are needed
+    # (absent = deleted).
+    source_notes_by_id = {} if uses_release_base else _load_notes_by_ids(source_note_ids)
+    deck_by_note = (
+        _note_deck_ids(source_note_ids) if uses_release_base
+        else {note_id: note.deck_id for note_id, note in source_notes_by_id.items()}
     )
+    # List changes sub-deck by sub-deck, in the learner's folder order, so pages
+    # read one folder after another.
+    deck_index = viewer_deck_index(install, as_owner=False)
+    if context_sink is not None:
+        context_sink["deck_by_note"] = deck_by_note
+        context_sink["deck_index"] = deck_index
+    unknown_rank = len(deck_index)
+
+    def deck_rank(note_id: str) -> int:
+        deck_id = deck_by_note.get(note_id)
+        deck = deck_index.get(int(deck_id)) if deck_id is not None else None
+        return deck["order"] if deck is not None else unknown_rank
+
+    note_override_rows.sort(key=lambda row: (
+        deck_rank(str(row.source_note_id)), str(row.source_note_id), str(row.field_name or ""), str(row.id),
+    ))
     from app.services.clone_field_identity_service import clone_field_identity_labels
     identity_labels = clone_field_identity_labels(install, schema_view)
     added_prefix = f"added:{install.id}:"
+    # Overrides come grouped by note, often several per note: read each note's
+    # Base (and its label) once.
+    labels_by_note: dict[str, str] = {}
+    label_fields = [
+        str(row.name) for row in schema_view.field_defs
+        if str(row.field_type or "text").lower() not in {"image", "audio", "diagram"}
+    ]
     for row in note_override_rows:
-        source_note = source_notes_by_id.get(str(row.source_note_id))
-        if source_note is None:
+        note_id = str(row.source_note_id)
+        if note_id not in deck_by_note:
             continue
         identity_key = str(row.field_identity_key or "")
         if identity_key not in identity_labels and not identity_key.startswith("extra:"):
@@ -321,20 +361,24 @@ def _build_local_change_payloads(
             release_field_name, release_field_name)
         if effective_field_name in removed_field_names:
             continue
-        if uses_release_base and str(source_note.id) not in base_note_values:
+        if uses_release_base and note_id not in base_note_values:
             continue
-        base_note_proxy = SimpleNamespace(
-            field_values=(
-                base_note_values.get(str(source_note.id), {})
-                if uses_release_base
-                else source_note.field_values
+        current_values = base_values_by_note.get(note_id)
+        if current_values is None:
+            current_values = _apply_schema_only_values(
+                SimpleNamespace(
+                    field_values=(
+                        base_note_values.get(note_id, {}) if uses_release_base
+                        else source_notes_by_id[note_id].field_values
+                    )
+                ),
+                removed_field_names=removed_field_names,
+                renamed_field_names=renamed_field_names,
             )
-        )
-        current_values = _apply_schema_only_values(
-            base_note_proxy,
-            removed_field_names=removed_field_names,
-            renamed_field_names=renamed_field_names,
-        )
+            base_values_by_note[note_id] = current_values
+            # Label the note as the learner sees it, not the owner's working copy.
+            labels_by_note[note_id] = _values_label(current_values, note_id, label_fields)
+        note_label = labels_by_note[note_id]
         before_value = (
             current_values.get(effective_field_name)
             if effective_field_name in current_values
@@ -350,18 +394,18 @@ def _build_local_change_payloads(
                     if row.operation == "remove"
                     else CHANGE_TYPE_NOTE_FIELD_SET
                 ),
-                "source_ref_id": source_note.id,
+                "source_ref_id": note_id,
                 "local_ref_id": row.id,
                 "path_key": effective_field_name,
-                "path_label": f"Note {_note_label(source_note)} / {effective_field_name}",
+                "path_label": f"Note {note_label} / {effective_field_name}",
                 "before_value": before_value,
                 "after_value": after_value,
                 "metadata_json": {
-                    "source_note_id": source_note.id,
+                    "source_note_id": note_id,
                     "source_field_def_id": stable_field_id,
                     "local_added_field_def_id": local_added_field_def_id,
                     "field_name": effective_field_name,
-                    "source_note_label": _note_label(source_note),
+                    "source_note_label": note_label,
                 },
                 "sort_order": sort_order,
             }
@@ -379,7 +423,8 @@ def preview_local_changes_for_install(
     change_type: str | None = None,
     query_text: str | None = None,
 ) -> dict[str, Any]:
-    items, fingerprint = _build_local_change_payloads(install)
+    context_sink: dict[str, Any] = {}
+    items, fingerprint = _build_local_change_payloads(install, context_sink=context_sink)
     page_limit = _coerce_page_limit(
         limit,
         default=DEFAULT_ITEM_PAGE_LIMIT,
@@ -438,6 +483,8 @@ def preview_local_changes_for_install(
         ]
     page_items = filtered_items[:page_limit]
     has_more = len(filtered_items) > page_limit
+    if has_more:
+        page_items = end_page_on_note_boundary(page_items, filtered_items[page_limit])
     next_cursor = None
     if has_more and page_items:
         next_cursor = _encode_cursor(
@@ -454,8 +501,13 @@ def preview_local_changes_for_install(
         "deck_item_id": install.deck_item_id,
         "overlay_fingerprint": fingerprint,
         "item_count": len(items),
+        "note_count": len({note_id for item in items if (note_id := change_note_id(item))}),
         "change_counts": dict(Counter(item["change_type"] for item in items)),
         "items": page_items,
+        **note_context_payload(
+            context_sink.get("schema_view"), context_sink.get("base_values") or {}, page_items,
+            deck_by_note=context_sink.get("deck_by_note"), deck_index=context_sink.get("deck_index"),
+        ),
         "page": {
             "limit": page_limit,
             "has_more": has_more,

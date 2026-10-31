@@ -7,12 +7,10 @@ import {
   FileDiff,
   GitCompare,
   KeyRound,
-  RefreshCcw,
-  ShieldAlert,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui'
 import type { DeckCardItem } from '../DeckCard'
 
 interface DeckCardActionsProps {
@@ -20,8 +18,6 @@ interface DeckCardActionsProps {
   variant: 'marketplace' | 'installed'
   detailUrl: string
   isCourseDeck: boolean
-  hasConflict: boolean
-  targetReleaseId: string
   actionDataTour?: string
   actions?: React.ReactNode
 }
@@ -31,8 +27,6 @@ export function DeckCardActions({
   variant,
   detailUrl,
   isCourseDeck,
-  hasConflict,
-  targetReleaseId,
   actionDataTour,
   actions,
 }: DeckCardActionsProps) {
@@ -52,42 +46,9 @@ export function DeckCardActions({
               {t('card.compare_personal_changes', 'So sánh phần sửa riêng')}
             </Link>
           </Button>
-        ) : hasConflict && item.deck_install_id ? (
-          <Button
-            size="sm"
-            asChild
-            className="h-8.5 w-full rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
-          >
-            <Link
-              to={`/installed-decks/${item.deck_install_id}/updates/${targetReleaseId}`}
-            >
-              <ShieldAlert className="mr-1.5 size-3.5" />
-              {t('card.handle_conflict', {
-                count: item.pending_conflict_count || '!',
-              })}
-            </Link>
-          </Button>
-        ) : item.update_available &&
-          item.deck_install_id &&
-          item.available_release ? (
-          <Button
-            size="sm"
-            asChild
-            className="h-8.5 w-full rounded-xl text-xs font-bold"
-          >
-            <Link
-              to={`/installed-decks/${item.deck_install_id}/updates/${item.available_release.id}`}
-            >
-              <RefreshCcw className="mr-1.5 size-3.5" />
-              {item.unread_update
-                ? t('card.view_new_update')
-                : t('card.view_update')}
-            </Link>
-          </Button>
         ) : null}
         {item.deck_install_id &&
-        item.install_bucket !== 'owned' &&
-        !hasConflict ? (
+        item.install_bucket !== 'owned' ? (
           <Button
             variant="outline"
             size="sm"

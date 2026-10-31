@@ -9,14 +9,18 @@ import { ApiError } from '@/shared/api/client'
 import type { DeckChangeRequest } from '../types'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-const { getDeckChangeRequest, sendDeckContribution, resolveDeckChangeRequestConflict, success, warning, error } = vi.hoisted(() => ({
+const {
+  getDeckChangeRequest, sendDeckContribution, resolveDeckChangeRequestConflict, approveDeckChangeRequest,
+  viewer, success, warning, error,
+} = vi.hoisted(() => ({
   getDeckChangeRequest: vi.fn(), sendDeckContribution: vi.fn(), resolveDeckChangeRequestConflict: vi.fn(),
+  approveDeckChangeRequest: vi.fn(), viewer: { id: 2 },
   success: vi.fn(), warning: vi.fn(), error: vi.fn(),
 }))
 vi.mock('../api', async () => ({ ...await vi.importActual('../api'),
-  getDeckChangeRequest, sendDeckContribution, resolveDeckChangeRequestConflict,
+  getDeckChangeRequest, sendDeckContribution, resolveDeckChangeRequestConflict, approveDeckChangeRequest,
 }))
-vi.mock('@/shared/api/bootstrap', () => ({ useBootstrap: () => ({ data: { user: { id: 2 } } }) }))
+vi.mock('@/shared/api/bootstrap', () => ({ useBootstrap: () => ({ data: { user: viewer } }) }))
 vi.mock('sonner', () => ({ toast: { success, warning, error } }))
 
 import i18n, { i18nReady } from '@/shared/config/i18n'
@@ -30,6 +34,7 @@ describe('contribution detail automatic sending', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    viewer.id = 2
     await i18nReady
     await i18n.changeLanguage('vi')
     request = {
@@ -129,5 +134,61 @@ describe('contribution detail automatic sending', () => {
     await act(async () => button('Gửi đóng góp')!.click())
     await waitFor(() => expect(container.textContent).toContain('Xem lại thay đổi đã lưu'))
     expect(error).toHaveBeenCalled()
+  })
+
+  function noteItem(id: string, noteId: string, label: string, field: string, before: string, after: string) {
+    return { id, change_type: 'note_field_set', source_ref_id: noteId, path_key: field,
+      before_value: before, after_value: after, effective_after_value: after, is_conflict: false,
+      metadata: { field_name: field, source_note_id: noteId, source_note_label: label } }
+  }
+
+  function pendingForOwner() {
+    viewer.id = 1
+    request = { ...request, status: 'pending_review', can_review: true, title: '', item_count: 3, note_count: 2,
+      requester: { id: 2, username: 'learner', display_name: 'Lan Anh' },
+      deck_item: { id: 'deck-1', title: 'N5 từ vựng' },
+      items: [
+        noteItem('item-1', 'note-1', '犬', 'Meaning', 'dog', 'hound'),
+        noteItem('item-2', 'note-1', '犬', 'Reading', 'いぬ', 'イヌ'),
+        noteItem('item-3', 'note-2', '猫', 'Meaning', 'cat', 'kitty'),
+      ],
+      field_defs: [{ name: 'Meaning', field_type: 'text' }, { name: 'Reading', field_type: 'text' }],
+      notes: { 'note-1': { label: '犬', values: { Meaning: 'dog', Reading: 'いぬ' } },
+        'note-2': { label: '猫', values: { Meaning: 'cat', Reading: 'ねこ' } } } }
+    approveDeckChangeRequest.mockImplementation(async () => ({ ...request, status: 'merged', can_review: false }))
+  }
+
+  it('names the contributor and hides internal ids from the owner', async () => {
+    pendingForOwner()
+    await render()
+    expect(container.textContent).toContain('Lan Anh')
+    expect(container.textContent).toContain('@learner')
+    expect(container.textContent).toContain('Đóng góp cho “N5 từ vựng”')
+    expect(container.textContent).toContain('2 note thay đổi')
+    expect(container.textContent).not.toMatch(/item-\d|note-\d|Revision/)
+  })
+
+  it('accepts only the ticked changes, or everything at once', async () => {
+    pendingForOwner()
+    await render()
+    const readingBox = container.querySelectorAll<HTMLButtonElement>('[aria-label="Chọn trường Reading"]')[0]
+    await act(async () => readingBox.click())
+    await waitFor(() => expect(button('Nhận 2 thay đổi đã chọn')).toBeDefined())
+    await act(async () => button('Nhận 2 thay đổi đã chọn')!.click())
+    await waitFor(() => expect(approveDeckChangeRequest).toHaveBeenCalledWith('request-1', '',
+      { mode: 'all_except', item_ids: ['item-2'] }))
+    approveDeckChangeRequest.mockClear()
+    await act(async () => button('Nhận tất cả')!.click())
+    await waitFor(() => expect(approveDeckChangeRequest).toHaveBeenCalledWith('request-1', '', undefined))
+  })
+
+  it('unticking a note leaves its fields out', async () => {
+    pendingForOwner()
+    await render()
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Chọn note 犬"]')!.click())
+    await waitFor(() => expect(container.textContent).toContain('Đã chọn 1/3 thay đổi'))
+    await act(async () => button('Nhận 1 thay đổi đã chọn')!.click())
+    await waitFor(() => expect(approveDeckChangeRequest).toHaveBeenCalledWith('request-1', '',
+      { mode: 'all_except', item_ids: ['item-1', 'item-2'] }))
   })
 })

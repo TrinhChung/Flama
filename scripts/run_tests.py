@@ -615,9 +615,12 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "models/deck_clone*.py",
             "models/note_type_install.py",
             "frontend/src/features/deck-collaboration/**",
+            "frontend/src/pages/installed-deck-comparison/**",
         ],
         "backend_tests": [
             "tests/test_deck_change_request_flow.py",
+            "tests/test_change_request_selection_unit.py",
+            "tests/test_contribution_selection_mysql.py",
             "tests/test_deck_install_rebase_flow.py",
             "tests/test_deck_publish_index.py",
             "tests/test_batched_deck_clone.py",
@@ -628,9 +631,14 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "frontend_tests": [
             "src/features/deck-collaboration/api.test.ts",
+            "src/features/deck-collaboration/model/noteChanges.test.ts",
+            "src/features/deck-collaboration/hooks/refetchFromFirstPage.test.ts",
+            "src/shared/hooks/useNearViewport.test.tsx",
+            "src/features/deck-collaboration/components/ChangeRequestDetailView.test.tsx",
+            "src/features/deck-collaboration/components/DeckContributionForm.test.tsx",
             "src/features/deck-collaboration/components/DiffWorkspace.test.tsx",
             "src/features/deck-collaboration/pages/ChangeRequestInboxPage.test.tsx",
-            "src/features/deck-collaboration/pages/InstalledDeckUpdatePage.test.tsx",
+            "src/pages/installed-deck-comparison/InstalledDeckComparisonPage.test.tsx",
         ],
     },
     "marketplace": {
@@ -647,6 +655,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "models/deck_review.py",
             "models/note_type_review.py",
             "frontend/src/features/marketplace/**",
+            "frontend/src/entities/marketplace-deck/**",
+            "frontend/src/features/library/**",
+            "frontend/src/pages/installed-decks/**",
         ],
         "backend_tests": [
             "tests/test_marketplace_filter_taxonomy.py",
@@ -658,7 +669,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_marketplace_list_performance.py",
         ],
         "frontend_tests": [
-            "src/features/marketplace/components/DeckCard.test.tsx",
+            "src/entities/marketplace-deck/ui/DeckCard.test.tsx",
             "src/features/marketplace/components/PublishDeckTree.test.tsx",
             "src/features/marketplace/publishApi.test.ts",
             "src/features/marketplace/pages/MarketplacePages.test.tsx",

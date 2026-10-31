@@ -11,7 +11,9 @@ from .flashcard_input import RequestValidationError, sanitize_plain_text
 
 MAX_CHANGE_REQUEST_TITLE_LENGTH = 255
 MAX_CHANGE_REQUEST_DESCRIPTION_LENGTH = 5_000
+MAX_SELECTION_IDS = 5_000
 RESOLUTION_MODES = {"keep_mine", "keep_upstream", "manual"}
+SELECTION_MODES = {"all_except", "only"}
 
 
 @dataclass(frozen=True)
@@ -21,10 +23,24 @@ class ChangeRequestDraftInput:
 
 
 @dataclass(frozen=True)
+class ChangeSelectionInput:
+    """Either every change except ``ids``, or only ``ids``.
+
+    Both forms are needed: a reviewer can untick a few rows of a long,
+    partly loaded list, or start from nothing and tick a few.
+    """
+
+    mode: str
+    ids: frozenset[str]
+    include_schema_changes: bool = True
+
+
+@dataclass(frozen=True)
 class ChangeRequestSendInput:
     title: str
     description: str
     expected_overlay_fingerprint: str
+    selection: ChangeSelectionInput | None = None
 
 
 @dataclass(frozen=True)
@@ -36,6 +52,7 @@ class ChangeRequestConflictResolutionInput:
 @dataclass(frozen=True)
 class ChangeRequestReviewInput:
     review_comment: str
+    selection: ChangeSelectionInput | None = None
 
 
 def _payload_dict(payload: dict[str, Any] | None) -> dict[str, Any]:
@@ -76,6 +93,45 @@ def validate_change_request_draft_request(payload: dict[str, Any] | None) -> Cha
     )
 
 
+def _validate_selection(raw: Any, *, ids_key: str, allow_schema_flag: bool) -> ChangeSelectionInput | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise RequestValidationError("selection must be an object.", field="selection")
+    allowed_keys = {"mode", ids_key} | ({"include_schema_changes"} if allow_schema_flag else set())
+    unknown_keys = sorted(key for key in raw if key not in allowed_keys)
+    if unknown_keys:
+        raise RequestValidationError(
+            f"Unknown selection fields: {', '.join(unknown_keys)}",
+            field=f"selection.{unknown_keys[0]}",
+        )
+    mode = raw.get("mode")
+    if mode not in SELECTION_MODES:
+        raise RequestValidationError("selection.mode must be all_except or only.", field="selection.mode")
+    raw_ids = raw.get(ids_key, [])
+    if not isinstance(raw_ids, list) or len(raw_ids) > MAX_SELECTION_IDS:
+        raise RequestValidationError(
+            f"selection.{ids_key} must be a list of at most {MAX_SELECTION_IDS} ids.",
+            field=f"selection.{ids_key}",
+        )
+    if any(not isinstance(value, str) or not value.strip() or len(value) > 64 for value in raw_ids):
+        raise RequestValidationError(
+            f"selection.{ids_key} must contain ids.",
+            field=f"selection.{ids_key}",
+        )
+    include_schema_changes = raw.get("include_schema_changes", True)
+    if not isinstance(include_schema_changes, bool):
+        raise RequestValidationError(
+            "selection.include_schema_changes must be a boolean.",
+            field="selection.include_schema_changes",
+        )
+    return ChangeSelectionInput(
+        mode=mode,
+        ids=frozenset(value.strip() for value in raw_ids),
+        include_schema_changes=include_schema_changes,
+    )
+
+
 def validate_change_request_send_request(payload: dict[str, Any] | None) -> ChangeRequestSendInput:
     body = dict(_payload_dict(payload))
     fingerprint = body.pop("expected_overlay_fingerprint", None)
@@ -84,8 +140,9 @@ def validate_change_request_send_request(payload: dict[str, Any] | None) -> Chan
             "Reload the contribution preview before sending.",
             field="expected_overlay_fingerprint",
         )
+    selection = _validate_selection(body.pop("selection", None), ids_key="note_ids", allow_schema_flag=True)
     draft = validate_change_request_draft_request(body)
-    return ChangeRequestSendInput(draft.title, draft.description, fingerprint)
+    return ChangeRequestSendInput(draft.title, draft.description, fingerprint, selection)
 
 
 def validate_change_request_conflict_resolution_request(
@@ -120,9 +177,11 @@ def validate_change_request_review_request(
     payload: dict[str, Any] | None,
     *,
     require_reason: bool,
+    allow_selection: bool = False,
 ) -> ChangeRequestReviewInput:
     body = _payload_dict(payload)
-    unknown_keys = sorted(key for key in body if key not in {"review_comment", "reason"})
+    allowed_keys = {"review_comment", "reason"} | ({"selection"} if allow_selection else set())
+    unknown_keys = sorted(key for key in body if key not in allowed_keys)
     if unknown_keys:
         raise RequestValidationError(
             f"Unknown fields: {', '.join(unknown_keys)}",
@@ -141,4 +200,7 @@ def validate_change_request_review_request(
             "review_comment is required.",
             field="review_comment",
         )
-    return ChangeRequestReviewInput(review_comment=review_comment)
+    return ChangeRequestReviewInput(
+        review_comment=review_comment,
+        selection=_validate_selection(body.get("selection"), ids_key="item_ids", allow_schema_flag=False),
+    )

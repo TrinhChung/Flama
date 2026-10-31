@@ -13,3 +13,5 @@ export {
   parseCurrency,
   type FormatCurrencyOptions,
 } from './currency'
+
+export { diffText, type TextDiff, type TextDiffSegment } from './textDiff'

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   useInfiniteQuery,
   useMutation,
@@ -12,18 +12,20 @@ import { useBootstrap } from '@/shared/api/bootstrap'
 import { ApiError } from '@/shared/api/client'
 import {
   approveDeckChangeRequest,
-  contributionItemToDiffItem,
   getDeckChangeRequest,
   rejectDeckChangeRequest,
   resolveDeckChangeRequestConflict,
   sendDeckContribution,
-  summarizeChangeRequest,
 } from '../api'
+import { groupContributionPages } from '../model/noteChanges'
 import type {
   ConflictResolutionInput,
   DeckChangeRequest,
   DiffFilters,
+  NoteContext,
 } from '../types'
+import { refetchFromFirstPage } from './refetchFromFirstPage'
+import { useReviewSelection } from './useChangeSelection'
 
 const PAGE_SIZE = 100
 
@@ -35,7 +37,6 @@ export function useChangeRequestDetail() {
   const { t } = useTranslation('collaboration')
 
   const [filters, setFilters] = useState<DiffFilters>({ query: '', changeType: 'all' })
-  const [pageIndex, setPageIndex] = useState(0)
   const [reviewComment, setReviewComment] = useState('')
   const [manualValues, setManualValues] = useState<Record<string, string>>({})
 
@@ -57,25 +58,24 @@ export function useChangeRequestDetail() {
     getNextPageParam: (page) => page.page?.next_cursor || undefined,
   })
 
-  const loadedPages = query.data?.pages || []
+  const loadedPages = useMemo(() => query.data?.pages || [], [query.data?.pages])
   const request = loadedPages[0]
-  const visiblePageIndex = Math.min(pageIndex, Math.max(loadedPages.length - 1, 0))
-  const visibleRequest = loadedPages[visiblePageIndex]
-  const allDiffItems = useMemo(
-    () =>
-      visibleRequest?.items.map((item, index) =>
-        contributionItemToDiffItem(item, index),
-      ) || [],
-    [visibleRequest?.items],
+  // Pages end on whole notes, so loaded pages concatenate into complete notes.
+  const grouped = useMemo(
+    () => groupContributionPages(loadedPages),
+    [loadedPages],
   )
-  const summary = useMemo(
-    () => (request ? summarizeChangeRequest(request) : null),
-    [request],
-  )
-
-  useEffect(() => {
-    setPageIndex(0)
-  }, [filters, requestId])
+  const noteContexts = useMemo(() => {
+    const contexts: Record<string, NoteContext> = {}
+    for (const page of loadedPages) Object.assign(contexts, page.notes || {})
+    return contexts
+  }, [loadedPages])
+  const fieldDefs = request?.field_defs || []
+  const reviewSelection = useReviewSelection({
+    grouped,
+    totalItems: request?.item_count || 0,
+    resetKey: `${requestId}:${request?.status || ''}`,
+  })
 
   function storeRequest(nextRequest: DeckChangeRequest) {
     queryClient.setQueriesData<InfiniteData<DeckChangeRequest>>(
@@ -118,16 +118,14 @@ export function useChangeRequestDetail() {
             }
           : current,
     )
-    void queryClient.invalidateQueries({
-      queryKey: ['active-deck-change-request', nextRequest.deck_item_id],
-    })
+    void refetchFromFirstPage(queryClient, ['active-deck-change-request', nextRequest.deck_item_id])
     void queryClient.invalidateQueries({ queryKey: ['incoming-deck-change-requests'] })
     if (nextRequest.status === 'merged') {
       void queryClient.invalidateQueries({
         queryKey: ['deck-release-preview', nextRequest.deck_item_id],
       })
     }
-    void queryClient.invalidateQueries({ queryKey: ['deck-change-request', requestId] })
+    void refetchFromFirstPage(queryClient, ['deck-change-request', requestId])
   }
 
   const resolveMutation = useMutation({
@@ -175,12 +173,16 @@ export function useChangeRequestDetail() {
       }
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['deck-change-request', requestId] })
+      void refetchFromFirstPage(queryClient, ['deck-change-request', requestId])
     },
   })
 
   const approveMutation = useMutation({
-    mutationFn: () => approveDeckChangeRequest(requestId, reviewComment.trim()),
+    mutationFn: (scope: 'selected' | 'all') => approveDeckChangeRequest(
+      requestId,
+      reviewComment.trim(),
+      scope === 'all' ? undefined : reviewSelection.payload,
+    ),
     onSuccess: (nextRequest) => {
       storeRequest(nextRequest)
       toast.success(
@@ -209,9 +211,9 @@ export function useChangeRequestDetail() {
       toast.error(error instanceof Error ? error.message : 'Không thể từ chối request.'),
   })
 
-  const unresolvedConflicts = (visibleRequest?.conflicts || []).filter(
-    (conflict) => !conflict.resolved_at,
-  )
+  const unresolvedConflicts = loadedPages
+    .flatMap((page) => page.conflicts || [])
+    .filter((conflict) => !conflict.resolved_at)
   const viewerId = bootstrapQuery.data?.user?.id
   const isOwner = Boolean(viewerId && request?.owner?.id && viewerId === request.owner.id)
   const isRequester = Boolean(
@@ -223,34 +225,16 @@ export function useChangeRequestDetail() {
     approveMutation.isPending ||
     rejectMutation.isPending
 
-  const onPreviousPage = () => {
-    setPageIndex((current) => Math.max(0, current - 1))
-  }
-
-  const onLoadMore = () => {
-    if (visiblePageIndex < loadedPages.length - 1) {
-      setPageIndex((current) => current + 1)
-      return
-    }
-    void query.fetchNextPage().then((result) => {
-      if ((result.data?.pages.length || 0) > loadedPages.length) {
-        setPageIndex((current) => current + 1)
-      }
-    })
-  }
-
-  const hasMore = visiblePageIndex < loadedPages.length - 1 || Boolean(query.hasNextPage)
-
   return {
     requestId,
     query,
     request,
-    visibleRequest,
-    summary,
-    allDiffItems,
+    grouped,
+    noteContexts,
+    fieldDefs,
+    reviewSelection,
     filters,
     setFilters,
-    pageIndex: visiblePageIndex,
     reviewComment,
     setReviewComment,
     manualValues,
@@ -259,13 +243,13 @@ export function useChangeRequestDetail() {
     isOwner,
     isRequester,
     isBusy,
-    loadedPagesLength: loadedPages.length,
     resolveMutation,
     submitMutation,
     approveMutation,
     rejectMutation,
-    onPreviousPage,
-    onLoadMore,
-    hasMore,
+    onLoadMore: () => {
+      void query.fetchNextPage()
+    },
+    hasMore: Boolean(query.hasNextPage),
   }
 }

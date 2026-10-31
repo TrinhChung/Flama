@@ -30,10 +30,17 @@ function request(overrides: Partial<DeckChangeRequest> = {}): DeckChangeRequest 
     requester: { id: 2, username: 'learner' }, owner: { id: 1, username: 'author' },
     item_count: 1, unresolved_conflict_count: 0, change_counts: { note_field_set: 1 },
     can_submit: false, can_review: false, can_resolve: false,
-    items: [{ id: 'item-1', change_type: 'note_field_set', path_key: 'Meaning',
-      before_value: 'dog', after_value: 'hound', metadata: { field_name: 'Meaning' }, is_conflict: false }],
+    items: [{ id: 'item-1', change_type: 'note_field_set', path_key: 'Meaning', source_ref_id: 'note-1',
+      before_value: 'dog', after_value: 'hound', is_conflict: false,
+      metadata: { field_name: 'Meaning', source_note_id: 'note-1', source_note_label: '犬' } }],
     conflicts: [], ...overrides,
   }
+}
+
+function localChange(noteId: string, label: string, field: string, before: string, after: string) {
+  return { change_type: 'note_field_set', source_ref_id: noteId, local_ref_id: `override-${noteId}-${field}`,
+    path_key: field, before_value: before, after_value: after,
+    metadata_json: { field_name: field, source_note_id: noteId, source_note_label: label } }
 }
 
 describe('single-action deck contributions', () => {
@@ -49,9 +56,10 @@ describe('single-action deck contributions', () => {
     await i18n.changeLanguage('vi')
     local = {
       deck_install_id: 'install-1', deck_item_id: 'deck-1', overlay_fingerprint: fingerprint,
-      item_count: 1, change_counts: { note_field_set: 1 },
-      items: [{ change_type: 'note_field_set', path_key: 'Meaning', before_value: 'dog',
-        after_value: 'hound', metadata_json: { field_name: 'Meaning' } }],
+      item_count: 1, note_count: 1, change_counts: { note_field_set: 1 },
+      items: [localChange('note-1', '犬', 'Meaning', 'dog', 'hound')],
+      field_defs: [{ name: 'Meaning', field_type: 'text' }, { name: 'Reading', field_type: 'text' }],
+      notes: { 'note-1': { label: '犬', values: { Meaning: 'dog', Reading: 'いぬ' } } },
     }
     active = null
     getLocalDeckChanges.mockImplementation(async () => local)
@@ -85,7 +93,7 @@ describe('single-action deck contributions', () => {
 
   function sendButton() {
     return Array.from(container.querySelectorAll('button')).find((button) =>
-      /Gửi đóng góp|Đang gửi đóng góp|Đã gửi/.test(button.textContent || ''))!
+      /Gửi đóng góp|Gửi \d+ note đã chọn|Đang gửi đóng góp|Đã gửi/.test(button.textContent || ''))!
   }
 
   async function waitFor(check: () => void) {
@@ -114,6 +122,7 @@ describe('single-action deck contributions', () => {
     await act(async () => sendButton().click())
     await vi.waitFor(() => expect(sendDeckContribution).toHaveBeenCalledWith('deck-1', {
       title: 'Sửa nghĩa', description: 'Giải thích', expected_overlay_fingerprint: fingerprint,
+      selection: { mode: 'all_except', note_ids: [], include_schema_changes: true },
     }))
     await vi.waitFor(() => expect(sendButton().textContent).toContain('Chờ tác giả duyệt'))
     expect(sendButton().disabled).toBe(true)
@@ -194,8 +203,46 @@ describe('single-action deck contributions', () => {
       items: [{ ...request().items[0], after_value: 'old draft value' }] })
     local = { ...local, items: [{ ...local.items[0], after_value: 'latest saved value' }] }
     await render()
-    await act(async () => container.querySelector<HTMLButtonElement>('[aria-expanded="false"]')!.click())
-    expect(container.textContent).toContain('latest saved value')
+    await vi.waitFor(() => expect(container.textContent).toContain('latest saved value'))
     expect(container.textContent).not.toContain('old draft value')
+  })
+
+  it('shows the whole note side by side and folds unchanged fields', async () => {
+    await render()
+    await vi.waitFor(() => expect(container.textContent).toContain('Bản hiện tại'))
+    expect(container.textContent).toContain('Bản đề xuất')
+    expect(container.textContent).toContain('hound')
+    expect(container.textContent).not.toContain('いぬ')
+    const expand = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Hiện đủ 2 trường'))!
+    await act(async () => expand.click())
+    expect(container.textContent).toContain('いぬ')
+    expect(container.textContent).not.toMatch(/note-1|override-/)
+  })
+
+  it('sends only the notes left ticked', async () => {
+    local = { ...local, item_count: 2, note_count: 2, change_counts: { note_field_set: 2 },
+      items: [...local.items, localChange('note-2', '猫', 'Meaning', 'cat', 'kitty')] }
+    await render()
+    const catBox = await vi.waitFor(() => {
+      const box = container.querySelector<HTMLButtonElement>('[aria-label="Chọn note 猫"]')
+      expect(box).not.toBeNull()
+      return box!
+    })
+    await act(async () => catBox.click())
+    await vi.waitFor(() => expect(container.textContent).toContain('Đã chọn 1/2 note'))
+    await act(async () => sendButton().click())
+    await vi.waitFor(() => expect(sendDeckContribution).toHaveBeenCalledWith('deck-1', expect.objectContaining({
+      selection: { mode: 'all_except', note_ids: ['note-2'], include_schema_changes: true },
+    })))
+  })
+
+  it('cannot send after unticking every note', async () => {
+    await render()
+    const none = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent === 'Bỏ chọn tất cả')!
+    await act(async () => none.click())
+    await vi.waitFor(() => expect(container.textContent).toContain('Hãy chọn ít nhất một note để gửi.'))
+    expect(sendButton().disabled).toBe(true)
   })
 })
