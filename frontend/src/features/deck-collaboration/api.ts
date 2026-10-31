@@ -775,6 +775,17 @@ export function buildDeckChangeRequestDraft(
   )
 }
 
+export function sendDeckContribution(
+  deckItemId: string,
+  body: { title: string; description: string; expected_overlay_fingerprint: string },
+) {
+  return apiJson<DeckChangeRequest>(
+    `/api/shared/decks/${encodeSegment(deckItemId)}/change-requests/send`,
+    'POST',
+    body,
+  )
+}
+
 export function syncDeckChangeRequest(deckItemId: string, requestId: string) {
   return apiJson<DeckChangeRequest>(
     `/api/shared/decks/${encodeSegment(deckItemId)}/change-requests/${encodeSegment(requestId)}/sync`,

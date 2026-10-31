@@ -5,19 +5,19 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { useBootstrap } from '@/shared/api/bootstrap'
+import { ApiError } from '@/shared/api/client'
 import {
   approveDeckChangeRequest,
   contributionItemToDiffItem,
   getDeckChangeRequest,
   rejectDeckChangeRequest,
   resolveDeckChangeRequestConflict,
-  submitDeckChangeRequest,
+  sendDeckContribution,
   summarizeChangeRequest,
-  syncDeckChangeRequest,
 } from '../api'
 import type {
   ConflictResolutionInput,
@@ -29,6 +29,7 @@ const PAGE_SIZE = 100
 
 export function useChangeRequestDetail() {
   const { requestId = '' } = useParams<{ requestId: string }>()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const bootstrapQuery = useBootstrap()
   const { t } = useTranslation('collaboration')
@@ -129,20 +130,6 @@ export function useChangeRequestDetail() {
     void queryClient.invalidateQueries({ queryKey: ['deck-change-request', requestId] })
   }
 
-  const syncMutation = useMutation({
-    mutationFn: () => syncDeckChangeRequest(request?.deck_item_id || '', requestId),
-    onSuccess: (nextRequest) => {
-      storeRequest(nextRequest)
-      toast.success(
-        nextRequest.unresolved_conflict_count
-          ? t('detail.toast_sync_conflicts', 'Đã đồng bộ; vẫn còn xung đột cần xử lý.')
-          : t('detail.toast_sync_success', 'Đã đồng bộ với deck gốc.'),
-      )
-    },
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : 'Không thể đồng bộ.'),
-  })
-
   const resolveMutation = useMutation({
     mutationFn: ({
       conflictId,
@@ -166,13 +153,30 @@ export function useChangeRequestDetail() {
   })
 
   const submitMutation = useMutation({
-    mutationFn: () => submitDeckChangeRequest(request?.deck_item_id || '', requestId),
+    mutationFn: () => sendDeckContribution(request?.deck_item_id || '', {
+      title: request?.title || '', description: request?.description || '',
+      expected_overlay_fingerprint: request?.overlay_fingerprint || '',
+    }),
+    retry: false,
     onSuccess: (nextRequest) => {
       storeRequest(nextRequest)
-      toast.success(t('detail.toast_submit_success', 'Đã gửi request tới owner.'))
+      if (nextRequest.status === 'has_conflict') {
+        toast.warning(t('detail.toast_sync_conflicts', 'Nội dung gốc đã thay đổi. Hãy xử lý các field xung đột trước khi gửi.'))
+      } else {
+        toast.success(t('request.toast_submit_success', 'Đã gửi đóng góp tới chủ sở hữu deck.'))
+      }
     },
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : 'Không thể gửi request.'),
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'CHANGE_REQUEST_STALE') {
+        toast.error(t('request.stale_changes', 'Nội dung đã lưu vừa thay đổi. Hãy kiểm tra lại danh sách trước khi gửi.'))
+        navigate(`/flashcards/shared-decks/${request?.deck_item_id}/change-request`)
+      } else {
+        toast.error(error instanceof Error ? error.message : t('request.send_error', 'Không thể gửi đóng góp.'))
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['deck-change-request', requestId] })
+    },
   })
 
   const approveMutation = useMutation({
@@ -214,7 +218,6 @@ export function useChangeRequestDetail() {
     viewerId && request?.requester?.id && viewerId === request.requester.id,
   )
   const isBusy =
-    syncMutation.isPending ||
     resolveMutation.isPending ||
     submitMutation.isPending ||
     approveMutation.isPending ||
@@ -257,7 +260,6 @@ export function useChangeRequestDetail() {
     isRequester,
     isBusy,
     loadedPagesLength: loadedPages.length,
-    syncMutation,
     resolveMutation,
     submitMutation,
     approveMutation,

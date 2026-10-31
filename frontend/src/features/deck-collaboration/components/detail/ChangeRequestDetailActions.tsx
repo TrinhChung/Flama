@@ -1,4 +1,4 @@
-import { Check, GitMerge, LoaderCircle, RefreshCcw, Send, X } from 'lucide-react'
+import { Check, GitMerge, LoaderCircle, Send, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -17,11 +17,9 @@ type ChangeRequestDetailActionsProps = {
   onReviewCommentChange: (value: string) => void
   onApprove: () => void
   onReject: () => void
-  onSync: () => void
   onSubmit: () => void
   isApproving: boolean
   isRejecting: boolean
-  isSyncing: boolean
   isSubmitting: boolean
 }
 
@@ -34,11 +32,9 @@ export function ChangeRequestDetailActions({
   onReviewCommentChange,
   onApprove,
   onReject,
-  onSync,
   onSubmit,
   isApproving,
   isRejecting,
-  isSyncing,
   isSubmitting,
 }: ChangeRequestDetailActionsProps) {
   const { t } = useTranslation('collaboration')
@@ -86,24 +82,10 @@ export function ChangeRequestDetailActions({
           </>
         ) : null}
 
-        {request.status === 'needs_sync' ||
-        request.status === 'draft' ||
-        request.status === 'has_conflict' ? (
-          <Button
-            className="w-full"
-            variant="outline"
-            disabled={isBusy || request.can_review}
-            onClick={onSync}
-          >
-            {isSyncing ? <LoaderCircle className="animate-spin" /> : <RefreshCcw />}
-            {t('detail.btn_sync_again', 'Đồng bộ lại')}
-          </Button>
-        ) : null}
-
-        {request.can_submit ? (
-          <Button className="w-full" disabled={isBusy} onClick={onSubmit}>
+        {isRequester && (request.status === 'needs_sync' || request.status === 'draft') ? (
+          <Button className="w-full" disabled={isBusy || request.unresolved_conflict_count > 0 || !request.item_count} onClick={onSubmit}>
             {isSubmitting ? <LoaderCircle className="animate-spin" /> : <Send />}
-            {t('detail.btn_submit_for_review', 'Gửi owner duyệt')}
+            {isSubmitting ? t('request.btn_sending', 'Đang gửi đóng góp…') : t('request.btn_submit', 'Gửi đóng góp')}
           </Button>
         ) : null}
 

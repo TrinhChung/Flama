@@ -51,6 +51,30 @@ class PruneReleasesTests(unittest.TestCase):
             self.assertTrue(ignored.is_dir())
             self.assertIn(ignored.name, ignored_names)
 
+    def test_current_only_retention_preserves_linked_shared_assets(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temp_path = Path(temporary_directory)
+            release_root = temp_path / "releases"
+            release_root.mkdir()
+            previous = self._create_release(release_root, "a", succeeded_at=200)
+            current = self._create_release(release_root, "b", succeeded_at=300)
+            shared_asset = temp_path / "shared-audio.mp3"
+            shared_asset.write_bytes(b"shared media")
+            try:
+                (previous / "audio.mp3").symlink_to(shared_asset)
+            except OSError as exc:
+                self.skipTest(f"File symlinks unavailable on this host: {exc}")
+
+            removed_names, _ = prune_releases.prune_releases(
+                releases_directory=release_root,
+                current_release=current,
+                keep_count=1,
+            )
+
+            self.assertEqual(removed_names, [previous.name])
+            self.assertTrue(current.is_dir())
+            self.assertEqual(shared_asset.read_bytes(), b"shared media")
+
     def test_rejects_current_release_outside_release_root(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             temp_path = Path(temporary_directory)

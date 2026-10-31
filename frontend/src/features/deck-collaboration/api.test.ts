@@ -19,12 +19,21 @@ import {
   prepareInstalledDeckUpdate,
   resolveDeckChangeRequestConflict,
   resolveInstalledUpdateConflict,
+  sendDeckContribution,
 } from './api'
 
 describe('deck collaboration API contract', () => {
   beforeEach(() => {
     apiRequest.mockReset()
     mutate.mockReset()
+  })
+
+  it('sends saved changes with the reviewed overlay fingerprint in one request', async () => {
+    const result = { id: 'request-1', status: 'pending_review' }
+    const body = { title: 'Sửa nghĩa', description: 'Mô tả', expected_overlay_fingerprint: 'a'.repeat(64) }
+    mutate.mockResolvedValueOnce(result)
+    await expect(sendDeckContribution('deck/item', body)).resolves.toBe(result)
+    expect(mutate).toHaveBeenCalledWith('/api/shared/decks/deck%2Fitem/change-requests/send', 'POST', body)
   })
 
   it('uses the Flask contribution endpoints and keeps their raw response envelope', async () => {

@@ -5,18 +5,17 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ApiError } from '@/shared/api/client'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import {
-  buildDeckChangeRequestDraft,
   contributionItemToDiffItem,
   getActiveDeckChangeRequest,
   getLocalDeckChanges,
-  submitDeckChangeRequest,
+  sendDeckContribution,
   summarizeChangeRequest,
   summarizeLocalChanges,
-  syncDeckChangeRequest,
 } from '../api'
 import type { DeckChangeRequest, DiffFilters } from '../types'
 
@@ -24,9 +23,10 @@ const PAGE_SIZE = 100
 
 export function useDeckChangeRequest() {
   const { deckItemId = '' } = useParams<{ deckItemId: string }>()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { t } = useTranslation('collaboration')
-  const formInitialized = useRef(false)
+  const initializedRequest = useRef<string | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [filters, setFilters] = useState<DiffFilters>({ query: '', changeType: 'all' })
@@ -71,21 +71,33 @@ export function useDeckChangeRequest() {
   const localPages = localQuery.data?.pages || []
   const activePages = activeQuery.data?.pages || []
   const activeRequest = activePages[0]?.request || null
-  const sourcePages = activeRequest ? activePages : localPages
+  const localPreview = localPages[0]
+  const isPendingReview = activeRequest?.status === 'pending_review'
+  // Show the saved changes that will actually be sent. A matching draft also
+  // carries the requester's previous conflict decisions; pending review is frozen.
+  const showActiveRequest = Boolean(activeRequest && (isPendingReview ||
+    activeRequest.overlay_fingerprint === localPreview?.overlay_fingerprint))
+  const sourcePages = showActiveRequest ? activePages : localPages
   const visiblePageIndex = Math.min(pageIndex, Math.max(sourcePages.length - 1, 0))
-  const visibleActiveRequest = activeRequest
+  const visibleActiveRequest = showActiveRequest
     ? activePages[visiblePageIndex]?.request
     : null
-  const visibleLocalPreview = activeRequest
+  const visibleLocalPreview = showActiveRequest
     ? null
     : localPages[visiblePageIndex]
-  const localPreview = localPages[0]
 
   useEffect(() => {
-    if (!activeRequest || formInitialized.current) return
+    initializedRequest.current = null
+    setTitle('')
+    setDescription('')
+    setFilters({ query: '', changeType: 'all' })
+  }, [deckItemId])
+
+  useEffect(() => {
+    if (!activeRequest || initializedRequest.current === activeRequest.id) return
     setTitle(activeRequest.title || '')
     setDescription(activeRequest.description || '')
-    formInitialized.current = true
+    initializedRequest.current = activeRequest.id
   }, [activeRequest])
 
   const allDiffItems = useMemo(() => {
@@ -95,17 +107,17 @@ export function useDeckChangeRequest() {
 
   const summary = useMemo(
     () =>
-      activeRequest
+      showActiveRequest && activeRequest
         ? summarizeChangeRequest(activeRequest)
         : localPreview
           ? summarizeLocalChanges(localPreview)
           : null,
-    [activeRequest, localPreview],
+    [activeRequest, localPreview, showActiveRequest],
   )
 
   useEffect(() => {
     setPageIndex(0)
-  }, [activeRequest?.id, filters])
+  }, [activeRequest?.id, filters, showActiveRequest])
 
   function storeRequest(request: DeckChangeRequest) {
     queryClient.setQueriesData<InfiniteData<{ request: DeckChangeRequest | null }>>(
@@ -129,74 +141,53 @@ export function useDeckChangeRequest() {
             }
           : current,
     )
-    void queryClient.invalidateQueries({
-      queryKey: ['active-deck-change-request', deckItemId],
-    })
   }
 
-  const draftMutation = useMutation({
-    mutationFn: () =>
-      buildDeckChangeRequestDraft(deckItemId, {
-        title: title.trim(),
-        description: description.trim(),
-      }),
+  const submitMutation = useMutation({
+    mutationFn: () => sendDeckContribution(deckItemId, {
+      title: title.trim(),
+      description: description.trim(),
+      expected_overlay_fingerprint: localPreview?.overlay_fingerprint || '',
+    }),
+    retry: false,
     onSuccess: (request) => {
       storeRequest(request)
-      toast.success(
-        t('request.toast_draft_created', 'Đã tạo bản nháp từ các thay đổi local đã lưu.'),
-      )
-    },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : 'Không thể tạo bản nháp đóng góp.',
-      ),
-  })
-
-  const syncMutation = useMutation({
-    mutationFn: () => syncDeckChangeRequest(deckItemId, activeRequest?.id || ''),
-    onSuccess: (request) => {
-      storeRequest(request)
-      if (request.unresolved_conflict_count) {
+      if (request.status === 'has_conflict') {
         toast.warning(
           t('request.toast_sync_conflicts', {
             count: request.unresolved_conflict_count,
             defaultValue: `Có ${request.unresolved_conflict_count} xung đột cần xử lý.`,
           }),
         )
+        navigate(`/flashcards/change-requests/${request.id}`)
       } else {
         toast.success(
-          t('request.toast_sync_success', 'Bản nháp đã đồng bộ với deck gốc.'),
+          t('request.toast_submit_success', 'Đã gửi đóng góp tới chủ sở hữu deck.'),
         )
       }
     },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : 'Không thể đồng bộ với deck gốc.',
-      ),
-  })
-
-  const submitMutation = useMutation({
-    mutationFn: () => submitDeckChangeRequest(deckItemId, activeRequest?.id || ''),
-    onSuccess: (request) => {
-      storeRequest(request)
-      toast.success(
-        t('request.toast_submit_success', 'Đã gửi đóng góp tới chủ sở hữu deck.'),
-      )
+    onError: (error) => {
+      toast.error(error instanceof ApiError && error.code === 'CHANGE_REQUEST_STALE'
+        ? t('request.stale_changes', 'Nội dung đã lưu vừa thay đổi. Hãy kiểm tra lại danh sách trước khi gửi.')
+        : error instanceof Error ? error.message : t('request.send_error', 'Không thể gửi đóng góp.'))
     },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : 'Không thể gửi đóng góp.',
-      ),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['local-deck-changes', deckItemId] })
+      void queryClient.invalidateQueries({ queryKey: ['active-deck-change-request', deckItemId] })
+      void queryClient.invalidateQueries({ queryKey: ['incoming-deck-change-requests'] })
+      if (activeRequest) void queryClient.invalidateQueries({ queryKey: ['deck-change-request', activeRequest.id] })
+    },
   })
 
-  const isPendingReview = activeRequest?.status === 'pending_review'
-  const isBusy = draftMutation.isPending || syncMutation.isPending || submitMutation.isPending
-  const hasAnyChanges = Boolean(activeRequest?.item_count || localPreview?.item_count)
-  const isFetchingDiff = activeRequest ? activeQuery.isFetching : localQuery.isFetching
-  const isFetchingMore = activeRequest
+  const isBusy = submitMutation.isPending
+  const canSend = Boolean(localPreview?.item_count && !isPendingReview && !isBusy &&
+    !localQuery.isFetching && !activeQuery.isFetching)
+  const hasAnyChanges = Boolean(showActiveRequest ? activeRequest?.item_count : localPreview?.item_count)
+  const isFetchingDiff = showActiveRequest ? activeQuery.isFetching : localQuery.isFetching
+  const isFetchingMore = showActiveRequest
     ? activeQuery.isFetchingNextPage
     : localQuery.isFetchingNextPage
-  const hasNextPage = activeRequest ? activeQuery.hasNextPage : localQuery.hasNextPage
+  const hasNextPage = showActiveRequest ? activeQuery.hasNextPage : localQuery.hasNextPage
 
   const onPreviousPage = () => {
     setPageIndex((current) => Math.max(0, current - 1))
@@ -208,7 +199,7 @@ export function useDeckChangeRequest() {
       return
     }
     const previousPageCount = sourcePages.length
-    const nextPage = activeRequest
+    const nextPage = showActiveRequest
       ? activeQuery.fetchNextPage()
       : localQuery.fetchNextPage()
     void nextPage.then((result) => {
@@ -235,13 +226,12 @@ export function useDeckChangeRequest() {
     summary,
     isPendingReview,
     isBusy,
+    canSend,
     hasAnyChanges,
     isFetchingDiff,
     isFetchingMore,
     hasNextPage,
     sourcePagesLength: sourcePages.length,
-    draftMutation,
-    syncMutation,
     submitMutation,
     onPreviousPage,
     onLoadMore,

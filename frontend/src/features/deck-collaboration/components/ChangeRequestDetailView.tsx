@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import '@/shared/config/i18n'
-import { DiffWorkspace } from '../components/DiffWorkspace'
-import { ChangeRequestDetailActions } from '../components/detail/ChangeRequestDetailActions'
-import { ChangeRequestMetaCard } from '../components/detail/ChangeRequestMetaCard'
-import { ContributionConflictCard } from '../components/detail/ContributionConflictCard'
+import { DiffWorkspace } from './DiffWorkspace'
+import { ChangeRequestDetailActions } from './detail/ChangeRequestDetailActions'
+import { ChangeRequestMetaCard } from './detail/ChangeRequestMetaCard'
+import { ContributionConflictCard } from './detail/ContributionConflictCard'
 import { useChangeRequestDetail } from '../hooks/useChangeRequestDetail'
 
-export function ChangeRequestDetailPage() {
+export function ChangeRequestDetailView() {
   const { t, i18n } = useTranslation('collaboration')
   const locale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
 
@@ -34,7 +34,6 @@ export function ChangeRequestDetailPage() {
     isRequester,
     isBusy,
     loadedPagesLength,
-    syncMutation,
     resolveMutation,
     submitMutation,
     approveMutation,
@@ -111,11 +110,9 @@ export function ChangeRequestDetailPage() {
           onReviewCommentChange={setReviewComment}
           onApprove={() => approveMutation.mutate()}
           onReject={() => rejectMutation.mutate()}
-          onSync={() => syncMutation.mutate()}
           onSubmit={() => submitMutation.mutate()}
           isApproving={approveMutation.isPending}
           isRejecting={rejectMutation.isPending}
-          isSyncing={syncMutation.isPending}
           isSubmitting={submitMutation.isPending}
         />
       </div>

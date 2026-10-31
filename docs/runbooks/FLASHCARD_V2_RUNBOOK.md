@@ -5,7 +5,7 @@
 - Canonical architecture is `Deck -> NoteType -> FieldDef -> Template -> Note -> Card`. Legacy tables have been fully retired and dropped.
 - Multi-template support is standard for all note types.
 - Field rename jobs execute synchronously within request handling.
-- Shared deck installs use logical overlay only: install pins a snapshot, clones the deck tree shell, and stores local clone edits in `DeckClone*` tables instead of copying source notes/cards.
+- Shared deck installs use logical overlay only. With Published Base enabled, learners read the latest published content plus their personal `DeckClone*` edits; source notes/cards are not copied. The older snapshot branches remain pending P6 cleanup.
 - Deck Change Requests enable cloner contributions back to the source deck owner with conflict resolution.
 
 ## Environment & Commands
@@ -33,10 +33,39 @@ flask --app wsgi.py clone-cutover-overlay
 - Verify media rendering with sandboxed iframe (`static/js/card_renderer_host.js`).
 
 ## Shared Deck Clone Notes
-- Shared deck install creates `DeckInstall` with pinned `base_snapshot_at`.
+- Published Base installs read current published Notes; legacy `base_snapshot_at` metadata is retained for compatibility.
 - Install clones the local deck subtree and creates `NoteTypeInstall` when the deck item is bound to a source note type.
 - Clone edits are stored in overlay tables such as `DeckCloneNoteFieldOverride`, not by mutating source notes/cards.
-- Startup automatically runs clone cutover for old installs through `cutover_clone_model_to_overlay_only(...)`.
+- Development/test maintenance can run clone cutover through `cutover_clone_model_to_overlay_only(...)` when `STARTUP_RUN_MAINTENANCE=True`; production startup is passive.
+
+## Contributing saved Note changes
+
+1. Edit a Note in an installed deck and save it. These personal changes remain private.
+2. Open the deck's **Đóng góp chỉnh sửa**, review the changes, and enter a title/description.
+3. Choose **Gửi đóng góp**. Draft preparation and comparison with the original content run automatically.
+4. If conflicts are found, the detail screen asks for field-level decisions. Save the decisions, then choose **Gửi đóng góp** there. No manual draft/sync step is required.
+5. The owner reviews the contribution; acceptance and publication remain separate owner actions.
+
+The send button requires saved content changes; title/description alone do not create
+a contribution. Pending contributions cannot be submitted again from the form.
+If personal changes differ from the reviewed preview, refresh/review is required.
+
+`POST /api/shared/decks/<deck_item_id>/change-requests/send` accepts `title`,
+`description`, and the preview's `expected_overlay_fingerprint`. It owns one
+transaction, preserves matching drafts and conflict resolutions, and returns
+`pending_review` or `has_conflict`. A retry with the same saved edits returns the
+existing pending contribution. The original draft/sync/submit endpoints remain
+available for older clients; the SPA uses the combined action.
+
+Verify with `npm run test:collab` in `frontend/`, and from the repository root:
+
+```powershell
+$env:FLAMA_MYSQL_TESTS = '1'
+.\.venv\Scripts\python.exe scripts/run_tests.py --file tests/test_contribution_send_mysql.py --backend-only
+```
+
+The MySQL tests create and remove a generated loopback schema, preserving the
+configured application database.
 
 ## Rollback Strategy
 - For schema migration rollbacks, use Alembic: `flask --app wsgi.py db downgrade <revision>`.

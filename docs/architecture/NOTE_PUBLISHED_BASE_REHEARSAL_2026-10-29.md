@@ -1,5 +1,11 @@
 # Published Base local validation, 2026-10-29
 
+Historical validation record. Production was subsequently activated on
+[30 October](NOTE_PUBLISHED_BASE_PRODUCTION_CUTOVER_2026-10-30.md). The disposable
+databases, dumps and implementation/UI baseline worktrees referenced below were
+deleted in the owner-approved [31 October cleanup](NOTE_PUBLISHED_BASE_CLEANUP_2026-10-31.md).
+The readiness statements below describe the rehearsal date.
+
 The [30 October review response](NOTE_PUBLISHED_BASE_REVIEW_RESPONSE_2026-10-30.md)
 and its sequential/process metrics supersede this report's initial 10-thread
 latency table. That table is retained as historical evidence, not a current p95
