@@ -46,11 +46,10 @@ def build_summaries(*, user_id, admin_mode, timezone_name, deck_ids):
     boundary = int(context.runtime_settings.day_boundary_hour_local)
     today = shared.study_repository._today_day_index(now=context.now,
         timezone_name=timezone_name, day_boundary_hour_local=boundary)
-    with shared._study_authority_conflict():
-        direct_counts = browse_note_repository.deck_counts(context, user_id=user_id,
-            admin_mode=admin_mode, today_day_index=today,
-            day_cutoff_utc=shared._day_index_to_datetime(today + 1, boundary,
-                timezone_name=timezone_name))
+    direct_counts = browse_note_repository.deck_counts(context, user_id=user_id,
+        admin_mode=admin_mode, today_day_index=today,
+        day_cutoff_utc=shared._day_index_to_datetime(today + 1, boundary,
+            timezone_name=timezone_name))
     cached = {}
 
     def summary(deck_id, visiting):

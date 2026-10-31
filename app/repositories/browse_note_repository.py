@@ -315,7 +315,11 @@ def order_notes(context, *, user_id, query=None, with_rank=False):
 
 
 def deck_counts(context, *, user_id, admin_mode, today_day_index, day_cutoff_utc):
-    """One Note per local deck, independent of template membership/multiplicity."""
+    """One Note per local deck, independent of template membership/multiplicity.
+
+    Like the Dashboard, counts read progress rows as stored: a damaged row
+    miscounts only its own Note; the offline study-authority-read-audit finds it.
+    """
     from app.repositories import note_analytics_read_repository as reads
     deck_ids = sorted(context.deck_by_id)
     owned = select(Note.id.label("note_id"), Note.deck_id.label("deck_id")).where(Note.deck_id.in_(deck_ids))
@@ -339,16 +343,11 @@ def deck_counts(context, *, user_id, admin_mode, today_day_index, day_cutoff_utc
             branches.append(select(Note.id.label("note_id"), local_deck.label("deck_id")).where(condition))
     members = union_all(*branches).subquery("browse_note_members") if len(branches) > 1 else branches[0].subquery("browse_note_members")
 
-    def build(note_ids=None):
-        query = select(members.c.note_id, members.c.deck_id, literal(1).label("card_count"))
-        if len(branches) > 1:
-            query = query.distinct()
-        if note_ids is not None:
-            query = query.where(members.c.note_id.in_(note_ids))
-        return query.subquery("browse_note_scope")
-
-    reads.guard_scope(db.session, learner_user_id=user_id, build=build)
-    rows = reads.note_rows(build(), learner_user_id=user_id).subquery("browse_note_availability")
+    scope = select(members.c.note_id, members.c.deck_id, literal(1).label("card_count"))
+    if len(branches) > 1:
+        scope = scope.distinct()
+    rows = reads.note_rows(scope.subquery("browse_note_scope"),
+        learner_user_id=user_id).subquery("browse_note_availability")
     # Match the existing deck aggregate buckets and scheduler day boundary.
     active = and_(or_(rows.c.is_suspended.is_(None), rows.c.is_suspended.is_(False)),
         not_(and_(rows.c.is_buried.is_(True), or_(rows.c.buried_until_day.is_(None), rows.c.buried_until_day >= today_day_index))))

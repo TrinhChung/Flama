@@ -311,9 +311,8 @@ def build_decks(*, user_id, admin_mode, timezone_name):
     boundary = int(context.runtime_settings.day_boundary_hour_local)
     today = shared.study_repository._today_day_index(now=context.now, timezone_name=timezone_name,
         day_boundary_hour_local=boundary)
-    with shared._study_authority_conflict():
-        direct = repository.deck_counts(context, user_id=user_id, admin_mode=admin_mode,
-            today_day_index=today, day_cutoff_utc=shared._day_index_to_datetime(today + 1, boundary, timezone_name=timezone_name))
+    direct = repository.deck_counts(context, user_id=user_id, admin_mode=admin_mode,
+        today_day_index=today, day_cutoff_utc=shared._day_index_to_datetime(today + 1, boundary, timezone_name=timezone_name))
     flat = []
 
     def flatten(nodes):
