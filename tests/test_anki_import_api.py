@@ -635,6 +635,30 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(changed.status_code, 200, changed.get_json())
         self.assertEqual(changed.get_json()["notes"][0]["state"], "changed")
 
+    def test_note_status_with_unimported_new_cards_returns_new_state(self):
+        self._login()
+        session = self._create_session()
+        response = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session['importSessionId']}/note-status",
+            json={
+                "notes": [
+                    {
+                        "ankiNoteId": 9991,
+                        "contentHash": "e" * 64,
+                        "cards": [
+                            {"sourceCardId": 8881, "snapshotHash": "f" * 64},
+                        ],
+                    }
+                ]
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        card_data = response.get_json()["notes"][0]["cards"][0]
+        self.assertEqual(card_data["sourceCardId"], "8881")
+        self.assertEqual(card_data["progressState"], "new")
+        self.assertIsNone(card_data["serverSnapshotHash"])
+        self.assertIsNone(card_data["reviewCursor"])
+
     def test_note_authority_progress_snapshot_projects_all_siblings_atomically(self):
         self._login()
         session_id = self._create_session()["importSessionId"]
