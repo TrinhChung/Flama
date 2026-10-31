@@ -308,7 +308,6 @@
   ["GET", "/api/tickets/attachments/<filename>"],
   ["GET", "/api/tickets/my"],
   ["POST", "/api/tickets/upload-image"],
-  ["POST", "/api/v1/internal/security/incident"],
   ["GET", "/api/wallet"],
   ["GET", "/api/wallet/transactions"],
   ["GET", "/api/worksheets/meta"],

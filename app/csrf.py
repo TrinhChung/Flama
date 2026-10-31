@@ -82,7 +82,6 @@ def _is_exempt_endpoint() -> bool:
         or request.path.startswith("/api/mcp")
         or request.path.startswith("/v1/mcp")
         or request.path.startswith("/api/internal/")
-        or request.path.startswith("/api/v1/internal/")
     ):
         return True
     exempt_endpoints = set(current_app.config.get("CSRF_EXEMPT_ENDPOINTS", ()))

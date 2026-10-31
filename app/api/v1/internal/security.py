@@ -64,7 +64,6 @@ def _verify_internal_secret() -> bool:
 
 
 @internal_security_bp.post("/internal/security/incident")
-@internal_security_bp.post("/v1/internal/security/incident")
 def report_security_incident():
     """Receive security threat notifications from internal services (e.g., worker 212).
 

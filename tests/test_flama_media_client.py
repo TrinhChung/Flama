@@ -5,20 +5,21 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from app import create_app
+from flask import Flask
+
 from app.services import flama_media_client
 from app.services.flama_media_client import FlamaMediaClientError
 
 
 class FlamaMediaClientTests(unittest.TestCase):
     def setUp(self):
-        self.app = create_app(
-            {
-                "TESTING": True,
-                "MEDIA_SHARED_SECRET": "test_shared_secret_12345",
-                "GATEWAY_SECRET": "test_gw_secret_67890",
-                "FLAMA_MEDIA_WORKER_URL": "http://10.10.0.6:4792",
-            }
+        # The client reads only app config; a bare app keeps the test off the database.
+        self.app = Flask(__name__)
+        self.app.config.update(
+            TESTING=True,
+            MEDIA_SHARED_SECRET="test_shared_secret_12345",
+            GATEWAY_SECRET="test_gw_secret_67890",
+            FLAMA_MEDIA_WORKER_URL="http://10.10.0.6:4792",
         )
 
     def test_generate_upload_ticket(self):
