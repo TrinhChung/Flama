@@ -1,5 +1,6 @@
-import { appApi } from '../../app/api'
-import type { FrontendUser } from '../../shared/types/api'
+import { apiJson, setCsrfToken } from '@/shared/api/client'
+import { API_BASE_URL } from '@/shared/config/env'
+import type { FrontendUser } from '@/shared/types/api'
 
 export type LoginPayload = {
   email: string
@@ -14,15 +15,46 @@ export type RegisterPayload = {
   confirm_password: string
 }
 
-export function login(payload: LoginPayload) {
-  return appApi.login(payload) as Promise<{
-    user: FrontendUser
-    redirect_to: string
-  }>
+type SessionResponse = {
+  authenticated: boolean
+  user: FrontendUser | null
+  csrf_token: string
 }
 
-export function register(payload: RegisterPayload) {
-  return appApi.register(payload)
+type LoginResponse = SessionResponse & {
+  next_url: string
+}
+
+type RegisterResponse = {
+  created: boolean
+  user: Pick<FrontendUser, 'id' | 'email' | 'username'>
+}
+
+export async function login(payload: LoginPayload): Promise<{ user: FrontendUser; redirect_to: string }> {
+  const result = await apiJson<LoginResponse>(`${API_BASE_URL}/auth/login`, 'POST', payload)
+  setCsrfToken(result.csrf_token)
+  if (!result.user) {
+    throw new Error('The server did not create an authenticated session.')
+  }
+  return {
+    user: result.user,
+    redirect_to: result.next_url || '/dashboard',
+  }
+}
+
+/** Ends the session; the response carries the CSRF token of the new anonymous session. */
+export async function logout(): Promise<{ redirect_to: string }> {
+  const result = await apiJson<SessionResponse>(`${API_BASE_URL}/session`, 'DELETE')
+  setCsrfToken(result.csrf_token)
+  return { redirect_to: '/' }
+}
+
+export async function register(payload: RegisterPayload) {
+  await apiJson<RegisterResponse>(`${API_BASE_URL}/auth/register`, 'POST', payload)
+  return {
+    message: 'Đăng ký thành công. Bạn có thể đăng nhập ngay.',
+    redirect_to: '/login',
+  }
 }
 
 export type ForgotPasswordPayload = {
@@ -36,21 +68,23 @@ export type ResetPasswordPayload = {
 }
 
 export function forgotPassword(payload: ForgotPasswordPayload) {
-  return appApi.forgotPassword(payload) as Promise<{
-    success: boolean
-    message: string
-  }>
+  return apiJson<{ success: boolean; message: string }>(
+    `${API_BASE_URL}/auth/forgot-password`,
+    'POST',
+    payload,
+  )
 }
 
 export function resetPassword(payload: ResetPasswordPayload) {
-  return appApi.resetPassword(payload) as Promise<{
-    success: boolean
-    message: string
-  }>
+  return apiJson<{ success: boolean; message: string }>(
+    `${API_BASE_URL}/auth/reset-password`,
+    'POST',
+    payload,
+  )
 }
 
 export function requestEmailVerification() {
-  return appApi.mutate<{
+  return apiJson<{
     success: boolean
     already_verified?: boolean
     message?: string
@@ -59,7 +93,7 @@ export function requestEmailVerification() {
 }
 
 export function verifyEmail(codeOrToken: string) {
-  return appApi.mutate<{
+  return apiJson<{
     success: boolean
     message?: string
     email_verified?: boolean
@@ -67,4 +101,3 @@ export function verifyEmail(codeOrToken: string) {
     student_status?: string
   }>('/api/profile/verify-email/confirm', 'POST', { code: codeOrToken })
 }
-

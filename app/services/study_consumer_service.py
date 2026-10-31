@@ -33,12 +33,13 @@ class StudyConsumerOptions:
     recovery_interval: float = 5.0
     heartbeat_interval: float = 5.0
     idle_interval: float = 0.25
+    template_sync_interval: float = 5.0
     error_backoff: float = 1.0
     recovery_page_size: int = 100
     jobs_per_pass: int = 10
 
     def __post_init__(self):
-        for name in ("recovery_interval", "heartbeat_interval", "idle_interval", "error_backoff"):
+        for name in ("recovery_interval", "heartbeat_interval", "idle_interval", "template_sync_interval", "error_backoff"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be a positive finite interval.")
@@ -77,6 +78,7 @@ class StudyBatchConsumer:
         self.cursor = None
         self.next_recovery = 0.0
         self.next_heartbeat = 0.0
+        self.next_template_sync = 0.0
         self.ready = False
 
     def step(self):
@@ -100,12 +102,18 @@ class StudyBatchConsumer:
             self.ready = ready
             self.next_heartbeat = self.clock() + self.options.heartbeat_interval
         counts = drain_study_queue(max_jobs=self.options.jobs_per_pass, recover_when_idle=False)
-        try:
-            template_sync = drain_template_sync_jobs(max_jobs=min(3, self.options.jobs_per_pass))
-        except Exception as exc:
-            # A template queue outage must not withdraw study-worker readiness.
-            logger.error("Template sync pass failed (%s); durable jobs will retry.", type(exc).__name__)
-            template_sync = None
+        template_sync = None
+        # Each claim is a database transaction. Claiming on every idle pass was
+        # most of MySQL's load while nobody studied; claim again at once only
+        # while jobs keep coming, otherwise after template_sync_interval.
+        if self.clock() >= self.next_template_sync:
+            try:
+                template_sync = drain_template_sync_jobs(max_jobs=min(3, self.options.jobs_per_pass))
+            except Exception as exc:
+                # A template queue outage must not withdraw study-worker readiness.
+                logger.error("Template sync pass failed (%s); durable jobs will retry.", type(exc).__name__)
+            if not (template_sync and any(template_sync.values())):
+                self.next_template_sync = self.clock() + self.options.template_sync_interval
         return {"recovery": recovery, "ready": self.ready, "template_sync": template_sync, **counts}
 
     def withdraw(self):

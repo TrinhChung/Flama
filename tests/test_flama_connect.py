@@ -335,6 +335,7 @@ class FlamaConnectTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "blocked_note_types")
         self.assertEqual(payload["blockers"][0]["code"], "NOTE_TYPE_MISSING")
+        self.assertEqual(payload["blockers"][0]["message"], "Chưa có Flama NoteType đích.")
         blocked_import = self._call(
             "importCards",
             {"importSessionId": payload["importSessionId"], "cards": []},
@@ -1585,6 +1586,21 @@ class FlamaConnectTests(unittest.TestCase):
                 created.field_values["Meaning"],
                 "Open: 'from...to...'; 'position'; 'vacancy' &lt;script&gt;",
             )
+
+    def test_add_note_keeps_anki_text_as_the_first_array_item(self):
+        with self.app.app_context():
+            db.session.add(FieldDef(note_type_id=self.note_type_id, name="Examples", field_type="array", position=9))
+            db.session.commit()
+        note = self._note(word="array-target")
+        note["fields"]["Examples"] = "例 A<br>例 <b>B</b>"
+
+        response = self._call("addNote", {"note": note})
+        self.assertIsInstance(response.get_json(), int, response.get_json())
+
+        with self.app.app_context():
+            created = Note.query.filter_by(user_id=self.user_id, deck_id=self.inbox_id).one()
+            # Mining normalizes non-richtext fields to plain text, the item included.
+            self.assertEqual(created.field_values["Examples"], ["例 A\n例 B"])
 
     def test_anki_entity_backfill_only_updates_tracked_anki_notes(self):
         with self.app.app_context():

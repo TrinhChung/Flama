@@ -6,14 +6,13 @@ locks, writes or materializes state, so these reads may run inside
 ``analytics_read_transaction()``. Counts read rows as stored: a damaged row
 miscounts only its own Note, and the offline audit re-derives whole-store
 availability and hashes from state. Study counts and Browse pages check
-their bounded rows with :func:`subject_integrity_violation`; the Browse Note
-list runs :func:`guard_scope`.
+their bounded rows with :func:`subject_integrity_violation`.
 """
 
 from __future__ import annotations
 
-from sqlalchemy import LargeBinary, and_, case, cast, func, literal, or_, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy import LargeBinary, and_, case, cast, literal, or_, select
+from sqlalchemy.orm import aliased
 
 from models.card import Card
 from models.study_progress_subject import StudyProgressSubject
@@ -100,66 +99,6 @@ def subject_integrity_violation(subject, *, note_id, learner_user_id: int):
         (_progress_shape_defect(subject), 1),
         else_=0,
     )
-
-
-def evidence_candidate_note_ids(session: Session, *, learner_user_id: int) -> list[str]:
-    """Notes whose evidence :func:`subject_integrity_violation` could flag.
-
-    One scan of the learner's rows, usually empty. Every row condition of the
-    violation CASE is matched on the row itself; a row whose live pointer and
-    logical key differ is the ``wrong_live_identity`` evidence of its live
-    Note. Both keys of a matching row are candidates. A superset: the scope
-    decides whether a candidate is read at all (a tombstone of a deleted Note
-    is in no scope).
-    """
-
-    subject = StudyProgressSubject
-    rows = session.execute(select(subject.logical_note_key, subject.live_note_id).where(
-        subject.learner_user_id == int(learner_user_id),
-        or_(
-            subject.live_note_id.is_(None),
-            subject.logical_note_key != cast(subject.live_note_id, LargeBinary),
-            subject.status_code.in_(_UNREADABLE_STATUSES),
-            _progress_shape_defect(subject),
-        ),
-    )).all()
-    candidates = set()
-    for logical_key, live_note_id in rows:
-        if live_note_id:
-            candidates.add(str(live_note_id))
-        try:
-            candidates.add(bytes(logical_key).decode("utf-8"))
-        except UnicodeDecodeError:
-            pass  # Not a Note ID; only its live pointer can be read.
-    return sorted(candidates)
-
-
-def guard_scope(session: Session, *, learner_user_id: int, build) -> None:
-    """Fail closed when a Note of a scope has unreadable evidence.
-
-    ``build(note_ids)`` returns the caller's scope, restricted to ``note_ids``
-    when given. The worst rank over the candidate Notes inside that exact
-    scope equals the per-Note rank of the whole scope, because every other
-    Note is clean. Run it in the same read snapshot as the metric query.
-    """
-
-    note_ids = evidence_candidate_note_ids(session, learner_user_id=learner_user_id)
-    if not note_ids:
-        return
-    scope = build(note_ids=note_ids)
-    subject = aliased(StudyProgressSubject)
-    worst = session.execute(
-        select(func.max(subject_integrity_violation(
-            subject, note_id=scope.c.note_id, learner_user_id=learner_user_id,
-        )))
-        .select_from(scope)
-        .outerjoin(subject, and_(
-            subject.learner_user_id == int(learner_user_id),
-            subject.logical_note_key == cast(scope.c.note_id, LargeBinary),
-        ))
-        .execution_options(include_retired_cards=True)
-    ).scalar()
-    raise_for_violation(worst)
 
 
 def note_rows(scope, *, learner_user_id: int, include_state: bool = False):

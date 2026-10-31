@@ -17,8 +17,10 @@ from app.services.connect.import_session import prepare_import_batch_context
 from models import db
 from models.card import Card
 from models.connect_import_session import ConnectImportSession
+from models.connect_note_type_ref import ConnectNoteTypeRef
 from models.connect_review_event_ref import ConnectReviewEventRef
 from models.connect_source_card_ref import ConnectSourceCardRef
+from models.connect_source_deck_ref import ConnectSourceDeckRef
 from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.deck import Deck
 from models.field_def import FieldDef
@@ -166,7 +168,8 @@ class AnkiImportApiTests(unittest.TestCase):
         response = self.client.get("/api/flashcards/import/anki/capabilities")
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(response.get_json()["cardBatchMaxItems"], 50)
-        self.assertEqual(response.get_json()["cardPackageTargetItems"], 500)
+        self.assertEqual(response.get_json()["cardPackageTargetItems"], 100)
+        self.assertEqual(response.get_json()["progressPackageTargetItems"], 200)
         self.assertEqual(response.get_json()["cardPackageMaxItems"], 1000)
         self.assertEqual(response.get_json()["cardPackageMaxBytes"], 16 * 1024 * 1024)
 
@@ -658,6 +661,182 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(card_data["progressState"], "new")
         self.assertIsNone(card_data["serverSnapshotHash"])
         self.assertIsNone(card_data["reviewCursor"])
+    def test_note_status_reports_cards_without_source_refs_as_new(self):
+        # A first sync of a deck sends cards the server has never seen; they
+        # have no ConnectSourceCardRef yet and must not break the batch.
+        self._login()
+        session_id = self._create_session()["importSessionId"]
+        self._upload_package(session_id, "cards", 0, [{
+            "ankiNoteId": 911,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "1" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "imported", "Meaning": "no progress yet"},
+                "tags": [],
+            },
+        }])
+
+        response = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
+            json={"notes": [
+                {
+                    "ankiNoteId": 911,
+                    "contentHash": "1" * 64,
+                    "cards": [{"sourceCardId": 9111, "snapshotHash": "2" * 64}],
+                },
+                {
+                    "ankiNoteId": 912,
+                    "contentHash": "3" * 64,
+                    "cards": [{"sourceCardId": 9121, "snapshotHash": "4" * 64}],
+                },
+            ]},
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        notes = {item["ankiNoteId"]: item for item in response.get_json()["notes"]}
+        self.assertEqual(notes[911]["state"], "unchanged")
+        self.assertEqual(notes[912]["state"], "new")
+        for anki_note_id, source_card_id in ((911, "9111"), (912, "9121")):
+            self.assertEqual(
+                notes[anki_note_id]["cards"],
+                [{
+                    "sourceCardId": source_card_id,
+                    "progressState": "new",
+                    "serverSnapshotHash": None,
+                    "reviewCursor": None,
+                }],
+            )
+
+    def test_anki_text_fills_an_array_field_as_its_first_item(self):
+        # Anki has no list fields: the whole text becomes the first item and an
+        # empty field an empty array, instead of rejecting the note.
+        with self.app.app_context():
+            db.session.add(FieldDef(note_type_id=self.note_type_id, name="Examples", field_type="array", position=2))
+            db.session.commit()
+        self._login()
+        session_id = self._create_session()["importSessionId"]
+        cases = {941: "例 A<br>例 <b>B</b>", 942: ""}
+        result = self._upload_package(session_id, "cards", 0, [{
+            "ankiNoteId": anki_note_id,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": f"{anki_note_id:064d}",
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": f"array-{anki_note_id}", "Meaning": "m", "Examples": value},
+                "tags": [],
+            },
+        } for anki_note_id, value in cases.items()])
+        self.assertEqual([item["imported"] for item in result["results"]], [True, True], result)
+        with self.app.app_context():
+            stored = {
+                note.field_values["Word"]: note.field_values["Examples"]
+                for note in Note.query.filter_by(user_id=self.admin_id)
+            }
+        self.assertEqual(stored, {"array-941": ["例 A<br>例 <b>B</b>"], "array-942": []})
+
+    def test_session_moves_every_ref_from_a_source_alias_to_its_key(self):
+        # A machine-bound v2 key arrives as an alias of the profile-only v3 key;
+        # every ref must follow so the next sync neither re-imports nor replays.
+        self._login()
+        old_key = self._session_payload()["sourceKey"]
+        first = self._create_session()["importSessionId"]
+        self._upload_package(first, "cards", 0, [{
+            "ankiNoteId": 921,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "5" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "moved", "Meaning": "with its source"},
+                "tags": [],
+            },
+        }])
+        applied = self._upload_package(first, "progress", 0, [{
+            "externalNoteId": 921,
+            "sourceCardId": 9211,
+            "ord": 0,
+            "snapshotHash": "7" * 64,
+            "baseSnapshotHash": None,
+            "type": 2,
+            "queue": 2,
+            "due": 50003,
+            "sourceToday": 50000,
+            "interval": 14,
+            "factor": 2500,
+            "reps": 2,
+            "lapses": 1,
+            "left": 0,
+        }])["results"][0]
+        self.assertEqual(applied["state"], "applied", applied)
+        new_key = "anki-v3:" + "6" * 64
+        with self.app.app_context():
+            ConnectSourceCardRef.query.filter_by(external_card_id="9211").one().review_cursor = 42
+            db.session.add_all([
+                ConnectReviewEventRef(user_id=self.admin_id, source_key=old_key, external_review_id="42",
+                                      external_card_id="9211", payload_hash="8" * 64,
+                                      status="ignored", ignored_reason="manual_or_rescheduled"),
+                # Already present under the new key: an identical alias ref is
+                # dropped, a conflicting one stays behind.
+                ConnectSourceCardRef(user_id=self.admin_id, source_key=old_key, external_card_id="9212",
+                                     external_note_id="921", source_ord=1, card_id="same"),
+                ConnectSourceCardRef(user_id=self.admin_id, source_key=new_key, external_card_id="9212",
+                                     external_note_id="921", source_ord=1, card_id="same"),
+                ConnectSourceCardRef(user_id=self.admin_id, source_key=old_key, external_card_id="9213",
+                                     external_note_id="921", source_ord=2, card_id="old-target"),
+                ConnectSourceCardRef(user_id=self.admin_id, source_key=new_key, external_card_id="9213",
+                                     external_note_id="921", source_ord=2, card_id="new-target"),
+            ])
+            db.session.commit()
+
+        response = self.client.post(
+            "/api/flashcards/import/anki/sessions",
+            json={**self._session_payload(), "sourceKey": new_key, "sourceAliases": [old_key]},
+        )
+        self.assertEqual(response.status_code, 201, response.get_json())
+        session_id = response.get_json()["importSessionId"]
+
+        status = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
+            json={"notes": [{
+                "ankiNoteId": 921,
+                "contentHash": "5" * 64,
+                "cards": [{"sourceCardId": 9211, "snapshotHash": "7" * 64}],
+            }]},
+        )
+        self.assertEqual(status.status_code, 200, status.get_json())
+        note_state = status.get_json()["notes"][0]
+        self.assertEqual(note_state["state"], "unchanged")
+        self.assertEqual(note_state["cards"][0]["progressState"], "unchanged")
+        self.assertEqual(note_state["cards"][0]["reviewCursor"], "42")
+        with self.app.app_context():
+            for model in (ConnectNoteTypeRef, ConnectSourceDeckRef, ConnectSourceNoteRef, ConnectReviewEventRef):
+                self.assertEqual(model.query.filter_by(source_key=old_key).count(), 0, model.__name__)
+                self.assertEqual(model.query.filter_by(source_key=new_key).count(), 1, model.__name__)
+            left_behind = ConnectSourceCardRef.query.filter_by(source_key=old_key).all()
+            self.assertEqual([(row.external_card_id, row.card_id) for row in left_behind], [("9213", "old-target")])
+            self.assertEqual(
+                sorted(row.external_card_id for row in ConnectSourceCardRef.query.filter_by(source_key=new_key)),
+                ["9211", "9212", "9213"],
+            )
+
+    def test_machine_bound_v2_source_key_asks_a_stale_page_to_reload(self):
+        self._login()
+        response = self.client.post(
+            "/api/flashcards/import/anki/sessions",
+            json={**self._session_payload(), "sourceKey": "anki-v2:" + "9" * 64},
+        )
+        self.assertEqual(response.status_code, 400, response.get_json())
+        self.assertIn("F5", response.get_json()["message"])
+        with self.app.app_context():
+            self.assertEqual(ConnectImportSession.query.count(), 0)
 
     def test_note_authority_progress_snapshot_projects_all_siblings_atomically(self):
         self._login()

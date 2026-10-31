@@ -1,7 +1,7 @@
 import React, { useId } from 'react'
 import { RefreshCw, Wifi, WifiOff, HelpCircle, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { AnkiConnectStatus } from '@/lib/ankiConnectClient'
+import type { AnkiConnectStatus } from '../lib/ankiConnectClient'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

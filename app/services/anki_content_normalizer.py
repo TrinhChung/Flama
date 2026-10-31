@@ -19,7 +19,7 @@ from app.services.flashcard_renderer import (
 from models import db
 from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.field_def import FieldDef
-from models.field_types import stored_field_value
+from models.field_types import ARRAY_FIELD_TYPE, stored_field_value
 from models.note import Note
 
 
@@ -454,6 +454,21 @@ def sanitize_yomitan_richtext(raw_html: str | None, max_length: int = 20_000) ->
         strip=True,
         css_sanitizer=_css_sanitizer,
     ).strip()
+
+
+def anki_text_as_array_items(
+    values: dict[str, Any],
+    field_defs: list[FieldDef] | tuple[FieldDef, ...],
+) -> dict[str, Any]:
+    """Anki stores every field as text; an ``array`` field takes it whole as its first item."""
+    array_names = {
+        field_def.name for field_def in field_defs
+        if str(field_def.field_type or "").lower() == ARRAY_FIELD_TYPE
+    }
+    return {
+        name: ([value] if value.strip() else []) if name in array_names and isinstance(value, str) else value
+        for name, value in values.items()
+    }
 
 
 def normalize_anki_field_values(

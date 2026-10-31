@@ -36,6 +36,7 @@ from app.services.share.helpers import (
     sync_deck_item_source_note_type,
     sync_deck_item_source_note_type_and_commit,
     touch_deck_install_usage,
+    touch_deck_installs_usage,
     touch_note_type_install_usage,
     validate_deck_subtree_move_to_parent,
     validate_marketplace_note_type_for_deck,

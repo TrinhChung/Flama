@@ -1,5 +1,5 @@
-import type { AnkiCardInfo } from '@/lib/ankiConnectClient'
-import type { AnkiNoteSyncState, SyncNoteStatus } from '@/lib/ankiIndexedDB'
+import type { AnkiCardInfo } from './ankiConnectClient'
+import type { AnkiNoteSyncState, SyncNoteStatus } from './ankiIndexedDB'
 
 export interface ImportCardResult {
   ankiNoteId?: number
@@ -62,14 +62,19 @@ export function mapAnkiDeckPath(sourceRoot: string, sourcePath: string, targetRo
   return sourcePath === sourceRoot ? normalizedTarget : `${normalizedTarget}${sourcePath.slice(sourceRoot.length)}`
 }
 
-export function indexCardDecksByNote(cards: AnkiCardInfo[]): Map<number, Set<string>> {
-  const result = new Map<number, Set<string>>()
+/**
+ * A Flama Note lives in one Deck while Anki places each Card separately, so a
+ * Note whose Cards were moved apart follows its first Card (lowest ord).
+ */
+export function indexNoteDecks(cards: AnkiCardInfo[]): Map<number, string> {
+  const firstCardByNote = new Map<number, AnkiCardInfo>()
   for (const card of cards) {
-    const decks = result.get(card.note) || new Set<string>()
-    decks.add(card.deckName)
-    result.set(card.note, decks)
+    const current = firstCardByNote.get(card.note)
+    if (!current || card.ord < current.ord || (card.ord === current.ord && card.cardId < current.cardId)) {
+      firstCardByNote.set(card.note, card)
+    }
   }
-  return result
+  return new Map([...firstCardByNote].map(([noteId, card]) => [noteId, card.deckName]))
 }
 
 export function indexImportCardResults(results: ImportCardResult[] | undefined): Map<number, ImportCardResult> {

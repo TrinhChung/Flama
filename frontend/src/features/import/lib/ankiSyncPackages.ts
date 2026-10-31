@@ -1,4 +1,5 @@
 import { BlobReader, BlobWriter, ZipWriter } from '@zip.js/zip.js'
+import { ApiError } from '@/shared/api/client'
 
 export interface MediaPackageEntry {
   filename: string
@@ -168,21 +169,32 @@ export function shouldFlushMediaPackage(
   return currentEntries >= maxEntries || currentBytes + nextBytes > Math.floor(maxBytes * 0.85)
 }
 
+/**
+ * The server stores a package under its sequence and replays the stored result
+ * for the same bytes. After a gateway timeout the first attempt may still be
+ * running, so retries wait long enough for it to commit and then replay it.
+ * A 4xx answer is the server's verdict on the package and is not retried.
+ */
+const PACKAGE_RETRY_DELAYS_MS = [2_000, 8_000]
+
+function isRetryablePackageError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true
+  return error.status === 0 || error.status >= 500 || error.status === 408 || error.status === 429
+}
+
 export async function uploadPackageWithRetry<T>(
   upload: () => Promise<T>,
   wait: (delayMs: number) => Promise<unknown> = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
-  maxAttempts = 3
+  delaysMs: readonly number[] = PACKAGE_RETRY_DELAYS_MS,
 ): Promise<T> {
-  let lastError: unknown = new Error('Không upload được package.')
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  for (let attempt = 0; ; attempt++) {
     try {
       return await upload()
     } catch (error) {
-      lastError = error
-      if (attempt < maxAttempts - 1) await wait(300 * 2 ** attempt)
+      if (attempt >= delaysMs.length || !isRetryablePackageError(error)) throw error
+      await wait(delaysMs[attempt])
     }
   }
-  throw lastError
 }
 
 export async function buildCardNdjsonPackage(records: unknown[]): Promise<CardPackageBlob> {

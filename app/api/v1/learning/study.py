@@ -54,13 +54,15 @@ study_bp.add_url_rule(
     view_func=_study_routes.study_session_commit,
     methods=["POST"],
 )
+# url_for() builds the first rule of an endpoint: keep "/next" (server render)
+# first so next_card_url does not switch callers to the client-render alias.
 study_bp.add_url_rule(
-    "/session/next",
+    "/next",
     view_func=_study_routes.study_next,
     methods=["GET"],
 )
 study_bp.add_url_rule(
-    "/next",
+    "/session/next",
     view_func=_study_routes.study_next,
     methods=["GET"],
 )

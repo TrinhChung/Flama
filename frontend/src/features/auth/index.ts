@@ -6,3 +6,4 @@ export const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').
 export const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage').then((module) => ({ default: module.VerifyEmailPage })))
 export { RequireAuth } from './components/RequireAuth'
 export { RequireCreator } from './components/RequireCreator'
+export { useLogout } from './hooks/useLogout'

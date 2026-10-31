@@ -194,9 +194,14 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "CONNECT_CARD_PACKAGE_MAX_ITEMS",
             default=1000,
         ),
+        # Package targets: see flama_connect_package_service.capabilities().
         "CONNECT_CARD_PACKAGE_TARGET_ITEMS": coerce_int_env(
             "CONNECT_CARD_PACKAGE_TARGET_ITEMS",
-            default=500,
+            default=100,
+        ),
+        "CONNECT_PROGRESS_PACKAGE_TARGET_ITEMS": coerce_int_env(
+            "CONNECT_PROGRESS_PACKAGE_TARGET_ITEMS",
+            default=200,
         ),
         "FLASHCARD_MEDIA_UPLOAD_ROOT": str(resolve_media_upload_root(initial_media_root)),
         "FLASHCARD_MEDIA_MAX_BYTES": int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024))),
@@ -264,12 +269,6 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         # Empty preserves the legacy test/manual queue, but a continuous worker
         # requires explicit isolation. Changing it does not remove DB admissions.
         "STUDY_QUEUE_NAMESPACE": os.getenv("STUDY_QUEUE_NAMESPACE", "").strip(),
-        # Wire v3 creation is negotiated per client and enabled only after all
-        # HTTP/worker consumers have dual readers. Existing v2 readers remain.
-        "STUDY_WIRE_V3_ENABLED": coerce_bool_env(
-            "STUDY_WIRE_V3_ENABLED",
-            default=False,
-        ),
         # Wire v4 is NOTE-authority-only (Note-token leases). Off by default;
         # it must be enabled before any learner is enrolled in NOTE (R1).
         "STUDY_WIRE_V4_ENABLED": coerce_bool_env(

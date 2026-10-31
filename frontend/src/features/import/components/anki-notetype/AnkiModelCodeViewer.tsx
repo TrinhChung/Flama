@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CardPreviewPanel } from '@/entities/flashcard'
-import type { AnkiConnectStatus } from '@/lib/ankiConnectClient'
+import type { AnkiConnectStatus } from '../../lib/ankiConnectClient'
 import type { AnkiModelDetail, PreviewResponse } from './types'
 
 interface AnkiModelCodeViewerProps {

@@ -36,6 +36,7 @@ from app.services import (
     study_service,
 )
 from app.services.anki_content_normalizer import (
+    anki_text_as_array_items,
     normalize_anki_field_values,
     normalize_anki_text_entities,
 )
@@ -265,7 +266,7 @@ def _parse_note(
             payload={
                 "note_type_id": note_type.id,
                 "deck_id": deck.id,
-                "field_values": fields,
+                "field_values": anki_text_as_array_items(fields, note_type.field_defs),
                 "tags": tags,
             },
             note_media_ids=allowed_media_references,

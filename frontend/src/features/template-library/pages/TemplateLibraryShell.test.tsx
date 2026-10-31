@@ -22,7 +22,7 @@ vi.mock('react-router-dom', async (original) => {
   } }
 })
 vi.mock('@/shared/api/bootstrap', () => ({ useBootstrap: () => mocks.bootstrap }))
-vi.mock('@/layouts/AppLayout', async () => {
+vi.mock('@/app/layouts/AppLayout', async () => {
   const { Outlet } = await import('react-router-dom')
   const { AppSidebar } = await import('@/components/app-sidebar')
   const { SidebarProvider } = await import('@/components/ui/sidebar')

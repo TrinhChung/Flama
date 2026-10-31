@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { bootstrapQueryKey } from '@/shared/api/bootstrap'
+import { bootstrapQueryKey, clearAccountQueries } from '@/shared/api/bootstrap'
 import type { FrontendBootstrap } from '@/shared/types/api'
 import { login } from '../api'
 import { getLoginSchema, type LoginFormValues } from '../schemas'
@@ -27,6 +27,7 @@ export function useLoginForm() {
   const mutation = useMutation({
     mutationFn: login,
     onSuccess: (result) => {
+      clearAccountQueries(queryClient)
       queryClient.setQueryData<FrontendBootstrap>(
         bootstrapQueryKey,
         (current) => (current ? { ...current, user: result.user, messages: [] } : current),

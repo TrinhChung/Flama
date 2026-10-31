@@ -51,6 +51,15 @@ vi.mock('@/app/api', () => ({
   },
 }))
 
+vi.mock('../api', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../api')>(),
+  studyApi: {
+    get: mocks.get,
+    mutate: mocks.mutate,
+    mutateKeepalive: mocks.mutateKeepalive,
+  },
+}))
+
 vi.mock('@/shared/api/bootstrap', () => ({
   useBootstrap: () => mocks.bootstrap,
 }))
@@ -752,11 +761,7 @@ describe('useStudySession cross-tab ownership', () => {
         scope: 'deck',
         scope_id: '12',
         composition_id: 'comp:notetype:type-1:template:template-1',
-        accepted_session_schema_versions: [
-          'study-session.v4',
-          'study-session.v3',
-          'study-session.v2',
-        ],
+        accepted_session_schema_versions: ['study-session.v4'],
         accepted_batch_schema_versions: ['study-batch.v3'],
         accepted_note_storage_profiles: ['note-mysql-float-text.v1'],
       },
