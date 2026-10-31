@@ -18,6 +18,8 @@ Welcome to the central documentation portal for **Flama** (Nihongo Flashcard Lea
 - [Deck, Note Type and Template stability](architecture/deck-notetype-template-stability-design.md): immutable releases, pinned presentation, receipt parity, asynchronous subscriber delivery and rollout checks.
 - [Marketplace bundle completeness review](architecture/marketplace-bundle-completeness-review-2026-10-21.md): five findings fixed and verified locally, with test evidence and production limits.
 - [Marketplace local rollout rehearsal](runbooks/MARKETPLACE_BUNDLE_LOCAL_ROLLOUT_20261021.md): reviewed publication plans, local results, verification and rollback.
+- [Flama Media direct edge upload & staging architecture](architecture/FLAMA_MEDIA_DIRECT_EDGE_UPLOAD_AND_STAGING_SPECIFICATION.md): Two-Phase Direct Upload from Client to Tokyo Worker 212 (`media.flama.vn`), 24h HMAC pre-signed tickets, 2h staging TTL cleanup, and WireGuard commit signals.
+- [Flama Media 3.1GB migration and cutover runbook](runbooks/FLAMA_MEDIA_MIGRATION_AND_CUTOVER_RUNBOOK_20261101.md): Operational execution guide for migrating 3.1GB legacy media to Worker 212, CAS deduplication + UUID symlink dual addressing (Zero Broken Links), and Nginx cutover.
 - [Test architecture P0 review](architecture/TEST_ARCHITECTURE_RFC.md): SPA contract checked in the frontend job, parked harness prototype and remaining MySQL rollout gates. Follow-up: [CI/CD test upgrade plan](plans/TEST_CICD_UPGRADE_IMPLEMENTATION_PLAN_2026-10-23.md).
 
 | Master Report | Description |
@@ -54,7 +56,7 @@ docs/
 ### 2. [Backend Domain (`docs/backend/`)](backend/)
 *Application factory, canonical REST APIs under `/api`, 102 SQLAlchemy models, Anki scheduling, and Flama Connect.*
 
-- [**Backend Architecture Guide**](backend/ARCHITECTURE.md): Comprehensive overview of Flask factory in `app/__init__.py`, passive production startup (`SELECT 1`), canonical REST blueprints, derived SQL `Card` view (ADR P11), `StudyProgressSubject` (ADR P10), overlay-only Marketplace clone model, and Flama Connect Yomitan adapter (port 4790).
+- [**Backend Architecture Guide**](backend/ARCHITECTURE.md): Comprehensive overview of Flask factory in `app/__init__.py`, passive production startup (`SELECT 1`), canonical REST blueprints, derived SQL `Card` view (ADR P11), `StudyProgressSubject` (ADR P10), overlay-only Marketplace clone model, Flama Connect Yomitan adapter (port 4790), and Flama Media hardened service (port 4792).
 - [**Backend Hub & System Landscape**](backend/README.md): System architecture overview, dependency graph, entry points (`wsgi.py`, `connect_wsgi.py`), and persistence map.
 - [**Backend Technical Debt Catalog**](backend/tech-debt/README.md): Active inventory of the 3,685-LOC `flashcards_share_service.py` monolith (54 callers), `vocabulary.py` legacy 410 stubs, and 45 route-level `db.session.commit()` transaction leaks.
 - [**Backend Historical Archive**](backend/old/README.md): Preserved archive of historical designs and completed plans:
@@ -70,8 +72,9 @@ docs/
 ### 3. [Operations & Infrastructure Domain (`docs/ops/`)](ops/)
 *Production VPS topology, systemd isolation, quiesced migrations, Docker, and CI/CD pipelines.*
 
-- [**Operations Architecture Guide**](ops/ARCHITECTURE.md): Comprehensive overview of Hostinger Ubuntu VPS deployment, 3 continuous systemd daemons, 4 lock-guarded high-frequency systemd timers, Nginx reverse proxy with `X-Accel-Redirect` media streaming, quiesced database migration workflow, 4 rollback safety gates, and 14 CI contract probes.
+- [**Operations Architecture Guide**](ops/ARCHITECTURE.md): Comprehensive overview of Hostinger Ubuntu VPS deployment, 3 continuous systemd daemons, 4 lock-guarded high-frequency systemd timers, Nginx reverse proxy with `X-Accel-Redirect` / Flama Media (port 4792) streaming, quiesced database migration workflow, 4 rollback safety gates, and 14 CI contract probes.
 - [**Operations Hub & Deployment Map**](ops/README.md): Runbooks index, directory tree, deployment prerequisites, and environment variable schema.
+- [**MySQL Master-Slave Replication Runbook**](ops/mysql_master_slave_plan.md): Production GTID-based MySQL 8.0 replication plan and runbook for VPS Primary and Server 212.
 - [**Operations Technical Debt Catalog**](ops/tech-debt/README.md): Parity backlog covering local development `docker-compose.yml` (`web` service commented out), Flama Connect containerization, and `.dockerignore` context optimizations.
 - [**Operations Historical Archive**](ops/old/README.md): Preserved operational runbooks including [Flama Audio Windows Release](ops/old/FLAMA_AUDIO_WINDOWS_RELEASE.md), [Flama Connect asbplayer Setup](ops/old/FLAMA_CONNECT_ASBPLAYER.md), and [Database Progress Scalability Rollout](ops/old/DATABASE_PROGRESS_SCALABILITY_ROLLOUT.md).
 
@@ -93,6 +96,7 @@ Active guides and runbooks supporting development, database maintenance, and int
 
 | Category | Guide / Runbook | Description |
 |---|---|---|
+| **Database Replication** | [**`mysql_master_slave_plan.md`**](ops/mysql_master_slave_plan.md) | Production GTID-based MySQL 8.0 Master-Slave replication plan and runbook for VPS Primary and Server 212. |
 | **Database & Seeding** | [**`SEEDING_GUIDE.md`**](guides/SEEDING_GUIDE.md) | Comprehensive database seeding guide (reseed workflows, CLI commands, seed data). |
 | **Templates & Note Types** | [**`NOTE_TYPE_TEMPLATE_GUIDE.md`**](guides/NOTE_TYPE_TEMPLATE_GUIDE.md) | Syntax and configuration guide for Note Types and Card Templates. |
 | **Flashcard V2** | [**`FLASHCARD_V2_RUNBOOK.md`**](runbooks/FLASHCARD_V2_RUNBOOK.md) | Active operational runbook for flashcard note creation, templates, and media handling. |
