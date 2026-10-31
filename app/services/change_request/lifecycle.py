@@ -123,6 +123,22 @@ def build_or_refresh_draft_request(
         user_id=requester_user_id,
         deck_item_id=deck_item_id,
     )
+    return _build_or_refresh_draft_for_install(
+        install, deck_item, active_request,
+        requester_user_id=requester_user_id, title=title, description=description,
+    )
+
+
+def _build_or_refresh_draft_for_install(
+    install: DeckInstall,
+    deck_item: DeckMarketplaceItem,
+    active_request: DeckChangeRequest | None,
+    *,
+    requester_user_id: int,
+    title: str,
+    description: str,
+) -> DeckChangeRequest:
+    """Build from an authorized context, including a caller's locked context."""
     _validate_install_release_for_contribution(install, deck_item)
     if active_request is not None and active_request.status == REQUEST_STATUS_PENDING_REVIEW:
         raise ChangeRequestError(

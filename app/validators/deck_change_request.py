@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from .flashcard_input import RequestValidationError, sanitize_plain_text
@@ -17,6 +18,13 @@ RESOLUTION_MODES = {"keep_mine", "keep_upstream", "manual"}
 class ChangeRequestDraftInput:
     title: str
     description: str
+
+
+@dataclass(frozen=True)
+class ChangeRequestSendInput:
+    title: str
+    description: str
+    expected_overlay_fingerprint: str
 
 
 @dataclass(frozen=True)
@@ -66,6 +74,18 @@ def validate_change_request_draft_request(payload: dict[str, Any] | None) -> Cha
             max_length=MAX_CHANGE_REQUEST_DESCRIPTION_LENGTH,
         ),
     )
+
+
+def validate_change_request_send_request(payload: dict[str, Any] | None) -> ChangeRequestSendInput:
+    body = dict(_payload_dict(payload))
+    fingerprint = body.pop("expected_overlay_fingerprint", None)
+    if not isinstance(fingerprint, str) or not re.fullmatch(r"[a-f0-9]{64}", fingerprint):
+        raise RequestValidationError(
+            "Reload the contribution preview before sending.",
+            field="expected_overlay_fingerprint",
+        )
+    draft = validate_change_request_draft_request(body)
+    return ChangeRequestSendInput(draft.title, draft.description, fingerprint)
 
 
 def validate_change_request_conflict_resolution_request(

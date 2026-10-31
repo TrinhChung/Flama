@@ -20,17 +20,20 @@ def get_active_request_for_install(
     deck_install_id: str,
     *,
     statuses: set[str],
+    for_update: bool = False,
 ) -> DeckChangeRequest | None:
     if not deck_install_id or not statuses:
         return None
-    return (
+    query = (
         DeckChangeRequest.query.filter(
             DeckChangeRequest.deck_install_id == deck_install_id,
             DeckChangeRequest.status.in_(sorted(statuses)),
         )
         .order_by(DeckChangeRequest.updated_at.desc(), DeckChangeRequest.created_at.desc(), DeckChangeRequest.id.desc())
-        .first()
     )
+    if for_update:
+        query = query.with_for_update().populate_existing()
+    return query.first()
 
 
 def get_request_with_detail(request_id: str) -> DeckChangeRequest | None:

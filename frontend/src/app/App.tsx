@@ -232,8 +232,8 @@ const InstalledDeckUpdatePage = lazy(() =>
   })),
 )
 const DeckChangeRequestPage = lazy(() =>
-  import('@/features/deck-collaboration').then((module) => ({
-    default: () => <module.DeckChangeRequestPage />,
+  import('@/pages/deck-change-request').then((module) => ({
+    default: module.DeckChangeRequestPage,
   })),
 )
 const ChangeRequestInboxPage = lazy(() =>
@@ -242,8 +242,8 @@ const ChangeRequestInboxPage = lazy(() =>
   })),
 )
 const ChangeRequestDetailPage = lazy(() =>
-  import('@/features/deck-collaboration').then((module) => ({
-    default: () => <module.ChangeRequestDetailPage />,
+  import('@/pages/change-request-detail').then((module) => ({
+    default: module.ChangeRequestDetailPage,
   })),
 )
 const AdminPermissionsPage = lazy(() =>

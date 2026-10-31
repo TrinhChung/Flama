@@ -265,6 +265,7 @@
   ["POST", "/api/profile/verify-email/request"],
   ["DELETE", "/api/session"],
   ["GET", "/api/session"],
+  ["POST", "/api/shared/decks/<deck_item_id>/change-requests/send"],
   ["GET", "/api/shared/note-types"],
   ["GET", "/api/shared/note-types/<note_type_id>"],
   ["POST", "/api/shared/note-types/<note_type_id>/install"],

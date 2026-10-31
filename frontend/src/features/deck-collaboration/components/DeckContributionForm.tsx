@@ -1,4 +1,4 @@
-import { ArrowLeft, FileDiff, LoaderCircle, RefreshCcw, Send } from 'lucide-react'
+import { ArrowLeft, FileDiff, LoaderCircle, Send } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -10,11 +10,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import '@/shared/config/i18n'
-import { ChangeRequestStatusBadge } from '../components/ChangeRequestStatusBadge'
-import { DiffWorkspace } from '../components/DiffWorkspace'
+import { ChangeRequestStatusBadge } from './ChangeRequestStatusBadge'
+import { DiffWorkspace } from './DiffWorkspace'
 import { useDeckChangeRequest } from '../hooks/useDeckChangeRequest'
 
-export function DeckChangeRequestPage() {
+export function DeckContributionForm() {
   const { t, i18n } = useTranslation('collaboration')
   const locale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
 
@@ -35,13 +35,12 @@ export function DeckChangeRequestPage() {
     summary,
     isPendingReview,
     isBusy,
+    canSend,
     hasAnyChanges,
     isFetchingDiff,
     isFetchingMore,
     hasNextPage,
     sourcePagesLength,
-    draftMutation,
-    syncMutation,
     submitMutation,
     onPreviousPage,
     onLoadMore,
@@ -82,7 +81,7 @@ export function DeckChangeRequestPage() {
         title={t('request.title', 'Đóng góp thay đổi')}
         description={t(
           'request.description',
-          'Chỉ các chỉnh sửa overlay đã lưu được đưa vào bản nháp. Deck local của bạn vẫn được giữ nếu owner từ chối.',
+          'Xem lại những thay đổi bạn đã lưu rồi gửi cho tác giả duyệt. Phần sửa riêng của bạn vẫn được giữ.',
         )}
         actions={
           <Button variant="outline" asChild>
@@ -116,11 +115,11 @@ export function DeckChangeRequestPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{t('request.meta_title', 'Thông tin gửi owner')}</CardTitle>
+          <CardTitle>{t('request.meta_title', 'Thông tin đóng góp')}</CardTitle>
           <CardDescription>
             {t(
               'request.meta_desc',
-              'Tạo hoặc làm mới draft từ trạng thái overlay hiện tại, sau đó sync trước khi gửi.',
+              'Khi gửi, hệ thống tự kiểm tra nội dung gốc. Bạn chỉ cần xử lý thêm nếu có xung đột.',
             )}
           </CardDescription>
         </CardHeader>
@@ -132,7 +131,7 @@ export function DeckChangeRequestPage() {
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder={t('request.field_title_placeholder', 'Ví dụ: Sửa nghĩa và cách đọc bài 3')}
-              disabled={isPendingReview}
+              disabled={isPendingReview || isBusy}
               maxLength={255}
             />
           </div>
@@ -146,7 +145,7 @@ export function DeckChangeRequestPage() {
                 'request.field_desc_placeholder',
                 'Giải thích ngắn lý do và phạm vi thay đổi…',
               )}
-              disabled={isPendingReview}
+              disabled={isPendingReview || isBusy}
               rows={3}
               maxLength={5000}
             />
@@ -154,43 +153,33 @@ export function DeckChangeRequestPage() {
           <div className="flex flex-wrap gap-2 lg:col-span-2">
             <Button
               type="button"
-              variant="outline"
-              disabled={isBusy || isPendingReview || !localPreview?.item_count}
-              onClick={() => draftMutation.mutate()}
-            >
-              {draftMutation.isPending ? <LoaderCircle className="animate-spin" /> : <FileDiff />}
-              {activeRequest
-                ? t('request.btn_refresh_draft', 'Làm mới bản nháp')
-                : t('request.btn_create_draft', 'Tạo bản nháp')}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={isBusy || !activeRequest || isPendingReview}
-              onClick={() => syncMutation.mutate()}
-            >
-              {syncMutation.isPending ? <LoaderCircle className="animate-spin" /> : <RefreshCcw />}
-              {t('request.btn_sync', 'Đồng bộ với deck gốc')}
-            </Button>
-            <Button
-              type="button"
-              disabled={isBusy || !activeRequest?.can_submit}
+              disabled={!canSend}
+              aria-describedby="contribution-send-status"
               onClick={() => submitMutation.mutate()}
             >
               {submitMutation.isPending ? <LoaderCircle className="animate-spin" /> : <Send />}
-              {t('request.btn_submit', 'Gửi đóng góp')}
+              {isBusy ? t('request.btn_sending', 'Đang gửi đóng góp…')
+                : isPendingReview ? t('request.btn_sent', 'Đã gửi · Chờ tác giả duyệt')
+                : t('request.btn_submit', 'Gửi đóng góp')}
             </Button>
           </div>
+          <p id="contribution-send-status" role="status" className="text-sm text-muted-foreground lg:col-span-2">
+            {isPendingReview
+              ? t('request.pending_notice', 'Đóng góp đã được gửi. Bạn vẫn có thể tiếp tục sửa riêng trong thư viện.')
+              : !localPreview?.item_count
+                ? t('request.no_local_changes_desc', 'Hãy sửa và lưu ít nhất một field trong deck đã cài, sau đó quay lại trang này. Tiêu đề và mô tả chỉ dùng để giải thích đóng góp.')
+                : t('request.send_ready', 'Các thay đổi bên dưới sẽ được gửi cho tác giả duyệt. Nội dung chung chỉ thay đổi sau khi tác giả duyệt và phát hành.')}
+          </p>
         </CardContent>
       </Card>
 
       {!hasAnyChanges ? (
         <Alert>
-          <AlertTitle>{t('request.no_local_changes_title', 'Chưa có thay đổi local')}</AlertTitle>
+          <AlertTitle>{t('request.no_local_changes_title', 'Chưa có thay đổi đã lưu')}</AlertTitle>
           <AlertDescription>
             {t(
               'request.no_local_changes_desc',
-              'Hãy sửa và lưu ít nhất một field trong deck clone trước khi tạo đóng góp.',
+              'Hãy sửa và lưu ít nhất một field trong deck đã cài, sau đó quay lại trang này. Tiêu đề và mô tả chỉ dùng để giải thích đóng góp.',
             )}
           </AlertDescription>
         </Alert>
