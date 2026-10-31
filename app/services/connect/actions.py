@@ -441,6 +441,20 @@ def _add_note(user_id: int, raw_note: object, *, standard, uow, scopes) -> int:
                     changed_field_names.add(k)
             if updated:
                 existing_note.field_values = field_vals
+                if prepared.pending_audio:
+                    active_attachments = {
+                        field_name: staged
+                        for field_name, staged in prepared.pending_audio.items()
+                        if field_name in changed_field_names
+                    }
+                    if active_attachments:
+                        materialized = flama_connect_media_service.materialize_audio(
+                            user_id=user_id,
+                            note=existing_note,
+                            attachments=active_attachments,
+                            managed=standard,
+                        )
+                        uow.materialized.append(materialized)
                 if prepared.clone_map is None:
                     from app.services import deck_working_tree_service
 
