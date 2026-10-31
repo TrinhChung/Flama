@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { compressImage, MAX_IMAGE_UPLOAD_BYTES } from '@/lib/imageCompression'
+import { copiedImageLink } from '../lib/copiedImageLink'
 
 export interface MediaFieldPreviewProps {
   fieldName: string
@@ -189,6 +190,14 @@ export function MediaFieldPreview({
         }
 
         if (uploadDisabled) {
+          // Chrome's "Copy image" also carries the image's address; use it when uploads are off.
+          const link = copiedImageLink(e.clipboardData)
+          if (link) {
+            const trimmedVal = value.trim()
+            onChange(trimmedVal ? `${trimmedVal}\n${link}` : link)
+            toast.success('Thẻ này không tải ảnh lên được nên đã dán link của ảnh.')
+            return
+          }
           toast.error('Thẻ này không hỗ trợ tải ảnh lên. Hãy dán link ảnh.')
           return
         }
