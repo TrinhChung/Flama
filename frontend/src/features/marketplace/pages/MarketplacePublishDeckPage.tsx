@@ -190,6 +190,7 @@ export function MarketplacePublishDeckPage() {
         target_audience: targetAudience.trim() || undefined,
         learning_goals: taxonomyGoals,
         primary_topics: taxonomyTopics,
+        publish_status: isEditMode ? (deckItem?.publish_status || 'published') : 'published',
         ...releaseMetadata,
       })
     },

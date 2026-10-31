@@ -65,6 +65,8 @@ export function SharedDeckDetailView() {
             deckSourceDeckId={deck.source_deck_id}
             version={deck.version}
             publishStatus={deck.publish_status}
+            publishedAt={deck.published_at}
+            currentReleaseId={deck.current_release_id}
             showKeyManager={showKeyManager}
             setShowKeyManager={setShowKeyManager}
             onUpdatePublishStatus={(st) => publishStatusMutation.mutate(st)}
