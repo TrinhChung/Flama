@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import create_app
 from models import db
 from models.media_asset import MediaAsset
-from models.image_asset import ImageAsset
+from models.shared_image_asset import SharedImageAsset
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,6 +64,12 @@ def main() -> None:
         assets = query.all()
         print(f"[*] Found {len(assets)} MediaAsset records to process.")
 
+        shared_query = SharedImageAsset.query.order_by(SharedImageAsset.created_at.asc())
+        if args.limit > 0:
+            shared_query = shared_query.limit(args.limit)
+        shared_assets = shared_query.all()
+        print(f"[*] Found {len(shared_assets)} SharedImageAsset records to process.")
+
         manifest: list[dict[str, str]] = []
         migrated_count = 0
         missing_count = 0
@@ -80,6 +86,36 @@ def main() -> None:
 
             cas_prefix1 = sha256[0:2]
             cas_prefix2 = sha256[2:4]
+            cas_rel = f"{cas_prefix1}/{cas_prefix2}/{sha256}{ext}"
+
+            uuid_prefix1 = uuid_id[0:2]
+            uuid_prefix2 = uuid_id[2:4]
+            uuid_rel = f"{uuid_prefix1}/{uuid_prefix2}/{uuid_id}{ext}"
+
+            manifest.append({
+                "storage_path": asset.storage_path,
+                "sha256": sha256,
+                "uuid": uuid_id,
+                "cas_rel": cas_rel,
+                "uuid_rel": uuid_rel,
+            })
+
+            migrated_count += 1
+
+        for idx, asset in enumerate(shared_assets, 1):
+            if not asset.storage_path:
+                continue
+            local_path = (upload_root / asset.storage_path).resolve()
+            if not local_path.exists() or not local_path.is_file():
+                missing_count += 1
+                continue
+
+            sha256 = asset.sha256 or ""
+            uuid_id = asset.id
+            ext = local_path.suffix.lower()
+
+            cas_prefix1 = sha256[0:2] if len(sha256) >= 4 else "00"
+            cas_prefix2 = sha256[2:4] if len(sha256) >= 4 else "00"
             cas_rel = f"{cas_prefix1}/{cas_prefix2}/{sha256}{ext}"
 
             uuid_prefix1 = uuid_id[0:2]
