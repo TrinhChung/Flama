@@ -62,7 +62,7 @@ export interface IAnkiConnectClient {
   checkConnection(endpoint?: string): Promise<{ status: AnkiConnectStatus; version?: number; error?: string }>
   getVersion(endpoint?: string): Promise<number>
   getActiveProfile(endpoint?: string): Promise<string>
-  getCollectionIdentity(endpoint?: string): Promise<string>
+  getLegacyCollectionIdentity(endpoint?: string): Promise<string>
   getDeckNames(endpoint?: string): Promise<string[]>
   getDeckNamesAndIds(endpoint?: string): Promise<Record<string, number>>
   findNotes(query: string, endpoint?: string): Promise<number[]>
@@ -163,7 +163,8 @@ export class AnkiConnectClient implements IAnkiConnectClient {
     }
   }
 
-  async getCollectionIdentity(endpoint?: string): Promise<string> {
+  /** Identity behind anki-v2 source keys: profile plus this machine's media folder. */
+  async getLegacyCollectionIdentity(endpoint?: string): Promise<string> {
     const profile = await this.getActiveProfile(endpoint)
     try {
       const mediaDir = await this.request<string>('getMediaDirPath', {}, endpoint)

@@ -64,6 +64,7 @@ export interface AnkiImportCapabilities {
   cardPackageMaxBytes: number
   cardPackageMaxUncompressedBytes: number
   progressBatchMaxItems: number
+  progressPackageTargetItems?: number
   reviewBatchMaxItems: number
   reviewSessionMaxItems: number
   supportedMediaExtensions: string[]

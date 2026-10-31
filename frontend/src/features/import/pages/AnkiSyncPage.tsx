@@ -101,7 +101,6 @@ export function AnkiSyncPage() {
       {activeTab === 'decks' ? (
         <AnkiSyncTab
           noteTypeOptions={noteTypeOptions}
-          flamaUserId={Number(bootstrapQuery.data?.user?.id || 0)}
           endpoint={endpoint}
           connectionStatus={connectionStatus}
           ankiVersion={ankiVersion}

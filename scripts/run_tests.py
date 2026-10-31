@@ -364,7 +364,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "models/shared_image_asset.py",
             "models/media_asset.py",
             "frontend/src/features/import/**",
-            "frontend/src/lib/ankiHtmlSanitizer*",
+            "frontend/src/features/import/lib/ankiHtmlSanitizer*",
         ],
         "backend_tests": [
             "tests/test_flashcard_api_integration.py",
@@ -401,7 +401,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_array_cutover.py",
         ],
         "frontend_tests": [
-            "src/lib/ankiHtmlSanitizer.test.ts",
+            "src/features/import/lib/ankiHtmlSanitizer.test.ts",
             "src/entities/deck/ui/DeckSelectionTreeView.test.tsx",
         ],
     },
@@ -708,7 +708,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "models/connect_*.py",
             "models/mcp_*.py",
             "models/oauth_*.py",
-            "frontend/src/lib/ankiSync*",
+            "frontend/src/features/import/lib/ankiSync*",
         ],
         "backend_tests": [
             "tests/test_template_authoring.py",
@@ -736,8 +736,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_integration_tokens_api.py",
         ],
         "frontend_tests": [
-            "src/lib/ankiSyncEngine.test.ts",
-            "src/lib/ankiSyncPackages.test.ts",
+            "src/features/import/lib/ankiSyncEngine.test.ts",
+            "src/features/import/lib/ankiSyncPackages.test.ts",
             "src/features/settings/components/__tests__/ConnectMiningSetup.test.tsx",
         ],
     },

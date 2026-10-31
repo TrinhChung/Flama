@@ -3,7 +3,7 @@ import {
   buildExactAnkiDeckQuery,
   buildExactAnkiModelQuery,
   classifyNoteSyncStatus,
-  indexCardDecksByNote,
+  indexNoteDecks,
   indexImportCardResults,
   mapAnkiDeckPath,
 } from './ankiSyncHelpers'
@@ -42,14 +42,15 @@ describe('ankiSyncEngine helpers', () => {
     expect(() => mapAnkiDeckPath('Japanese::N3', 'Japanese::N2', 'Imported::N3')).toThrow()
   })
 
-  it('detects notes whose cards are assigned to more than one Anki deck', () => {
-    const indexed = indexCardDecksByNote([
-      { cardId: 1, note: 10, modelName: 'Basic', deckName: 'Root::A', fields: {}, ord: 0, type: 0, queue: 0, due: 1, interval: 0, factor: 0, reps: 0, lapses: 0 },
+  it('places a note whose cards were moved apart in the deck of its first card', () => {
+    const indexed = indexNoteDecks([
       { cardId: 2, note: 10, modelName: 'Basic', deckName: 'Root::B', fields: {}, ord: 1, type: 0, queue: 0, due: 2, interval: 0, factor: 0, reps: 0, lapses: 0 },
+      { cardId: 1, note: 10, modelName: 'Basic', deckName: 'Root::A', fields: {}, ord: 0, type: 0, queue: 0, due: 1, interval: 0, factor: 0, reps: 0, lapses: 0 },
       { cardId: 3, note: 11, modelName: 'Basic', deckName: 'Root::A', fields: {}, ord: 0, type: 0, queue: 0, due: 3, interval: 0, factor: 0, reps: 0, lapses: 0 },
+      { cardId: 5, note: 12, modelName: 'Cloze', deckName: 'Root::C', fields: {}, ord: 0, type: 0, queue: 0, due: 4, interval: 0, factor: 0, reps: 0, lapses: 0 },
+      { cardId: 4, note: 12, modelName: 'Cloze', deckName: 'Root::D', fields: {}, ord: 0, type: 0, queue: 0, due: 5, interval: 0, factor: 0, reps: 0, lapses: 0 },
     ])
-    expect([...indexed.get(10)!]).toEqual(['Root::A', 'Root::B'])
-    expect([...indexed.get(11)!]).toEqual(['Root::A'])
+    expect(Object.fromEntries(indexed)).toEqual({ 10: 'Root::A', 11: 'Root::A', 12: 'Root::D' })
   })
 
   it('retries a failed note even when its content hash is unchanged', () => {

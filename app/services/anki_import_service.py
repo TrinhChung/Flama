@@ -22,6 +22,7 @@ from models.connect_import_session import ConnectImportSession
 
 AnkiImportError = flama_connect_service.ConnectError
 AnkiImportPackageError = flama_connect_package_service.ConnectPackageError
+LEGACY_MACHINE_SOURCE_PREFIX = "anki-v2:"
 
 
 def _commit_with_analytics() -> None:
@@ -38,6 +39,13 @@ def capabilities() -> dict[str, object]:
 
 
 def create_session(*, user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    # anki-v2 keys included the machine's media folder path. Current pages send
+    # the profile-only anki-v3 key and move v2 refs to it, so a page still
+    # sending v2 would find no refs and import every note again.
+    if str(payload.get("sourceKey") or "").startswith(LEGACY_MACHINE_SOURCE_PREFIX):
+        raise AnkiImportError(
+            "Trang đồng bộ đang dùng phiên bản cũ. Vui lòng tải lại trang (F5) rồi đồng bộ lại."
+        )
     try:
         normalized = dict(payload)
         # The authenticated web route, not the browser payload, owns the source

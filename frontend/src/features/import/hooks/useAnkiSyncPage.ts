@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
-import type { AnkiConnectStatus } from '@/lib/ankiConnectClient'
-import { ankiConnectClient } from '@/lib/ankiConnectClient'
+import type { AnkiConnectStatus } from '../lib/ankiConnectClient'
+import { ankiConnectClient } from '../lib/ankiConnectClient'
 
 export type NoteField = {
   id: string
