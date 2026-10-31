@@ -168,18 +168,27 @@ def get_frontend_base_url(req: Request | None = None) -> str:
     return ""
 
 
+def get_issuer_url(req: Request | None = None) -> str:
+    """RFC 8414 issuer; must be identical on every origin that points clients at it."""
+    try:
+        configured = str(current_app.config.get("OAUTH_ISSUER_URL") or "").strip().rstrip("/")
+    except RuntimeError:
+        configured = ""
+    return configured or get_base_url(req)
+
+
 def get_protected_resource_metadata(req: Request | None = None) -> dict[str, Any]:
     base_url = get_base_url(req)
     return {
         "resource": f"{base_url}/api/mcp",
-        "authorization_servers": [base_url],
+        "authorization_servers": [get_issuer_url(req)],
         "scopes_supported": sorted(mcp_scope_service.ALL_GRANULAR_SCOPES),
         "bearer_methods_supported": ["header"],
     }
 
 
 def get_authorization_server_metadata(req: Request | None = None) -> dict[str, Any]:
-    base_url = get_base_url(req)
+    base_url = get_issuer_url(req)
     return {
         "issuer": base_url,
         "authorization_endpoint": f"{base_url}/oauth/authorize",

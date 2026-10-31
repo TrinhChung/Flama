@@ -87,7 +87,7 @@ def _call(operation, user_id, arguments):
 
 
 def build_template_tools(definition):
-    def tool(name, title, description, operation, properties, required=(), write=False):
+    def tool(name, title, description, operation, properties, required=(), write=False, destructive=False):
         schema = {"type": "object", "properties": properties, "required": list(required), "additionalProperties": False}
         def validate(arguments):
             return validate_template_inputs(validate_object(arguments, schema))
@@ -95,7 +95,8 @@ def build_template_tools(definition):
             return _call(operation, user_id, arguments)
         return definition(name=name, title=title, description=description, input_schema=schema,
             handler=handle, arguments_validator=validate, required_scope="note-type:write" if write else "note-type:read",
-            annotations={"readOnlyHint": not write, "destructiveHint": False}, error_handler=wrap_authoring_error)
+            annotations={"readOnlyHint": not write, "destructiveHint": destructive, "openWorldHint": False},
+            error_handler=wrap_authoring_error)
     return (
         tool("list_card_templates", "List Card Templates",
             "List your reusable card templates with input schemas, usage and pagination, without HTML/CSS. Use get_card_template(include_source=true) to edit source.",
@@ -110,11 +111,11 @@ def build_template_tools(definition):
             "create", CONTENT, ("name",), True),
         tool("update_card_template", "Update Card Template",
             "Rename or edit an owned reusable template and its typed inputs through the versioned library. Pass expected_current_version_id from get_card_template to reject stale edits. Content edits affect active applications; preview first.",
-            "update", {**CONTENT, "template_id": NAME, "expected_current_version_id": {"type": ["string", "null"]}}, ("template_id",), True),
+            "update", {**CONTENT, "template_id": NAME, "expected_current_version_id": {"type": ["string", "null"]}}, ("template_id",), True, True),
         tool("attach_card_template", "Attach Card Template",
             "Attach an owned reusable template to an owned NoteType. Supply input_bindings from input keys to that NoteType's field IDs, optional display_name, position and is_default. Returns application_id for preview and later binding edits.",
             "attach", {**APPLICATION, "note_type_id": NAME, "template_id": NAME}, ("note_type_id", "template_id", "input_bindings"), True),
         tool("update_template_application", "Update Template Application",
             "Edit one owned template occurrence's input_bindings, display_name, position or default status without changing its reusable definition. Preview using note_type_id + application_id afterwards.",
-            "application", {**APPLICATION, "note_type_id": NAME, "application_id": NAME}, ("note_type_id", "application_id"), True),
+            "application", {**APPLICATION, "note_type_id": NAME, "application_id": NAME}, ("note_type_id", "application_id"), True, True),
     )

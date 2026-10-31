@@ -358,6 +358,10 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             os.getenv("PUBLIC_APP_URL", "").strip().rstrip("/")
             or os.getenv("FRONTEND_URL", "").strip().rstrip("/")
         ),
+        # OAuth issuer advertised by every MCP origin (the Connect process has no AS of its own).
+        "OAUTH_ISSUER_URL": os.getenv("OAUTH_ISSUER_URL", "").strip().rstrip("/"),
+        # Plain-text token OpenAI asks for at /.well-known/openai-apps-challenge.
+        "OPENAI_APPS_CHALLENGE_TOKEN": os.getenv("OPENAI_APPS_CHALLENGE_TOKEN", "").strip(),
         "PASSWORD_RESET_TOKEN_TTL_MINUTES": coerce_int_env(
             "PASSWORD_RESET_TOKEN_TTL_MINUTES", default=30
         ),

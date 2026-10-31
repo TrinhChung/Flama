@@ -118,6 +118,8 @@ jobs:
           MCP_PREVIEW_TTL_SECONDS: ${{ vars.MCP_PREVIEW_TTL_SECONDS || '600' }}
           MCP_TEMPLATE_PREVIEW_UI_ENABLED: ${{ vars.MCP_TEMPLATE_PREVIEW_UI_ENABLED || 'false' }}
           MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL: ${{ vars.MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL || 'https://api.flama.vn' }}
+          OAUTH_ISSUER_URL: ${{ vars.OAUTH_ISSUER_URL || 'https://api.flama.vn' }}
+          OPENAI_APPS_CHALLENGE_TOKEN: ${{ vars.OPENAI_APPS_CHALLENGE_TOKEN }}
           SHARED_DECK_TREE_CLONE_MODE: ${{ vars.SHARED_DECK_TREE_CLONE_MODE || 'batched' }}
           DECK_SOURCE_NOTETYPE_GUARD_MODE: ${{ vars.DECK_SOURCE_NOTETYPE_GUARD_MODE || 'shadow' }}
           MARKETPLACE_SAMPLE_MODE: ${{ vars.MARKETPLACE_SAMPLE_MODE || 'shadow_cache' }}

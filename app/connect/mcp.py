@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from flask import Blueprint, jsonify, make_response, request
+from flask import Blueprint, current_app, jsonify, make_response, request
 
 from app.services import mcp_auth_service, mcp_tool_registry, mcp_tool_service, oauth_service, quota_service
 from app.services.mcp_access_token_service import McpAccessTokenError
@@ -32,6 +32,37 @@ def connect_oauth_protected_resource(resource_path: str | None = None):
     return jsonify(data)
 
 
+@mcp_connect_bp.get("/.well-known/openai-apps-challenge")
+def openai_apps_challenge():
+    """OpenAI plugin domain verification: the exact token as plain text, nothing else."""
+    token = str(current_app.config.get("OPENAI_APPS_CHALLENGE_TOKEN") or "").strip()
+    if not token:
+        return jsonify({"error": "not found"}), 404
+    response = make_response(token, 200)
+    response.mimetype = "text/plain"
+    return response
+
+
+_MISSING_CREDENTIAL_CODES = frozenset({"AUTH_REQUIRED", "MCP_TOKEN_MISSING"})
+_INSUFFICIENT_SCOPE_CODES = frozenset({"MCP_SCOPE_FORBIDDEN", "PERMISSION_DENIED"})
+
+
+def _www_authenticate(*, status: int, error_code: str | None, message: str, scope: str | None) -> str | None:
+    """RFC 6750 challenge; carries no ``error`` when the request sent no credential."""
+    if status == 401:
+        error = None if error_code in _MISSING_CREDENTIAL_CODES else "invalid_token"
+    elif status == 403 and error_code in _INSUFFICIENT_SCOPE_CODES:
+        error = "insufficient_scope"
+    else:
+        return None
+    base_url = oauth_service.get_base_url(request)
+    parts = [f'resource_metadata="{base_url}/.well-known/oauth-protected-resource"']
+    if scope:
+        parts.append(f'scope="{scope}"')
+    if error:
+        description = message.replace('"', "'")
+        parts += [f'error="{error}"', f'error_description="{description}"']
+    return "Bearer " + ", ".join(parts)
 
 
 def _jsonrpc_error(
@@ -41,6 +72,7 @@ def _jsonrpc_error(
     message: str,
     status: int,
     data: dict | None = None,
+    scope: str | None = None,
 ):
     payload: dict[str, Any] = {
         "jsonrpc": "2.0",
@@ -56,11 +88,14 @@ def _jsonrpc_error(
     response.status_code = status
     response.headers["MCP-Protocol-Version"] = mcp_tool_service.MCP_PROTOCOL_VERSION
     response.headers["Cache-Control"] = "no-store"
-    if status == 401:
-        base_url = oauth_service.get_base_url(request)
-        response.headers["WWW-Authenticate"] = (
-            f'Bearer error="unauthorized", resource_metadata="{base_url}/.well-known/oauth-protected-resource"'
-        )
+    challenge = _www_authenticate(
+        status=status,
+        error_code=(data or {}).get("code"),
+        message=message,
+        scope=scope,
+    )
+    if challenge:
+        response.headers["WWW-Authenticate"] = challenge
     return response
 
 
@@ -115,6 +150,7 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
         )
 
     request_id = rpc_request.request_id
+    required_scope: str | None = None
 
     try:
         # Method: ping (Standard MCP protocol liveness check)
@@ -123,15 +159,11 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
 
         # Method: initialize
         if rpc_request.method == "initialize":
-            auth_context = mcp_auth_service.authenticate_mcp_request_if_present(
+            # Reject a bad credential at handshake time; the result never echoes who it belongs to.
+            mcp_auth_service.authenticate_mcp_request_if_present(
                 request=request,
                 url_token=url_token,
                 session_user=session_user,
-            )
-            user_info_msg = (
-                f" Authenticated as user_id={auth_context.user.id} ({auth_context.user.username})."
-                if auth_context
-                else ""
             )
             return _jsonrpc_result(
                 request_id,
@@ -152,14 +184,15 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                     },
                     "serverInfo": {
                         "name": "flama-mcp-connect",
-                        "title": "Flama MCP Service",
+                        "title": "Flama",
                         "version": "1.0.0",
-                        "description": "Flama Model Context Protocol integration on Flama Connect." + user_info_msg,
+                        "description": "Flama flashcards: decks, notes, spaced-repetition study and the deck marketplace.",
                     },
                     "instructions": (
-                        "Call tools/list to discover available flashcard tools. "
-                        "Authenticate using Bearer token, X-Flama-Connect-Key, or URL token. "
-                        "The server derives the user from the authentication context."
+                        "Flama is a spaced-repetition flashcard app. Tools act on the signed-in user's own "
+                        "decks, notes, note types and study schedule; marketplace and documentation tools "
+                        "work without sign-in. Resolve deck and note type IDs with the list/get tools before "
+                        "writing, and preview before sync, note type updates and deck releases."
                     ),
                 },
             )
@@ -286,11 +319,12 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                 user_id = auth_context.user.id if auth_context and auth_context.user else None
                 auth_type = auth_context.auth_type if auth_context else "guest"
             else:
+                required_scope = tool_definition.required_scope
                 auth_context = mcp_auth_service.authenticate_mcp_request(
                     request=request,
                     url_token=url_token,
                     session_user=session_user,
-                    required_scope=tool_definition.required_scope,
+                    required_scope=required_scope,
                 )
                 # Only private tool calls count; initialize/tools/list and public tools stay free.
                 if not quota_service.consume(auth_context.user, quota_service.KIND_MCP).allowed:
@@ -350,6 +384,7 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
             message=str(exc),
             status=exc.status,
             data={"code": exc.code},
+            scope=required_scope,
         )
     except Exception:
         db.session.rollback()
