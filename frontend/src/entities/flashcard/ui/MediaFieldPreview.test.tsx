@@ -226,6 +226,42 @@ describe('MediaFieldPreview', () => {
     act(() => root.unmount())
   })
 
+  it("uses the address Chrome's Copy image puts beside the picture when uploads are off", async () => {
+    const { toast } = await import('sonner')
+    const toastErrorSpy = vi.spyOn(toast, 'error')
+    toastErrorSpy.mockClear()
+    const client = await import('@/shared/api/client')
+    const requestSpy = vi.spyOn(client, 'apiRequest')
+    requestSpy.mockClear()
+    const onChange = vi.fn()
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <MediaFieldPreview fieldName="Picture" fieldType="image" value="" onChange={onChange} uploadDisabled />,
+      )
+    })
+    const previewContainer = container.querySelector('[tabindex="0"]') as HTMLDivElement
+    const file = new File(['x'], 'image.png', { type: 'image/png' })
+    const chromeCopy = new Event('paste', { bubbles: true, cancelable: true }) as any
+    chromeCopy.clipboardData = {
+      items: [{ type: 'text/html', getAsFile: () => null }, { type: 'image/png', getAsFile: () => file }],
+      files: [file],
+      getData: (format: string) => (format === 'text/html'
+        ? '<html><body><!--StartFragment--><img src="https://example.com/dog.jpg" alt="dog"/><!--EndFragment--></body></html>'
+        : ''),
+    }
+    await act(async () => {
+      previewContainer.dispatchEvent(chromeCopy)
+    })
+    expect(onChange).toHaveBeenCalledWith('https://example.com/dog.jpg')
+    expect(toastErrorSpy).not.toHaveBeenCalledWith('Thẻ này không hỗ trợ tải ảnh lên. Hãy dán link ảnh.')
+    expect(requestSpy).not.toHaveBeenCalled()
+    act(() => root.unmount())
+  })
+
   it('safely handles non-string or array values without throwing TypeError', async () => {
     expect(resolveDisplayUrl(null)).toBe('')
     expect(resolveDisplayUrl(undefined)).toBe('')

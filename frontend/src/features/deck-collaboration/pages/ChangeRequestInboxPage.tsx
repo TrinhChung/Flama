@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, FileDiff, Inbox, LoaderCircle, UserRound } from 'lucide-react'
+import { ArrowLeft, ChevronRight, FileDiff, Inbox, LoaderCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
@@ -8,6 +8,7 @@ import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 import '@/shared/config/i18n'
 import { ChangeRequestStatusBadge } from '../components/ChangeRequestStatusBadge'
+import { ContributorIdentity } from '../components/detail/ContributorIdentity'
 import { formatDate, useChangeRequestInbox } from '../hooks/useChangeRequestInbox'
 
 export function ChangeRequestInboxPage() {
@@ -73,6 +74,8 @@ export function ChangeRequestInboxPage() {
       ) : (
         <div className="space-y-3">
           {items.map((req) => {
+            const deckTitle = req.deck_item?.title || 'Shared deck'
+            const noteCount = req.note_count ?? req.item_count
             const formattedDate = formatDate(req.submitted_at, locale)
             const dateText = formattedDate
               ? t('inbox.submitted_date', {
@@ -85,33 +88,31 @@ export function ChangeRequestInboxPage() {
               <Card key={req.id} className="transition-colors hover:border-primary/40">
                 <CardHeader className="pb-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 space-y-1">
+                    <div className="min-w-0 space-y-2">
+                      <ContributorIdentity actor={req.requester} caption={dateText} />
                       <div className="flex flex-wrap items-center gap-2">
-                        <CardTitle className="truncate text-base">{req.title}</CardTitle>
+                        <CardTitle className="truncate text-base">
+                          {req.title || t('detail.untitled', { deck: deckTitle, defaultValue: `Đóng góp cho “${deckTitle}”` })}
+                        </CardTitle>
                         <ChangeRequestStatusBadge status={req.status} />
                       </div>
-                      <CardDescription>
-                        {req.deck_item?.title || 'Shared deck'} · {dateText}
-                      </CardDescription>
+                      <CardDescription>{deckTitle}</CardDescription>
                     </div>
                     <Button asChild>
                       <Link to={`/flashcards/change-requests/${req.id}`}>
-                        {t('inbox.btn_view_diff', 'Xem diff')}
+                        {t('inbox.btn_view_diff', 'Xem thay đổi')}
                         <ChevronRight />
                       </Link>
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <Badge variant="secondary">
-                    <UserRound />
-                    {req.requester.username}
-                  </Badge>
                   <Badge variant="outline">
                     <FileDiff />
-                    {t('inbox.card_items', {
-                      count: req.item_count.toLocaleString(locale),
-                      defaultValue: `${req.item_count.toLocaleString(locale)} thay đổi`,
+                    {t('inbox.card_notes', {
+                      count: noteCount,
+                      formatted: noteCount.toLocaleString(locale),
+                      defaultValue: `${noteCount.toLocaleString(locale)} note thay đổi`,
                     })}
                   </Badge>
                   {req.unresolved_conflict_count ? (

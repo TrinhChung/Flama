@@ -33,6 +33,7 @@ from app.services.change_request.helpers import (
     _normalize_item_filters,
     _note_label,
     _primary_conflict,
+    change_note_id,
 )
 from models.deck_change_request import DeckChangeRequest
 from models.deck_change_request_conflict import DeckChangeRequestConflict
@@ -42,6 +43,18 @@ from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
 from models.field_def import FieldDef
 from models.note import Note
+
+
+def _actor_payload(user: Any, fallback_id: int | None) -> dict[str, Any]:
+    """Name the person, not the id: owners decide whom to trust by name."""
+    if user is None:
+        return {"id": fallback_id, "username": "Unknown", "display_name": None, "avatar_url": None}
+    return {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name or None,
+        "avatar_url": user.avatar_url or None,
+    }
 
 
 def _serialize_conflict(row: DeckChangeRequestConflict) -> dict[str, Any]:
@@ -83,6 +96,7 @@ def _serialize_request_item(item: DeckChangeRequestItem) -> dict[str, Any]:
         "metadata": metadata,
         "is_conflict": bool(item.is_conflict),
         "conflict": _serialize_conflict(conflict) if conflict else None,
+        "review_decision": metadata.get("review_decision"),
     }
 
 
@@ -95,6 +109,8 @@ def serialize_request_page(
     unresolved_conflict_count: int,
     change_counts: dict[str, int],
     page: dict[str, Any],
+    note_count: int | None = None,
+    note_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     serialized_items = [_serialize_request_item(item) for item in item_rows]
     page_conflicts = [
@@ -124,19 +140,10 @@ def serialize_request_page(
         "review_comment": request_obj.review_comment,
         "created_at": request_obj.created_at.isoformat() if request_obj.created_at else None,
         "updated_at": request_obj.updated_at.isoformat() if request_obj.updated_at else None,
-        "requester": {
-            "id": request_obj.requester.id if request_obj.requester else request_obj.requester_user_id,
-            "username": request_obj.requester.username if request_obj.requester else "Unknown",
-        },
-        "owner": {
-            "id": request_obj.owner.id if request_obj.owner else request_obj.owner_user_id,
-            "username": request_obj.owner.username if request_obj.owner else "Unknown",
-        },
+        "requester": _actor_payload(request_obj.requester, request_obj.requester_user_id),
+        "owner": _actor_payload(request_obj.owner, request_obj.owner_user_id),
         "reviewed_by": (
-            {
-                "id": request_obj.reviewed_by.id,
-                "username": request_obj.reviewed_by.username,
-            }
+            _actor_payload(request_obj.reviewed_by, request_obj.reviewed_by_user_id)
             if request_obj.reviewed_by
             else None
         ),
@@ -149,6 +156,8 @@ def serialize_request_page(
             else None
         ),
         "item_count": int(item_count),
+        # Null on later pages: the total is counted once, with the first page.
+        "note_count": int(note_count) if note_count is not None else None,
         "unresolved_conflict_count": int(unresolved_conflict_count),
         "change_counts": dict(change_counts),
         "can_submit": (
@@ -166,6 +175,8 @@ def serialize_request_page(
         ),
         "items": serialized_items,
         "conflicts": page_conflicts,
+        "field_defs": list((note_context or {}).get("field_defs") or []),
+        "notes": dict((note_context or {}).get("notes") or {}),
         "page": page,
     }
 
@@ -184,6 +195,7 @@ def serialize_request(request_obj: DeckChangeRequest, *, viewer_user_id: int) ->
         item_count=len(item_rows),
         unresolved_conflict_count=len(unresolved_conflicts),
         change_counts=dict(Counter(item.change_type for item in item_rows)),
+        note_count=len({note_id for item in item_rows if (note_id := change_note_id(item))}),
         page={
             "limit": len(item_rows),
             "has_more": False,
@@ -199,6 +211,7 @@ def serialize_request_summary(
     *,
     item_count: int | None = None,
     unresolved_conflict_count: int | None = None,
+    note_count: int | None = None,
 ) -> dict[str, Any]:
     if item_count is None:
         item_count = len(request_obj.items or [])
@@ -213,10 +226,7 @@ def serialize_request_summary(
         "status": request_obj.status,
         "base_release_id": request_obj.base_release_id,
         "revision": int(request_obj.revision or 0),
-        "requester": {
-            "id": request_obj.requester.id if request_obj.requester else request_obj.requester_user_id,
-            "username": request_obj.requester.username if request_obj.requester else "Unknown",
-        },
+        "requester": _actor_payload(request_obj.requester, request_obj.requester_user_id),
         "deck_item": (
             {
                 "id": request_obj.deck_item.id,
@@ -226,6 +236,11 @@ def serialize_request_summary(
             else None
         ),
         "item_count": int(item_count),
+        "note_count": (
+            int(note_count)
+            if note_count is not None
+            else len({note_id for item in (request_obj.items or []) if (note_id := change_note_id(item))})
+        ),
         "unresolved_conflict_count": int(unresolved_conflict_count),
         "submitted_at": request_obj.submitted_at.isoformat() if request_obj.submitted_at else None,
         "updated_at": request_obj.updated_at.isoformat() if request_obj.updated_at else None,

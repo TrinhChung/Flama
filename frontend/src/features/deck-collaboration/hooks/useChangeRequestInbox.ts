@@ -7,7 +7,8 @@ const PAGE_SIZE = 30
 
 export function formatDate(value?: string | null, locale = 'vi-VN'): string {
   if (!value) return ''
-  const date = new Date(value)
+  // The API sends naive UTC timestamps; without a zone JS would read them as local time.
+  const date = new Date(/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(value) ? value : `${value}Z`)
   if (Number.isNaN(date.getTime())) return ''
   return new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',

@@ -20,3 +20,7 @@ export {
 export {
   useUnsavedChangesGuard,
 } from './useUnsavedChangesGuard'
+
+export {
+  useNearViewport,
+} from './useNearViewport'

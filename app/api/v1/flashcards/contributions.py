@@ -23,6 +23,7 @@ def send_contribution(deck_item_id: str):
             deck_item_id=deck_item_id, requester_user_id=current_user.id,
             title=data.title, description=data.description,
             expected_overlay_fingerprint=data.expected_overlay_fingerprint,
+            selection=data.selection,
         )
         return jsonify(result)
     except RequestValidationError as exc:

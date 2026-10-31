@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { ArrowLeft, ShieldAlert } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -6,10 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import '@/shared/config/i18n'
-import { DiffWorkspace } from './DiffWorkspace'
 import { ChangeRequestDetailActions } from './detail/ChangeRequestDetailActions'
 import { ChangeRequestMetaCard } from './detail/ChangeRequestMetaCard'
 import { ContributionConflictCard } from './detail/ContributionConflictCard'
+import { NoteChangeList } from './notes/NoteChangeList'
 import { useChangeRequestDetail } from '../hooks/useChangeRequestDetail'
 
 export function ChangeRequestDetailView() {
@@ -20,11 +21,12 @@ export function ChangeRequestDetailView() {
     requestId,
     query,
     request,
-    summary,
-    allDiffItems,
+    grouped,
+    noteContexts,
+    fieldDefs,
+    reviewSelection,
     filters,
     setFilters,
-    pageIndex,
     reviewComment,
     setReviewComment,
     manualValues,
@@ -33,15 +35,40 @@ export function ChangeRequestDetailView() {
     isOwner,
     isRequester,
     isBusy,
-    loadedPagesLength,
     resolveMutation,
     submitMutation,
     approveMutation,
     rejectMutation,
-    onPreviousPage,
     onLoadMore,
     hasMore,
   } = useChangeRequestDetail()
+
+  // Conflicts name the note and field they are about, never internal ids.
+  const conflictSubjects = useMemo(() => {
+    const typesByName = new Map(fieldDefs.map((field) => [field.name, field.field_type]))
+    const subjects = new Map<string, { title: string; fieldName: string; fieldType: string }>()
+    for (const note of grouped.notes) {
+      const noteLabel = note.label || noteContexts[note.noteId]?.label || t('notes.untitled_note', 'Note chưa có tên')
+      for (const change of note.changes) {
+        if (!change.itemId) continue
+        subjects.set(change.itemId, {
+          title: `${noteLabel} · ${change.fieldName}`,
+          fieldName: change.fieldName,
+          fieldType: typesByName.get(change.fieldName) || 'text',
+        })
+      }
+    }
+    for (const change of grouped.schema) {
+      if (change.itemId) {
+        subjects.set(change.itemId, {
+          title: `${t('notes.schema_title', 'Cấu trúc trường')} · ${change.fieldName}`,
+          fieldName: change.fieldName,
+          fieldType: 'text',
+        })
+      }
+    }
+    return subjects
+  }, [fieldDefs, grouped, noteContexts, t])
 
   if (!requestId) {
     return (
@@ -55,7 +82,7 @@ export function ChangeRequestDetailView() {
   if (query.isPending) {
     return <PageLoading label={t('detail.loading', 'Đang tải change request…')} />
   }
-  if (query.error || !request || !summary) {
+  if (query.error || !request) {
     return (
       <Page>
         <PageError
@@ -68,11 +95,13 @@ export function ChangeRequestDetailView() {
     )
   }
 
+  const deckTitle = request.deck_item?.title || t('detail.btn_shared_deck', 'Shared deck')
+
   return (
     <Page size="wide">
       <PageHeader
-        title={request.title}
-        description={`${request.deck_item?.title || 'Shared deck'} · ${request.requester.username} → ${request.owner.username}`}
+        title={request.title || t('detail.untitled', { deck: deckTitle, defaultValue: `Đóng góp cho “${deckTitle}”` })}
+        description={deckTitle}
         actions={
           <>
             <Button variant="outline" asChild>
@@ -108,7 +137,9 @@ export function ChangeRequestDetailView() {
           isBusy={isBusy}
           reviewComment={reviewComment}
           onReviewCommentChange={setReviewComment}
-          onApprove={() => approveMutation.mutate()}
+          acceptsEverything={reviewSelection.acceptsEverything}
+          selectedCount={reviewSelection.controls.selectedCount}
+          onApprove={(scope) => approveMutation.mutate(scope)}
           onReject={() => rejectMutation.mutate()}
           onSubmit={() => submitMutation.mutate()}
           isApproving={approveMutation.isPending}
@@ -126,30 +157,40 @@ export function ChangeRequestDetailView() {
             <p className="text-sm text-muted-foreground">
               {t(
                 'detail.conflicts_desc',
-                'So sánh base, upstream và bản local rồi chọn kết quả cho từng field.',
+                'So sánh bản gốc lúc bạn sửa, bản của bạn và bản tác giả đang có, rồi chọn kết quả cho từng trường.',
               )}
             </p>
           </div>
-          {unresolvedConflicts.map((conflict) => (
-            <ContributionConflictCard
-              key={conflict.id}
-              conflict={conflict}
-              manualValue={manualValues[conflict.id] || ''}
-              disabled={resolveMutation.isPending}
-              onManualValueChange={(value) =>
-                setManualValues((current) => ({
-                  ...current,
-                  [conflict.id]: value,
-                }))
-              }
-              onResolve={(input) =>
-                resolveMutation.mutate({
-                  conflictId: conflict.id,
-                  input,
-                })
-              }
-            />
-          ))}
+          {unresolvedConflicts.map((conflict) => {
+            const subject = (conflict.item_id && conflictSubjects.get(conflict.item_id)) || {
+              title: t('notes.badge_conflict', 'Xung đột'),
+              fieldName: '',
+              fieldType: 'text',
+            }
+            return (
+              <ContributionConflictCard
+                key={conflict.id}
+                conflict={conflict}
+                title={subject.title}
+                fieldName={subject.fieldName}
+                fieldType={subject.fieldType}
+                manualValue={manualValues[conflict.id] || ''}
+                disabled={resolveMutation.isPending}
+                onManualValueChange={(value) =>
+                  setManualValues((current) => ({
+                    ...current,
+                    [conflict.id]: value,
+                  }))
+                }
+                onResolve={(input) =>
+                  resolveMutation.mutate({
+                    conflictId: conflict.id,
+                    input,
+                  })
+                }
+              />
+            )
+          })}
         </section>
       ) : null}
 
@@ -168,7 +209,7 @@ export function ChangeRequestDetailView() {
           <AlertDescription className="flex flex-wrap items-center gap-2">
             {t(
               'detail.conflict_remaining_desc',
-              'Chuyển sang bộ lọc xung đột để xử lý theo từng field.',
+              'Lọc các note có xung đột để xử lý từng trường.',
             )}
             <Button
               type="button"
@@ -187,28 +228,18 @@ export function ChangeRequestDetailView() {
         </Alert>
       ) : null}
 
-      <DiffWorkspace
-        summary={summary}
-        items={allDiffItems}
-        filters={filters}
-        onFiltersChange={(nextFilters) => {
-          setFilters(nextFilters)
-        }}
+      <NoteChangeList
+        grouped={grouped}
+        fieldDefs={fieldDefs}
+        noteContexts={noteContexts}
+        totalNotes={request.note_count ?? grouped.notes.length}
+        selection={request.can_review ? reviewSelection.controls : undefined}
+        query={filters.query}
+        onQueryChange={(nextQuery) => setFilters((current) => ({ ...current, query: nextQuery }))}
         isFetching={query.isFetching}
         isFetchingMore={query.isFetchingNextPage}
-        hasPrevious={pageIndex > 0}
-        onPrevious={onPreviousPage}
-        hasMore={pageIndex < loadedPagesLength - 1 || hasMore}
+        hasMore={hasMore}
         onLoadMore={onLoadMore}
-        pageLabel={t('diff.page_label', {
-          page: pageIndex + 1,
-          defaultValue: `Trang ${pageIndex + 1}`,
-        })}
-        emptyTitle={t('diff.empty_filter_title', 'Không có thay đổi khớp bộ lọc')}
-        emptyDescription={t(
-          'diff.empty_filter_desc',
-          'Thử chọn loại thay đổi khác hoặc xóa từ khóa tìm kiếm.'
-        )}
       />
     </Page>
   )

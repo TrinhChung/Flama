@@ -78,7 +78,7 @@ def list_incoming_requests_for_owner(
     cursor_updated_at=None,
     cursor_id: str | None = None,
     limit: int = 30,
-) -> tuple[list[tuple[DeckChangeRequest, int, int]], bool]:
+) -> tuple[list[tuple[DeckChangeRequest, int, int, int]], bool]:
     if not statuses:
         return [], False
 
@@ -138,14 +138,44 @@ def list_incoming_requests_for_owner(
             .all()
         )
     }
+    note_count_by_request = {
+        str(request_id): int(row_count or 0)
+        for request_id, row_count in (
+            db.session.query(
+                DeckChangeRequestItem.change_request_id,
+                func.count(func.distinct(DeckChangeRequestItem.source_ref_id)),
+            )
+            .filter(
+                DeckChangeRequestItem.change_request_id.in_(request_ids or [""]),
+                DeckChangeRequestItem.change_type.in_(("note_field_set", "note_field_remove")),
+            )
+            .group_by(DeckChangeRequestItem.change_request_id)
+            .all()
+        )
+    }
     return [
         (
             request_obj,
             item_count_by_request.get(str(request_obj.id), 0),
             unresolved_count_by_request.get(str(request_obj.id), 0),
+            note_count_by_request.get(str(request_obj.id), 0),
         )
         for request_obj in page_rows
     ], len(rows) > limit
+
+
+def get_request_note_count(request_id: str) -> int:
+    """Count notes with field changes; note items reference the note in source_ref_id."""
+
+    return int(
+        db.session.query(func.count(func.distinct(DeckChangeRequestItem.source_ref_id)))
+        .filter(
+            DeckChangeRequestItem.change_request_id == request_id,
+            DeckChangeRequestItem.change_type.in_(("note_field_set", "note_field_remove")),
+        )
+        .scalar()
+        or 0
+    )
 
 
 def get_request_counts(request_id: str) -> tuple[int, int, dict[str, int]]:
@@ -188,8 +218,12 @@ def list_request_items_page(
     change_types: set[str] | None = None,
     query_text: str | None = None,
     conflicts_only: bool = False,
-) -> tuple[list[DeckChangeRequestItem], bool, int]:
-    """Read a stable keyset page of atomic diff items."""
+) -> tuple[list[DeckChangeRequestItem], DeckChangeRequestItem | None, int]:
+    """Read a stable keyset page of atomic diff items.
+
+    Also returns the first row after the page (``None`` on the last page) so
+    the caller can end the page on a whole note.
+    """
 
     query = DeckChangeRequestItem.query.filter(
         DeckChangeRequestItem.change_request_id == request_id
@@ -228,7 +262,7 @@ def list_request_items_page(
         .limit(limit + 1)
         .all()
     )
-    return rows[:limit], len(rows) > limit, filtered_count
+    return rows[:limit], (rows[limit] if len(rows) > limit else None), filtered_count
 
 
 def get_request_conflict(change_request_id: str, conflict_id: str) -> DeckChangeRequestConflict | None:

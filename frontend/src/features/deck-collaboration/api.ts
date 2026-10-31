@@ -1,11 +1,9 @@
 import { apiJson, apiRequest } from '@/shared/api/client'
 export { getAutoPublishStatus, updateAutoPublishSetting } from '@/entities/deck-publication'
 import type {
-  AppliedInstalledUpdate,
-  ApplyInstalledUpdateInput,
   ChangeRequestInbox,
-  ChangeRequestItem,
   ConflictResolutionInput,
+  ContributionSendSelection,
   CreateDeckReleaseInput,
   CursorDiffPage,
   DeckChangeRequest,
@@ -15,14 +13,9 @@ import type {
   DiffFilters,
   DiffItem,
   DiffSummary,
-  InstalledDeckSettings,
-  InstalledDeckUpdatePage,
-  InstalledDeckUpdates,
-  InstalledUpdateConflictPage,
-  LocalChangeItem,
   LocalChangesPreview,
-  PreparedInstalledUpdate,
   ReleasePreviewPage,
+  ReviewSelection,
 } from './types'
 
 type ReleaseStatus = DeckRelease['status']
@@ -94,83 +87,6 @@ type RawReleaseChanges = {
   summary: RawDiffSummary
   items: RawDiffItem[]
   next_cursor: string | null
-}
-
-type RawInstalledDeckUpdates = {
-  content_model?: 'published_base'
-  install_id: string | number
-  deck_item_id?: string | number | null
-  version_mode?: string | null
-  overlay_revision?: string | number | null
-  auto_update_enabled?: boolean
-  sync_mode?: string | null
-  last_auto_updated_at?: string | null
-  last_sync_status?: string | null
-  pending_conflict_count?: number
-  active_rebase_id?: string | number | null
-  applied_release: RawRelease | null
-  available_release: RawRelease | null
-  update_available: boolean
-  unread_update: boolean
-  change_count?: number
-}
-
-type RawInstalledDeckUpdateDiff = {
-  install_id: string | number
-  from_release: RawRelease | null
-  to_release: RawRelease
-  items: RawDiffItem[]
-  summary?: RawDiffSummary
-  page: {
-    limit: number
-    has_more: boolean
-    next_cursor: string | null
-  }
-}
-
-type RawUpdateConflict = {
-  id: string | number
-  change_id?: string | number | null
-  change_key?: string | null
-  note_label?: string | null
-  field_name?: string | null
-  property_key?: string | null
-  base_value?: unknown
-  local_value?: unknown
-  upstream_value?: unknown
-  resolution_mode?: 'keep_mine' | 'keep_upstream' | 'manual' | null
-  resolved_value?: unknown
-  resolved_at?: string | null
-}
-
-type RawRebaseConflictPage = {
-  limit: number
-  has_more: boolean
-  next_after_id: string | number | null
-}
-
-type RawPreparedInstalledUpdate = {
-  id: string | number
-  status: string
-  to_release?: RawRelease | null
-  expected_overlay_revision?: string | number | null
-  conflict_count?: number
-  resolved_conflict_count?: number
-  conflicts?: RawUpdateConflict[]
-  conflict_page?: RawRebaseConflictPage
-}
-
-type RawPreparedInstalledUpdateEnvelope = {
-  rebase: RawPreparedInstalledUpdate
-}
-
-type RawInstalledUpdateConflictPage = {
-  rebase_id: string | number
-  status: string
-  conflict_count: number
-  resolved_conflict_count: number
-  items: RawUpdateConflict[]
-  page: RawRebaseConflictPage
 }
 
 type DiffQuery = {
@@ -314,339 +230,6 @@ export function getReleaseChanges(
   } satisfies CursorDiffPage))
 }
 
-export function getInstalledDeckUpdates(
-  installId: string,
-  signal?: AbortSignal,
-) {
-  return apiRequest<RawInstalledDeckUpdates>(
-    `/api/marketplace/installations/${encodeSegment(installId)}/updates`,
-    { signal },
-  ).then(normalizeInstalledDeckUpdates)
-}
-
-function normalizeUpdateConflict(conflict: RawUpdateConflict) {
-  return {
-    id: String(conflict.id),
-    change_id: conflict.change_id === null || conflict.change_id === undefined
-      ? conflict.change_key
-      : String(conflict.change_id),
-    note_label: conflict.note_label,
-    field_name: conflict.field_name || conflict.property_key,
-    base_value: conflict.base_value,
-    local_value: conflict.local_value,
-    upstream_value: conflict.upstream_value,
-    resolution_mode: conflict.resolution_mode,
-    resolved_value: conflict.resolved_value,
-    resolved_at: conflict.resolved_at,
-  }
-}
-
-function normalizeConflictPage(page: RawRebaseConflictPage) {
-  return {
-    limit: page.limit,
-    has_more: page.has_more,
-    next_after_id: page.next_after_id === null ? null : String(page.next_after_id),
-  }
-}
-
-function normalizePreparedInstalledUpdate(
-  payload: RawPreparedInstalledUpdate,
-): PreparedInstalledUpdate {
-  const conflicts = (payload.conflicts || []).map(normalizeUpdateConflict)
-  const conflictCount = payload.conflict_count ?? conflicts.length
-  const resolvedConflictCount = payload.resolved_conflict_count
-    ?? conflicts.filter((conflict) => Boolean(conflict.resolved_at)).length
-  return {
-    rebase_id: String(payload.id),
-    status: payload.status === 'applied'
-      ? 'applied'
-      : conflictCount > resolvedConflictCount
-        ? 'conflicts'
-        : 'ready',
-    conflict_count: conflictCount,
-    resolved_conflict_count: resolvedConflictCount,
-    conflicts,
-    conflict_page: payload.conflict_page
-      ? normalizeConflictPage(payload.conflict_page)
-      : undefined,
-    expected_overlay_revision: payload.expected_overlay_revision,
-  }
-}
-
-function normalizeInstalledDeckUpdates(payload: RawInstalledDeckUpdates) {
-  const appliedRelease = payload.applied_release
-    ? normalizeRelease(payload.applied_release)
-    : null
-  const availableRelease = payload.available_release
-    ? normalizeRelease(payload.available_release)
-    : null
-  return {
-    content_model: payload.content_model,
-    installation: {
-      id: String(payload.install_id),
-      deck_item_id: payload.deck_item_id === null || payload.deck_item_id === undefined
-        ? null
-        : String(payload.deck_item_id),
-      version_mode: payload.version_mode,
-      auto_update_enabled: payload.auto_update_enabled,
-      sync_mode: payload.sync_mode,
-      last_auto_updated_at: payload.last_auto_updated_at,
-      pending_conflict_count: payload.pending_conflict_count,
-      active_rebase_id: payload.active_rebase_id ? String(payload.active_rebase_id) : null,
-      applied_release: appliedRelease,
-      available_release: availableRelease,
-      overlay_revision: payload.overlay_revision,
-    },
-    items: availableRelease ? [availableRelease] : [],
-    update_available: payload.update_available,
-    unread_update: payload.unread_update,
-    change_count: payload.change_count || availableRelease?.change_count || 0,
-    auto_update_enabled: payload.auto_update_enabled,
-    sync_mode: payload.sync_mode,
-    last_auto_updated_at: payload.last_auto_updated_at,
-    pending_conflict_count: payload.pending_conflict_count,
-    active_rebase_id: payload.active_rebase_id ? String(payload.active_rebase_id) : null,
-  } satisfies InstalledDeckUpdates
-}
-
-export function markInstalledDeckUpdateSeen(
-  installId: string,
-  releaseId: string,
-) {
-  return apiJson<RawInstalledDeckUpdates>(
-    `/api/marketplace/installations/${encodeSegment(installId)}/updates/${encodeSegment(releaseId)}/mark-seen`,
-    'POST',
-    {},
-  ).then(normalizeInstalledDeckUpdates)
-}
-
-export function getInstalledDeckUpdate(
-  installId: string,
-  releaseId: string,
-  query: DiffQuery,
-  signal?: AbortSignal,
-) {
-  const path = withDiffQuery(
-    `/api/marketplace/installations/${encodeSegment(installId)}/updates/${encodeSegment(releaseId)}/diff`,
-    query,
-  )
-  return apiRequest<RawInstalledDeckUpdateDiff>(path, { signal }).then((payload) => {
-    const targetRelease = normalizeRelease(payload.to_release)
-    return {
-      installation: {
-        id: String(payload.install_id),
-        applied_release: payload.from_release
-          ? normalizeRelease(payload.from_release)
-          : null,
-        available_release: targetRelease,
-      },
-      from_release: payload.from_release
-        ? normalizeRelease(payload.from_release)
-        : null,
-      target_release: targetRelease,
-      changelog: targetRelease.changelog,
-      already_applied: payload.from_release?.id === payload.to_release.id,
-      snapshot_revision: payload.to_release.id,
-      summary: normalizeSummary(payload.summary || {
-        change_count: targetRelease.change_count,
-        entity_count: targetRelease.entity_count,
-        added_count: targetRelease.added_count,
-        modified_count: targetRelease.modified_count,
-        removed_count: targetRelease.removed_count,
-      }),
-      items: payload.items.map(normalizeItem),
-      next_cursor: payload.page.has_more ? payload.page.next_cursor : null,
-    } satisfies InstalledDeckUpdatePage
-  })
-}
-
-export function prepareInstalledDeckUpdate(
-  installId: string,
-  releaseId: string,
-  body: {
-    expected_applied_release_id?: string | null
-    expected_overlay_revision?: string | number | null
-    idempotency_key: string
-  },
-) {
-  return apiJson<RawPreparedInstalledUpdateEnvelope>(
-    `/api/marketplace/installations/${encodeSegment(installId)}/updates/${encodeSegment(releaseId)}/prepare`,
-    'POST',
-    body,
-  ).then(({ rebase }) => normalizePreparedInstalledUpdate(rebase))
-}
-
-export function getInstalledUpdateConflicts(
-  rebaseId: string,
-  afterId?: string | null,
-  limit = 100,
-  signal?: AbortSignal,
-) {
-  const search = new URLSearchParams()
-  if (afterId) search.set('after_id', afterId)
-  search.set('limit', String(limit))
-  return apiRequest<RawInstalledUpdateConflictPage>(
-    `/api/marketplace/rebases/${encodeSegment(rebaseId)}/conflicts?${search.toString()}`,
-    { signal },
-  ).then((payload) => ({
-    rebase_id: String(payload.rebase_id),
-    status: payload.status === 'applied'
-      ? 'applied'
-      : payload.conflict_count > payload.resolved_conflict_count
-        ? 'conflicts'
-        : 'ready',
-    conflict_count: payload.conflict_count,
-    resolved_conflict_count: payload.resolved_conflict_count,
-    items: payload.items.map(normalizeUpdateConflict),
-    page: normalizeConflictPage(payload.page),
-  } satisfies InstalledUpdateConflictPage))
-}
-
-export function applyInstalledDeckUpdate(
-  installId: string,
-  releaseId: string,
-  body: ApplyInstalledUpdateInput,
-) {
-  return apiJson<RawPreparedInstalledUpdateEnvelope>(
-    `/api/marketplace/installations/${encodeSegment(installId)}/updates/${encodeSegment(releaseId)}/apply`,
-    'POST',
-    body,
-  ).then(({ rebase }) => ({
-    status: 'applied' as const,
-    applied_release: rebase.to_release
-      ? normalizeRelease(rebase.to_release)
-      : { id: releaseId, version_label: releaseId },
-  } satisfies AppliedInstalledUpdate))
-}
-
-export function resolveInstalledUpdateConflict(
-  rebaseId: string,
-  conflictId: string,
-  resolutionMode: 'keep_mine' | 'keep_upstream',
-) {
-  return apiJson<RawPreparedInstalledUpdateEnvelope>(
-    `/api/marketplace/rebases/${encodeSegment(rebaseId)}/conflicts/${encodeSegment(conflictId)}/resolve`,
-    'POST',
-    { resolution_mode: resolutionMode },
-  ).then(({ rebase }) => normalizePreparedInstalledUpdate(rebase))
-}
-
-export function applyPreparedInstalledUpdate(rebaseId: string) {
-  return apiJson<RawPreparedInstalledUpdateEnvelope>(
-    `/api/marketplace/rebases/${encodeSegment(rebaseId)}/apply`,
-    'POST',
-    {},
-  ).then(({ rebase }) => {
-    if (!rebase.to_release) {
-      throw new Error('Máy chủ không trả về release vừa áp dụng.')
-    }
-    return {
-      status: 'applied' as const,
-      applied_release: normalizeRelease(rebase.to_release),
-    } satisfies AppliedInstalledUpdate
-  })
-}
-
-export function getInstalledDeckSettings(
-  installId: string,
-  signal?: AbortSignal,
-): Promise<InstalledDeckSettings> {
-  return apiRequest<InstalledDeckSettings>(
-    `/api/marketplace/installations/${encodeSegment(installId)}/settings`,
-    { signal },
-  )
-}
-
-export function updateInstalledDeckSettings(
-  installId: string,
-  autoUpdateEnabled: boolean,
-): Promise<InstalledDeckUpdates> {
-  return apiJson<RawInstalledDeckUpdates>(
-    `/api/marketplace/installations/${encodeSegment(installId)}/settings`,
-    'POST',
-    { auto_update_enabled: autoUpdateEnabled },
-  ).then(normalizeInstalledDeckUpdates)
-}
-
-export function detachInstalledDeck(
-  installId: string,
-): Promise<{ install_id: string; version_mode: string; status: string }> {
-  return apiJson<{ install_id: string; version_mode: string; status: string }>(
-    `/api/marketplace/installations/${encodeSegment(installId)}/detach`,
-    'POST',
-    {},
-  )
-}
-
-export function resolveAllInstalledUpdateConflicts(
-  rebaseId: string,
-  resolutionMode: 'keep_mine' | 'keep_upstream',
-) {
-  return apiJson<RawPreparedInstalledUpdateEnvelope>(
-    `/api/marketplace/rebases/${encodeSegment(rebaseId)}/conflicts/resolve-all`,
-    'POST',
-    { resolution_mode: resolutionMode },
-  ).then(({ rebase }) => normalizePreparedInstalledUpdate(rebase))
-}
-
-function contributionChangeType(changeType: string) {
-  if (changeType === 'field_def_add') return 'added' as const
-  if (changeType === 'note_field_remove' || changeType === 'field_def_disable') {
-    return 'removed' as const
-  }
-  return 'modified' as const
-}
-
-function contributionMetadata(item: ChangeRequestItem | LocalChangeItem) {
-  return 'metadata' in item ? item.metadata : (item.metadata_json || {})
-}
-
-function metadataText(metadata: Record<string, unknown>, key: string) {
-  const value = metadata[key]
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-export function contributionItemToDiffItem(
-  item: ChangeRequestItem | LocalChangeItem,
-  index = 0,
-): DiffItem {
-  const metadata = contributionMetadata(item)
-  const conflict = 'conflict' in item ? item.conflict : null
-  const unresolvedConflict = Boolean(
-    'is_conflict' in item
-    && item.is_conflict
-    && (!conflict || !conflict.resolved_at),
-  )
-  const sourceRef = String(item.source_ref_id || item.local_ref_id || '')
-  const entityKind = item.change_type.startsWith('note_field')
-    ? 'note_field'
-    : 'field_def'
-  const fieldName = metadataText(metadata, 'field_name') || item.path_key || item.path_label
-  const noteLabel = metadataText(metadata, 'source_note_label')
-  const itemId = 'id' in item && item.id
-    ? item.id
-    : `${item.change_type}:${sourceRef}:${item.path_key || index}`
-
-  return {
-    id: String(itemId),
-    change_type: unresolvedConflict
-      ? 'conflict'
-      : contributionChangeType(item.change_type),
-    entity_kind: entityKind,
-    entity_id: sourceRef || String(itemId),
-    operation: item.change_type,
-    note_id: entityKind === 'note_field' ? sourceRef : null,
-    note_label: noteLabel || item.path_label,
-    field_def_id: metadataText(metadata, 'source_field_def_id'),
-    field_name: fieldName,
-    before_value: item.before_value,
-    after_value: 'effective_after_value' in item
-      ? item.effective_after_value
-      : item.after_value,
-    conflict_id: conflict?.id || null,
-  }
-}
-
 export function summarizeDiffItems(items: DiffItem[]): DiffSummary {
   const entities = new Set<string>()
   const notes = new Set<string>()
@@ -677,36 +260,6 @@ export function summarizeDiffItems(items: DiffItem[]): DiffSummary {
     modified,
     removed,
     conflicts,
-  }
-}
-
-export function summarizeChangeRequest(request: DeckChangeRequest): DiffSummary {
-  return summarizeContributionCounts(
-    request.item_count,
-    request.unresolved_conflict_count,
-    request.change_counts,
-  )
-}
-
-export function summarizeLocalChanges(preview: LocalChangesPreview): DiffSummary {
-  return summarizeContributionCounts(preview.item_count, 0, preview.change_counts)
-}
-
-function summarizeContributionCounts(
-  itemCount: number,
-  unresolvedConflictCount: number,
-  changeCounts: Record<string, number>,
-): DiffSummary {
-  const count = (changeType: string) => Number(changeCounts[changeType] || 0)
-  return {
-    total: itemCount,
-    entities: itemCount,
-    added: count('field_def_add'),
-    modified: count('note_field_set')
-      + count('field_def_update')
-      + count('field_order_update'),
-    removed: count('note_field_remove') + count('field_def_disable'),
-    conflicts: unresolvedConflictCount,
   }
 }
 
@@ -777,7 +330,13 @@ export function buildDeckChangeRequestDraft(
 
 export function sendDeckContribution(
   deckItemId: string,
-  body: { title: string; description: string; expected_overlay_fingerprint: string },
+  body: {
+    title: string
+    description: string
+    expected_overlay_fingerprint: string
+    /** Omit to keep a matching draft's own choice of notes. */
+    selection?: ContributionSendSelection
+  },
 ) {
   return apiJson<DeckChangeRequest>(
     `/api/shared/decks/${encodeSegment(deckItemId)}/change-requests/send`,
@@ -846,11 +405,15 @@ export function getDeckChangeRequest(
   )
 }
 
-export function approveDeckChangeRequest(requestId: string, reviewComment: string) {
+export function approveDeckChangeRequest(
+  requestId: string,
+  reviewComment: string,
+  selection?: ReviewSelection,
+) {
   return apiJson<DeckChangeRequest>(
     `/api/change-requests/${encodeSegment(requestId)}/approve`,
     'POST',
-    { review_comment: reviewComment },
+    selection ? { review_comment: reviewComment, selection } : { review_comment: reviewComment },
   )
 }
 

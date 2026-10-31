@@ -226,9 +226,9 @@ const ReleaseBuilderPage = lazy(() =>
     default: module.ReleaseBuilderPage,
   })),
 )
-const InstalledDeckUpdatePage = lazy(() =>
-  import('@/pages/installed-deck-update').then((module) => ({
-    default: module.InstalledDeckUpdatePage,
+const InstalledDeckComparisonPage = lazy(() =>
+  import('@/pages/installed-deck-comparison').then((module) => ({
+    default: module.InstalledDeckComparisonPage,
   })),
 )
 const DeckChangeRequestPage = lazy(() =>
@@ -486,11 +486,11 @@ const router = createBrowserRouter([
           },
           {
             path: 'installed-decks/:installId/comparison',
-            element: deferred(<InstalledDeckUpdatePage />),
+            element: deferred(<InstalledDeckComparisonPage />),
           },
           {
             path: 'installed-decks/:installId/updates/:releaseId',
-            element: deferred(<InstalledDeckUpdatePage />),
+            element: deferred(<InstalledDeckComparisonPage />),
           },
           {
             path: 'flashcards/installed-decks',

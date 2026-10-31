@@ -81,6 +81,13 @@ DEFAULT_ITEM_PAGE_LIMIT = 100
 MAX_ITEM_PAGE_LIMIT = 250
 
 MISSING_MARKER = {"__missing__": True}
+NOTE_CHANGE_TYPES = {CHANGE_TYPE_NOTE_FIELD_SET, CHANGE_TYPE_NOTE_FIELD_REMOVE}
+# The owner's per-item verdict lives in item metadata, so partial approval
+# needs no extra columns.
+REVIEW_DECISION_ACCEPTED = "accepted"
+REVIEW_DECISION_DECLINED = "declined"
+SELECTION_MODE_ALL_EXCEPT = "all_except"
+SELECTION_MODE_ONLY = "only"
 
 
 class ChangeRequestError(Exception):
@@ -229,6 +236,20 @@ def _load_notes_by_ids(note_ids: set[str], *, chunk_size: int = 500) -> dict[str
     return rows_by_id
 
 
+def _note_deck_ids(note_ids: set[str], *, chunk_size: int = 500) -> dict[str, int | None]:
+    """Deck of each Note that still exists, with the same visibility rules but no content."""
+    normalized = sorted({str(note_id) for note_id in note_ids if note_id})
+    found: dict[str, int | None] = {}
+    for offset in range(0, len(normalized), chunk_size):
+        rows = (
+            db.session.query(Note.id, Note.deck_id)
+            .filter(Note.id.in_(normalized[offset:offset + chunk_size]))
+            .all()
+        )
+        found.update({str(note_id): deck_id for note_id, deck_id in rows})
+    return found
+
+
 def _load_field_defs_by_ids(
     field_ids: set[str],
     *,
@@ -339,16 +360,21 @@ def _added_field_snapshot(row: DeckCloneAddedFieldDef) -> dict[str, Any]:
 def _note_label(note: Note | None) -> str:
     if note is None:
         return "Unknown note"
-    values = dict(note.field_values or {})
-    for key_name in ("Word", "word", "Front", "front", "Expression", "expression"):
+    return _values_label(dict(note.field_values or {}), note.id)
+
+
+def _values_label(values: dict[str, Any], note_id: Any, text_field_order: list[str] | None = None) -> str:
+    """``text_field_order`` (note-type order, media left out) makes the
+    fallback label stable instead of following dict order."""
+    for key_name in ("Word", "word", "Front", "front", "Expression", "expression", *(text_field_order or [])):
         candidate = field_value_text(values.get(key_name)).strip()
         if candidate:
-            return candidate
+            return candidate[:80]
     for raw_value in values.values():
         candidate = field_value_text(raw_value).strip()
         if candidate:
             return candidate[:80]
-    return f"Note {note.id}"
+    return f"Note {note_id}"
 
 
 def _apply_schema_only_values(
@@ -460,8 +486,89 @@ def _item_resolution_mode(item: DeckChangeRequestItem) -> str:
     return str(conflict.resolution_mode or "").strip().lower() if conflict else ""
 
 
+def _item_review_decision(item: DeckChangeRequestItem) -> str | None:
+    return dict(item.metadata_json or {}).get("review_decision")
+
+
 def _item_is_dropped_from_request(item: DeckChangeRequestItem) -> bool:
-    return _item_resolution_mode(item) == "keep_upstream"
+    return (
+        _item_resolution_mode(item) == "keep_upstream"
+        or _item_review_decision(item) == REVIEW_DECISION_DECLINED
+    )
+
+
+def _change_attr(change: Any, name: str) -> Any:
+    """Read a local change payload (dict) and a stored item row alike."""
+    return change.get(name) if isinstance(change, dict) else getattr(change, name, None)
+
+
+def change_note_id(change: Any) -> str | None:
+    if _change_attr(change, "change_type") not in NOTE_CHANGE_TYPES:
+        return None
+    metadata = dict(_change_attr(change, "metadata_json") or {})
+    return str(metadata.get("source_note_id") or _change_attr(change, "source_ref_id") or "").strip() or None
+
+
+def change_signature(change: Any) -> tuple[str, str, str]:
+    return (
+        str(_change_attr(change, "change_type") or ""),
+        str(_change_attr(change, "local_ref_id") or ""),
+        str(_change_attr(change, "path_key") or ""),
+    )
+
+
+def end_page_on_note_boundary(page: list[Any], next_change: Any) -> list[Any]:
+    """Never split one note's changes across pages; reviewers judge whole notes."""
+    note_id = change_note_id(next_change)
+    if note_id is None:
+        return page
+    trimmed = list(page)
+    while trimmed and change_note_id(trimmed[-1]) == note_id:
+        trimmed.pop()
+    # A single note larger than the page stays split rather than never loading.
+    return trimmed or page
+
+
+def _selection_includes(selection: Any, key: str | None) -> bool:
+    return (key in selection.ids) == (selection.mode == SELECTION_MODE_ONLY)
+
+
+def with_required_field_additions(chosen: list[Any], candidates: list[Any]) -> list[Any]:
+    """Keep candidate order; a learner-added field travels with its note values."""
+    needed = {
+        str(dict(_change_attr(change, "metadata_json") or {}).get("local_added_field_def_id") or "")
+        for change in chosen
+        if change_note_id(change)
+    } - {""}
+    chosen_ids = {id(change) for change in chosen}
+    return [
+        change
+        for change in candidates
+        if id(change) in chosen_ids
+        or (
+            _change_attr(change, "change_type") == CHANGE_TYPE_FIELD_DEF_ADD
+            and str(_change_attr(change, "local_ref_id") or "") in needed
+        )
+    ]
+
+
+def select_local_changes(payloads: list[dict[str, Any]], selection: Any) -> list[dict[str, Any]]:
+    """Pick whole notes by note id; field-structure changes travel as one group."""
+    chosen = [
+        payload
+        for payload in payloads
+        if (
+            _selection_includes(selection, note_id)
+            if (note_id := change_note_id(payload))
+            else selection.include_schema_changes
+        )
+    ]
+    return with_required_field_additions(chosen, payloads)
+
+
+def select_request_items(items: list[DeckChangeRequestItem], selection: Any) -> list[DeckChangeRequestItem]:
+    chosen = [item for item in items if _selection_includes(selection, str(item.id))]
+    return with_required_field_additions(chosen, items)
 
 
 def _effective_after_value(item: DeckChangeRequestItem) -> Any:
@@ -497,10 +604,9 @@ def _make_request_title(
     requester_id: int,
     requested_title: str,
 ) -> str:
-    if requested_title:
-        return requested_title
-    deck_title = str(deck_item.title or "").strip() or "Shared deck"
-    return f"Change Request for {deck_title} ({requester_id})"
+    # An untitled contribution is labelled by the client in the reader's
+    # language, next to the requester's name; never store a raw user id here.
+    return requested_title or ""
 
 
 def _get_request_install(request_obj: DeckChangeRequest) -> DeckInstall | None:

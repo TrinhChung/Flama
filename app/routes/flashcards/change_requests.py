@@ -240,6 +240,7 @@ def approve_change_request(request_id: str):
         review_input = validate_change_request_review_request(
             request.get_json(silent=True),
             require_reason=False,
+            allow_selection=True,
         )
         request_obj = deck_change_request_service.get_request_detail_for_user(
             request_id=request_id,
@@ -249,6 +250,7 @@ def approve_change_request(request_id: str):
             request_obj,
             actor_user_id=current_user.id,
             review_comment=review_input.review_comment,
+            selection=review_input.selection,
         )
         db.session.commit()
         return jsonify(_change_request_response_payload(request_obj.id))

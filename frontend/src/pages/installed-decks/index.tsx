@@ -78,7 +78,6 @@ export function InstalledDecksPage() {
 
       {/* Unified Search & Filter Control Center */}
       <InstalledDecksFilterBar
-        showVersionUpdates={!items.some((item) => item.content_model === 'published_base')}
         queryText={queryText}
         setQueryText={setQueryText}
         searchInputRef={searchInputRef}

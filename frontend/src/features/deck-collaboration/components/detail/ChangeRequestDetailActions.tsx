@@ -1,4 +1,4 @@
-import { Check, GitMerge, LoaderCircle, Send, X } from 'lucide-react'
+import { Check, CheckCheck, ListChecks, LoaderCircle, Send, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,10 @@ type ChangeRequestDetailActionsProps = {
   isBusy: boolean
   reviewComment: string
   onReviewCommentChange: (value: string) => void
-  onApprove: () => void
+  /** Selected changes out of all, when the owner unticked some. */
+  acceptsEverything: boolean
+  selectedCount: number
+  onApprove: (scope: 'selected' | 'all') => void
   onReject: () => void
   onSubmit: () => void
   isApproving: boolean
@@ -30,6 +33,8 @@ export function ChangeRequestDetailActions({
   isBusy,
   reviewComment,
   onReviewCommentChange,
+  acceptsEverything,
+  selectedCount,
   onApprove,
   onReject,
   onSubmit,
@@ -60,16 +65,35 @@ export function ChangeRequestDetailActions({
                 onChange={(event) => onReviewCommentChange(event.target.value)}
                 placeholder={t(
                   'detail.review_comment_placeholder',
-                  'Lý do merge hoặc từ chối…',
+                  'Lý do nhận hoặc từ chối…',
                 )}
                 rows={3}
                 maxLength={5000}
               />
             </div>
-            <Button className="w-full" disabled={isBusy} onClick={onApprove}>
-              {isApproving ? <LoaderCircle className="animate-spin" /> : <GitMerge />}
-              {t('detail.btn_merge', 'Merge vào working deck')}
+            {acceptsEverything ? null : (
+              <Button className="w-full" disabled={isBusy || selectedCount === 0} onClick={() => onApprove('selected')}>
+                {isApproving ? <LoaderCircle className="animate-spin" /> : <ListChecks />}
+                {t('detail.btn_accept_selected', {
+                  count: selectedCount,
+                  defaultValue: `Nhận ${selectedCount} thay đổi đã chọn`,
+                })}
+              </Button>
+            )}
+            <Button
+              className="w-full"
+              variant={acceptsEverything ? 'default' : 'outline'}
+              disabled={isBusy}
+              onClick={() => onApprove('all')}
+            >
+              {isApproving && acceptsEverything ? <LoaderCircle className="animate-spin" /> : <CheckCheck />}
+              {t('detail.btn_accept_all', 'Nhận tất cả')}
             </Button>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {selectedCount === 0 && !acceptsEverything
+                ? t('detail.nothing_selected', 'Hãy chọn ít nhất một thay đổi để nhận.')
+                : t('detail.accept_hint', 'Bỏ chọn note hoặc trường bạn không muốn nhận. Phần không nhận vẫn nằm trong bản sửa riêng của người đóng góp.')}
+            </p>
             <Button
               className="w-full"
               variant="destructive"
@@ -77,7 +101,7 @@ export function ChangeRequestDetailActions({
               onClick={onReject}
             >
               {isRejecting ? <LoaderCircle className="animate-spin" /> : <X />}
-              {t('detail.btn_reject', 'Từ chối request')}
+              {t('detail.btn_reject', 'Từ chối đóng góp')}
             </Button>
           </>
         ) : null}

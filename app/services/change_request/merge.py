@@ -18,6 +18,8 @@ from app.services.change_request.helpers import (
     REQUEST_STATUS_NEEDS_SYNC,
     REQUEST_STATUS_PENDING_REVIEW,
     REQUEST_STATUS_REJECTED,
+    REVIEW_DECISION_ACCEPTED,
+    REVIEW_DECISION_DECLINED,
     ChangeRequestError,
     _audit,
     _effective_after_value,
@@ -31,6 +33,7 @@ from app.services.change_request.helpers import (
     _order_token,
     _request_schema_context,
     _utcnow,
+    select_request_items,
 )
 from app.services.change_request.lifecycle import sync_request
 from app.validators.flashcard_input import clean_array_fields
@@ -231,13 +234,39 @@ def approve_and_merge_request(
     *,
     actor_user_id: int,
     review_comment: str,
+    selection: Any = None,
 ) -> DeckChangeRequest:
+    """Merge the owner's chosen items; ``selection=None`` accepts every item.
+
+    Each item records its verdict, and declined items are skipped exactly like
+    items the requester gave up, so they can neither conflict nor merge.
+    """
     _ensure_owner_access(request_obj, user_id=actor_user_id)
     if request_obj.status != REQUEST_STATUS_PENDING_REVIEW:
         raise ChangeRequestError(
             "Only pending review requests can be approved.",
             status=409,
         )
+
+    request_items = list(request_obj.items or [])
+    accepted_ids = {
+        str(item.id)
+        for item in (request_items if selection is None else select_request_items(request_items, selection))
+    }
+    if not any(str(item.id) in accepted_ids and not _item_is_dropped_from_request(item) for item in request_items):
+        raise ChangeRequestError(
+            "Choose at least one change to accept.",
+            status=400,
+            error="NO_SELECTED_CHANGES",
+            field="selection",
+        )
+    for item in request_items:
+        item.metadata_json = {
+            **dict(item.metadata_json or {}),
+            "review_decision": (
+                REVIEW_DECISION_ACCEPTED if str(item.id) in accepted_ids else REVIEW_DECISION_DECLINED
+            ),
+        }
 
     sync_request(
         request_obj,
@@ -499,6 +528,8 @@ def approve_and_merge_request(
             "deck_install_id": request_obj.deck_install_id,
             "merge_status": request_obj.status,
             "dirty_change_count": len(dirty_changes),
+            "accepted_item_count": len(accepted_ids),
+            "declined_item_count": len(request_items) - len(accepted_ids),
         },
     )
     db.session.flush()

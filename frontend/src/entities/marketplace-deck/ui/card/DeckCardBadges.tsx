@@ -1,8 +1,6 @@
 import {
   GraduationCap,
   KeyRound,
-  ShieldAlert,
-  Zap,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +10,6 @@ interface DeckCardBadgesProps {
   item: DeckCardItem
   variant: 'marketplace' | 'installed'
   isCourseDeck: boolean
-  hasConflict: boolean
   getCategoryBadgeStyle: (cat: string | null | undefined) => string
   formatSyncStatus: (val: string) => string
 }
@@ -21,7 +18,6 @@ export function DeckCardBadges({
   item,
   variant,
   isCourseDeck,
-  hasConflict,
   getCategoryBadgeStyle,
   formatSyncStatus,
 }: DeckCardBadgesProps) {
@@ -43,15 +39,6 @@ export function DeckCardBadges({
                 ? t('card.owned')
                 : t('card.installed')}
           </Badge>
-          {item.auto_update_enabled ? (
-            <Badge
-              variant="outline"
-              className="px-1.5 py-0 text-[10px] font-semibold border-primary/30 text-primary bg-primary/5"
-            >
-              <Zap className="mr-0.5 size-2.5 inline" />
-              {t('card.auto')}
-            </Badge>
-          ) : null}
         </div>
       ) : (
         <div className="flex items-center gap-1.5 truncate max-w-[65%]">
@@ -77,20 +64,7 @@ export function DeckCardBadges({
 
       {/* Right Status / Price Badge */}
       {variant === 'installed' ? (
-        hasConflict ? (
-          <span className="truncate text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-            <ShieldAlert className="size-3 shrink-0" />
-            {item.pending_conflict_count
-              ? t('card.has_conflicts', { count: item.pending_conflict_count })
-              : t('card.has_conflict')}
-          </span>
-        ) : item.content_model !== 'published_base' && item.update_available ? (
-          <span className="truncate text-xs font-semibold text-primary">
-            {t('card.update_available', {
-              label: item.available_release?.version_label || t('card.new_release'),
-            })}
-          </span>
-        ) : item.last_sync_status ? (
+        item.last_sync_status && item.last_sync_status !== 'conflict' ? (
           <span className="truncate text-xs text-muted-foreground">
             {formatSyncStatus(item.last_sync_status)}
           </span>

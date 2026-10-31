@@ -26,7 +26,7 @@ export function useInstalledDecks() {
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [category, setCategory] = useState('')
   const [statusFilter, setStatusFilter] = useState<
-    'all' | 'using_now' | 'installed' | 'owned' | 'update_available' | 'conflict'
+    'all' | 'using_now' | 'installed' | 'owned'
   >('all')
   const [selectedDomain, setSelectedDomain] = useState('')
   const [selectedSubject, setSelectedSubject] = useState('')
@@ -146,14 +146,6 @@ export function useInstalledDecks() {
       list = list.filter((item) => item.install_bucket === 'installed')
     } else if (statusFilter === 'owned') {
       list = list.filter((item) => item.install_bucket === 'owned')
-    } else if (statusFilter === 'update_available') {
-      list = list.filter((item) => Boolean(item.update_available))
-    } else if (statusFilter === 'conflict') {
-      list = list.filter(
-        (item) =>
-          item.last_sync_status === 'conflict' ||
-          Boolean(item.pending_conflict_count && item.pending_conflict_count > 0),
-      )
     }
 
     if (selectedDomain) {
@@ -257,7 +249,7 @@ export function useInstalledDecks() {
         target: '[data-tour="installed-search-box"]',
         title: t('tour.step3_title', { defaultValue: '🔍 3. Tìm Kiếm & Lọc Bộ Thẻ' }),
         content: t('tour.step3_content', {
-          defaultValue: 'Tìm kiếm nhanh theo tên deck, lọc theo danh mục, trình độ JLPT hoặc lọc theo trạng thái đang học/có bản cập nhật.',
+          defaultValue: 'Tìm kiếm nhanh theo tên deck, lọc theo danh mục, trình độ JLPT hoặc trạng thái đang học.',
         }),
         placement: 'bottom',
       },

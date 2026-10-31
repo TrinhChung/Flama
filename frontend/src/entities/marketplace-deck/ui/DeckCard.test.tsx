@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { DeckCard, type DeckCardItem } from './DeckCard'
+import { DeckCard, type DeckCardItem } from '@/entities/marketplace-deck'
 
 describe('DeckCard Component', () => {
   let container: HTMLDivElement | null = null
@@ -117,11 +117,11 @@ describe('DeckCard Component', () => {
 
     expect(container?.textContent).toContain('Kanji Look and Learn N4')
     expect(container?.textContent).toContain('Đang sử dụng')
-    expect(container?.textContent).toContain('Auto')
+    expect(container?.textContent).not.toContain('Auto')
     expect(container?.textContent).toContain('Học ngay')
   })
 
-  it('renders conflict warning and button when conflicts exist in installed deck', () => {
+  it('ignores obsolete update conflicts and keeps contributions available', () => {
     const item: DeckCardItem = {
       id: 'deck-conflict-1',
       title: 'Soumatome N3 Grammar',
@@ -140,8 +140,9 @@ describe('DeckCard Component', () => {
       )
     })
 
-    expect(container?.textContent).toContain('3 xung đột')
-    expect(container?.textContent).toContain('Xử lý xung đột (3)')
+    expect(container?.textContent).not.toContain('xung đột')
+    expect(container?.querySelector('a[href*="/updates/"]')).toBeNull()
+    expect(container?.querySelector('a[href$="/change-request"]')).not.toBeNull()
   })
 
   it('renders student discount badge when student_discount_applied is true', () => {

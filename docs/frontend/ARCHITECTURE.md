@@ -125,7 +125,7 @@ Routing Hierarchy (frontend/src/App.tsx)
         ├── /statistics ───────────── StatisticsPage
         ├── /note-types, /note-types/:id, /note-types/:id/fields
         ├── /card-templates, /card-templates/:id
-        ├── /installed-decks, /installed-decks/:id/templates, /installed-decks/:id/updates/:releaseId
+        ├── /installed-decks, /installed-decks/:id/templates, /installed-decks/:id/comparison
         ├── /flashcards/shared-decks/:id/change-request, /flashcards/change-requests/incoming
         ├── /worksheets ───────────── WorksheetsPage
         ├── /audio/generate ───────── DeckAudioGeneratorPage
@@ -196,10 +196,10 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
 | **`auth`** | `features/auth/` | Authentication forms (`LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `ResetPasswordPage`), form hooks (`useLoginForm.ts`, `useRegisterForm.ts`), session auth gating via `useBootstrap()` in `RequireAuth.tsx`. |
 | **`browse`** | `features/browse/` | Note table, deck filter, editor, selection, batch actions and tool dialogs; public entry `index.ts`, local clients in `api/`. `useBrowseState` composes focused hooks; `pages/browse` coordinates audio/worksheets/guide. The client reads `/browse/notes?view=rows`, Note detail/update and `/browse/decks?view=notes`; IDs are Note IDs. Component names retaining "Card" use an internal adapter. Compact NoteTypes preload under `['note-types', 'browse', 'compact']`. |
 | **`dashboard`** | `features/dashboard/` | Deck tree (`DeckTree`, `DeckRow`), deck create/rename/move/delete/reset modals, drag-and-drop moves, `useDashboardPage`; slice-local API in `api/dashboardApi.ts`. The page itself is `pages/dashboard`. |
-| **`deck-collaboration`** | `features/deck-collaboration/` | Community deck contribution: `ChangeRequestInboxPage`, `ChangeRequestDetailPage`, `ReleaseBuilderPage`, `InstalledDeckUpdatePage`. |
+| **`deck-collaboration`** | `features/deck-collaboration/` | Contribution selection, submission and review; author release builder; personal Base override comparison composed by `pages/installed-deck-comparison`. Contribution metadata uses a wide form with a side action card. Legacy `/installed-decks/:installId/updates/:releaseId` links redirect to comparison; manual installed-deck update/rebase UI and clients have been removed. |
 | **`guide`** | `features/guide/` | Interactive knowledge base (`GuidePage`, `GuideArticlePage`), Yomitan, asbplayer, and desktop companion tutorials. |
 | **`import`** | `features/import/` | Import wizard (`FileImportPage`, `AnkiSyncPage`), AnkiConnect field mapping, progress streaming, zip extraction via zip.js. |
-| **`library`** | `features/library/` | Installed community decks (`InstalledDecksPage`), overlay sync status, update checks against published releases. |
+| **`library`** | `features/library/` | Installed community decks composed by `pages/installed-decks`, filtered by ownership/study status. Base updates arrive when the author publishes; personal edits are compared separately. |
 | **`marketplace`** | `features/marketplace/` | Public deck & note-type marketplace (`SharedDecksPage`, `SharedDeckDetailPage`, `MarketplacePublishDeckPage`), payOS payment results. |
 | **`mcp`** | `features/mcp/` | Model Context Protocol API tokens, scope matrix, and authorization credentials for external AI agents. |
 | **`note-types`** | `features/note-types/` | Note type builder (`NoteTypeManagerPage`, `NoteTypeFieldsPage`, `NoteTypeDetailPage`), field schema configuration. |

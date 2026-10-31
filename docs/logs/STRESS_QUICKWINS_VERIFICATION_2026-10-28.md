@@ -4,6 +4,12 @@ Date: 2026-10-28. Scope: the three small follow-ups selected from the local repo
 `docs/architecture/CONCURRENCY_STRESS_TEST_REPORT.md` (a separate local artifact).
 Application fixes are local; no application deployment or service restart was performed.
 
+The source report and its original telemetry/harness were subsequently preserved
+on the local archive branch `archive/local-pending-20261031`. Read the report with
+`git show archive/local-pending-20261031:docs/architecture/CONCURRENCY_STRESS_TEST_REPORT.md`.
+The archive's approval labels and old main-database stress scripts are retained
+as historical material, not current qualification or a runnable P6 test suite.
+
 ## Install locking
 
 - Deck NoteType installation and complete NoteType release receipts now acquire

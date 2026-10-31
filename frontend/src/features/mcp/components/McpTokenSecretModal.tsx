@@ -1,8 +1,6 @@
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import { KeyRound, AlertTriangle, Check, Copy, LinkIcon } from 'lucide-react'
-import { toast } from 'sonner'
 import { CodeSnippetBox } from '@/shared/ui'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,8 +11,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { FLAMA_MCP_URL } from '@/config/env'
 import type { IssuedTokenResult, McpMode } from '../types'
+import { useMcpTokenSecret } from '../hooks/useMcpTokenSecret'
 
 export interface McpTokenSecretModalProps {
   issuedToken: IssuedTokenResult | null
@@ -31,61 +29,8 @@ export function McpTokenSecretModal({
 }: McpTokenSecretModalProps) {
   const { t } = useTranslation('mcp')
   const showModal = isOpen !== undefined ? isOpen : Boolean(issuedToken)
-  const [copiedToken, setCopiedToken] = useState(false)
-  const [copiedUrl, setCopiedUrl] = useState(false)
-
-  const serverUrl = issuedToken
-    ? `${FLAMA_MCP_URL.replace(/\/+$/, '')}/${encodeURIComponent(issuedToken.token)}`
-    : ''
-
-  const jsonConfig = issuedToken
-    ? JSON.stringify(
-        {
-          mcpServers: {
-            flama: {
-              url: serverUrl,
-              headers: {
-                Authorization: `Bearer ${issuedToken.token}`,
-              },
-            },
-          },
-        },
-        null,
-        2
-      )
-    : ''
-
-  const handleCopyToken = async () => {
-    if (!issuedToken?.token) return
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(issuedToken.token)
-      } else {
-        throw new Error('Clipboard API unavailable')
-      }
-      setCopiedToken(true)
-      toast.success(mode === 'admin' ? t('secret_modal.copied_token_toast_admin') : t('secret_modal.copied_token_toast_user'))
-      setTimeout(() => setCopiedToken(false), 2000)
-    } catch {
-      toast.error(mode === 'admin' ? t('secret_modal.copy_failed_toast_admin') : t('secret_modal.copy_failed_toast_user'))
-    }
-  }
-
-  const handleCopyUrl = async () => {
-    if (!serverUrl) return
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(serverUrl)
-      } else {
-        throw new Error('Clipboard API unavailable')
-      }
-      setCopiedUrl(true)
-      toast.success(mode === 'admin' ? t('secret_modal.copied_url_toast_admin') : t('secret_modal.copied_url_toast_user'))
-      setTimeout(() => setCopiedUrl(false), 2000)
-    } catch {
-      toast.error(mode === 'admin' ? t('secret_modal.copy_failed_toast_admin') : t('secret_modal.copy_failed_toast_user'))
-    }
-  }
+  const { serverUrl, jsonConfig, copiedToken, copiedUrl, handleCopyToken, handleCopyUrl } =
+    useMcpTokenSecret({ issuedToken, isOpen: showModal, mode })
 
   return (
     <Dialog open={showModal} onOpenChange={(open) => !open && onClose()}>

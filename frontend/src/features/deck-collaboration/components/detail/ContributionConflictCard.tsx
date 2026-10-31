@@ -6,16 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import '@/shared/config/i18n'
+import { isMissingValue } from '../../model/noteChanges'
 import type { ChangeRequestConflict, ConflictResolutionInput } from '../../types'
-
-function formatValue(value: unknown, noDataText: string, nullText: string, emptyText: string) {
-  if (value === undefined) return noDataText
-  if (value === null) return nullText
-  if (value === '') return emptyText
-  if (typeof value === 'string') return value
-  const serialized = JSON.stringify(value, null, 2)
-  return serialized === undefined ? String(value) : serialized
-}
+import { FieldValueView } from '../notes/FieldValueView'
 
 function parseManualValue(value: string) {
   const trimmed = value.trim()
@@ -31,16 +24,14 @@ function ConflictValue({
   label,
   value,
   tone,
-  noDataText,
-  nullText,
-  emptyText,
+  fieldType,
+  fieldName,
 }: {
   label: string
   value: unknown
   tone: 'base' | 'mine' | 'upstream'
-  noDataText: string
-  nullText: string
-  emptyText: string
+  fieldType: string
+  fieldName: string
 }) {
   const toneClass = {
     base: 'border-border bg-muted/30',
@@ -50,21 +41,32 @@ function ConflictValue({
   return (
     <div className={`overflow-hidden rounded-lg border ${toneClass}`}>
       <div className="border-b px-3 py-2 text-xs font-semibold">{label}</div>
-      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 text-xs font-mono">
-        {formatValue(value, noDataText, nullText, emptyText)}
-      </pre>
+      <div className="max-h-64 overflow-auto p-3">
+        <FieldValueView
+          value={isMissingValue(value) ? undefined : value}
+          fieldType={fieldType}
+          fieldName={fieldName}
+        />
+      </div>
     </div>
   )
 }
 
 export function ContributionConflictCard({
   conflict,
+  title,
+  fieldName,
+  fieldType,
   manualValue,
   disabled,
   onManualValueChange,
   onResolve,
 }: {
   conflict: ChangeRequestConflict
+  /** Note and field the conflict is about, e.g. "食べる · Meaning". */
+  title: string
+  fieldName: string
+  fieldType: string
   manualValue: string
   disabled: boolean
   onManualValueChange: (value: string) => void
@@ -72,22 +74,16 @@ export function ContributionConflictCard({
 }) {
   const { t } = useTranslation('collaboration')
 
-  const noDataText = t('diff.value_no_data', '(không có dữ liệu)')
-  const nullText = t('diff.value_null', '(null)')
-  const emptyText = t('diff.value_empty', '(chuỗi rỗng)')
-
   return (
     <Card className="overflow-hidden border-amber-500/35">
       <CardHeader className="bg-amber-500/8">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <CardTitle className="text-sm">
-              {conflict.conflict_type.replaceAll('_', ' ')} · {conflict.source_ref_id || 'field'}
-            </CardTitle>
+            <CardTitle className="text-sm">{title}</CardTitle>
             <CardDescription>
               {t(
                 'detail.conflict_upstream_local_title',
-                'Upstream và bản local cùng thay đổi dữ liệu này.',
+                'Tác giả và bạn cùng sửa trường này.',
               )}
             </CardDescription>
           </div>
@@ -106,25 +102,22 @@ export function ContributionConflictCard({
             label={t('detail.base_label', 'Base')}
             value={conflict.base_value}
             tone="base"
-            noDataText={noDataText}
-            nullText={nullText}
-            emptyText={emptyText}
+            fieldType={fieldType}
+            fieldName={fieldName}
           />
           <ConflictValue
             label={t('detail.mine_label', 'Bản của tôi')}
             value={conflict.local_value}
             tone="mine"
-            noDataText={noDataText}
-            nullText={nullText}
-            emptyText={emptyText}
+            fieldType={fieldType}
+            fieldName={fieldName}
           />
           <ConflictValue
             label={t('detail.upstream_label', 'Deck gốc hiện tại')}
             value={conflict.upstream_value}
             tone="upstream"
-            noDataText={noDataText}
-            nullText={nullText}
-            emptyText={emptyText}
+            fieldType={fieldType}
+            fieldName={fieldName}
           />
         </div>
         <div className="flex flex-wrap gap-2">
