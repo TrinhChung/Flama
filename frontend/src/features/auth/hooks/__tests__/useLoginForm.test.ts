@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '@/shared/config/i18n'
+import { bootstrapQueryKey } from '@/shared/api/bootstrap'
 import { login } from '../../api'
 import { useLoginForm } from '../useLoginForm'
 
@@ -181,5 +182,18 @@ describe('useLoginForm Redirection Logic', () => {
 
     expect(mockNavigate).toHaveBeenCalledWith('/marketplace/decks', { replace: true })
     expect(window.location.href).toBe('http://localhost:5173/login')
+  })
+
+  it('drops data cached for the previous account and keeps the bootstrap entry', async () => {
+    const user = { id: 4, email: 'user@flama.vn', username: 'flama_user', is_admin: false }
+    vi.mocked(login).mockResolvedValueOnce({ user, redirect_to: '/sync' } as any)
+    queryClient.setQueryData(bootstrapQueryKey, { user: null, messages: [] })
+    queryClient.setQueryData(['import-options'], { note_type_options: [{ id: 'note-type-of-previous-account' }] })
+
+    const hook = await renderHookWithRoute('/login')
+    await submitForm(hook)
+
+    expect(queryClient.getQueryData(['import-options'])).toBeUndefined()
+    expect(queryClient.getQueryData(bootstrapQueryKey)).toEqual({ user, messages: [] })
   })
 })

@@ -520,7 +520,7 @@ def create_import_session(user_id: int, params: dict[str, Any]) -> dict[str, Any
                         "sourceModelId": plan.source_model_id,
                         "sourceModelName": plan.source_model_name,
                         "code": "NOTE_TYPE_MISSING",
-                        "message": "ChÆ°a cÃ³ Flama NoteType Ä‘Ã­ch.",
+                        "message": "Chưa có Flama NoteType đích.",
                     }
                 )
             else:

@@ -12,8 +12,7 @@ import {
   Store,
   UserPlus,
 } from 'lucide-react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { AmbientBackground } from '@/components/ambient-background'
@@ -37,8 +36,8 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
-import { appApi } from '@/app/api'
-import { bootstrapQueryKey, useBootstrap } from '@/shared/api/bootstrap'
+import { useLogout } from '@/features/auth'
+import { useBootstrap } from '@/shared/api/bootstrap'
 import { Brand } from '@/shared/components/Brand'
 import { LanguageSwitcher } from '@/shared/ui/LanguageSwitcher'
 import type { FrontendBootstrap } from '@/shared/types/api'
@@ -344,8 +343,6 @@ export function AppLayout() {
   const { t, i18n } = useTranslation('shell')
   const bootstrapQuery = useBootstrap()
   const bootstrap = bootstrapQuery.data
-  const queryClient = useQueryClient()
-  const navigate = useNavigate()
   const location = useLocation()
   const currentLang = (i18n.resolvedLanguage || i18n.language || 'vi').startsWith('en') ? 'en' : 'vi'
 
@@ -359,21 +356,7 @@ export function AppLayout() {
     })
   }, [bootstrap?.messages])
 
-  const logoutMutation = useMutation({
-    mutationFn: () => appApi.logout(),
-    onSuccess: () => {
-      queryClient.setQueryData<FrontendBootstrap>(
-        bootstrapQueryKey,
-        (current) =>
-          current ? { ...current, user: null, messages: [] } : current,
-      )
-      toast.success(t('status.logout_success'))
-      navigate('/', { replace: true })
-    },
-    onError: (error: Error) => {
-      toast.error(t('status.logout_failed'), { description: error.message })
-    },
-  })
+  const logoutMutation = useLogout()
 
   if (bootstrapQuery.isPending) {
     return (

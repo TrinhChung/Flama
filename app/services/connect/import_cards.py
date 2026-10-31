@@ -830,14 +830,14 @@ def get_import_note_statuses(
             if card_ref is None:
                 progress_state = "new"
                 review_cursor = None
-            revision = token_revision_by_card_id.get(str(card_ref.card_id))
-            local_changed = (
-                card_ref.applied_local_revision_state == "AUTHORITY"
-                and card_ref.applied_authority_revision is not None
-                and revision is not None
-                and int(card_ref.applied_authority_revision) != revision
-            )
-            if card_ref is not None:
+            else:
+                revision = token_revision_by_card_id.get(str(card_ref.card_id))
+                local_changed = (
+                    card_ref.applied_local_revision_state == "AUTHORITY"
+                    and card_ref.applied_authority_revision is not None
+                    and revision is not None
+                    and int(card_ref.applied_authority_revision) != revision
+                )
                 if local_changed:
                     progress_state = "local_changed"
                 elif card_ref.snapshot_hash == requested_card["snapshotHash"]:

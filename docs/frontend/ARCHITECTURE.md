@@ -153,7 +153,7 @@ Current physical layout (legacy paths below are still used; this is not the targ
 
 ```
 frontend/src/
-├── app/                  # Application initialization, API facade, content sync
+├── app/                  # Application initialization, AppLayout shell (layouts/), API facade, content sync
 ├── assets/               # Brand SVGs, icons, illustrations
 ├── components/           # Global components & shadcn primitives
 │   └── ui/               # 30 Radix UI primitives with Tailwind CVA
@@ -162,7 +162,6 @@ frontend/src/
 ├── entities/             # Core business domain entities
 ├── features/             # 25 independent functional domain slices
 ├── hooks/                # Global device and utility hooks
-├── layouts/              # AppLayout shell
 ├── lib/                  # Foundational utilities (arrayField, audioClient, ankiSync)
 ├── pages/                # Route compositions (`pages/<slice>/ui`) and standalone pages
 └── shared/               # Reusable infrastructure (API, UI primitives, i18n)
