@@ -635,6 +635,55 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(changed.status_code, 200, changed.get_json())
         self.assertEqual(changed.get_json()["notes"][0]["state"], "changed")
 
+    def test_note_status_reports_cards_without_source_refs_as_new(self):
+        # A first sync of a deck sends cards the server has never seen; they
+        # have no ConnectSourceCardRef yet and must not break the batch.
+        self._login()
+        session_id = self._create_session()["importSessionId"]
+        self._upload_package(session_id, "cards", 0, [{
+            "ankiNoteId": 911,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "1" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "imported", "Meaning": "no progress yet"},
+                "tags": [],
+            },
+        }])
+
+        response = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
+            json={"notes": [
+                {
+                    "ankiNoteId": 911,
+                    "contentHash": "1" * 64,
+                    "cards": [{"sourceCardId": 9111, "snapshotHash": "2" * 64}],
+                },
+                {
+                    "ankiNoteId": 912,
+                    "contentHash": "3" * 64,
+                    "cards": [{"sourceCardId": 9121, "snapshotHash": "4" * 64}],
+                },
+            ]},
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        notes = {item["ankiNoteId"]: item for item in response.get_json()["notes"]}
+        self.assertEqual(notes[911]["state"], "unchanged")
+        self.assertEqual(notes[912]["state"], "new")
+        for anki_note_id, source_card_id in ((911, "9111"), (912, "9121")):
+            self.assertEqual(
+                notes[anki_note_id]["cards"],
+                [{
+                    "sourceCardId": source_card_id,
+                    "progressState": "new",
+                    "serverSnapshotHash": None,
+                    "reviewCursor": None,
+                }],
+            )
+
     def test_note_authority_progress_snapshot_projects_all_siblings_atomically(self):
         self._login()
         session_id = self._create_session()["importSessionId"]

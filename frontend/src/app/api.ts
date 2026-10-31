@@ -1,11 +1,4 @@
 import type { GenerateStrokesPayload, GenerateStrokesResponse, EstimateBatchStrokesPayload, EstimateBatchStrokesResponse, BatchGenerateStrokesPayload, BatchGenerateStrokesResponse } from '@/entities/stroke'
-import type {
-  ForgotPasswordPayload,
-  LoginPayload,
-  RegisterPayload,
-  ResetPasswordPayload,
-} from '../features/auth/api'
-
 import { API_BASE_URL, resolveBackendUrl } from '../config/env'
 import {
   apiJson,
@@ -60,15 +53,6 @@ type SessionResponse = {
   authenticated: boolean
   user: FrontendUser | null
   csrf_token: string
-}
-
-type LoginResponse = SessionResponse & {
-  next_url: string
-}
-
-type RegisterResponse = {
-  created: boolean
-  user: Pick<FrontendUser, 'id' | 'email' | 'username'>
 }
 
 function toBootstrap(payload: SessionResponse): FrontendBootstrap {
@@ -137,56 +121,6 @@ export const appApi = {
   async getBootstrap(): Promise<FrontendBootstrap> {
     const payload = await apiRequest<SessionResponse>(`${API_BASE}/session`, { includeTimezone: false })
     return toBootstrap(payload)
-  },
-
-  async login(payload: LoginPayload) {
-    const result = await apiJson<LoginResponse>(
-      `${API_BASE}/auth/login`,
-      'POST',
-      payload,
-    )
-    const bootstrap = toBootstrap(result)
-    if (!bootstrap.user) {
-      throw new Error('The server did not create an authenticated session.')
-    }
-    return {
-      user: bootstrap.user,
-      redirect_to: result.next_url || '/dashboard',
-    }
-  },
-
-  async register(payload: RegisterPayload) {
-    await apiJson<RegisterResponse>(`${API_BASE}/auth/register`, 'POST', payload)
-    return {
-      message: 'Đăng ký thành công. Bạn có thể đăng nhập ngay.',
-      redirect_to: '/login',
-    }
-  },
-
-  async forgotPassword(payload: ForgotPasswordPayload) {
-    return apiJson<{ success: boolean; message: string }>(
-      `${API_BASE}/auth/forgot-password`,
-      'POST',
-      payload,
-    )
-  },
-
-  async resetPassword(payload: ResetPasswordPayload) {
-    return apiJson<{ success: boolean; message: string }>(
-      `${API_BASE}/auth/reset-password`,
-      'POST',
-      payload,
-    )
-  },
-
-
-  async logout() {
-    const result = await apiJson<SessionResponse>(
-      `${API_BASE}/session`,
-      'DELETE',
-    )
-    toBootstrap(result)
-    return { redirect_to: '/' }
   },
 
   async generateStrokes(payload: GenerateStrokesPayload): Promise<GenerateStrokesResponse> {

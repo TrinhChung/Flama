@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { bootstrapQueryKey, useBootstrap } from './bootstrap'
+import { bootstrapQueryKey, clearAccountQueries, useBootstrap } from './bootstrap'
 import { useBrowseState } from '@/features/browse'
 import { useAnkiSyncPage } from '@/features/import/hooks/useAnkiSyncPage'
 
@@ -118,5 +118,22 @@ describe('Shared session bootstrap', () => {
     }))
     expect(mocks.bootstrap).toHaveBeenCalledTimes(1)
     expect(client.getQueryData(['bootstrap'])).toBeUndefined()
+  })
+
+  it('refetches account data such as Anki import options after a sign-in change', async () => {
+    const previousAccountOptions = { note_type_options: [{ id: 'note-type-of-a', name: '文法N1', fields: [] }] }
+    client.setQueryData(bootstrapQueryKey, payload('Learner A'))
+    client.setQueryData(['import-options'], previousAccountOptions)
+
+    clearAccountQueries(client)
+    client.setQueryData(bootstrapQueryKey, payload('Learner B'))
+    await render()
+
+    expect(mocks.bootstrap).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-sync]')?.textContent).toBe('Learner B')
+    expect(mocks.get).toHaveBeenCalledWith('/flashcards/import/options')
+    await act(async () => vi.waitFor(() => {
+      expect(client.getQueryData(['import-options'])).toEqual({ items: [] })
+    }))
   })
 })

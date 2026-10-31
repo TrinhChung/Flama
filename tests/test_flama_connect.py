@@ -335,6 +335,7 @@ class FlamaConnectTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "blocked_note_types")
         self.assertEqual(payload["blockers"][0]["code"], "NOTE_TYPE_MISSING")
+        self.assertEqual(payload["blockers"][0]["message"], "Chưa có Flama NoteType đích.")
         blocked_import = self._call(
             "importCards",
             {"importSessionId": payload["importSessionId"], "cards": []},
