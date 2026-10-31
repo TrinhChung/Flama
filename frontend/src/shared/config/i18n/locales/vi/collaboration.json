@@ -171,6 +171,7 @@
     "btn_next": "Trang tiếp"
   },
   "request": {
+    "changed_notes": "{{count}} note thay đổi",
     "changed_notes_one": "{{count}} note thay đổi",
     "changed_notes_other": "{{count}} note thay đổi",
     "preservation_title": "Phần sửa riêng và tiến độ học được giữ nguyên",

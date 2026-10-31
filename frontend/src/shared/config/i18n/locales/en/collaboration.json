@@ -171,6 +171,7 @@
     "btn_next": "Next Page"
   },
   "request": {
+    "changed_notes": "{{count}} changed notes",
     "changed_notes_one": "{{count}} changed note",
     "changed_notes_other": "{{count}} changed notes",
     "preservation_title": "Your personal edits and learning progress are preserved",
