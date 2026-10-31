@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { ApiError } from '@/shared/api/client'
 import {
   buildCardNdjsonPackage,
   buildMediaZip,
@@ -94,11 +95,31 @@ describe('ankiSyncPackages', () => {
   })
 
   it('keeps a failed package fatal after bounded retries', async () => {
-    const upload = vi.fn().mockRejectedValue(new Error('package rejected'))
+    const upload = vi.fn().mockRejectedValue(new ApiError('gateway timeout', 504))
     const wait = vi.fn().mockResolvedValue(undefined)
 
-    await expect(uploadPackageWithRetry(upload, wait)).rejects.toThrow('package rejected')
+    await expect(uploadPackageWithRetry(upload, wait)).rejects.toThrow('gateway timeout')
     expect(upload).toHaveBeenCalledTimes(3)
-    expect(wait).toHaveBeenCalledTimes(2)
+    expect(wait.mock.calls).toEqual([[2_000], [8_000]])
+  })
+
+  it('returns the replayed result once a timed-out package has committed', async () => {
+    const upload = vi.fn()
+      .mockRejectedValueOnce(new ApiError('gateway timeout', 504))
+      .mockRejectedValueOnce(new ApiError('offline', 0))
+      .mockResolvedValueOnce({ replayed: true })
+    const wait = vi.fn().mockResolvedValue(undefined)
+
+    await expect(uploadPackageWithRetry(upload, wait)).resolves.toEqual({ replayed: true })
+    expect(upload).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not retry a package the server rejected', async () => {
+    const upload = vi.fn().mockRejectedValue(new ApiError('package checksum does not match', 400))
+    const wait = vi.fn().mockResolvedValue(undefined)
+
+    await expect(uploadPackageWithRetry(upload, wait)).rejects.toThrow('package checksum does not match')
+    expect(upload).toHaveBeenCalledTimes(1)
+    expect(wait).not.toHaveBeenCalled()
   })
 })

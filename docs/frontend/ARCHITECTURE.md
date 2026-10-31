@@ -162,7 +162,7 @@ frontend/src/
 ├── entities/             # Core business domain entities
 ├── features/             # 25 independent functional domain slices
 ├── hooks/                # Global device and utility hooks
-├── lib/                  # Foundational utilities (arrayField, audioClient, ankiSync)
+├── lib/                  # Foundational utilities (arrayField, audioClient); Anki sync lives in features/import/lib
 ├── pages/                # Route compositions (`pages/<slice>/ui`) and standalone pages
 └── shared/               # Reusable infrastructure (API, UI primitives, i18n)
 ```

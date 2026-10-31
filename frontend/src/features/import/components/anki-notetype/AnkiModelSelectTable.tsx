@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import type { AnkiConnectStatus } from '@/lib/ankiConnectClient'
+import type { AnkiConnectStatus } from '../../lib/ankiConnectClient'
 import type { AnkiModelDetail, FlamaNoteTypeOption } from './types'
 
 interface AnkiModelSelectTableProps {

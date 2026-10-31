@@ -34,7 +34,7 @@ vi.mock('@/features/browse/api/browseApi', () => ({
     fetchVoiceVoxVoices: (api_key: string) => mocks.get('/api/tts/providers/voicevox/voices', 'POST', { api_key }),
   },
 }))
-vi.mock('@/lib/ankiConnectClient', () => ({
+vi.mock('@/features/import/lib/ankiConnectClient', () => ({
   ankiConnectClient: { checkConnection: mocks.checkConnection },
 }))
 

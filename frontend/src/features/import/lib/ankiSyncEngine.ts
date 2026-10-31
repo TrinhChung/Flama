@@ -2,13 +2,14 @@
  * Anki -> Flama sync planner and incremental state.
  *
  * The selected Anki deck is a subtree. Card metadata is the source of truth
- * for deck placement; a single destination deck must never flatten children.
+ * for deck placement (a Note follows its first Card); a single destination
+ * deck must never flatten children.
  */
 
-import type { AnkiImportNoteTypePlan } from '@/features/import/api'
-import { ankiImportApi } from '@/features/import/api'
-import type { AnkiCardInfo, AnkiNoteInfo, AnkiReviewLog } from '@/lib/ankiConnectClient'
-import { ankiConnectClient } from '@/lib/ankiConnectClient'
+import type { AnkiImportNoteTypePlan } from '../api'
+import { ankiImportApi } from '../api'
+import type { AnkiCardInfo, AnkiNoteInfo, AnkiReviewLog } from './ankiConnectClient'
+import { ankiConnectClient } from './ankiConnectClient'
 import {
   buildCardNdjsonPackage,
   buildMediaZip,
@@ -19,13 +20,13 @@ import {
   shouldFlushMediaPackage,
   type MediaPackageEntry,
   uploadPackageWithRetry,
-} from '@/lib/ankiSyncPackages'
+} from './ankiSyncPackages'
 import {
   extractAudioReferences,
   extractImageReferences,
   ankiHtmlToPlainText,
   sanitizeAnkiHtml,
-} from '@/lib/ankiHtmlSanitizer'
+} from './ankiHtmlSanitizer'
 
 import {
   openSyncDB,
@@ -60,7 +61,7 @@ import {
   buildExactAnkiModelQuery,
   isDeckInSubtree,
   mapAnkiDeckPath,
-  indexCardDecksByNote,
+  indexNoteDecks,
   indexImportCardResults,
   classifyNoteSyncStatus,
   COMMON_MAPPING_RULES,
@@ -73,7 +74,7 @@ export {
   buildExactAnkiModelQuery,
   isDeckInSubtree,
   mapAnkiDeckPath,
-  indexCardDecksByNote,
+  indexNoteDecks,
   indexImportCardResults,
   classifyNoteSyncStatus,
   COMMON_MAPPING_RULES,
@@ -294,21 +295,20 @@ export async function executeAnkiSync(
   modelName: string,
   fieldMapping: Record<string, string>,
   syncMode: 'new_and_changed' | 'only_new' | 'resync_all',
-  flamaUserId: number,
   onProgress?: (progress: SyncProgressUpdate) => void,
   options: AnkiSyncOptions = {}
 ): Promise<{ success: boolean; totalSynced: number; totalSkipped: number; totalMediaDetected: number; errors: string[] }> {
   const endpoint = options.endpoint || ''
   const syncMedia = options.syncMedia !== false
   const targetRoot = options.targetDeckName?.trim() || deckName
-  const collectionIdentity = await ankiConnectClient.getCollectionIdentity(endpoint)
-  const sourceKey = `anki-v2:${await calculateStringHash(collectionIdentity)}`
-  const sourceAliases = [...new Set([
-    JSON.stringify([flamaUserId, endpoint || 'default-anki']),
-    JSON.stringify([flamaUserId, 'default-anki']),
-    JSON.stringify([flamaUserId, 'http://127.0.0.1:8765']),
-    JSON.stringify([flamaUserId, 'http://localhost:8765']),
-  ])]
+  // The profile name follows the collection through AnkiWeb sync; the media
+  // folder path in the anki-v2 key differed per machine, so a second computer
+  // started a new source and imported every note again. The server moves refs
+  // from the v2 alias to this key.
+  const sourceKey = `anki-v3:${await calculateStringHash(await ankiConnectClient.getActiveProfile(endpoint))}`
+  const sourceAliases = [
+    `anki-v2:${await calculateStringHash(await ankiConnectClient.getLegacyCollectionIdentity(endpoint))}`,
+  ]
   const errors: string[] = []
 
   onProgress?.({
@@ -322,14 +322,9 @@ export async function executeAnkiSync(
     ankiConnectClient.findCards(buildExactAnkiDeckQuery(deckName), endpoint),
   ])
   const cardsInfo = await fetchCardsInfo(cardIds, endpoint)
-  const deckSetsByNote = indexCardDecksByNote(cardsInfo)
-  const ambiguous = [...deckSetsByNote.entries()].filter(([, decks]) => decks.size !== 1)
-  if (ambiguous.length > 0) {
-    const examples = ambiguous.slice(0, 5).map(([noteId, decks]) => `#${noteId}: ${[...decks].join(', ')}`)
-    throw new Error(`Có ${ambiguous.length} note có card nằm ở nhiều deck; Flama chưa thể giữ chính xác: ${examples.join('; ')}`)
-  }
+  const deckByNote = indexNoteDecks(cardsInfo)
 
-  const noteIds = [...deckSetsByNote.keys()]
+  const noteIds = [...deckByNote.keys()]
   if (noteIds.length === 0) {
     return { success: true, totalSynced: 0, totalSkipped: 0, totalMediaDetected: 0, errors: [] }
   }
@@ -394,7 +389,7 @@ export async function executeAnkiSync(
   const uniqueMedia = new Set<string>()
 
   for (const note of notesInfo) {
-    const sourceDeckPath = [...(deckSetsByNote.get(note.noteId) || [])][0]
+    const sourceDeckPath = deckByNote.get(note.noteId)
     if (!sourceDeckPath) continue
     const plan = modelPlanByName.get(note.modelName)
     if (!plan) continue
@@ -497,7 +492,7 @@ export async function executeAnkiSync(
       mappedFields[targetName] = normalizeMediaFieldValue(field.value || '', fieldType)
     }
     const targetDeckPath = mapAnkiDeckPath(deckName, item.sourceDeckPath, targetRoot)
-    const profileId = JSON.stringify([sourceKey, deckName, item.info.modelName, targetDeckPath, binding.targetNoteTypeId])
+    const profileId = JSON.stringify([deckName, item.info.modelName, targetDeckPath, binding.targetNoteTypeId])
     const progressRecords = (await Promise.all((item.info.cards || []).map(async (cardId) => {
       const card = cardsInfoMap.get(cardId)
       if (!card) return null
@@ -783,7 +778,7 @@ export async function executeAnkiSync(
       for (const entry of batch) {
         const outcome = byNote.get(entry.item.info.noteId)
         const imported = outcome?.imported === true
-        const profileId = JSON.stringify([sourceKey, deckName, entry.item.info.modelName, entry.targetDeckPath, entry.targetNoteTypeId])
+        const profileId = JSON.stringify([deckName, entry.item.info.modelName, entry.targetDeckPath, entry.targetNoteTypeId])
         await saveNoteSyncState({
           sourceKey, ankiNoteId: entry.item.info.noteId, ankiDeckName: entry.item.sourceDeckPath,
           ankiNoteType: entry.item.info.modelName, flamaCardId: imported ? outcome?.noteId : null,
@@ -807,7 +802,11 @@ export async function executeAnkiSync(
   let progressPackageSequence = 0
   const unmappedHistoryCardIds = new Set<number>()
   const mappedDuringProgress = new Set<number>()
-  for (const batch of chunks(progressRecords, 500)) {
+  const progressPackageMaxItems = Math.max(1, Math.min(
+    capabilities.progressBatchMaxItems || 1_000,
+    capabilities.progressPackageTargetItems || 500,
+  ))
+  for (const batch of chunks(progressRecords, progressPackageMaxItems)) {
     try {
       const syncPackage = await buildCardNdjsonPackage(batch)
       const packageHash = await calculateBinaryHash(await syncPackage.blob.arrayBuffer())

@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 import unicodedata
 
 from flask import current_app
-from sqlalchemy import and_, asc, desc, func, or_
+from sqlalchemy import and_, asc, delete, desc, func, or_, select, tuple_, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -96,7 +96,7 @@ from app.services.connect.resolvers import (
 )
 
 def _migrate_source_aliases(user_id: int, source_key: str, raw_aliases: object) -> None:
-    """Move legacy endpoint-based refs into the profile-aware source namespace."""
+    """Move refs recorded under an earlier key of the same Anki source into the current key."""
     if raw_aliases is None:
         return
     if not isinstance(raw_aliases, list) or len(raw_aliases) > 5:
@@ -109,25 +109,43 @@ def _migrate_source_aliases(user_id: int, source_key: str, raw_aliases: object) 
         if alias != source_key and alias not in aliases:
             aliases.append(alias)
 
+    # Card and review refs carry the progress snapshot and review cursor; leaving
+    # them behind would replay a source's whole history as new.
     specs = (
         (ConnectNoteTypeRef, "external_model_id", "note_type_id"),
         (ConnectSourceDeckRef, "external_deck_id", "deck_id"),
         (ConnectSourceNoteRef, "external_note_id", "note_id"),
+        (ConnectSourceCardRef, "external_card_id", "card_id"),
+        (ConnectReviewEventRef, "external_review_id", "review_event_id"),
     )
     for alias in aliases:
         for model, external_field, target_field in specs:
-            rows = model.query.filter_by(user_id=user_id, source_key=alias).all()
-            for row in rows:
-                external_id = getattr(row, external_field)
-                existing = model.query.filter_by(
-                    user_id=user_id,
-                    source_key=source_key,
-                    **{external_field: external_id},
-                ).first()
-                if existing is None:
-                    row.source_key = source_key
-                elif getattr(existing, target_field) == getattr(row, target_field):
-                    db.session.delete(row)
+            table = model.__table__
+            external = table.c[external_field]
+            target = table.c[target_field]
+            in_alias = and_(table.c.user_id == user_id, table.c.source_key == alias)
+            # MySQL rejects a subquery on the statement's own table unless it is
+            # materialized, hence the derived table around the current rows.
+            current = (
+                select(external, target)
+                .where(table.c.user_id == user_id, table.c.source_key == source_key)
+                .subquery()
+            )
+            db.session.execute(
+                update(table)
+                .where(in_alias, external.not_in(select(current.c[external_field])))
+                .values(source_key=source_key)
+            )
+            # A ref already present under the current key wins: an identical
+            # alias row is dropped, a conflicting one stays for inspection.
+            db.session.execute(
+                delete(table).where(
+                    in_alias,
+                    tuple_(external, target).in_(
+                        select(current.c[external_field], current.c[target_field])
+                    ),
+                )
+            )
 
 
 

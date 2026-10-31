@@ -3,18 +3,18 @@ import { useQueryClient } from '@tanstack/react-query'
 import type {
   AnkiConnectStatus,
   AnkiNoteInfo,
-} from '@/lib/ankiConnectClient'
+} from '../lib/ankiConnectClient'
 import {
   ankiConnectClient,
-} from '@/lib/ankiConnectClient'
+} from '../lib/ankiConnectClient'
 import {
   autoSuggestFieldMapping,
   buildExactAnkiDeckQuery,
   buildExactAnkiModelQuery,
-} from '@/lib/ankiSyncEngine'
+} from '../lib/ankiSyncEngine'
 import { getCsrfToken } from '@/shared/api/client'
 import { bootstrapQueryKey } from '@/shared/api/bootstrap'
-import { sanitizeAnkiHtml } from '@/lib/ankiHtmlSanitizer'
+import { sanitizeAnkiHtml } from '../lib/ankiHtmlSanitizer'
 import { appApi } from '@/app/api'
 import { AnkiDeckSelectCard } from './anki-deck/AnkiDeckSelectCard'
 import { AnkiFieldMappingCard } from './anki-deck/AnkiFieldMappingCard'
@@ -57,7 +57,6 @@ interface PreviewResponse {
 
 interface AnkiSyncTabProps {
   noteTypeOptions: FlamaNoteTypeOption[]
-  flamaUserId: number
   endpoint: string
   connectionStatus: AnkiConnectStatus
   ankiVersion: number | null
@@ -65,7 +64,6 @@ interface AnkiSyncTabProps {
 
 export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
   noteTypeOptions,
-  flamaUserId,
   endpoint,
   connectionStatus,
 }) => {
@@ -387,7 +385,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
       }
 
       workerRef.current = new Worker(
-        new URL('../../../lib/sync.worker.ts', import.meta.url),
+        new URL('../lib/sync.worker.ts', import.meta.url),
         { type: 'module' }
       )
 
@@ -434,7 +432,6 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
             modelName: selectedAnkiModel,
             fieldMapping,
             syncMode,
-            flamaUserId,
             csrfToken,
             options: {
               syncMedia: true,

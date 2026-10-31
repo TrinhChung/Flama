@@ -1,5 +1,5 @@
 import { executeAnkiSync } from './ankiSyncEngine'
-import { setCsrfToken } from '../shared/api/client'
+import { setCsrfToken } from '@/shared/api/client'
 
 self.onmessage = async (e: MessageEvent) => {
   const { type, payload } = e.data
@@ -9,7 +9,6 @@ self.onmessage = async (e: MessageEvent) => {
       modelName,
       fieldMapping,
       syncMode,
-      flamaUserId,
       csrfToken,
       options,
     } = payload
@@ -22,7 +21,6 @@ self.onmessage = async (e: MessageEvent) => {
         modelName,
         fieldMapping,
         syncMode,
-        flamaUserId,
         (progress) => {
           self.postMessage({ type: 'PROGRESS', payload: progress })
         },

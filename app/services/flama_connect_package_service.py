@@ -71,14 +71,23 @@ def capabilities() -> dict[str, object]:
         # Kept for older clients: this is the server's internal DB work chunk,
         # not the transport package size.
         "cardBatchMaxItems": 50,
+        # One package is one request and one transaction. Measured 2026-10-31 on
+        # local MySQL: 500 new notes 22 s, 500 updated notes 27 s, 1000 progress
+        # cards 45 s; production ran about twice as slow (500 notes 45 s on
+        # 2026-10-04) behind nginx's 60 s proxy timeout. These targets keep a
+        # package near 10-20 s there.
         "cardPackageTargetItems": min(
-            _config_int("CONNECT_CARD_PACKAGE_TARGET_ITEMS", 500),
+            _config_int("CONNECT_CARD_PACKAGE_TARGET_ITEMS", 100),
             _config_int("CONNECT_CARD_PACKAGE_MAX_ITEMS", 1000),
         ),
         "cardPackageMaxItems": _config_int("CONNECT_CARD_PACKAGE_MAX_ITEMS", 1000),
         "cardPackageMaxBytes": package_max_bytes,
         "cardPackageMaxUncompressedBytes": package_max_uncompressed_bytes,
         "progressBatchMaxItems": _config_int("CONNECT_SYNC_PACKAGE_MAX_ITEMS", 1000),
+        "progressPackageTargetItems": min(
+            _config_int("CONNECT_PROGRESS_PACKAGE_TARGET_ITEMS", 200),
+            _config_int("CONNECT_SYNC_PACKAGE_MAX_ITEMS", 1000),
+        ),
         "reviewBatchMaxItems": _config_int("CONNECT_SYNC_PACKAGE_MAX_ITEMS", 1000),
         "reviewSessionMaxItems": _config_int("CONNECT_REVIEW_SESSION_MAX_ITEMS", 2_000_000),
         "supportedMediaExtensions": sorted(AUDIO_EXTENSIONS | IMAGE_EXTENSIONS),
