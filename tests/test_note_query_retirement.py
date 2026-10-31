@@ -9,7 +9,7 @@ from sqlalchemy import event, insert, text
 
 from app import create_app
 from app.repositories import study_repository
-from app.services import browse_card_service, study_authority_read_service
+from app.services import browse_card_service, browse_note_service, study_authority_read_service
 from app.services.anki_scheduler import CardState
 from app.services.study_authority_read_service import (
     StudyAuthorityAvailabilityRead, StudyAuthorityAvailabilitySnapshot,
@@ -444,8 +444,8 @@ class NoteQueryRetirementTests(unittest.TestCase):
         self.assertEqual(progress_sql(), aggregate_sql())
 
     # Evidence contract per progress reader. Counts (dashboard, overview,
-    # forecast) read rows as stored; the Study queue and the Browse page fail
-    # closed on their own bounded rows. Forecast prewarm:
+    # forecast, Browse sidebar) read rows as stored; the Study queue and the
+    # Browse page fail closed on their own bounded rows. Forecast prewarm:
     # tests/test_forecast_snapshots.py; the fixed-offset SQL overview path runs
     # on MySQL in scripts/probe_dashboard_due_counts_mysql.py.
     def _progress_reader_errors(self):
@@ -468,6 +468,8 @@ class NoteQueryRetirementTests(unittest.TestCase):
             'study_queue_counts': lambda: study_repository.query_study_queue_counts(
                 self._query(), user_id=self.user.id, now=NOW, timezone_name='UTC'),
             'browse_page': lambda: self._browse(),
+            'browse_deck_counts': lambda: browse_note_service.build_decks(
+                user_id=self.user.id, admin_mode=False, timezone_name='UTC'),
         }
         errors = {}
         for name, read in readers.items():
@@ -489,9 +491,10 @@ class NoteQueryRetirementTests(unittest.TestCase):
     def test_progress_readers_contract_clean_evidence(self):
         self._contract_fixture()
         self.assertEqual(self._progress_reader_errors(), dict.fromkeys(
-            ('dashboard_counts', 'overview_future_due', 'today_future_rows', 'study_queue_counts', 'browse_page')))
+            ('dashboard_counts', 'overview_future_due', 'today_future_rows', 'study_queue_counts', 'browse_page',
+             'browse_deck_counts')))
 
-    _COUNT_READERS = dict.fromkeys(('dashboard_counts', 'overview_future_due', 'today_future_rows'))
+    _COUNT_READERS = dict.fromkeys(('dashboard_counts', 'overview_future_due', 'today_future_rows', 'browse_deck_counts'))
 
     def test_progress_readers_contract_logical_identity_drift(self):
         self._subject_of(self._contract_fixture()).logical_note_key = b'noncanonical-key'
