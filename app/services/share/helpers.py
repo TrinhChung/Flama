@@ -667,21 +667,48 @@ def touch_deck_install_usage(
     local_deck_id: int,
     activity_at: datetime | None = None,
 ) -> None:
-    from app.services.share.overlay import deck_installs_covering_deck
-    installs = deck_installs_covering_deck(user_id=user_id, deck_id=local_deck_id)
-    if not installs:
-        return
     now = activity_at or _utcnow()
-    for install in installs:
+    touch_deck_installs_usage(
+        user_id=user_id,
+        activity_by_local_deck_id={int(local_deck_id): (now, now)},
+    )
+
+
+def touch_deck_installs_usage(
+    *,
+    user_id: int,
+    activity_by_local_deck_id: Dict[int, Tuple[datetime, datetime]],
+) -> None:
+    """Touch every install covering the reviewed decks once.
+
+    ``activity_by_local_deck_id`` maps a local deck to its first and last
+    review time. The reviews are already written, so each install's reps are
+    the same however many of its subdecks were studied: one evaluation at the
+    last review leaves the row and counters a touch per review would leave.
+    """
+    from app.services.share.overlay import deck_installs_covering_deck
+
+    windows: dict[str, tuple[DeckInstall, datetime, datetime]] = {}
+    for local_deck_id, (deck_first, deck_last) in activity_by_local_deck_id.items():
+        for install in deck_installs_covering_deck(user_id=user_id, deck_id=local_deck_id):
+            known = windows.get(str(install.id))
+            if known is None:
+                windows[str(install.id)] = (install, deck_first, deck_last)
+            else:
+                windows[str(install.id)] = (
+                    known[0], min(known[1], deck_first), max(known[2], deck_last),
+                )
+    for install_id in sorted(windows):
+        install, first, last = windows[install_id]
         install = (
-            DeckInstall.query.filter_by(id=install.id)
+            DeckInstall.query.filter_by(id=install_id)
             .with_for_update()
             .first()
         ) or install
         if install.first_use_at is None:
-            install.first_use_at = now
-        install.last_activity_at = now
-        _update_deck_install_market_activity(install, now=now)
+            install.first_use_at = first
+        install.last_activity_at = last
+        _update_deck_install_market_activity(install, now=last)
 
 
 def deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:

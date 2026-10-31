@@ -434,7 +434,7 @@ def _top_items_by_category_decks(items: list[DeckMarketplaceItem], *, limit_per_
 
 @flashcards_bp.after_request
 def _set_card_security_headers(response):
-    if request.path.endswith("/preview") or request.path.startswith("/api/study"):
+    if request.path.endswith("/preview"):
         response.headers["Content-Security-Policy"] = CSP_CARD_POLICY
     if (request.path == "/media/proxy" or request.path.startswith("/media/proxy/")) and response.status_code >= 400:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"

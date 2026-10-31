@@ -267,9 +267,10 @@ class ReviewUsageTouches:
 
     A per-review touch sets ``first_use_at`` once, moves ``last_activity_at``
     forward and re-evaluates a market-activity flag that cannot turn off while
-    reviews only add reps. Touching each install key at its first and last
-    review time, in time order, leaves the same rows and counters as touching
-    it after every review, without repeating the install lookups per answer.
+    reviews only add reps. Touching each note-type install at its first and
+    last review time, and each deck install once with the review window of all
+    its studied subdecks, leaves the same rows and counters as touching them
+    after every review, without repeating the install lookups per answer.
     """
 
     _NOTE_TYPE, _DECK = 0, 1
@@ -295,24 +296,28 @@ class ReviewUsageTouches:
 
     def apply(self) -> None:
         calls = []
+        deck_windows: dict[int, dict[int, tuple[datetime, datetime]]] = {}
         for order, (key, (first, last)) in enumerate(self._times.items()):
-            calls.append((first, key[1], order, key))
+            user_id, kind, value = key
+            if kind == self._DECK:
+                deck_windows.setdefault(user_id, {})[value] = (first, last)
+                continue
+            calls.append((first, order, key))
             if last != first:
-                calls.append((last, key[1], order, key))
+                calls.append((last, order, key))
         self._times.clear()
-        for activity_at, kind, _order, (user_id, _kind, value) in sorted(calls):
-            if kind == self._NOTE_TYPE:
-                flashcards_share_service.touch_note_type_install_usage(
-                    user_id=user_id,
-                    installed_note_type_id=value,
-                    activity_at=activity_at,
-                )
-            else:
-                flashcards_share_service.touch_deck_install_usage(
-                    user_id=user_id,
-                    local_deck_id=value,
-                    activity_at=activity_at,
-                )
+        for activity_at, _order, (user_id, _kind, value) in sorted(calls):
+            flashcards_share_service.touch_note_type_install_usage(
+                user_id=user_id,
+                installed_note_type_id=value,
+                activity_at=activity_at,
+            )
+        # Several subdecks of one installed tree share its install (and reps).
+        for user_id, windows in sorted(deck_windows.items()):
+            flashcards_share_service.touch_deck_installs_usage(
+                user_id=user_id,
+                activity_by_local_deck_id=windows,
+            )
 
 
 def _apply_review_side_effects(

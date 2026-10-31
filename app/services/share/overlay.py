@@ -698,6 +698,25 @@ def build_clone_schema_view(
     return resolved_view
 
 
+def clone_base_values_for_notes(
+    install: DeckInstall,
+    note_ids,
+) -> dict[str, dict[str, Any]] | None:
+    """Batch the base values ``apply_clone_note_field_overrides`` reads per Note.
+
+    Missing Notes read as empty, as on the per-Note path. ``None`` means the
+    install reads each source Note's own values, which needs no query.
+    """
+    ids = sorted({str(note_id) for note_id in note_ids if note_id})
+    if published_base_enabled():
+        return published_note_values_for_ids(install, ids)
+    if _install_uses_release(install):
+        from app.services import deck_release_service
+
+        return deck_release_service.get_note_values_for_ids_at_release(install.applied_release, ids)
+    return None
+
+
 def apply_clone_note_field_overrides(
     *,
     install: DeckInstall,

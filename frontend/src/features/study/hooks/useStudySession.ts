@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { appApi } from '@/app/api'
+import { studyApi } from '../api'
 import { useBootstrap } from '@/shared/api/bootstrap'
 import { ApiError } from '@/shared/api/client'
 import type { TemplateBindings } from '@/entities/card-template'
@@ -155,7 +155,7 @@ async function settleClosedRestoredLease(
   ) {
     const prepared = prepareCommit(session)
     try {
-      const response = await appApi.mutate<unknown>(
+      const response = await studyApi.mutate<unknown>(
         `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
         'POST',
         prepared.payload,
@@ -190,7 +190,7 @@ export function openSnapshot(userId: number, deckId: string, compositionId: stri
   const key = `${scopeKey(userId, 'deck', deckId)}:composition:${compositionId}:bindings:${bindingIdentity}`
   const existing = openingRequests.get(key)
   if (existing) return existing
-  const request = appApi.mutate<StudySessionSnapshot>(
+  const request = studyApi.mutate<StudySessionSnapshot>(
     '/api/study/sessions',
     'POST',
     {
@@ -198,11 +198,9 @@ export function openSnapshot(userId: number, deckId: string, compositionId: stri
       scope_id: deckId,
       composition_id: compositionId,
       ...(frozenBindings === undefined ? {} : { input_bindings: frozenBindings }),
-      accepted_session_schema_versions: [
-        'study-session.v4',
-        'study-session.v3',
-        'study-session.v2',
-      ],
+      // Only v4 leases can carry NOTE authority; older local sessions are
+      // still restored by their own readers.
+      accepted_session_schema_versions: ['study-session.v4'],
       accepted_batch_schema_versions: ['study-batch.v3'],
       accepted_note_storage_profiles: [NOTE_STORAGE_PROFILE],
     },
@@ -429,7 +427,7 @@ export function useStudySession(deckId: string | null) {
             && !active.in_flight_batches?.length
           let closedLeaseStatus: StudySessionStatus['status'] | 'missing' | null = null
           try {
-            const serverSession = await appApi.get<StudySessionStatus>(
+            const serverSession = await studyApi.get<StudySessionStatus>(
               `/api/study/sessions/${activeSessionId}`,
             )
             if (!isThisLease()) return
@@ -732,7 +730,7 @@ export function useStudySession(deckId: string | null) {
       const prepared = prepareCommit(active, options)
       if (isThisLease()) activateSession(prepared.session)
       sessionDurableRef.current = await saveStudySession(prepared.session)
-      const response = await appApi.mutate<unknown>(
+      const response = await studyApi.mutate<unknown>(
         `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
         'POST',
         prepared.payload,
@@ -1013,7 +1011,7 @@ export function useStudySession(deckId: string | null) {
         }
         sessionDurableRef.current = await saveStudySession(prepared.session)
         try {
-          const response = await appApi.mutateKeepalive<unknown>(
+          const response = await studyApi.mutateKeepalive<unknown>(
             `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
             'POST',
             prepared.payload,

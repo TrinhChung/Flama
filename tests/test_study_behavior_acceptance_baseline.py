@@ -218,6 +218,9 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 "rating": "good", "operation_key": str(uuid4()), "duration_ms": 2500,
                 "scope": "deck", "scope_id": self.deck_id, "timezone": "Asia/Ho_Chi_Minh"})
             self.assertEqual(response.status_code, 200, response.get_json())
+            # The server-render next link, not the client-render alias.
+            self.assertTrue(response.get_json()["next_card_url"].startswith("/api/study/next?"),
+                response.get_json()["next_card_url"])
             with self.app.app_context():
                 result = mcp_study_tools.submit_review(user_id=self.author_id, card_id=self.card_b_id,
                     rating="good", duration_ms=2500, operation_key=str(uuid4()))

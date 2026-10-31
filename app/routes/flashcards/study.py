@@ -74,6 +74,10 @@ from app.services.study_action_runtime import (
 )
 from app.presenters.vocabulary_presenter import note_field_values_as_strings
 
+# The views below are served only through the canonical ``study_bp``
+# (app/api/v1/learning/study.py); build their URLs from its endpoints.
+_STUDY_ENDPOINT = "api_v1.api_v1_learning.api_v1_learning_study."
+
 
 def _effective_scheduler_deck_id(
     card: Card,
@@ -309,14 +313,14 @@ def _build_study_next_payload(
         install_id = effective_context.install_id
         if public_item is not None:
             template_url = url_for(
-                "flashcards.study_public_artifact",
+                _STUDY_ENDPOINT + "study_public_artifact",
                 deck_item_id=public_item.id,
                 card_id=selected_card.id,
                 kind="template",
                 version=template_version,
             )
             content_url = url_for(
-                "flashcards.study_public_artifact",
+                _STUDY_ENDPOINT + "study_public_artifact",
                 deck_item_id=public_item.id,
                 card_id=selected_card.id,
                 kind="content",
@@ -325,14 +329,14 @@ def _build_study_next_payload(
             visibility = "public"
         else:
             template_url = url_for(
-                "flashcards.study_private_artifact",
+                _STUDY_ENDPOINT + "study_private_artifact",
                 card_id=selected_card.id,
                 kind="template",
                 version=template_version,
                 install_id=install_id,
             )
             content_url = url_for(
-                "flashcards.study_private_artifact",
+                _STUDY_ENDPOINT + "study_private_artifact",
                 card_id=selected_card.id,
                 kind="content",
                 version=content_version,
@@ -368,7 +372,7 @@ def _build_study_next_payload(
             "intervals_ref": {
                 "state_version": state_version,
                 "url": url_for(
-                    "flashcards.study_intervals_preview",
+                    _STUDY_ENDPOINT + "study_intervals_preview",
                     card_id=selected_card.id,
                     selection_id=selection_id,
                     review_state_version=state_version,
@@ -380,7 +384,7 @@ def _build_study_next_payload(
             "due_count": due_count,
             "can_edit_card": bool(note and note.user_id == current_user.id),
             "save_card_url": (
-                url_for("flashcards.study_edit_card", card_id=selected_card.id)
+                url_for(_STUDY_ENDPOINT + "study_edit_card", card_id=selected_card.id)
                 if note and note.user_id == current_user.id
                 else None
             ),
@@ -423,7 +427,7 @@ def _build_study_next_payload(
         "due_count": due_count,
         "can_edit_card": bool(note and note.user_id == current_user.id),
         "save_card_url": (
-            url_for("flashcards.study_edit_card", card_id=selected_card.id)
+            url_for(_STUDY_ENDPOINT + "study_edit_card", card_id=selected_card.id)
             if note and note.user_id == current_user.id
             else None
         ),
@@ -489,7 +493,6 @@ def _study_next_payload_for_scope(
 @flashcards_bp.route("/flashcards/study")
 @login_required
 def flashcard_study_page():
-    decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
     return serve_react_spa()
 
 
@@ -584,10 +587,6 @@ def _version_gone_response():
     )
 
 
-@flashcards_bp.route(
-    "/api/study/artifacts/public/deck-items/<deck_item_id>/cards/<card_id>/<kind>/versions/<version>",
-    methods=["GET"],
-)
 def study_public_artifact(deck_item_id: str, card_id: str, kind: str, version: str):
     if kind not in {"template", "content"}:
         return _no_store_json({"error": "NOT_FOUND", "message": "Artifact not found."}, 404)
@@ -618,10 +617,6 @@ def study_public_artifact(deck_item_id: str, card_id: str, kind: str, version: s
     return _artifact_response(artifact, public=True)
 
 
-@flashcards_bp.route(
-    "/api/study/artifacts/private/cards/<card_id>/<kind>/versions/<version>",
-    methods=["GET"],
-)
 @login_required
 def study_private_artifact(card_id: str, kind: str, version: str):
     if kind not in {"template", "content"}:
@@ -647,7 +642,6 @@ def study_private_artifact(card_id: str, kind: str, version: str):
     return _artifact_response(artifact, public=False)
 
 
-@flashcards_bp.route("/api/study/cards/<card_id>/intervals-preview", methods=["GET"])
 @login_required
 def study_intervals_preview(card_id: str):
     context = _load_private_artifact_context(
@@ -713,7 +707,6 @@ def study_intervals_preview(card_id: str):
     )
 
 
-@flashcards_bp.route("/api/study/scopes/<scope_type>/<scope_id>/compositions", methods=["GET"])
 @login_required
 def study_scope_compositions(scope_type: str, scope_id: str):
     from app.services.study_composition_service import (
@@ -776,7 +769,6 @@ def study_scope_compositions(scope_type: str, scope_id: str):
     return jsonify(payload)
 
 
-@flashcards_bp.route("/api/study/sessions", methods=["POST"])
 @login_required
 def study_session_open():
     payload = request.get_json(silent=True) or {}
@@ -845,31 +837,15 @@ def study_session_open():
             requested_composition_id=requested_composition_id,
             request_source="preset" if requested_composition_id != validated_composition.composition_id else validated_composition.source,
         )
+        # Only v4 leases can carry NOTE authority; an older shared decoder is
+        # refused by the service before it reads any Card.
         wire_schema_version = study_session_service.negotiate_session_wire_schema(
             payload.get("accepted_session_schema_versions"),
-            v3_enabled=bool(
-                current_app.config.get("STUDY_WIRE_V3_ENABLED", False)
-            ),
+            v3_enabled=False,
             v4_enabled=bool(
                 current_app.config.get("STUDY_WIRE_V4_ENABLED", False)
             ),
         )
-        legacy_wire_schema_version = wire_schema_version
-        if wire_schema_version == "study-session.v4":
-            try:
-                legacy_wire_schema_version = (
-                    study_session_service.negotiate_session_wire_schema(
-                        payload.get("accepted_session_schema_versions"),
-                        v3_enabled=bool(
-                            current_app.config.get("STUDY_WIRE_V3_ENABLED", False)
-                        ),
-                        v4_enabled=False,
-                    )
-                )
-            except study_session_service.StudySessionError as exc:
-                if exc.code != "UNSUPPORTED_SESSION_SCHEMA":
-                    raise
-                legacy_wire_schema_version = None
         result = run_with_deadlock_retry(
             lambda: study_session_service.open_study_session(
                 user=current_user,
@@ -881,7 +857,6 @@ def study_session_open():
                 composition_selection=composition_selection,
                 input_bindings=payload.get("input_bindings"),
                 wire_schema_version=wire_schema_version,
-                legacy_wire_schema_version=legacy_wire_schema_version,
                 accepted_batch_schema_versions=payload.get("accepted_batch_schema_versions"),
                 accepted_note_storage_profiles=payload.get("accepted_note_storage_profiles"),
             ),
@@ -908,10 +883,6 @@ def study_session_open():
     return _no_store_json(result, 201)
 
 
-@flashcards_bp.route(
-    "/api/study/sessions/<session_id>",
-    methods=["GET"],
-)
 @login_required
 def study_session_status(session_id: str):
     try:
@@ -928,10 +899,6 @@ def study_session_status(session_id: str):
     return _no_store_json(result)
 
 
-@flashcards_bp.route(
-    "/api/study/sessions/<session_id>/batch/<batch_id>",
-    methods=["GET"],
-)
 @login_required
 def study_session_batch_status(session_id: str, batch_id: str):
     from app.services.study_note_batch_transport_service import get_study_session_batch_status
@@ -943,10 +910,6 @@ def study_session_batch_status(session_id: str, batch_id: str):
     return _no_store_json(result)
 
 
-@flashcards_bp.route(
-    "/api/study/sessions/<session_id>/batch",
-    methods=["POST"],
-)
 @login_required
 def study_session_batch(session_id: str):
     if not bool(current_app.config.get("STUDY_ASYNC_BATCH_ENABLED", False)):
@@ -987,10 +950,6 @@ def study_session_batch(session_id: str):
     return _no_store_json(result, 202)
 
 
-@flashcards_bp.route(
-    "/api/study/sessions/<session_id>/commit",
-    methods=["POST"],
-)
 @login_required
 def study_session_commit(session_id: str):
     if (
@@ -1048,8 +1007,6 @@ def study_session_commit(session_id: str):
     return _no_store_json(result)
 
 
-@flashcards_bp.route("/api/study/session/next", methods=["GET"])
-@flashcards_bp.route("/api/study/next", methods=["GET"])
 @login_required
 def study_next():
     try:
@@ -1089,8 +1046,6 @@ def study_next():
         )
     return _no_store_json(payload)
 
-@flashcards_bp.route("/api/study/cards/<card_id>/answer", methods=["POST"])
-@flashcards_bp.route("/api/study/<card_id>/answer", methods=["POST"])
 @login_required
 def study_answer(card_id: str):
     payload = request.get_json(silent=True) or {}
@@ -1154,9 +1109,9 @@ def study_answer(card_id: str):
     next_scope_id = requested_scope_id if requested_scope_id is not None else local_deck_id_for_usage
     next_card_url = None
     if scope == "note_type" and requested_scope_id_raw:
-        next_card_url = url_for("flashcards.study_next", scope="note_type", scope_id=requested_scope_id_raw)
+        next_card_url = url_for(_STUDY_ENDPOINT + "study_next", scope="note_type", scope_id=requested_scope_id_raw)
     elif next_scope_id:
-        next_card_url = url_for("flashcards.study_next", scope="deck", scope_id=next_scope_id)
+        next_card_url = url_for(_STUDY_ENDPOINT + "study_next", scope="deck", scope_id=next_scope_id)
 
     next_url = None
     if scope == "deck":
@@ -1203,7 +1158,6 @@ def study_answer(card_id: str):
     return _no_store_json(response_payload)
 
 
-@flashcards_bp.route("/api/study/cards/<card_id>/edit", methods=["PATCH"])
 @login_required
 def study_edit_card(card_id: str):
     payload = request.get_json(silent=True) or {}
@@ -1231,7 +1185,7 @@ def study_edit_card(card_id: str):
             public_item = study_artifact_service.public_deck_item(context)
             if public_item is not None:
                 artifact_url = url_for(
-                    "flashcards.study_public_artifact",
+                    _STUDY_ENDPOINT + "study_public_artifact",
                     deck_item_id=public_item.id,
                     card_id=card_id,
                     kind="content",
@@ -1240,7 +1194,7 @@ def study_edit_card(card_id: str):
                 visibility = "public"
             else:
                 artifact_url = url_for(
-                    "flashcards.study_private_artifact",
+                    _STUDY_ENDPOINT + "study_private_artifact",
                     card_id=card_id,
                     kind="content",
                     version=version,
