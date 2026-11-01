@@ -48,7 +48,7 @@ Over successive development cycles, the Flama Japanese SRS learning platform has
 - Migrating from server-rendered Jinja templates to a 100% decoupled **React 19 SPA** (`frontend/src/`).
 - Retiring physical card tables in favor of a **dynamic derived SQL view** (`Card` ADR P11) and Note-level study progress (`StudyProgressSubject` ADR P10).
 - Establishing an **overlay-only Marketplace clone model** (`DeckInstall`) that protects original author content from destructive mutations.
-- Adding high-speed companion services: **Flama Connect** (`connect_wsgi.py`, port 4790) for Yomitan/asbplayer 1-click mining, and **Flama Audio** (`flama-audio/`, port 4791) for local desktop VoiceVox and Kokoro TTS synthesis.
+- Adding high-speed companion services: **Flama Connect** (`connect_wsgi.py`, port 4790) for Yomitan/asbplayer 1-click mining, **Flama Audio** (`flama-audio/`, port 4791) for local desktop VoiceVox and Kokoro TTS synthesis, and **Flama Media** (`flama-media/`, port 4792) for hardened zero-trust media processing and delivery.
 
 However, internal documentation did not keep pace with these systemic migrations. Technical debt accumulated across `docs/`, `AGENTS.md`, and `README.md`, resulting in:
 1. **Factually inaccurate documentation**: Stale CLI commands, outdated dependency versions, nonexistent module paths, hallucinated model names, and incorrect line references.

@@ -65,12 +65,15 @@ def _overlay_scope(
     visible_deck_ids: list[int],
     by_note: bool = False,
     include_note_types: bool = True,
+    scoped: bool | None = None,
 ):
     """Logical-overlay source Cards, or with ``by_note`` Notes, under the learner's mapped local decks."""
 
+    if scoped is None:
+        scoped = len(visible_deck_ids) <= 64
     local_deck_filter = (
         DeckCloneDeckMap.local_deck_id.in_(visible_deck_ids)
-        if len(visible_deck_ids) <= 64
+        if scoped
         else DeckCloneDeckMap.local_deck_id.isnot(None)
     )
     if not include_note_types:
@@ -198,6 +201,7 @@ def aggregate_deck_study_counts(
     count_by_note: bool = False,
     owned_by_any_user: bool = False,
     include_note_types: bool = False,
+    scope_to_decks: bool = False,
 ) -> Tuple[Dict[int, Dict[str, int]], Dict[int, str]]:
     """Count total/new/learn/due per visible deck (subtrees are summed by the caller).
 
@@ -209,11 +213,15 @@ def aggregate_deck_study_counts(
     decks with the learner's own state, not only the learner's Notes.
     Fallback note-type metadata is opt-in (``include_note_types=True``); no
     production caller needs it, and one deck's alone is ``deck_note_type_metadata``.
+    More than 64 decks read every Note of the learner instead of a long IN list,
+    which suits a whole deck tree. A caller passing a subset of the learner's
+    decks (a prewarm batch, the dirty decks) sets ``scope_to_decks``.
     """
 
     if not visible_deck_ids:
         return {}, {}
 
+    scoped = scope_to_decks or len(visible_deck_ids) <= 64
     # Admins see every deck but, as before, never count logical-overlay sources.
     overlay, overlay_types = (
         (None, [])
@@ -224,15 +232,12 @@ def aggregate_deck_study_counts(
             visible_deck_ids=visible_deck_ids,
             by_note=count_by_note,
             include_note_types=include_note_types,
+            scoped=scoped,
         )
     )
     from app.repositories.note_analytics_scope_repository import deck_note_scope
 
-    scope_deck_ids = (
-        visible_deck_ids
-        if (owned_by_any_user or len(visible_deck_ids) <= 64)
-        else None
-    )
+    scope_deck_ids = visible_deck_ids if (scoped or owned_by_any_user) else None
     scope = deck_note_scope(
         learner_user_id=learner_user_id, deck_ids=scope_deck_ids,
         overlay=overlay, owned_by_any_user=owned_by_any_user, by_note=count_by_note,

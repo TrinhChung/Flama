@@ -8,7 +8,7 @@ Welcome to the Flama Backend documentation directory. This hub covers the archit
 
 | Document | Purpose & Scope |
 |---|---|
-| [**`ARCHITECTURE.md`**](./ARCHITECTURE.md) | **Authoritative Technical Architecture Guide**: Flask Application Factory (`create_app()`, `MediaHardenedSessionInterface`, passive startup check), REST API layer (`app/api/v1/` alongside `app/routes/flashcards/study.py`), 102 SQLAlchemy models (Derived `Card` view ADR P11, `StudyProgressSubject` ADR P10, Overlay-only clone model `DeckInstall`), Anki SM-2 / FSRS scheduler, Flama Connect scheme CORS, and Flama Audio companion. |
+| [**`ARCHITECTURE.md`**](./ARCHITECTURE.md) | **Authoritative Technical Architecture Guide**: Flask Application Factory (`create_app()`, `MediaHardenedSessionInterface`, passive startup check), REST API layer (`app/api/v1/` alongside `app/routes/flashcards/study.py`), 102 SQLAlchemy models (Derived `Card` view ADR P11, `StudyProgressSubject` ADR P10, Overlay-only clone model `DeckInstall`), Anki SM-2 / FSRS scheduler, Flama Connect scheme CORS, Flama Audio companion, and Flama Media hardened service. |
 | [**`tech-debt/README.md`**](./tech-debt/README.md) | **Technical Debt & Architectural Backlog**: Comprehensive catalog detailing `flashcards_share_service.py` (3,685 LOC monolith with 34 callers), `vocabulary.py` (718 LOC with 16 legacy 410 stubs), 40+ direct `db.session.commit()` calls in route handlers, and query bottlenecks. |
 | [**`old/README.md`**](./old/README.md) | **Historical Archive**: Directory reserved for preserving retired backend architecture notes, historical ADRs, and completed migration plans. |
 
@@ -76,6 +76,7 @@ nihongo/
 │   └── study_progress_subject.py # Decoupled study progress (ADR P10)
 ├── connect_wsgi.py           # Standalone entry point for Flama Connect (port 4790)
 ├── flama-audio/              # Local desktop TTS companion (.NET 8 WPF, port 4791)
+├── flama-media/              # Hardened zero-trust media service in Go (port 4792)
 ├── study_worker.py           # Background CLI study session worker
 └── wsgi.py                   # Primary application entry point (port 4789)
 ```

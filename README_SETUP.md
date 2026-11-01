@@ -20,6 +20,11 @@ flask --app wsgi.py run --host=0.0.0.0 --port=4789
 python connect_wsgi.py
 # Hoac:
 flask --app connect_wsgi.py run --host=0.0.0.0 --port=4790
+
+# 5) Chay Flama Media Service (Go - Port 4792)
+cd flama-media && go run ./cmd/server
+# Hoac container:
+cd flama-media && docker compose up -d
 ```
 
 ### Windows PowerShell
@@ -38,6 +43,11 @@ flask --app wsgi.py run --host=0.0.0.0 --port=4789
 python connect_wsgi.py
 # Hoac:
 flask --app connect_wsgi.py run --host=0.0.0.0 --port=4790
+
+# 5) Chay Flama Media Service (Go - Port 4792)
+cd flama-media; go run ./cmd/server
+# Hoac container:
+cd flama-media; docker compose up -d
 ```
 
 ### Windows Command Prompt
@@ -53,12 +63,18 @@ REM 3) Chay Flama Connect service (Yomitan / Anki Connect protocol - Port 4790)
 python connect_wsgi.py
 REM Hoac:
 flask --app connect_wsgi.py run --host=0.0.0.0 --port=4790
+
+REM 4) Chay Flama Media Service (Go - Port 4792)
+cd flama-media && go run ./cmd/server
+REM Hoac container:
+cd flama-media && docker compose up -d
 ```
 
 ## Prerequisites
 
 - Python 3.12 (the version in `.python-version`, used by CI and production)
-- Docker + Docker Compose plugin (neu chay MySQL bang container)
+- Go 1.22+ (cho `flama-media/` microservice)
+- Docker + Docker Compose plugin (neu chay MySQL bang container hoac flama-media container)
 - Tren Windows:
   - Dung PowerShell hoac Command Prompt cho cac lenh native cua Windows
   - Cai Git Bash hoac WSL neu muon chay cac script `.sh`

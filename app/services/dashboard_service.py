@@ -85,6 +85,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], bool]:
         day_cutoff_utc=day_cutoff_utc,
         admin_mode=admin_mode,
         count_by_note=count_by_note,
+        scope_to_decks=len(dirty_ids) < len(visible_deck_ids),
     )
     card_counts_by_deck.update(cached_counts)
 

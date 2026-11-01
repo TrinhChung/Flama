@@ -9,6 +9,7 @@
 - Companion services:
   - `connect_wsgi.py` on port `4790`: Flama Connect service (Yomitan / AnkiConnect protocol bridge for 1-click word mining).
   - `flama-audio/` on port `4791`: Flama Audio desktop companion (.NET 8 WPF) providing local VoiceVox and Kokoro TTS engines.
+  - `flama-media/` on port `4792`: Flama Media service (Go) providing hardened, zero-trust media processing, storage & streaming with HMAC presigned tickets and image re-encoding.
 - Core domains: auth, dashboard/stats, vocabulary browse/study, flashcard note types/import/share/study/media, deck change requests, marketplace, payOS payments, admin management, CLI seeding.
 
 ## Inspect First
@@ -50,6 +51,7 @@
 - Deck Change Requests: `app/services/deck_change_request_service.py`, `app/repositories/deck_change_request_repository.py`, `models/deck_change_request.py`, `docs/backend/old/completed-plans/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
 - Flama Connect (Yomitan/AnkiConnect): `connect_wsgi.py`, `app/services/flama_connect_service.py`, `models/connect_*.py`
 - Flama Audio Local TTS: `flama-audio/`, `frontend/src/features/audio/`, `flama-audio/README.md`
+- Flama Media Service: `flama-media/`, `flama-media/README.md`, `app/services/flashcard_renderer.py`
 - Payments (payOS): `app/services/payment_service.py`, `app/services/payment/provider/payos_provider.py`, `docs/backend/old/FLAMA_PAYMENT_ARCHITECTURE.md`
 - Admin users and roles: `app/api/v1/admin/`, `app/services/admin_service.py`, `app/services/admin_user_api_service.py`, `app/services/user_roles.py`, `models/user_role.py`
 - Seeding and CLI: `app/cli.py`, `scripts/reseed_db.*`, `static/seed_data/`

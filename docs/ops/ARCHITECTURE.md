@@ -22,6 +22,7 @@ The production runtime is a multi-process architecture:
 3. **Durable Study Consumer (`flama-study-worker.service`)**: Continuous asynchronous worker (`study_worker.py`) consuming study sessions from Redis and persisting progress to MySQL.
 4. **Scheduled Maintenance Timers**: Periodic systemd timer units executing analytics count rollups, review analytics event drains, temporary media eviction, and study session retention.
 5. **Desktop Companion (`flama-audio/`)**: Local .NET 8 WPF desktop application running on port `4791` for end-user VoiceVox and Kokoro local TTS synthesis.
+6. **Flama Media Service (`flama-media/`, Port 4792)**: Hardened Go microservice running on private Worker Node 212, proxied from OV Gateway Nginx via `X-Flama-Gateway-Secret`, providing zero-trust image re-encoding, HMAC presigned ticket uploads, and sharded disk storage (`/data/flama/media`).
 
 ### 1.1 Architecture Topology Diagram
 
@@ -36,31 +37,29 @@ The production runtime is a multi-process architecture:
                     ▼ (HTTPS 443 with Origin Cert)
        ┌───────────────────────────┐
        │   Nginx Reverse Proxy     │
-       │  (libnginx-mod-headers-   │
-       │          more)            │
-       └──────┬─────────────┬──────┘
-              │             │
-   (api.flama.vn)     (connect.flama.vn)
-              │             │
-              ▼             ▼
-       ┌─────────────┐┌─────────────┐
-       │flama.service││flama-connect│
-       │  (Port 4789)││  (Port 4790)│
-       └──────┬──────┘└──────┬──────┘
-              │              │
-              ├──────────────┴──────────────┬────────────────────────┐
-              ▼                             ▼                        ▼
-       ┌──────────────┐              ┌──────────────┐         ┌──────────────┐
-       │ MySQL 8.0    │              │ Redis 7.x    │         │ /var/lib/    │
-       │ (3306 Socket/│              │ (6379 Rate   │         │ flama/media/ │
-       │  TCP)        │              │  Limit & Q)  │         │ (X-Accel)    │
-       └──────────────┘              └──────┬───────┘         └──────────────┘
-                                            │
-                                            ▼
-                                     ┌──────────────┐
-                                     │ flama-study- │
-                                     │ worker       │
-                                     └──────────────┘
+       │  (OV Gateway, Malaysia)   │
+       └──────┬─────────────┬──────┴──────────────────┐
+              │             │                         │
+   (api.flama.vn)     (connect.flama.vn)        (/media/* proxy)
+              │             │                         │
+              ▼             ▼                         ▼ (Private WAN :4792)
+       ┌─────────────┐┌─────────────┐          ┌─────────────────────────┐
+       │flama.service││flama-connect│          │ Flama Media Service     │
+       │  (Port 4789)││  (Port 4790)│          │ (Go, Port 4792)         │
+       └──────┬──────┘└──────┬──────┘          │ [Worker Node 212]       │
+              │              │                 └────────────┬────────────┘
+              ├──────────────┴──────────────┬───────┐       │
+              ▼                             ▼       ▼       ▼
+       ┌──────────────┐              ┌───────────┐  ┌──────────────┐
+       │ MySQL 8.0    │              │ Redis 7.x │  │ /data/flama/ │
+       │ (Primary DB) │              │ (6379)    │  │ media/ (212) │
+       └──────────────┘              └─────┬─────┘  └──────────────┘
+                                           │
+                                           ▼
+                                    ┌──────────────┐
+                                    │ flama-study- │
+                                    │ worker       │
+                                    └──────────────┘
 ```
 
 ---
@@ -106,8 +105,8 @@ Maintenance jobs run on isolated schedules managed by systemd timers:
 
 1. **`flama-analytics-counts.service` & `.timer`**:
    - Schedule: Runs every 60 seconds (`OnUnitInactiveSec=60s`, `OnBootSec=30s`, `RandomizedDelaySec=5s`).
-   - Command: `/usr/bin/flock --nonblock /run/flama-analytics-counts/runner.lock /opt/flama/venv/bin/flask --app wsgi.py analytics-counts-prewarm --configured --apply --max-decks 100 --max-buckets 4096` (prewarms learner deck counts and forecast buckets).
-   - Execution Condition: Guarded by `ExecCondition` verifying `DECK_COUNT_WRITE_ENABLED` is active and `DECK_COUNT_PREWARM_USER_IDS` is configured.
+   - Command: `/usr/bin/flock --nonblock /run/flama-analytics-counts/runner.lock /opt/flama/venv/bin/flask --app wsgi.py analytics-counts-prewarm --configured --apply --max-decks 100 --max-buckets 4096` (prewarms learner deck counts and forecast buckets; each run finishes every 100-deck batch per learner through the keyset cursor, and each batch reads only its own decks' Notes).
+   - Execution Condition: Guarded by `ExecCondition` verifying `DECK_COUNT_WRITE_ENABLED` is active and `DECK_COUNT_PREWARM_USER_IDS` is configured. With `DECK_COUNT_READ_MODE=summary`, only these learners read deck-count snapshots; others read raw counts.
 2. **`flama-review-analytics-worker.service` & `.timer`**:
    - Schedule: Runs every 1 second (`OnUnitInactiveSec=1s`, `OnBootSec=5s`, `AccuracySec=100ms`).
    - Command: `/usr/bin/flock --nonblock /run/flama-review-analytics/runner.lock /opt/flama/venv/bin/flask --app wsgi.py review-analytics-drain --pending --apply --max-users 20 --max-revisions 100` (drains buffered review outbox projection events into analytics store in near real-time).
