@@ -1,36 +1,19 @@
-"""Bounded remote image download with DNS pinning and SSRF protection."""
+"""Remote image and page downloads, performed by the media worker (SSRF checks there)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import http.client
 import ipaddress
 from pathlib import Path
 import socket
-import ssl
-from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from werkzeug.utils import secure_filename
 
 from app.validators import RequestValidationError
 
 
-class DirectCrawlDisabledError(RequestValidationError, ValueError):
-    """Explicit security exception raised when direct external HTTP crawling is attempted."""
-
-    def __init__(
-        self,
-        message: str = "Direct external crawling is disabled. Use Flama Media service for URL safety verification.",
-        *,
-        code: str = "DIRECT_CRAWL_DISABLED",
-        status: int = 403,
-        field: str | None = None,
-    ) -> None:
-        super().__init__(message, code=code, status=status, field=field)
-
-
 MAX_REMOTE_URL_LENGTH = 2048
-REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 MIME_TO_EXTENSION = {
     "image/gif": "gif",
     "image/jpeg": "jpg",
@@ -59,41 +42,6 @@ class _ResolvedRemoteTarget:
     addresses: tuple[str, ...]
 
 
-class _PinnedHTTPSConnection(http.client.HTTPSConnection):
-    """HTTPS connection that verifies the URL host while dialing a pinned IP."""
-
-    def __init__(
-        self,
-        *,
-        server_hostname: str,
-        connect_host: str,
-        port: int,
-        timeout: float,
-    ) -> None:
-        super().__init__(
-            server_hostname,
-            port=port,
-            timeout=timeout,
-            context=ssl.create_default_context(),
-        )
-        self._connect_host = connect_host
-
-    def connect(self) -> None:
-        raw_socket = socket.create_connection(
-            (self._connect_host, self.port),
-            self.timeout,
-            self.source_address,
-        )
-        try:
-            self.sock = self._context.wrap_socket(
-                raw_socket,
-                server_hostname=self.host,
-            )
-        except Exception:
-            raw_socket.close()
-            raise
-
-
 def fetch_remote_image(
     raw_url: str,
     *,
@@ -101,10 +49,23 @@ def fetch_remote_image(
     timeout_seconds: float,
     max_redirects: int,
 ) -> RemoteImagePayload:
-    # Requirement R3: Direct socket/HTTP crawling is strictly disabled.
-    # Outbound URL fetching and malware inspection must be routed to Flama Media service on Worker 212.
-    raise DirectCrawlDisabledError(
-        "Direct external crawling is disabled. Use Flama Media service for URL safety verification."
+    """Download a public image through the media worker (redirects capped at 3 there)."""
+    url = _normalize_remote_url(raw_url)
+    result = _fetch_via_worker(url, kind="image", max_bytes=max_bytes, timeout_seconds=timeout_seconds)
+    mime_type = str(result["content_type"]).split(";", 1)[0].strip().lower()
+    extension = MIME_TO_EXTENSION.get(mime_type)
+    if not extension or not result["content"]:
+        raise _remote_error(
+            "Link không trả về hình ảnh hợp lệ.",
+            code="IMAGE_REMOTE_TYPE_NOT_ALLOWED",
+            status=415,
+        )
+    final_url = str(result["final_url"] or url)
+    return RemoteImagePayload(
+        content=result["content"],
+        filename=_filename_from_url(final_url, extension=extension),
+        mime_type=mime_type,
+        source_url=final_url,
     )
 
 
@@ -115,14 +76,40 @@ def fetch_remote_html(
     timeout_seconds: float = 6.0,
     max_redirects: int = 3,
 ) -> str:
-    """Fetch HTML content from a remote webpage with DNS pinning and SSRF protection."""
-    # Requirement R3: Direct socket/HTTP crawling is strictly disabled.
-    # Outbound URL fetching and malware inspection must be routed to Flama Media service on Worker 212.
-    raise DirectCrawlDisabledError(
-        "Direct external crawling is disabled. Use Flama Media service for URL safety verification."
-    )
+    """Download a public HTML page through the media worker."""
+    url = _normalize_remote_url(raw_url)
+    result = _fetch_via_worker(url, kind="html", max_bytes=max_bytes, timeout_seconds=timeout_seconds)
+    charset = "utf-8"
+    for part in str(result["content_type"]).split(";")[1:]:
+        key, _, value = part.strip().partition("=")
+        if key.lower() == "charset" and value.strip():
+            charset = value.strip().strip('"')
+    try:
+        return result["content"].decode(charset, errors="replace")
+    except LookupError:
+        return result["content"].decode("utf-8", errors="replace")
 
 
+# Worker error codes -> the codes callers and the UI already know.
+_WORKER_ERROR_CODES = {
+    "URL_NOT_ALLOWED": ("Không cho phép tải từ địa chỉ này.", "IMAGE_REMOTE_HOST_NOT_ALLOWED", 400),
+    "PAYLOAD_TOO_LARGE": ("Tệp từ link vượt quá giới hạn dung lượng.", "MEDIA_TOO_LARGE", 413),
+    "MEDIA_TYPE_NOT_ALLOWED": ("Link không trả về nội dung được hỗ trợ.", "IMAGE_REMOTE_TYPE_NOT_ALLOWED", 415),
+    "FETCH_FAILED": ("Không tải được nội dung từ link.", "IMAGE_REMOTE_FETCH_FAILED", 422),
+}
+
+
+def _fetch_via_worker(url: str, *, kind: str, max_bytes: int, timeout_seconds: float) -> dict:
+    # Outbound requests leave from the media worker, never from the app server.
+    from app.services import flama_media_client
+
+    try:
+        return flama_media_client.fetch_url_via_worker(
+            url, kind=kind, max_bytes=int(max_bytes), timeout_seconds=float(timeout_seconds)
+        )
+    except flama_media_client.FlamaMediaClientError as exc:
+        message, code, status = _WORKER_ERROR_CODES.get(exc.error_code, (exc.message, exc.error_code, exc.status_code))
+        raise _remote_error(message, code=code, status=status) from exc
 
 
 def _normalize_remote_url(raw_url: str) -> str:
@@ -264,57 +251,6 @@ def _resolve_public_addresses(hostname: str, port: int) -> tuple[str, ...]:
         key=lambda value: 0 if ipaddress.ip_address(value).version == 4 else 1
     )
     return tuple(addresses)
-
-
-def _request_target(
-    target: _ResolvedRemoteTarget,
-    *,
-    timeout_seconds: float,
-    accept_header: str | None = None,
-) -> tuple[http.client.HTTPConnection, http.client.HTTPResponse]:
-    # Requirement R3: Direct socket/HTTP crawling from Chung VPS is strictly disabled.
-    # Outbound URL fetching and malware inspection must be routed to Flama Media service on Worker 212.
-    raise DirectCrawlDisabledError(
-        "Direct external crawling is disabled. Use Flama Media service for URL safety verification."
-    )
-
-
-def _read_bounded(
-    response: http.client.HTTPResponse,
-    *,
-    max_bytes: int,
-) -> bytes:
-    chunks: list[bytes] = []
-    total = 0
-    while True:
-        chunk = response.read(min(64 * 1024, max_bytes + 1 - total))
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > max_bytes:
-            raise _remote_error(
-                f"Hình ảnh từ link vượt quá {int(max_bytes)} bytes.",
-                code="MEDIA_TOO_LARGE",
-                status=413,
-            )
-        chunks.append(chunk)
-    content = b"".join(chunks)
-    if not content:
-        raise _remote_error(
-            "Link hình ảnh trả về tệp rỗng.",
-            code="IMAGE_REMOTE_FETCH_FAILED",
-        )
-    return content
-
-
-def _parse_content_length(raw_value: str | None) -> int | None:
-    if not raw_value:
-        return None
-    try:
-        value = int(raw_value)
-    except (TypeError, ValueError):
-        return None
-    return value if value >= 0 else None
 
 
 def _filename_from_url(url: str, *, extension: str) -> str:

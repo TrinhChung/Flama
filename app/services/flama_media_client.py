@@ -221,69 +221,51 @@ def send_zip_to_worker(zip_bytes: bytes, user_id: int | None = None) -> dict[str
         ) from exc
 
 
-def fetch_media_from_url(
+def fetch_url_via_worker(
     url: str,
+    *,
+    kind: str = "image",
+    max_bytes: int,
+    timeout_seconds: float = 20.0,
     user_id: int | None = None,
-    max_bytes: int | None = None,
-    action: str = "fetch_and_store",
 ) -> dict[str, Any]:
-    """Request Worker 212 to safely verify, fetch, sanitize, and persist an external media URL.
+    """Have the media worker download a public URL and return the checked bytes.
 
-    Calls Go media service endpoint POST /media/fetch-url.
-    Returns Worker response dict:
-    {
-        "asset_id": "<sha256>",
-        "url": "/store/<asset_id>",
-        "sha256": "<sha256>",
-        "size_bytes": 1234,
-        "content_type": "image/png",
-        "deduplicated": bool
-    }
+    Outbound crawling leaves from worker212 so the app server's address is never
+    exposed to third-party sites. The worker re-checks every dialed address and
+    redirect against private ranges and verifies the content by magic bytes
+    (``kind`` "image": jpeg/png/gif/webp, "html": an HTML page).
+    Returns ``{"content", "content_type", "final_url", "filename"}``.
     """
     worker_url = _worker_url()
     gateway_secret = str(current_app.config.get("GATEWAY_SECRET") or "").strip()
-    ticket = generate_upload_ticket(user_id=user_id, max_bytes=max_bytes, action="fetch_url")
-
-    payload: dict[str, Any] = {
-        "url": url,
-        "user_id": int(user_id) if user_id is not None else 0,
-        "action": action,
-    }
-    if max_bytes is not None:
-        payload["max_bytes"] = int(max_bytes)
-
-    fetch_endpoint = f"{worker_url}/media/fetch-url"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {ticket}",
-        "User-Agent": "Flama-ChungVPS/1.0",
-    }
+    ticket = generate_upload_ticket(user_id=user_id, max_bytes=max_bytes, ttl_seconds=60, action="fetch_url")
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {ticket}", "Accept": "*/*"}
     if gateway_secret:
         headers["X-Flama-Gateway-Secret"] = gateway_secret
-
-    req_body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(fetch_endpoint, data=req_body, headers=headers, method="POST")
-
+    body = json.dumps({"url": url, "kind": kind, "timeout_seconds": float(timeout_seconds)}).encode("utf-8")
+    req = urllib.request.Request(f"{worker_url}/media/fetch-url", data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = resp.read()
-            return json.loads(data.decode("utf-8"))
+        # The worker's own fetch timeout bounds the call; allow a little for transfer.
+        with urllib.request.build_opener(_NoInternalRedirects()).open(req, timeout=float(timeout_seconds) + 10) as resp:
+            content = resp.read(int(max_bytes) + 1)
+            if len(content) > int(max_bytes):
+                raise FlamaMediaClientError("Remote file exceeds the allowed size", 413, "PAYLOAD_TOO_LARGE")
+            return {
+                "content": content,
+                "content_type": str(resp.headers.get("Content-Type") or ""),
+                "final_url": str(resp.headers.get("X-Flama-Final-Url") or url),
+                "filename": str(resp.headers.get("X-Flama-Filename") or ""),
+            }
     except urllib.error.HTTPError as exc:
-        err_body = exc.read().decode("utf-8", errors="replace")
-        logger.error("[MEDIA_CLIENT] Worker 212 returned HTTP %s on url fetch: %s", exc.code, err_body)
         try:
-            err_json = json.loads(err_body)
-            msg = err_json.get("message") or err_json.get("error") or err_body
-            err_code = err_json.get("error") or "URL_FETCH_ERROR"
-        except Exception:
-            msg = err_body
-            err_code = "URL_FETCH_ERROR"
-        raise FlamaMediaClientError(msg, status_code=exc.code, error_code=err_code) from exc
-    except Exception as exc:
-        logger.exception("[MEDIA_CLIENT] Failed to connect to media worker for url fetch: %s", exc)
+            error = json.loads(exc.read(8192).decode("utf-8"))
+        except (ValueError, UnicodeError):
+            error = {}
         raise FlamaMediaClientError(
-            f"Cannot connect to media worker: {exc}",
-            status_code=503,
-            error_code="MEDIA_WORKER_UNAVAILABLE",
+            str(error.get("message") or "Media worker could not fetch the URL."),
+            status_code=exc.code if exc.code in {400, 403, 413, 415} else 502,
+            error_code=str(error.get("error") or "FETCH_FAILED"),
         ) from exc
-
+    except (OSError, ValueError) as exc:
+        raise FlamaMediaClientError("Media worker is unavailable.", 503, "MEDIA_WORKER_UNAVAILABLE") from exc
