@@ -34,9 +34,11 @@ Mặc định đang dùng cho các điểm chưa chốt (đổi nếu chủ dự
 | 3 | SVG nét chữ: 212 sinh + lưu `/data/flama/strokes` (đã chép 17.600 file chuẩn từ OV), SVG thay thế khi không có dữ liệu gốc, OV nginx `proxy_store` khi thiếu; worksheet đọc từ 212 | Đã chạy trên 212 và OV; Flask (`FLAMA_STROKE_WORKER_ENABLED=1`, worksheet) có hiệu lực sau PR #283. Cloudflare còn giữ một số 404 nét chữ cũ (cache 1 năm) — cần purge `media.flama.vn/store/stroke_` | Claude |
 | 4 | Báo sự cố chỉ tạo cảnh báo + audit, không khoá tài khoản | Code trong PR #283; `/api/v1/internal/` miễn CSRF | Claude |
 | 5 | Dọn: bỏ timer sync, fallback nginx về app, route media/stroke Flask, Pillow, worksheet tự tải SVG từ GitHub trên VPS | Sau khi 1–3 chạy ổn trên prod | — |
+| 6 | CI media + Ubuntu dọn staging sau 1 ngày | Đã sửa catalog CI; MySQL media contract xanh. Pipeline private cài tmpfiles `mM:1d`, timer active/enabled kiểm tra 30 phút. Gateway deploy qua CI, chặn control endpoint công khai; SSH chỉ kiểm tra | GPT |
+| 7 | Kiểm tra tích hợp Flask → Go → MySQL và ZIP preset | Go ZIP đã dùng preset ký trong ticket, test ZIP/vet/race/ARM64 xanh; PR Go #1/#2 đã merge và deploy bằng CI. Test HTTP + MySQL thật bổ sung trong PR app tiếp theo (chạy Linux) | GPT |
 
 ## Việc sau khi PR #283 deploy
 
 1. Thử upload ảnh và audio TTS trong một thẻ thật; kiểm tra field lưu `/store/<uuid>` và file có trên 212.
 2. Bật báo sự cố trên 212: `SECURITY_CALLBACK_URL=http://wg-app-server:4789/api/internal/security/incident` (đường không có `/v1`), rồi restart `flama-media`. Chỉ làm sau khi bản chỉ-cảnh-báo đã chạy.
-3. Merge TrinhChung/flama-media#1 để CI build lại đúng bản đang chạy (CI chỉ thay binary, không sửa `.env`).
+3. Go #1/#2 đã merge; CI đã build ARM64 và deploy thành công. Backend #283 cũng đã merge và qua CI/deploy; đối chiếu trạng thái này với runtime trước khi chạy smoke test thẻ thật.
