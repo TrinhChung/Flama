@@ -162,7 +162,7 @@ class MediaStagingServiceTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(committed_url)
-        self.assertTrue(committed_url.startswith("/media/proxy/"))
+        self.assertTrue(committed_url.startswith("/store/"))
 
         # Verify MediaAsset was created
         asset_id = committed_url.split("/")[-1]
@@ -196,7 +196,7 @@ class MediaStagingServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(updated["Word"], "Inu")
-        self.assertTrue(updated["Image"].startswith("/media/proxy/"))
+        self.assertTrue(updated["Image"].startswith("/store/"))
 
     def test_http_stage_paste_and_serve(self):
         client = self.app.test_client()

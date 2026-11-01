@@ -79,6 +79,7 @@ class ContentApiError(ValueError):
 
 
 from sqlalchemy.orm import selectinload
+from app.services.media_field_codec import store_media_url
 
 
 def list_note_types(*, user_id: int, compact: bool = False, summary: bool = False) -> dict[str, Any]:
@@ -1216,7 +1217,7 @@ def get_note(*, user_id: int, note_id: str) -> dict[str, Any]:
             "field_name": asset.field_name,
             "filename": asset.filename,
             "mime_type": asset.mime_type,
-            "url": f"/media/proxy/{asset.id}",
+            "url": store_media_url(asset.id),
         }
         for asset in note.media_assets
     ]

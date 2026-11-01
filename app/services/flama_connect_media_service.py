@@ -31,6 +31,7 @@ from models.connect_import_session import ConnectImportSession
 from models.media_asset import MediaAsset
 from models.note import Note
 from models.note_type import NoteType
+from app.services.media_field_codec import store_media_url
 
 
 YOMITAN_MP3_FILENAME_RE = re.compile(
@@ -506,7 +507,7 @@ def resolve_import_media(
                 None,
             )
             if matching_existing is not None:
-                canonical_url = f"/media/proxy/{matching_existing.id}"
+                canonical_url = store_media_url(matching_existing.id)
                 raw_fields[field_name] = canonical_url
                 allowed.add(canonical_url)
                 continue
@@ -586,7 +587,7 @@ def materialize_import_media(
                     )
                     db.session.add(existing)
                     db.session.flush()
-                values[field_name] = f"/media/proxy/{existing.id}"
+                values[field_name] = store_media_url(existing.id)
                 attached_count += 1
             except Exception as exc:
                 current_app.logger.error("Lỗi khi xử lý import media %s: %s", staged.filename, exc)
@@ -654,7 +655,7 @@ def materialize_audio(
             )
             db.session.add(asset)
             db.session.flush()
-            values[field_name] = f"/media/proxy/{asset.id}"
+            values[field_name] = store_media_url(asset.id)
             if pending_path is not None:
                 pending_paths_by_id[pending.id] = pending_path
     except Exception:

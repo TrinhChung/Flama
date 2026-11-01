@@ -167,7 +167,7 @@ class FlashcardMediaMigrationTests(unittest.TestCase):
         values = dict(db.session.get(Note, self.note_id).field_values)
         self.assertEqual(values["Picture"], "https://cdn.example.com/picture.png")
         self.assertEqual(values["Diagram"], "")
-        self.assertTrue(values["Audio"].startswith("/media/proxy/"))
+        self.assertTrue(values["Audio"].startswith("/store/"))
         self.assertEqual(values["MissingAudio"], "missing.mp3")
         self.assertEqual(values["WrongAudio"], "")
         self.assertIn(

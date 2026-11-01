@@ -166,11 +166,11 @@ class FieldValueConsumerTests(unittest.TestCase):
         self.assertEqual(content_version(context), before)
         artifact = build_content_artifact(context)
         self.assertEqual(artifact["media"][0]["field_name"], "Word.a")
-        self.assertEqual(artifact["media"][0]["proxy_url"], f"/media/proxy/{asset.id}")
+        self.assertEqual(artifact["media"][0]["proxy_url"], f"/store/{asset.id}")
         after_render = render_template_pair(template=template, field_defs=captured_fields,
             field_values=captured_values, media_assets=[asset])["front_html"]
         self.assertEqual(before_render, after_render)
-        self.assertEqual(build_media_reference_lookup([asset])[asset.id].url, f"/media/proxy/{asset.id}")
+        self.assertEqual(build_media_reference_lookup([asset])[asset.id].url, f"/store/{asset.id}")
 
     def test_mysql_search_compilation_reads_values_without_named_live_column(self):
         sql = str(select(Note.id).where(note_values_search_condition(keyword_like="%cat%")).compile(

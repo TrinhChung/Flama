@@ -14,6 +14,7 @@ import {
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { resolveMediaUrl } from '@/shared/config/env'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,7 +65,7 @@ export function NavUser({
               <Avatar className="size-8 rounded-lg">
                 {user.avatar_url ? (
                   <AvatarImage
-                    src={user.avatar_url}
+                    src={resolveMediaUrl(user.avatar_url)}
                     alt={displayName}
                     className="rounded-lg object-cover"
                   />

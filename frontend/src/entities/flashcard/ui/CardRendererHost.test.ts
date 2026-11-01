@@ -394,6 +394,49 @@ describe('card renderer host viewport modes', () => {
     controller.destroy()
   })
 
+  it('serves store media from the media origin and plays a legacy ref allowed under its store URL', async () => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(
+      iframe,
+      { mediaBaseUrl: 'https://media.flama.vn/' },
+    )
+    controller.render({
+      html: '<img src="/store/image-2.webp"><audio src="/media/proxy/audio-2"></audio><img src="/store/stroke_ja_4e00.svg">',
+      allowed_media_urls: ['/store/image-2.webp', '/store/audio-2'],
+      allowed_audio_urls: ['/store/audio-2'],
+    })
+
+    expect(iframe.srcdoc).toContain('<base href="https://media.flama.vn/">')
+    expect(iframe.srcdoc).toContain('https://media.flama.vn/store/image-2.webp')
+    expect(iframe.srcdoc).toContain('img-src https://media.flama.vn/store/image-2.webp https://media.flama.vn/store/audio-2 https://media.flama.vn/store/ ')
+
+    const instanceId = iframe.srcdoc.match(/"instanceId":"([^"]+)"/)?.[1]
+    window.dispatchEvent(new MessageEvent('message', {
+      source: iframe.contentWindow!,
+      data: {
+        channel: 'flama-card-renderer',
+        direction: 'renderer_to_host',
+        instanceId,
+        action: 'play_audio',
+        payload: { ref: '/media/proxy/audio-2', requestId: `${instanceId}:audio:2`, elementToken: 'flama-audio-2' },
+      },
+    }))
+    await Promise.resolve()
+
+    const sharedAudio = document.querySelector('body > audio[aria-hidden="true"]')
+    expect(sharedAudio?.getAttribute('src')).toBe('https://media.flama.vn/media/proxy/audio-2')
+    controller.destroy()
+  })
+
   it('adds exact public HTTPS media URLs to CSP without authorizing injected proxy ids', () => {
     const source = readFileSync(
       resolve(process.cwd(), '../static/js/card_renderer_host.js'),

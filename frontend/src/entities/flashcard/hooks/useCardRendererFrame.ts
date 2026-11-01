@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { resolveBackendUrl } from '@/shared/config/env'
+import { MEDIA_ORIGIN, resolveBackendUrl } from '@/shared/config/env'
 import type { CardRendererFrameProps, RendererDiagnostic, RendererReadyEvent } from '../model/types'
 
 declare global {
@@ -24,7 +24,7 @@ declare global {
 }
 
 let scriptLoadPromise: Promise<void> | null = null
-const RENDERER_HOST_VERSION = 'renderer-diagnostics-v5'
+const RENDERER_HOST_VERSION = 'renderer-store-media-v6'
 const EMPTY_FIELD_DEFS: unknown[] = []
 const EMPTY_FIELD_VALUES: Record<string, string> = {}
 
@@ -123,7 +123,7 @@ export function useCardRendererFrame({
       autoHeight: !fillHeight,
       fillHeight,
       enableLivePatch,
-      mediaBaseUrl: mediaBaseUrl || resolveBackendUrl('/'),
+      mediaBaseUrl: mediaBaseUrl || (MEDIA_ORIGIN ? `${MEDIA_ORIGIN}/` : resolveBackendUrl('/')),
       onError: (diagnostic: RendererDiagnostic) => {
         if (callbackRef.current.onDiagnostic) callbackRef.current.onDiagnostic(diagnostic)
         else console.warn('Flama card renderer:', diagnostic.message)

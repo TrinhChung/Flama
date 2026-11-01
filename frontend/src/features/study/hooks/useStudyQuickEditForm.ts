@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { appApi } from '@/app/api'
-import { resolveBackendUrl } from '@/config/env'
+import { resolveMediaUrl } from '@/shared/config/env'
 import { fieldValueEditorText, serializeArrayFieldValues } from '@/lib/arrayField'
 import { noteWritePreconditions } from '@/lib/noteWritePreconditions'
 import { NOTE_TAG_MAX_COUNT, NOTE_TAG_MAX_LENGTH, tagDedupeKey } from '@/entities/flashcard'
@@ -245,14 +245,14 @@ export function useStudyQuickEditForm({
     if (cardDetailQuery.data?.media_assets) {
       for (const asset of cardDetailQuery.data.media_assets) {
         if (asset.filename && asset.url) {
-          map.set(asset.filename.toLowerCase(), resolveBackendUrl(asset.url))
+          map.set(asset.filename.toLowerCase(), resolveMediaUrl(asset.url))
         }
       }
     }
     if (content?.media) {
       for (const m of content.media) {
         if (m.filename && m.proxy_url) {
-          map.set(m.filename.toLowerCase(), resolveBackendUrl(m.proxy_url))
+          map.set(m.filename.toLowerCase(), resolveMediaUrl(m.proxy_url))
         }
       }
     }

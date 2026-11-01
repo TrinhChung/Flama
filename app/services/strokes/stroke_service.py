@@ -14,10 +14,6 @@ from sqlalchemy.orm import selectinload
 
 from app.services import deck_working_tree_service
 from app.services.strokes.cjk_extractor import CjkExtractor
-from app.services.strokes.dataset_builder import (
-    fetch_authentic_stroke_svg,
-    generate_kanji_placeholder_svg,
-)
 from models import db
 from models.field_types import field_value_text
 from models.card import card_id_clause
@@ -65,7 +61,10 @@ def _get_upload_root() -> Path:
 
 
 def ensure_stroke_shared_asset(image_key: str, upload_root: Path | None = None) -> SharedImageAsset | None:
-    """Ensure a stroke diagram exists in SharedImageAsset and physical media storage."""
+    """Ensure a stroke diagram exists in SharedImageAsset without external network calls or disk writes.
+
+    All 35,143 canonical stroke diagrams are hosted on OV Gateway SSD and served via /store/.
+    """
     m = re.match(r"^stroke_([a-z0-9_]+)_([a-f0-9]{4,6})$", image_key.lower())
     if not m:
         return None
@@ -77,31 +76,20 @@ def ensure_stroke_shared_asset(image_key: str, upload_root: Path | None = None) 
     except ValueError:
         return None
 
-    root = upload_root or _get_upload_root()
-    storage_path = f"library/strokes/{raw_folder}/{hex_code}.svg"
-    full_path = root / storage_path
-    
     existing = SharedImageAsset.query.filter_by(image_key=image_key).first()
+    storage_path = f"strokes/{image_key}.svg"
 
-    if not full_path.exists():
-        full_path.parent.mkdir(parents=True, exist_ok=True)
-        # Check if static fallback exists first
-        static_file = _get_static_root() / "strokes" / locale_norm / f"{hex_code}.svg"
-        if static_file.exists():
-            svg_content = static_file.read_text(encoding="utf-8")
-        else:
-            svg_content = fetch_authentic_stroke_svg(char, locale=locale_norm) or generate_kanji_placeholder_svg(char, locale=locale_norm)
-            try:
-                static_file.parent.mkdir(parents=True, exist_ok=True)
-                static_file.write_text(svg_content, encoding="utf-8")
-            except Exception:
-                pass
-        
-        full_path.write_text(svg_content, encoding="utf-8")
-
-    svg_bytes = full_path.read_bytes() if full_path.exists() else b""
-    sha256 = hashlib.sha256(svg_bytes).hexdigest() if svg_bytes else ""
-    size_bytes = len(svg_bytes)
+    # Read-only check on local static dataset if present
+    sha256 = ""
+    size_bytes = 0
+    static_file = _get_static_root() / "strokes" / locale_norm / f"{hex_code}.svg"
+    if static_file.exists():
+        try:
+            svg_bytes = static_file.read_bytes()
+            sha256 = hashlib.sha256(svg_bytes).hexdigest()
+            size_bytes = len(svg_bytes)
+        except Exception:
+            pass
 
     if not existing:
         asset = SharedImageAsset(
@@ -127,8 +115,9 @@ def ensure_stroke_shared_asset(image_key: str, upload_root: Path | None = None) 
             existing.storage_path = storage_path
             existing.mime_type = "image/svg+xml"
             existing.is_enabled = True
-            existing.size_bytes = size_bytes
-            existing.sha256 = sha256
+            if sha256 and not existing.sha256:
+                existing.sha256 = sha256
+                existing.size_bytes = size_bytes
             try:
                 db.session.commit()
             except Exception:
@@ -178,9 +167,6 @@ def resolve_stroke_items(
     for char in characters:
         hex_code = CjkExtractor.char_to_hex(char)
         image_key = f"stroke_{raw_folder}_{hex_code}"
-        
-        # Ensure exists in SharedImageAsset & media library storage
-        ensure_stroke_shared_asset(image_key)
         url = f"/store/{image_key}.svg"
 
         items.append({

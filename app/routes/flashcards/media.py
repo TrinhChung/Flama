@@ -188,6 +188,7 @@ def _media_error(error: str, message: str, *, status: int = 404):
     return response, code
 
 
+@flashcards_bp.route("/store/<asset_id>", methods=["GET"])
 @flashcards_bp.route("/media/proxy/<asset_id>", methods=["GET"])
 def proxy_media(asset_id: str):
     # Reserved, application-owned samples are available without a MediaAsset.

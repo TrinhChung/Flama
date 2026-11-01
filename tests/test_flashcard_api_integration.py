@@ -672,7 +672,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(detail_response.status_code, 200)
         self.assertEqual(
             detail_response.get_json()["field_values"]["Audio"],
-            f"/media/proxy/{asset_id}",
+            f"/store/{asset_id}",
         )
         self.assertEqual(
             self.client.get("/api/flashcards/import/options").status_code,
@@ -4104,7 +4104,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         allowed_audio_asset_ids = rendered_back_payload.get("allowed_audio_asset_ids") or []
         self.assertEqual(len(allowed_audio_urls), 1)
         self.assertEqual(len(allowed_audio_asset_ids), 1)
-        self.assertTrue(str(allowed_audio_urls[0]).startswith("/media/proxy/"))
+        self.assertTrue(str(allowed_audio_urls[0]).startswith("/store/"))
         self.assertIn("custom-audio", rendered_back_payload.get("html") or "")
         self.assertIn(".play()", rendered_back_payload.get("html") or "")
 
@@ -4308,7 +4308,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertTrue(payload.get("success"))
         self.assertEqual(
             (payload.get("field_values") or {}).get("Word_Audio"),
-            f"/media/proxy/{asset_id}",
+            f"/store/{asset_id}",
         )
 
     def test_study_edit_card_updates_deck_and_tags(self):

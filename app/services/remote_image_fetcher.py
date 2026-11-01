@@ -15,6 +15,20 @@ from werkzeug.utils import secure_filename
 from app.validators import RequestValidationError
 
 
+class DirectCrawlDisabledError(RequestValidationError, ValueError):
+    """Explicit security exception raised when direct external HTTP crawling is attempted."""
+
+    def __init__(
+        self,
+        message: str = "Direct external crawling is disabled. Use Flama Media service for URL safety verification.",
+        *,
+        code: str = "DIRECT_CRAWL_DISABLED",
+        status: int = 403,
+        field: str | None = None,
+    ) -> None:
+        super().__init__(message, code=code, status=status, field=field)
+
+
 MAX_REMOTE_URL_LENGTH = 2048
 REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 MIME_TO_EXTENSION = {
@@ -87,90 +101,11 @@ def fetch_remote_image(
     timeout_seconds: float,
     max_redirects: int,
 ) -> RemoteImagePayload:
-    current_url = _normalize_remote_url(raw_url)
-    redirect_count = 0
-
-    while True:
-        target = _resolve_remote_target(current_url)
-        connection, response = _request_target(
-            target,
-            timeout_seconds=timeout_seconds,
-        )
-        try:
-            if response.status in REDIRECT_STATUS_CODES:
-                if redirect_count >= int(max_redirects):
-                    raise _remote_error(
-                        "Link hình ảnh chuyển hướng quá nhiều lần.",
-                        code="IMAGE_REMOTE_TOO_MANY_REDIRECTS",
-                    )
-                location = (response.getheader("Location") or "").strip()
-                if not location:
-                    raise _remote_error(
-                        "Link hình ảnh trả về chuyển hướng không hợp lệ.",
-                        code="IMAGE_REMOTE_FETCH_FAILED",
-                    )
-                next_url = _normalize_remote_url(urljoin(target.url, location))
-                next_scheme = urlsplit(next_url).scheme.lower()
-                if target.scheme == "https" and next_scheme != "https":
-                    raise _remote_error(
-                        "Không cho phép chuyển hướng hình ảnh từ HTTPS xuống HTTP.",
-                        code="IMAGE_REMOTE_REDIRECT_DOWNGRADE",
-                    )
-                current_url = next_url
-                redirect_count += 1
-                continue
-
-            if response.status != 200:
-                raise _remote_error(
-                    f"Không thể tải hình ảnh từ link (HTTP {response.status}).",
-                    code="IMAGE_REMOTE_FETCH_FAILED",
-                )
-
-            content_encoding = (
-                response.getheader("Content-Encoding") or "identity"
-            ).strip().lower()
-            if content_encoding not in {"", "identity"}:
-                raise _remote_error(
-                    "Link hình ảnh dùng kiểu nén phản hồi không được hỗ trợ.",
-                    code="IMAGE_REMOTE_ENCODING_NOT_ALLOWED",
-                    status=415,
-                )
-
-            mime_type = (
-                response.getheader("Content-Type") or ""
-            ).split(";", 1)[0].strip().lower()
-            extension = MIME_TO_EXTENSION.get(mime_type)
-            if extension is None:
-                raise _remote_error(
-                    "Link không trả về định dạng hình ảnh được hỗ trợ.",
-                    code="MEDIA_TYPE_NOT_ALLOWED",
-                    status=415,
-                )
-
-            content_length = _parse_content_length(
-                response.getheader("Content-Length")
-            )
-            if content_length is not None and content_length > int(max_bytes):
-                raise _remote_error(
-                    f"Hình ảnh từ link vượt quá {int(max_bytes)} bytes.",
-                    code="MEDIA_TOO_LARGE",
-                    status=413,
-                )
-
-            content = _read_bounded(response, max_bytes=int(max_bytes))
-            filename = _filename_from_url(
-                target.url,
-                extension=extension,
-            )
-            return RemoteImagePayload(
-                content=content,
-                filename=filename,
-                mime_type=mime_type,
-                source_url=target.url,
-            )
-        finally:
-            response.close()
-            connection.close()
+    # Requirement R3: Direct socket/HTTP crawling is strictly disabled.
+    # Outbound URL fetching and malware inspection must be routed to Flama Media service on Worker 212.
+    raise DirectCrawlDisabledError(
+        "Direct external crawling is disabled. Use Flama Media service for URL safety verification."
+    )
 
 
 def fetch_remote_html(
@@ -181,68 +116,12 @@ def fetch_remote_html(
     max_redirects: int = 3,
 ) -> str:
     """Fetch HTML content from a remote webpage with DNS pinning and SSRF protection."""
-    current_url = _normalize_remote_url(raw_url)
-    redirect_count = 0
+    # Requirement R3: Direct socket/HTTP crawling is strictly disabled.
+    # Outbound URL fetching and malware inspection must be routed to Flama Media service on Worker 212.
+    raise DirectCrawlDisabledError(
+        "Direct external crawling is disabled. Use Flama Media service for URL safety verification."
+    )
 
-    while True:
-        target = _resolve_remote_target(current_url)
-        connection, response = _request_target(
-            target,
-            timeout_seconds=timeout_seconds,
-            accept_header="text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8",
-        )
-        try:
-            if response.status in REDIRECT_STATUS_CODES:
-                if redirect_count >= int(max_redirects):
-                    raise _remote_error(
-                        "Link trang web chuyển hướng quá nhiều lần.",
-                        code="IMAGE_REMOTE_TOO_MANY_REDIRECTS",
-                    )
-                location = (response.getheader("Location") or "").strip()
-                if not location:
-                    raise _remote_error(
-                        "Link trang web trả về chuyển hướng không hợp lệ.",
-                        code="IMAGE_REMOTE_FETCH_FAILED",
-                    )
-                next_url = _normalize_remote_url(urljoin(target.url, location))
-                next_scheme = urlsplit(next_url).scheme.lower()
-                if target.scheme == "https" and next_scheme != "https":
-                    raise _remote_error(
-                        "Không cho phép chuyển hướng từ HTTPS xuống HTTP.",
-                        code="IMAGE_REMOTE_REDIRECT_DOWNGRADE",
-                    )
-                current_url = next_url
-                redirect_count += 1
-                continue
-
-            if response.status != 200:
-                raise _remote_error(
-                    f"Không thể tải nội dung trang web (HTTP {response.status}).",
-                    code="IMAGE_REMOTE_FETCH_FAILED",
-                )
-
-            content_length = _parse_content_length(
-                response.getheader("Content-Length")
-            )
-            if content_length is not None and content_length > int(max_bytes):
-                raise _remote_error(
-                    f"Nội dung trang web vượt quá {int(max_bytes)} bytes.",
-                    code="MEDIA_TOO_LARGE",
-                    status=413,
-                )
-
-            content = _read_bounded(response, max_bytes=int(max_bytes))
-            content_type = (response.getheader("Content-Type") or "").lower()
-            encoding = "utf-8"
-            if "charset=" in content_type:
-                encoding = content_type.split("charset=", 1)[1].split(";", 1)[0].strip()
-            try:
-                return content.decode(encoding, errors="replace")
-            except Exception:
-                return content.decode("utf-8", errors="replace")
-        finally:
-            response.close()
-            connection.close()
 
 
 
@@ -393,43 +272,11 @@ def _request_target(
     timeout_seconds: float,
     accept_header: str | None = None,
 ) -> tuple[http.client.HTTPConnection, http.client.HTTPResponse]:
-    last_error: Exception | None = None
-    accept = accept_header or ", ".join(MIME_TO_EXTENSION)
-    for address in target.addresses:
-        connection: http.client.HTTPConnection
-        if target.scheme == "https":
-            connection = _PinnedHTTPSConnection(
-                server_hostname=target.hostname,
-                connect_host=address,
-                port=target.port,
-                timeout=float(timeout_seconds),
-            )
-        else:
-            connection = http.client.HTTPConnection(
-                address,
-                port=target.port,
-                timeout=float(timeout_seconds),
-            )
-        try:
-            connection.request(
-                "GET",
-                target.request_target,
-                headers={
-                    "Accept": accept,
-                    "Host": target.host_header,
-                    "User-Agent": "Flama-Image-Crawler/1.0",
-                    "Connection": "close",
-                },
-            )
-            return connection, connection.getresponse()
-        except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
-            last_error = exc
-            connection.close()
-
-    raise _remote_error(
-        "Không thể kết nối tới máy chủ hình ảnh.",
-        code="IMAGE_REMOTE_FETCH_FAILED",
-    ) from last_error
+    # Requirement R3: Direct socket/HTTP crawling from Chung VPS is strictly disabled.
+    # Outbound URL fetching and malware inspection must be routed to Flama Media service on Worker 212.
+    raise DirectCrawlDisabledError(
+        "Direct external crawling is disabled. Use Flama Media service for URL safety verification."
+    )
 
 
 def _read_bounded(

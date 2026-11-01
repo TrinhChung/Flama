@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { resolveMediaUrl } from '@/shared/config/env'
 import { cn } from '@/lib/utils'
 import type { ChangeRequestActor } from '../../types'
 
@@ -21,7 +22,7 @@ export function ContributorIdentity({
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <Avatar className={cn('rounded-lg', size === 'sm' ? 'size-7' : 'size-9')}>
-        {actor.avatar_url ? <AvatarImage src={actor.avatar_url} alt="" className="object-cover" /> : null}
+        {actor.avatar_url ? <AvatarImage src={resolveMediaUrl(actor.avatar_url)} alt="" className="object-cover" /> : null}
         <AvatarFallback className="rounded-lg bg-primary/10 font-bold text-primary">
           {name.charAt(0).toUpperCase()}
         </AvatarFallback>

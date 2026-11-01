@@ -388,7 +388,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         self.assertEqual(patch_resp.status_code, 200)
         payload = patch_resp.get_json() or {}
         values = payload.get("field_values") or {}
-        self.assertEqual(values.get("Sound"), f"/media/proxy/{asset_id}")
+        self.assertEqual(values.get("Sound"), f"/store/{asset_id}")
 
     def test_patch_note_accepts_audio_sound_tag_reference(self):
         note_type = self._create_note_type_with_media()
@@ -412,7 +412,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         self.assertEqual(patch_resp.status_code, 200)
         payload = patch_resp.get_json() or {}
         values = payload.get("field_values") or {}
-        self.assertEqual(values.get("Sound"), f"/media/proxy/{asset_id}")
+        self.assertEqual(values.get("Sound"), f"/store/{asset_id}")
 
     def test_upload_rejects_fake_extension(self):
         note_type = self._create_note_type_with_media()
@@ -520,7 +520,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         upload_payload = upload_resp.get_json() or {}
         first_asset_id = upload_payload.get("asset_id")
         self.assertTrue(first_asset_id)
-        self.assertTrue(str(upload_payload.get("url") or "").startswith("/media/proxy/"))
+        self.assertTrue(str(upload_payload.get("url") or "").startswith("/store/"))
 
         duplicate_resp = self.client.post(
             f"/api/notes/{note_id}/markdown-media",

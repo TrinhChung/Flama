@@ -25,6 +25,7 @@ from app.repositories.vocabulary_repository import (
     note_field_values_as_strings,
     note_ordered_field_names,
 )
+from app.services.media_field_codec import store_media_url
 
 
 
@@ -154,7 +155,7 @@ def build_browse_card_detail(
                 "field_name": asset.field_name,
                 "filename": asset.filename,
                 "mime_type": asset.mime_type,
-                "url": f"/media/proxy/{asset.id}",
+                "url": store_media_url(asset.id),
             }
             for asset in note_obj.media_assets
         ]

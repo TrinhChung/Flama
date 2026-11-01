@@ -31,6 +31,7 @@ from models import db
 from models.field_types import ARRAY_FIELD_TYPE, field_value_text
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note, NoteType
+from app.services.media_field_codec import store_media_url
 
 
 def _utcnow() -> datetime:
@@ -586,7 +587,7 @@ def build_browse_card_detail(
                 "field_name": asset.field_name,
                 "filename": asset.filename,
                 "mime_type": asset.mime_type,
-                "url": f"/media/proxy/{asset.id}",
+                "url": store_media_url(asset.id),
             }
             for asset in note_obj.media_assets
         ]

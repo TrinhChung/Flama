@@ -273,17 +273,17 @@ class FlashcardImportMediaValidationTests(unittest.TestCase):
 
             note1 = notes_by_word.get("猫")
             self.assertIsNotNone(note1)
-            self.assertEqual(note1.field_values["Audio"], f"/media/proxy/{asset_id}")
+            self.assertEqual(note1.field_values["Audio"], f"/store/{asset_id}")
             self.assertEqual(note1.field_values["Image"], library_url)
 
             note2 = notes_by_word.get("子猫")
             self.assertIsNotNone(note2)
-            self.assertEqual(note2.field_values["Audio"], f"/media/proxy/{asset_id}")
+            self.assertEqual(note2.field_values["Audio"], f"/store/{asset_id}")
             self.assertEqual(note2.field_values["Image"], library_url)
 
             note3 = notes_by_word.get("子猫2")
             self.assertIsNotNone(note3)
-            self.assertEqual(note3.field_values["Audio"], f"/media/proxy/{asset_id}")
+            self.assertEqual(note3.field_values["Audio"], f"/store/{asset_id}")
             self.assertEqual(note3.field_values["Image"], library_url)
 
     def test_library_store_url_is_accepted_without_belonging_to_the_note(self):

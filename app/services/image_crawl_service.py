@@ -15,7 +15,11 @@ from werkzeug.datastructures import FileStorage
 
 from app.services import deck_working_tree_service, quota_service
 from app.services.image_sanitizer import sanitize_shared_image
-from app.services.remote_image_fetcher import fetch_remote_html, fetch_remote_image
+from app.services.remote_image_fetcher import (
+    DirectCrawlDisabledError,
+    fetch_remote_html,
+    fetch_remote_image,
+)
 from app.validators import (
     MediaUploadValidationResult,
     RequestValidationError,
@@ -28,6 +32,7 @@ from models.audit_log import AuditLog
 from models.field_def import FieldDef
 from models.media_asset import MediaAsset
 from models.note import Note
+from app.services.media_field_codec import store_media_url
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +288,7 @@ def crawl_and_save_note_media(
     if existing:
         if not markdown_inline:
             values = dict(note.field_values or {})
-            canonical_url = f"/media/proxy/{existing.id}"
+            canonical_url = store_media_url(existing.id)
             if values.get(sanitized.field_name) != canonical_url:
                 values[sanitized.field_name] = canonical_url
                 note.field_values = values
@@ -331,7 +336,7 @@ def crawl_and_save_note_media(
         db.session.flush()
         if not markdown_inline:
             values = dict(note.field_values or {})
-            values[sanitized.field_name] = f"/media/proxy/{asset.id}"
+            values[sanitized.field_name] = store_media_url(asset.id)
             note.field_values = values
             deck_working_tree_service.mark_note_field_batches_changed(
                 mutations=[
@@ -515,7 +520,7 @@ def crawl_note_media_batch(
             if existing:
                 if not markdown_inline:
                     values = dict(note.field_values or {})
-                    canonical_url = f"/media/proxy/{existing.id}"
+                    canonical_url = store_media_url(existing.id)
                     if values.get(sanitized.field_name) != canonical_url:
                         values[sanitized.field_name] = canonical_url
                         note.field_values = values
@@ -581,7 +586,7 @@ def crawl_note_media_batch(
 
             if not markdown_inline:
                 values = dict(note.field_values or {})
-                values[sanitized.field_name] = f"/media/proxy/{asset.id}"
+                values[sanitized.field_name] = store_media_url(asset.id)
                 note.field_values = values
                 dirty_field_names_by_note_id.setdefault(note.id, set()).add(
                     sanitized.field_name
@@ -719,7 +724,7 @@ def _media_payload(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "asset_id": asset.id,
-        "url": f"/media/proxy/{asset.id}",
+        "url": store_media_url(asset.id),
         "field_name": asset.field_name,
         "sha256": asset.sha256,
         "size_bytes": asset.size_bytes,
@@ -729,3 +734,14 @@ def _media_payload(
     if include_filename:
         payload["filename"] = asset.filename
     return payload
+
+
+def delegate_url_crawl_to_media_worker(
+    url: str,
+    user_id: int | None = None,
+    max_bytes: int | None = None,
+) -> dict[str, Any]:
+    """Delegate safe URL fetching, anti-SSRF verification, and CAS ingestion to Worker 212."""
+    from app.services.flama_media_client import fetch_media_from_url
+    return fetch_media_from_url(url, user_id=user_id, max_bytes=max_bytes)
+

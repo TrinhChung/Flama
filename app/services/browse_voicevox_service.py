@@ -15,6 +15,7 @@ from werkzeug.utils import secure_filename
 
 from app.services import deck_working_tree_service, tts_provider_service
 from app.services.media_field_codec import (
+    store_media_url,
     is_canonical_media_url,
     join_media_field_urls,
     split_media_field_value,
@@ -414,7 +415,7 @@ def generate_voicevox(
             db.session.flush()
 
         filename = str(existing_asset.filename or "")
-        asset_url = f"/media/proxy/{existing_asset.id}"
+        asset_url = store_media_url(existing_asset.id)
         existing_value = str(note_values.get(destination_field) or "").strip()
         if append_audio and existing_value:
             next_value = join_media_field_urls(

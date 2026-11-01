@@ -25,6 +25,7 @@ from models.audit_log import AuditLog
 from models.field_types import stored_field_value
 from models.media_asset import MediaAsset
 from models.note import Note
+from app.services.media_field_codec import store_media_url
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +235,7 @@ def commit_staged_media(
     """Commit a staged image into a permanent MediaAsset for the specified Note.
     
     Returns:
-        The permanent canonical proxy URL: f"/media/proxy/{asset.id}"
+        The permanent canonical store URL (store_media_url(asset.id))
     """
     if not stage_id or not STAGE_ID_PATTERN.fullmatch(stage_id):
         return None
@@ -323,7 +324,7 @@ def commit_staged_media(
         except Exception:
             pass
 
-    return f"/media/proxy/{asset.id}"
+    return store_media_url(asset.id)
 
 
 def commit_all_staged_urls_in_field_values(

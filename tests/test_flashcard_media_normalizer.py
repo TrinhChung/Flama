@@ -41,11 +41,11 @@ class FlashcardMediaNormalizerTests(unittest.TestCase):
         lookup = build_media_reference_lookup([asset])
         self.assertEqual(
             normalize_single_media_reference("[sound:sound.wav]", lookup, field_type="audio"),
-            "/media/proxy/asset-xyz",
+            "/store/asset-xyz",
         )
         self.assertEqual(
             normalize_single_media_reference("sound.wav", lookup, field_type="audio"),
-            "/media/proxy/asset-xyz",
+            "/store/asset-xyz",
         )
 
     def test_external_sound_url_is_extracted(self):

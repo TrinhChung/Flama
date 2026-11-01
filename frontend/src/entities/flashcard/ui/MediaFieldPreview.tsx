@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useRef } from 'react'
-import { resolveBackendUrl } from '@/config/env'
+import { resolveBackendUrl, resolveMediaUrl } from '@/shared/config/env'
 import { apiRequest } from '@/shared/api/client'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -46,10 +46,10 @@ export function resolveDisplayUrl(
   }
   if (/^https:\/\/[^\s"'<>]+$/i.test(value)) return value
   if (/^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\/[^\s"'<>]*$/i.test(value)) return value
-  if (/^\/(?:media\/)?(?:store|proxy)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)) return resolveBackendUrl(value)
+  if (/^\/(?:media\/)?(?:store|proxy)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)) return resolveMediaUrl(value)
   if (/^\/media\/staged\/[A-Za-z0-9_-]{8,64}$/.test(value)) return resolveBackendUrl(value)
   if (/^\/media\/asset\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) return resolveBackendUrl(value)
-  if (/^\/media\/library\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)) return resolveBackendUrl(value)
+  if (/^\/media\/library\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)) return resolveMediaUrl(value)
   if (/^\/static\/strokes\/[A-Za-z0-9_-]+\/[A-Fa-f0-9]+\.svg$/.test(value)) return resolveBackendUrl(value)
   return ''
 }

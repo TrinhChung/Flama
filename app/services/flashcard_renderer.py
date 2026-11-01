@@ -18,7 +18,7 @@ from flask import current_app, has_app_context
 import bleach
 import chevron
 from bleach.css_sanitizer import CSSSanitizer
-from app.services.media_field_codec import is_canonical_media_url, split_media_field_value
+from app.services.media_field_codec import is_canonical_media_url, split_media_field_value, store_media_url
 from app.services.template_binding_service import prepare_bound_fields
 try:
     from markdown_it import MarkdownIt
@@ -459,7 +459,7 @@ def _resolve_media_url(value: Any, media_lookup: dict[str, Any]) -> str:
         raw = sound_match.group(1).strip()
     asset = media_lookup.get(raw)
     if asset is not None:
-        return f"/media/proxy/{asset.id}"
+        return store_media_url(asset.id)
     if is_canonical_media_url(raw):
         return raw
     if raw.startswith("stroke_"):

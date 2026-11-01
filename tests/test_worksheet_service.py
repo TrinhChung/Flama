@@ -551,7 +551,7 @@ class TestWorksheetService(unittest.TestCase):
         item = res["pages"][0]["items"][0]
         self.assertEqual(item["char"], "汉")
         self.assertTrue(item["has_stroke"])
-        self.assertIn("/strokes/zh/", item["stroke_url"])
+        self.assertEqual(item["stroke_url"], f"/store/stroke_zh_{ord('汉'):x}.svg")
         self.assertIn("flama-mmah-numbers", item["stroke_svg"])
         self.assertIn("flama-stroke-num", item["stroke_svg"])
 

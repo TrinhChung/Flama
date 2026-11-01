@@ -14,6 +14,7 @@ _BINARY_PATH_PREFIXES = (
     "/assets/",
     "/static/",
     "/media/",
+    "/store/",
 )
 
 
@@ -42,7 +43,7 @@ def init_spa_delivery(app) -> None:
             return _legacy_adapter_removed()
 
         if request.method in ("GET", "HEAD"):
-            if path.startswith(_BINARY_PATH_PREFIXES):
+            if path == "/store" or path.startswith(_BINARY_PATH_PREFIXES):
                 return None
             if path == "/support-donation/qr":
                 return None

@@ -164,7 +164,12 @@ def _lookup_target(
     asset_id = str(getattr(entry, "id", "") or "").strip()
     mime_type = str(getattr(entry, "mime_type", "") or "").strip().lower()
     family = "audio" if mime_type.startswith("audio/") else "image" if mime_type.startswith("image/") else None
-    return MediaReferenceTarget(f"/media/proxy/{asset_id}", family) if asset_id else None
+    return MediaReferenceTarget(store_media_url(asset_id), family) if asset_id else None
+
+
+def store_media_url(asset_id: Any) -> str:
+    """Canonical URL of an app media asset; the store serves it by asset id."""
+    return f"/store/{asset_id}"
 
 
 def shared_image_store_url(*, image_key: str | None, asset_id: Any) -> str:
@@ -218,11 +223,11 @@ def build_media_reference_lookup(assets: Any) -> dict[str, MediaReferenceTarget]
             continue
         mime_type = str(getattr(asset, "mime_type", "") or "").strip().lower()
         family = "audio" if mime_type.startswith("audio/") else "image" if mime_type.startswith("image/") else None
-        url = f"/media/proxy/{asset_id}"
+        url = store_media_url(asset_id)
         target = MediaReferenceTarget(url, family)
         lookup[asset_id] = target
         lookup[url] = target
-        lookup[f"/store/{asset_id}"] = target
+        lookup[f"/media/proxy/{asset_id}"] = target
         lookup[f"/media/store/{asset_id}"] = target
         filename = str(getattr(asset, "filename", "") or "").strip()
         if filename:
@@ -315,7 +320,7 @@ def resolve_media_file_target(
                 asset = db.session.get(MediaAsset, cleaned)
                 if asset:
                     family = "audio" if (asset.mime_type or "").startswith("audio/") else "image"
-                    return MediaReferenceTarget(f"/media/proxy/{asset.id}", family)
+                    return MediaReferenceTarget(store_media_url(asset.id), family)
 
             from models.note import Note
             from sqlalchemy import func, or_
@@ -329,12 +334,12 @@ def resolve_media_file_target(
                 user_asset = query.join(Note, MediaAsset.note_id == Note.id).filter(Note.user_id == user_id).first()
                 if user_asset:
                     family = "audio" if (user_asset.mime_type or "").startswith("audio/") else "image"
-                    return MediaReferenceTarget(f"/media/proxy/{user_asset.id}", family)
+                    return MediaReferenceTarget(store_media_url(user_asset.id), family)
 
             asset = query.first()
             if asset:
                 family = "audio" if (asset.mime_type or "").startswith("audio/") else "image"
-                return MediaReferenceTarget(f"/media/proxy/{asset.id}", family)
+                return MediaReferenceTarget(store_media_url(asset.id), family)
     except Exception:
         pass
 

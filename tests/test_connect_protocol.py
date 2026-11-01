@@ -248,7 +248,7 @@ class ConnectProtocolTests(unittest.TestCase):
             assets = {row.field_name: row for row in MediaAsset.query.all()}
             self.assertEqual(set(assets), {"Audio", "Image"})
             for name, asset in assets.items():
-                self.assertEqual(stored.field_values[name], f"/media/proxy/{asset.id}")
+                self.assertEqual(stored.field_values[name], f"/store/{asset.id}")
                 self.assertTrue((Path(self.upload_tmp.name) / asset.storage_path).exists())
             self.assertEqual(ConnectPendingMedia.query.count(), 0)
 

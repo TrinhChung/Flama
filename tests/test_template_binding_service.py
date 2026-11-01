@@ -85,12 +85,12 @@ class TemplateBindingServiceTests(unittest.TestCase):
         content = study_artifact_service.build_content_artifact(context)
         self.assertIn('src="{{voice_url}}"', artifact["front_source"])
         self.assertIn('src="{{image_url}}"', artifact["front_source"])
-        self.assertEqual(content["render_context"]["voice_url"], "/media/proxy/audio-asset")
-        self.assertEqual(content["render_context"]["image_url"], "/media/proxy/image-asset")
+        self.assertEqual(content["render_context"]["voice_url"], "/store/audio-asset")
+        self.assertEqual(content["render_context"]["image_url"], "/store/image-asset")
         rendered = render_template_pair(template=template, field_defs=fields,
                                         field_values=context.field_values, media_assets=media)
-        self.assertIn('src="/media/proxy/audio-asset"', rendered["front_html"])
-        self.assertIn('src="/media/proxy/image-asset"', rendered["front_html"])
+        self.assertIn('src="/store/audio-asset"', rendered["front_html"])
+        self.assertIn('src="/store/image-asset"', rendered["front_html"])
         self.assertEqual(rendered["front_renderer_payload"]["allowed_audio_asset_ids"], ["audio-asset"])
         self.assertEqual(template.front_html, '<audio src="{{voice}}"></audio><img src="{{image}}">')
 
