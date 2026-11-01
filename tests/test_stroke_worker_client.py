@@ -124,5 +124,53 @@ class StrokeWorkerTests(unittest.TestCase):
         self.assertEqual(result["db_updated"], 1)
 
 
+class WorksheetStrokeSourceTests(unittest.TestCase):
+    SVG = '<svg xmlns="http://www.w3.org/2000/svg" class="flama-stroke-char"><path d="M1 1"/></svg>'
+
+    def setUp(self):
+        self.app = Flask(__name__)
+        self.app.config.update(FLAMA_STROKE_WORKER_ENABLED=True, FLAMA_MEDIA_WORKER_URL="http://wg-worker:4792",
+                               GATEWAY_SECRET="test-gateway-secret")
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        self.addCleanup(self.ctx.pop)
+        worker_client._SVG_CACHE.clear()
+        self.addCleanup(worker_client._SVG_CACHE.clear)
+
+    def _svg_response(self, body: str):
+        response = MagicMock()
+        response.read.return_value = body.encode()
+        response.__enter__.return_value = response
+        return response
+
+    @patch("app.services.worksheets.worksheet_service.fetch_authentic_stroke_svg")
+    @patch("app.services.strokes.worker_client._open_internal")
+    def test_worksheet_reads_strokes_from_worker_without_github_or_disk(self, request, github):
+        from app.services.worksheets import worksheet_service
+
+        request.return_value = self._svg_response(self.SVG)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with (patch.object(worksheet_service, "_get_static_root", return_value=root),
+                  patch.object(worksheet_service, "_get_upload_root", return_value=root)):
+                first = worksheet_service._get_stroke_svg_content("zh-hant", "6c34", char="水")
+                second = worksheet_service._get_stroke_svg_content("zh-hant", "6c34", char="水")
+            self.assertEqual(list(root.iterdir()), [])
+        self.assertEqual((first, second), (self.SVG, self.SVG))
+        github.assert_not_called()
+        request.assert_called_once()  # the second read comes from the in-process cache
+        sent = request.call_args.args[0]
+        self.assertEqual(sent.full_url, "http://wg-worker:4792/store/stroke_zh_hant_6c34.svg")
+        self.assertEqual(sent.get_header("X-flama-gateway-secret"), "test-gateway-secret")
+
+    @patch("app.services.strokes.worker_client._open_internal")
+    def test_worker_failure_returns_none_and_is_not_cached(self, request):
+        request.side_effect = OSError("down")
+        self.assertIsNone(worker_client.fetch_stroke_svg("水", "ja"))
+        request.side_effect = None
+        request.return_value = self._svg_response(self.SVG)
+        self.assertEqual(worker_client.fetch_stroke_svg("水", "ja"), self.SVG)
+
+
 if __name__ == "__main__":
     unittest.main()

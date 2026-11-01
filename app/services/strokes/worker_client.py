@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 import json
+import logging
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,8 +24,56 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _open_internal(request):
-    return urllib.request.build_opener(_NoRedirect()).open(request, timeout=60)
+def _open_internal(request, timeout: float = 60):
+    return urllib.request.build_opener(_NoRedirect()).open(request, timeout=timeout)
+
+
+logger = logging.getLogger(__name__)
+_SVG_CACHE: OrderedDict[str, str] = OrderedDict()
+_SVG_CACHE_LOCK = threading.Lock()
+_SVG_CACHE_MAX = 1024
+_MAX_SVG_BYTES = 1024 * 1024
+
+
+def fetch_stroke_svg(char: str, locale: str) -> str | None:
+    """Read one stroke SVG from worker212 for inlining (worksheets).
+
+    The worker serves its stored file, generating it first when missing (a
+    placeholder when no canonical data exists), so the app server neither calls
+    GitHub nor writes stroke files. Successful reads are kept in a small
+    in-process LRU so a worksheet's prefetch and render share one request.
+    """
+    key = f"stroke_{locale.replace('-', '_')}_{format(ord(char), 'x')}"
+    with _SVG_CACHE_LOCK:
+        if key in _SVG_CACHE:
+            _SVG_CACHE.move_to_end(key)
+            return _SVG_CACHE[key]
+    base_url = str(current_app.config.get("FLAMA_MEDIA_WORKER_URL") or "").rstrip("/")
+    gateway_secret = str(current_app.config.get("GATEWAY_SECRET") or "").strip()
+    if not base_url or not gateway_secret:
+        logger.warning("Stroke SVG %s not fetched: worker URL or gateway secret missing", key)
+        return None
+    request = urllib.request.Request(
+        f"{base_url}/store/{key}.svg",
+        headers={"X-Flama-Gateway-Secret": gateway_secret, "Accept": "image/svg+xml"},
+    )
+    try:
+        with _open_internal(request, timeout=15) as response:
+            data = response.read(_MAX_SVG_BYTES + 1)
+        if len(data) > _MAX_SVG_BYTES:
+            raise ValueError("stroke SVG exceeds limit")
+        svg = data.decode("utf-8")
+    except (OSError, ValueError, UnicodeError) as exc:
+        logger.warning("Stroke SVG %s unavailable from worker: %s", key, exc)
+        return None
+    if "<svg" not in svg:
+        return None
+    with _SVG_CACHE_LOCK:
+        _SVG_CACHE[key] = svg
+        _SVG_CACHE.move_to_end(key)
+        while len(_SVG_CACHE) > _SVG_CACHE_MAX:
+            _SVG_CACHE.popitem(last=False)
+    return svg
 
 
 def generate_strokes(characters: list[str], locale: str, *, force: bool = False) -> dict[str, dict[str, Any]]:

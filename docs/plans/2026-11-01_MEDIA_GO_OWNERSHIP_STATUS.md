@@ -31,7 +31,7 @@ Mặc định đang dùng cho các điểm chưa chốt (đổi nếu chủ dự
 |---|---|---|---|
 | 1 | Upload thẳng FE → 212 (staging, commit, preset + WebP, symlink id) | Go đã chạy trên 212 từ 2026-11-01 13:04 UTC; OV route `/media/staged/` (GET). App chờ merge PR #283 | Claude |
 | 2 | Tải ảnh/trang từ URL qua Go (`POST /media/fetch-url`, chỉ qua WireGuard) | Go đã chạy trên 212; Flask `remote_image_fetcher` gọi worker, chờ PR #283 | Claude |
-| 3 | SVG nét chữ: 212 sinh + lưu `/data/flama/strokes`, OV nginx `proxy_store` khi thiếu | Đã chạy trên 212 và OV; `FLAMA_STROKE_WORKER_ENABLED=1` trong env, có hiệu lực sau PR #283 | Claude |
+| 3 | SVG nét chữ: 212 sinh + lưu `/data/flama/strokes` (đã chép 17.600 file chuẩn từ OV), SVG thay thế khi không có dữ liệu gốc, OV nginx `proxy_store` khi thiếu; worksheet đọc từ 212 | Đã chạy trên 212 và OV; Flask (`FLAMA_STROKE_WORKER_ENABLED=1`, worksheet) có hiệu lực sau PR #283. Cloudflare còn giữ một số 404 nét chữ cũ (cache 1 năm) — cần purge `media.flama.vn/store/stroke_` | Claude |
 | 4 | Báo sự cố chỉ tạo cảnh báo + audit, không khoá tài khoản | Code trong PR #283; `/api/v1/internal/` miễn CSRF | Claude |
 | 5 | Dọn: bỏ timer sync, fallback nginx về app, route media/stroke Flask, Pillow, worksheet tự tải SVG từ GitHub trên VPS | Sau khi 1–3 chạy ổn trên prod | — |
 
