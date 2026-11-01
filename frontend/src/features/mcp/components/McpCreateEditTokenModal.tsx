@@ -107,8 +107,8 @@ export function McpCreateEditTokenModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="w-[95vw] sm:max-w-xl max-h-[90vh] flex flex-col overflow-hidden p-0 rounded-2xl border-border/60 shadow-2xl">
+        <DialogHeader className="px-5 py-4 border-b bg-muted/20 text-left shrink-0">
           <DialogTitle>
             {isPermissionsOnly
               ? t('modal.title_permissions_only')
@@ -116,7 +116,7 @@ export function McpCreateEditTokenModal({
               ? mode === 'admin' ? t('modal.title_edit_admin') : t('modal.title_edit_user')
               : mode === 'admin' ? t('modal.title_create_admin') : t('modal.title_create_user')}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs text-muted-foreground mt-0.5">
             {isPermissionsOnly
               ? t('modal.desc_permissions_only')
               : isEditing
@@ -125,132 +125,134 @@ export function McpCreateEditTokenModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          {mode === 'admin' && !isEditing && (
-            <div className="space-y-1.5">
-              <Label htmlFor="admin-token-user" className="text-xs font-semibold">
-                {t('modal.select_user_label')}
-              </Label>
-              <NativeSelect
-                id="admin-token-user"
-                value={String(userId)}
-                onChange={(e) => setUserId(e.target.value)}
-                className="w-full text-xs"
-              >
-                {!userId && <NativeSelectOption value="">{t('modal.select_user_placeholder')}</NativeSelectOption>}
-                {users?.map((u) => (
-                  <NativeSelectOption key={u.id} value={String(u.id)}>
-                    {u.display_name || u.username} ({u.username} - {u.email})
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-          )}
-
-          {!isPermissionsOnly && (
-            <div className="space-y-1.5">
-              <Label htmlFor={isEditing ? 'edit-token-name' : 'mcp-token-name'} className="text-xs font-semibold">
-                {t('modal.name_label')}
-              </Label>
-              <Input
-                id={isEditing ? 'edit-token-name' : 'mcp-token-name'}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={mode === 'admin' ? t('modal.name_placeholder_admin') : t('modal.name_placeholder_user')}
-                className="text-xs"
-                maxLength={120}
-                required
-              />
-            </div>
-          )}
-
-          {mode === 'admin' && !isEditing && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">{t('modal.custom_token_label')}</Label>
-              <Input
-                value={customToken}
-                onChange={(e) => setCustomToken(e.target.value)}
-                placeholder={t('modal.custom_token_placeholder')}
-                className="text-xs font-mono"
-              />
-            </div>
-          )}
-
-          {!isPermissionsOnly && (
-            <div className="space-y-1.5">
-              <Label htmlFor={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'} className="text-xs font-semibold">
-                {t('modal.expiry_label')}
-              </Label>
-              <NativeSelect
-                id={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'}
-                value={expiry}
-                onChange={(e) => setExpiry(e.target.value)}
-                className="w-full text-xs"
-              >
-                {isEditing && <NativeSelectOption value="keep">{t('modal.expiry_options.keep')}</NativeSelectOption>}
-                <NativeSelectOption value="180">{t('modal.expiry_options.days_180')}</NativeSelectOption>
-                <NativeSelectOption value="365">{t('modal.expiry_options.days_365')}</NativeSelectOption>
-                <NativeSelectOption value="none">{t('modal.expiry_options.none')}</NativeSelectOption>
-                <NativeSelectOption value="90">{t('modal.expiry_options.days_90')}</NativeSelectOption>
-                <NativeSelectOption value="30">{t('modal.expiry_options.days_30')}</NativeSelectOption>
-                <NativeSelectOption value="7">{t('modal.expiry_options.days_7')}</NativeSelectOption>
-              </NativeSelect>
-            </div>
-          )}
-
-          <div className="space-y-2 pt-2 border-t">
-            <div className="flex flex-wrap items-center justify-between gap-1 text-xs font-semibold">
-              <span>{t('modal.scopes_count', { count: scopes.length, total: ALL_MCP_SCOPES.length })}</span>
-              <div className="flex items-center gap-1">
-                <Button type="button" variant="ghost" size="xs" onClick={() => setScopes(ALL_MCP_SCOPES.map((s) => s.key))} className="h-6 px-1.5 text-[11px]">
-                  {t('modal.select_all')}
-                </Button>
-                <Button type="button" variant="ghost" size="xs" onClick={() => setScopes([])} className="h-6 px-1.5 text-[11px]">
-                  {t('modal.deselect_all')}
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5 pb-1">
-              {SCOPE_PRESETS.map((preset) => (
-                <Button
-                  key={preset.key}
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  onClick={() => handleApplyPreset(preset.key)}
-                  className="h-6 px-2 text-[11px]"
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-w-0">
+            {mode === 'admin' && !isEditing && (
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-token-user" className="text-xs font-semibold">
+                  {t('modal.select_user_label')}
+                </Label>
+                <NativeSelect
+                  id="admin-token-user"
+                  value={String(userId)}
+                  onChange={(e) => setUserId(e.target.value)}
+                  className="w-full text-xs"
                 >
-                  {t(`scopes.presets.${preset.key}.label`, preset.label)}
-                </Button>
-              ))}
-            </div>
+                  {!userId && <NativeSelectOption value="">{t('modal.select_user_placeholder')}</NativeSelectOption>}
+                  {users?.map((u) => (
+                    <NativeSelectOption key={u.id} value={String(u.id)}>
+                      {u.display_name || u.username} ({u.username} - {u.email})
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+            )}
 
-            <div className="space-y-2 max-h-56 overflow-y-auto border rounded-lg p-2.5 bg-muted/20">
-              {SCOPE_CATEGORIES.map((cat) => (
-                <div key={cat.key} className="space-y-1 pb-2 border-b last:border-b-0">
-                  <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                    <span>{t(`scopes.categories.${cat.key}.name`, cat.name)}</span>
-                    <div className="flex gap-1 text-[10px]">
-                      <button type="button" onClick={() => handleToggleCategory(cat.scopes, true)} className="hover:underline text-muted-foreground">{t('modal.category_select_all')}</button>
-                      <span>|</span>
-                      <button type="button" onClick={() => handleToggleCategory(cat.scopes, false)} className="hover:underline text-muted-foreground">{t('modal.category_deselect_all')}</button>
+            {!isPermissionsOnly && (
+              <div className="space-y-1.5">
+                <Label htmlFor={isEditing ? 'edit-token-name' : 'mcp-token-name'} className="text-xs font-semibold">
+                  {t('modal.name_label')}
+                </Label>
+                <Input
+                  id={isEditing ? 'edit-token-name' : 'mcp-token-name'}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={mode === 'admin' ? t('modal.name_placeholder_admin') : t('modal.name_placeholder_user')}
+                  className="text-xs"
+                  maxLength={120}
+                  required
+                />
+              </div>
+            )}
+
+            {mode === 'admin' && !isEditing && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">{t('modal.custom_token_label')}</Label>
+                <Input
+                  value={customToken}
+                  onChange={(e) => setCustomToken(e.target.value)}
+                  placeholder={t('modal.custom_token_placeholder')}
+                  className="text-xs font-mono"
+                />
+              </div>
+            )}
+
+            {!isPermissionsOnly && (
+              <div className="space-y-1.5">
+                <Label htmlFor={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'} className="text-xs font-semibold">
+                  {t('modal.expiry_label')}
+                </Label>
+                <NativeSelect
+                  id={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'}
+                  value={expiry}
+                  onChange={(e) => setExpiry(e.target.value)}
+                  className="w-full text-xs"
+                >
+                  {isEditing && <NativeSelectOption value="keep">{t('modal.expiry_options.keep')}</NativeSelectOption>}
+                  <NativeSelectOption value="180">{t('modal.expiry_options.days_180')}</NativeSelectOption>
+                  <NativeSelectOption value="365">{t('modal.expiry_options.days_365')}</NativeSelectOption>
+                  <NativeSelectOption value="none">{t('modal.expiry_options.none')}</NativeSelectOption>
+                  <NativeSelectOption value="90">{t('modal.expiry_options.days_90')}</NativeSelectOption>
+                  <NativeSelectOption value="30">{t('modal.expiry_options.days_30')}</NativeSelectOption>
+                  <NativeSelectOption value="7">{t('modal.expiry_options.days_7')}</NativeSelectOption>
+                </NativeSelect>
+              </div>
+            )}
+
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-xs font-semibold">
+                <span>{t('modal.scopes_count', { count: scopes.length, total: ALL_MCP_SCOPES.length })}</span>
+                <div className="flex items-center gap-1">
+                  <Button type="button" variant="ghost" size="xs" onClick={() => setScopes(ALL_MCP_SCOPES.map((s) => s.key))} className="h-6 px-1.5 text-[11px]">
+                    {t('modal.select_all')}
+                  </Button>
+                  <Button type="button" variant="ghost" size="xs" onClick={() => setScopes([])} className="h-6 px-1.5 text-[11px]">
+                    {t('modal.deselect_all')}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 pb-1">
+                {SCOPE_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.key}
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => handleApplyPreset(preset.key)}
+                    className="h-6 px-2 text-[11px]"
+                  >
+                    {t(`scopes.presets.${preset.key}.label`, preset.label)}
+                  </Button>
+                ))}
+              </div>
+
+              <div className="space-y-2 max-h-56 overflow-y-auto border rounded-lg p-2.5 bg-muted/20">
+                {SCOPE_CATEGORIES.map((cat) => (
+                  <div key={cat.key} className="space-y-1 pb-2 border-b last:border-b-0">
+                    <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                      <span>{t(`scopes.categories.${cat.key}.name`, cat.name)}</span>
+                      <div className="flex gap-1 text-[10px]">
+                        <button type="button" onClick={() => handleToggleCategory(cat.scopes, true)} className="hover:underline text-muted-foreground">{t('modal.category_select_all')}</button>
+                        <span>|</span>
+                        <button type="button" onClick={() => handleToggleCategory(cat.scopes, false)} className="hover:underline text-muted-foreground">{t('modal.category_deselect_all')}</button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {ALL_MCP_SCOPES.filter((s) => s.category === cat.key).map((sc) => (
+                        <label key={sc.key} className="flex items-center gap-2 p-1 rounded-md hover:bg-muted/50 cursor-pointer text-xs">
+                          <Checkbox checked={scopes.includes(sc.key)} onCheckedChange={() => handleToggleScope(sc.key)} />
+                          <span className="truncate" title={t(`scopes.items.${sc.key.replace(/[-:]/g, '_')}.desc`, sc.desc)}>{t(`scopes.items.${sc.key.replace(/[-:]/g, '_')}.label`, sc.label)}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {ALL_MCP_SCOPES.filter((s) => s.category === cat.key).map((sc) => (
-                      <label key={sc.key} className="flex items-center gap-2 p-1 rounded-md hover:bg-muted/50 cursor-pointer text-xs">
-                        <Checkbox checked={scopes.includes(sc.key)} onCheckedChange={() => handleToggleScope(sc.key)} />
-                        <span className="truncate" title={t(`scopes.items.${sc.key.replace(/[-:]/g, '_')}.desc`, sc.desc)}>{t(`scopes.items.${sc.key.replace(/[-:]/g, '_')}.label`, sc.label)}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="px-5 py-3 border-t bg-muted/30 m-0 shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t('modal.cancel')}
             </Button>
