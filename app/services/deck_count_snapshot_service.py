@@ -35,6 +35,12 @@ def _utc_naive(value):
     return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo is not None else value
 
 
+def _prewarmed_learner(user_id):
+    configured = current_app.config.get("DECK_COUNT_PREWARM_USER_IDS", ())
+    configured = configured.split(",") if isinstance(configured, str) else configured
+    return str(int(user_id)) in {str(value).strip() for value in configured}
+
+
 @dataclass(frozen=True)
 class _Context:
     user_id: int
@@ -194,11 +200,14 @@ def resolve_cached_owned_deck_counts(
 
     The caller owns its coherent snapshot (Dashboard uses fresh read-only RR).
     Non-owned and unqualified installed scopes remain on the raw aggregator.
+    Only the prewarm worker publishes snapshots, so a learner outside
+    ``DECK_COUNT_PREWARM_USER_IDS`` has none and skips the stamp reads.
     """
     session = session if isinstance(session, Session) else session()
     requested = sorted({int(value) for value in visible_deck_ids})
     if (not requested or not current_app.config.get("DECK_COUNT_WRITE_ENABLED", False)
-            or current_app.config.get("DECK_COUNT_READ_MODE", "raw") != "summary"):
+            or current_app.config.get("DECK_COUNT_READ_MODE", "raw") != "summary"
+            or not _prewarmed_learner(learner_user_id)):
         if requested and current_app.config.get("DECK_COUNT_READ_MODE", "raw") == "summary":
             require_ready_summary(user_id=learner_user_id, metric="dashboard")
         return {}, requested
@@ -376,6 +385,8 @@ def prewarm_owned_deck_counts(*, user_id, deck_ids=None, now_utc=None, session_f
             today_day_index=captured.day_index, day_cutoff_utc=captured.cutoff,
             admin_mode=captured.admin_mode,
             count_by_note=captured.unit_code == NOTE_UNIT, include_note_types=False,
+            # A batch reads only its own decks' Notes, not the learner's whole collection.
+            scope_to_decks=True,
         )
         counts = _ComputedCounts(raw)
         counts.computed_at = now

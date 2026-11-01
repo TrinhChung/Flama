@@ -329,7 +329,7 @@ class DeckCountProjectionTests(unittest.TestCase):
         db.session.remove()
         warmed = prewarm_owned_deck_counts(user_id=self.user_id)
         self.assertEqual(warmed["published"], 3)
-        self.app.config["DECK_COUNT_READ_MODE"] = "summary"
+        self.app.config.update(DECK_COUNT_READ_MODE="summary", DECK_COUNT_PREWARM_USER_IDS=(str(self.user_id),))
         mutations = []
 
         def capture(connection, cursor, statement, parameters, context, many):
@@ -373,7 +373,8 @@ class DeckCountNotePipelineTests(unittest.TestCase):
         self.fixture = note_fixtures.StudyDirectNoteReplayTests(
             "test_retry_returns_original_result_without_executing_scheduler_or_side_effects")
         self.fixture.setUp()
-        self.app.config.update(DECK_COUNT_WRITE_ENABLED=True, DECK_COUNT_READ_MODE="summary")
+        self.app.config.update(DECK_COUNT_WRITE_ENABLED=True, DECK_COUNT_READ_MODE="summary",
+                               DECK_COUNT_PREWARM_USER_IDS=(str(self.fixture.user_id),))
 
     def tearDown(self):
         self.app.config["DECK_COUNT_WRITE_ENABLED"] = False

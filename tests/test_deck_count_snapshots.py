@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app import create_app
 from app.repositories import deck_count_snapshot_repository as repository
 from app.services import deck_count_snapshot_service as service
+from app.services.analytics_summary_readiness import AnalyticsSummaryNotReady
 from app.services.review_analytics_policy import ReviewAnalyticsPolicy
 from models import db
 from models.card import Card
@@ -104,7 +105,8 @@ class DeckCountSnapshotTests(unittest.TestCase):
             stage_note_state(db.session, user_id=self.user_id, card_id=self.cards[5], queue="review", due_day=DAY, is_suspended=True),
         ])
         db.session.commit()
-        self.app.config.update(DECK_COUNT_WRITE_ENABLED=True, DECK_COUNT_READ_MODE="summary")
+        self.app.config.update(DECK_COUNT_WRITE_ENABLED=True, DECK_COUNT_READ_MODE="summary",
+                               DECK_COUNT_PREWARM_USER_IDS=(str(self.user_id),))
 
     def tearDown(self):
         op._proxy = None
@@ -164,6 +166,30 @@ class DeckCountSnapshotTests(unittest.TestCase):
         self.assertFalse(self.prewarm()["ok"])
         self.app.config.update(DECK_COUNT_WRITE_ENABLED=True, DECK_COUNT_READ_MODE="raw")
         self.assertEqual(self.resolve(), ({}, [self.deck_id, self.empty_id]))
+
+    def test_learner_outside_prewarm_scope_reads_raw_without_stamp_queries(self):
+        self.prewarm()
+        self.app.config["DECK_COUNT_PREWARM_USER_IDS"] = (str(self.other_id),)
+        statements = []
+        def capture(_connection, _cursor, sql, _params, _context, _many):
+            statements.append(sql.upper())
+        sa.event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            self.assertEqual(self.resolve(), ({}, [self.deck_id, self.empty_id]))
+        finally:
+            sa.event.remove(db.engine, "before_cursor_execute", capture)
+        self.assertEqual(statements, [])
+        self.app.config["ANALYTICS_REQUIRE_READY_USER_IDS"] = (str(self.user_id),)
+        with self.assertRaises(AnalyticsSummaryNotReady):
+            self.resolve()
+        self.app.config["DECK_COUNT_PREWARM_USER_IDS"] = f"{self.other_id},{self.user_id}"
+        self.assertEqual(len(self.resolve()[0]), 2)
+
+    def test_prewarm_batch_reads_only_its_own_decks(self):
+        original = service.aggregate_deck_study_counts
+        with patch.object(service, "aggregate_deck_study_counts", wraps=original) as raw:
+            self.prewarm()
+        self.assertTrue(raw.call_args.kwargs["scope_to_decks"])
 
     def test_prewarm_skips_valid_keys_and_rebuilds_only_dirty_decks(self):
         self.prewarm()
