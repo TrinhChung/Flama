@@ -1071,6 +1071,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/update_route_snapshot.py",
             "scripts/verify_m4_link_integrity.py",
             "scripts/deploy_cloudflare_cache_rule.py",
+            "scripts/check_secrets_staged.py",
+            "scripts/install_git_hooks.py",
             "wsgi_audit.py",
         ],
         "backend_tests": [

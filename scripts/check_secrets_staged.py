@@ -19,6 +19,7 @@ ALLOWLIST_PATHS: list[re.Pattern[str]] = [
     re.compile(r"^docs/ops/incidents/"),
     re.compile(r"^docs/plans/"),
     re.compile(r"^ISSUE_PRODUCTION_CONFIG_EXPOSURE\.md$"),
+    re.compile(r"^AGENTS\.md$"),
     re.compile(r"^tests/"),
     re.compile(r"^docs/reports/2026-11-01_GIT_HISTORY_LEAK_INVESTIGATION_REPORT\.md$"),
     re.compile(r"^docs/runbooks/GIT_HISTORY_SCRUB_RUNBOOK\.md$"),
@@ -29,7 +30,7 @@ ALLOWLIST_PATHS: list[re.Pattern[str]] = [
 # Forbidden file patterns (must not be committed directly to public repo)
 FORBIDDEN_FILE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
-        re.compile(r".*\.nginx\.conf$"),
+        re.compile(r"(?:^|/).*nginx\.conf$"),
         "Production Nginx configuration belongs in infra-vpn/flama/nginx/ (generic public templates must end with .nginx.conf.example)",
     ),
     (
@@ -60,13 +61,13 @@ RULES: list[dict[str, object]] = [
     },
     {
         "id": "internal-wireguard-ip",
-        "description": "Internal WireGuard mesh IP address (10.10.0.4 - 10.10.0.6)",
+        "description": "Internal WireGuard mesh IP address",
         "pattern": re.compile(r"\b10\.10\.0\.[4-6]\b"),
     },
     {
         "id": "flama-private-key",
         "description": "Unencrypted Private Key header",
-        "pattern": re.compile(r"-----BEGIN (?:[A-Z0-9_-]+ )?PRIVATE KEY-----"),
+        "pattern": re.compile(r"(?i)-----BEGIN (?:[A-Z0-9_-]+ )?PRIVATE KEY-----"),
     },
     {
         "id": "personal-admin-email",

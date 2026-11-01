@@ -3,20 +3,26 @@
 
 set -e
 
+test_python() {
+    "$1" -c "import sys; sys.exit(0)" >/dev/null 2>&1
+}
+
 # Find python executable
 PYTHON=""
-if [ -f ".venv/Scripts/python.exe" ]; then
+if [ -f ".venv/Scripts/python.exe" ] && test_python ".venv/Scripts/python.exe"; then
     PYTHON=".venv/Scripts/python.exe"
-elif [ -f ".venv/bin/python" ]; then
+elif [ -f ".venv/bin/python" ] && test_python ".venv/bin/python"; then
     PYTHON=".venv/bin/python"
-elif command -v python3 >/dev/null 2>&1; then
+elif command -v python3 >/dev/null 2>&1 && test_python "python3"; then
     PYTHON="python3"
-elif command -v python >/dev/null 2>&1; then
+elif command -v python >/dev/null 2>&1 && test_python "python"; then
     PYTHON="python"
-elif command -v py >/dev/null 2>&1; then
+elif command -v py >/dev/null 2>&1 && py -3.12 -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
     PYTHON="py -3.12"
+elif command -v py >/dev/null 2>&1 && test_python "py"; then
+    PYTHON="py"
 else
-    echo "[pre-commit] WARNING: Python not found, skipping Python pre-commit checks."
+    echo "[pre-commit] WARNING: Python not found or non-functional, skipping Python pre-commit checks."
 fi
 
 # 1. Primary Secret Scan: Gitleaks if available

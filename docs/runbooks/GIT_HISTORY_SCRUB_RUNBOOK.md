@@ -288,9 +288,12 @@ flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4==>[REDACTED_GATEWAY_SECRET]
 # 4. BẢN ĐỒ THAY THẾ EMAIL QUẢN TRỊ VIÊN CÁ NHÂN
 chungtrinh2k2@gmail.com==>noreply@flama.vn
 
-# 5. BẢN ĐỒ THAY THẾ CÁC FALLBACK URL NỘI BỘ WIREGUARD TRONG CODE/DOCS
+# 5. BẢN ĐỒ THAY THẾ CÁC FALLBACK URL VÀ ĐỊA CHỈ IP NỘI BỘ WIREGUARD (MESH TOPOLOGY)
 http://10.10.0.6:4792==>http://127.0.0.1:4792
 ubuntu@10.10.0.6==>ubuntu@wg-worker212-ip
+10.10.0.4==>[REDACTED_WG_IP_CHUNG]
+10.10.0.5==>[REDACTED_WG_IP_OV]
+10.10.0.6==>[REDACTED_WG_IP_WORKER212]
 ```
 
 > [!NOTE]
@@ -307,25 +310,58 @@ ubuntu@10.10.0.6==>ubuntu@wg-worker212-ip
 
 ### 5.1 Khởi Tạo Không Gian Làm Việc Cô Lập (Isolated Scratchpad)
 
-#### Trên Linux / macOS:
-```bash
-# Di chuyển ra thư mục làm việc cha
-cd ..
+> [!IMPORTANT]
+> **ĐẢM BẢO BAO PHỦ TOÀN BỘ 66 NHÁNH**:
+> `git-filter-repo` sẽ viết lại toàn bộ commit và cập nhật tất cả references có trong kho chứa. Để đảm bảo 100% tất cả 66 nhánh trên remote đều được thanh lọc:
+> - **Phương án 1 (Khuyến nghị - Nhanh và sạch nhất)**: Thao tác trực tiếp trên bản **Bare Mirror Clone** (`--mirror`). Kho mirror lưu trữ toàn bộ các refs `refs/heads/*` cục bộ, giúp `git-filter-repo` tự động viết lại toàn bộ 66 nhánh cùng lúc mà không cần checkout thủ công.
+> - **Phương án 2 (Working-Tree Clone)**: Nếu sử dụng clone thông thường có working tree, BẮT BUỘC phải tạo local tracking branches cho toàn bộ 66 remote branches trước khi chạy filter.
 
-# Clone một bản sao mới từ chính thư mục local hiện tại (hoặc từ mirror backup)
+#### Phương án 1 (Khuyến nghị chuẩn): Thực thi trực tiếp trên Bare Mirror Clone
+
+##### Trên Linux / macOS / Git Bash:
+```bash
+cd ..
+# Clone một bản bare mirror mới để thực thi lọc an toàn
+git clone --mirror flama_backup_mirror.git flama-filter-workspace.git
+cd flama-filter-workspace.git
+
+# Copy file replace-text.txt đã tạo ở Mục 4 vào thư mục cha hoặc trực tiếp vào đây
+# (Tiến hành chạy git-filter-repo ở Mục 5.2)
+```
+
+##### Trên Windows (PowerShell):
+```powershell
+Set-Location -Path ".."
+git clone --mirror "flama_backup_mirror.git" "flama-filter-workspace.git"
+Set-Location -Path "flama-filter-workspace.git"
+```
+
+#### Phương án 2: Working Tree Clone (Kèm Lệnh Track Đầy Đủ 66 Nhánh)
+
+##### Trên Linux / macOS / Git Bash:
+```bash
+cd ..
 git clone flama_backup_mirror.git flama-filter-workspace
 cd flama-filter-workspace
 
-# Đảm bảo tất cả các remote branches đều được theo dõi cục bộ để filter áp dụng toàn bộ
+# Bắt buộc: Track toàn bộ 66 branches từ remote để git-filter-repo lọc trên tất cả các nhánh
+for branch in $(git branch -r | grep -v '\->' | grep -v 'origin/master'); do
+    git branch --track "${branch#origin/}" "$branch" || true
+done
 git checkout master
 ```
 
-#### Trên Windows (PowerShell):
+##### Trên Windows (PowerShell):
 ```powershell
 Set-Location -Path ".."
-# Clone bản làm việc cô lập từ mirror hoặc repo hiện tại
 git clone "flama_backup_mirror.git" "flama-filter-workspace"
 Set-Location -Path "flama-filter-workspace"
+
+# Bắt buộc: Track toàn bộ 66 branches từ remote
+git branch -r | Where-Object { $_ -notmatch '->' -and $_ -notmatch 'origin/master' } | ForEach-Object {
+    $b = $_.Trim().Replace("origin/", "")
+    git branch --track $b "origin/$b"
+}
 git checkout master
 ```
 
@@ -397,13 +433,18 @@ git log --all -S "187.77.131.151"
 git log --all -S "161.33.193.141"
 git log --all -S "132.145.115.226"
 
-# 2. Kiểm tra Gateway Secret Token:
+# 2. Kiểm tra 3 IP WireGuard Mesh nội bộ:
+git log --all -S "10.10.0.4"
+git log --all -S "10.10.0.5"
+git log --all -S "10.10.0.6"
+
+# 3. Kiểm tra Gateway Secret Token:
 git log --all -S "flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4"
 
-# 3. Kiểm tra Google OAuth Client ID Production:
+# 4. Kiểm tra Google OAuth Client ID Production:
 git log --all -S "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08"
 
-# 4. Kiểm tra Email Cá Nhân Quản Trị:
+# 5. Kiểm tra Email Cá Nhân Quản Trị:
 git log --all -S "chungtrinh2k2@gmail.com"
 ```
 
@@ -413,7 +454,12 @@ git log --all -S "chungtrinh2k2@gmail.com"
 
 ### 6.2 Script Một Chạm Kiểm Tra Toàn Diện Cho Linux / macOS (`verify_history_clean.sh`)
 
-Lưu script sau thành file `verify_history_clean.sh` và thực thi:
+> [!WARNING]
+> **LƯU TRỮ VÀ THỰC THI SCRIPT ĐỐI SOÁT BÊN NGOÀI REPOSITORY ĐANG FILTER**:
+> Tuyệt đối lưu và chạy file `verify_history_clean.sh` hoặc `Verify-HistoryClean.ps1` **bên ngoài** thư mục repository đang lọc (ví dụ lưu tại thư mục cha `../verify_history_clean.sh` hoặc ngoài workspace).
+> **Nguyên nhân**: Nếu bạn tạo hoặc commit file script này trực tiếp bên trong repo trước khi chạy `git-filter-repo`, lệnh filter sẽ tự động quét và thay thế các chuỗi pattern trong chính file script thành chuỗi RFC 5737 (`192.0.2.151`, ...), dẫn đến script tự làm hỏng logic kiểm tra của chính nó và báo lỗi giả khi quét lịch sử.
+
+Lưu script sau thành file `../verify_history_clean.sh` (bên ngoài repo đang lọc) và thực thi:
 
 ```bash
 #!/usr/bin/env bash
@@ -439,6 +485,9 @@ SENSITIVE_PATTERNS=(
     "187.77.131.151"
     "161.33.193.141"
     "132.145.115.226"
+    "10.10.0.4"
+    "10.10.0.5"
+    "10.10.0.6"
     "flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4"
     "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08.apps.googleusercontent.com"
     "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08"
@@ -482,7 +531,7 @@ fi
 
 ### 6.3 Script Một Chạm Kiểm Tra Toàn Diện Cho Windows PowerShell (`Verify-HistoryClean.ps1`)
 
-Lưu script sau thành file `Verify-HistoryClean.ps1` và thực thi:
+Lưu script sau thành file `..\Verify-HistoryClean.ps1` (bên ngoài repo đang lọc) và thực thi:
 
 ```powershell
 <#
@@ -499,6 +548,9 @@ $SensitivePatterns = @(
     "187.77.131.151",
     "161.33.193.141",
     "132.145.115.226",
+    "10.10.0.4",
+    "10.10.0.5",
+    "10.10.0.6",
     "flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4",
     "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08.apps.googleusercontent.com",
     "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08",
