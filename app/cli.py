@@ -342,9 +342,19 @@ def register_scalability_commands(app: Flask, *, allow_writes: bool = False) -> 
         for learner_id in sorted(ids):
             try:
                 counts = prewarm_owned_deck_counts(user_id=learner_id, force=force, max_decks=max_decks)
+                batches = [counts]
+                # Each batch keeps its own short snapshot; the cursor finishes a
+                # study-day rollover in one run instead of one batch per timer tick.
+                while counts["ok"] and counts.get("has_more"):
+                    counts = prewarm_owned_deck_counts(user_id=learner_id, force=force, max_decks=max_decks,
+                                                       after_deck_id=counts["next_after_deck_id"])
+                    batches.append(counts)
                 forecast = prewarm_forecast_summary(user_id=learner_id, force=force, max_buckets=max_buckets)
             except (ValueError, RuntimeError) as exc:
                 raise click.ClickException(str(exc)) from exc
+            counts = {**counts, "batches": len(batches),
+                      "computed": sum(batch.get("computed", 0) for batch in batches),
+                      "published": sum(batch.get("published", 0) for batch in batches)}
             click.echo(json.dumps({"user_id": learner_id, "deck_counts": counts, "forecast": forecast}))
             if not counts["ok"] or not forecast["ok"]:
                 raise click.exceptions.Exit(1)

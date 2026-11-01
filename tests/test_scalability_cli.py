@@ -51,6 +51,24 @@ class ScalabilityCliTests(unittest.TestCase):
         forecast.assert_called_once_with(user_id=1, force=False, max_buckets=12)
         self.assertIn("BUCKET_BUDGET_EXCEEDED", result.output)
 
+    def test_applied_job_finishes_every_deck_batch_with_the_keyset_cursor(self):
+        self.app.config["DECK_COUNT_WRITE_ENABLED"] = True
+        batches = [
+            {"ok": True, "has_more": True, "next_after_deck_id": 5, "computed": 2, "published": 2},
+            {"ok": True, "has_more": False, "next_after_deck_id": 9, "computed": 1, "published": 0},
+        ]
+        with patch("app.services.deck_count_snapshot_service.prewarm_owned_deck_counts",
+                   side_effect=batches) as deck, \
+             patch("app.services.forecast_snapshot_service.prewarm_forecast_summary",
+                   return_value={"ok": True}):
+            result = self.runner.invoke(args=["analytics-counts-prewarm", "--user-id", "1",
+                "--apply", "--max-decks", "2"])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(deck.call_args_list[1].kwargs,
+                         {"user_id": 1, "force": False, "max_decks": 2, "after_deck_id": 5})
+        report = json.loads(result.output)["deck_counts"]
+        self.assertEqual((report["batches"], report["computed"], report["published"]), (2, 3, 2))
+
     def test_audit_factory_exposes_only_projection_status(self):
         app = create_audit_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:", "REDIS_URL": ""})
         result = app.test_cli_runner().invoke(args=["--help"])

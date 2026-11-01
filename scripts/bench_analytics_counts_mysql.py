@@ -130,7 +130,7 @@ def run(arguments):
         "ANALYTICS_REQUIRE_READY_USER_IDS": [],
         "REVIEW_ANALYTICS_READ_USER_IDS": [], "REDIS_URL": "",
         "DECK_COUNT_WRITE_ENABLED": not arguments.history_only,
-        "DECK_COUNT_READ_MODE": "raw",
+        "DECK_COUNT_READ_MODE": "raw", "DECK_COUNT_PREWARM_USER_IDS": ["1"],
         "FORECAST_SUMMARY_READ_MODE": "raw", "FORECAST_SUMMARY_READ_USER_IDS": [],
     })
     now = datetime.fromisoformat(arguments.now)

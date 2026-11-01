@@ -30,7 +30,7 @@ Overview của năm cũ và study-time vốn đã nhanh (12–60 ms) nên gần 
 
 - **Ngay sau khi học:** deck vừa ôn có learner revision mới nên snapshot của nó cũ cho tới lần prewarm kế tiếp (timer chạy mỗi phút). Khi đó dashboard chỉ đếm trực tiếp deck đó: user 1 tăng 203 → 209 ms, user 4 339 → 344 ms, user 2 74 → 107 ms.
 - **Chi phí ghi** (`scripts/bench_review_projection_mysql.py`, 240 mẫu mỗi trường hợp): bật cả hai bộ ghi làm p95 của lệnh trả lời tăng 52,46 → 54,13 ms (+1,67 ms, +3,2%), trong ngưỡng ≤ 5 ms và ≤ 10%. Bộ ghi tổng ôn qua outbox có độ trễ p95 1,05 s ở local.
-- **Global epoch** tăng khi sửa hoặc phát hành template, phát hành hoặc cài release, xoá deck/Note/note type hàng loạt, và khi cờ market-active của install đổi. Mỗi lần tăng làm cũ mọi snapshot. Trong 30 ngày trước bản dump có khoảng 125 sự kiện như vậy, rơi vào 6–10 ngày. Dựng lại toàn bộ snapshot của 5 learner mất khoảng 20 s ở local. Timer production dựng tối đa 100 deck mỗi learner mỗi phút, nên user 1 cần khoảng 16 phút. Trong lúc đó các deck cũ đọc trực tiếp, tức là không chậm hơn hiện nay quá vài phần trăm.
+- **Global epoch** tăng khi sửa hoặc phát hành template, phát hành hoặc cài release, xoá deck/Note/note type hàng loạt, và khi cờ market-active của install đổi. Mỗi lần tăng làm cũ mọi snapshot. Trong 30 ngày trước bản dump có khoảng 125 sự kiện như vậy, rơi vào 6–10 ngày. Dựng lại toàn bộ snapshot của 5 learner mất khoảng 20 s ở local. Từ 2026-11-01, mỗi lần chạy timer dựng hết các lô 100 deck của từng learner theo cursor, và mỗi lô chỉ đọc Note của chính các deck trong lô. Trước đó mỗi lô đếm lại cả collection và mỗi phút chỉ chạy một lô, nên user 1 cần khoảng 16 phút. Đo local 2026-11-01: dựng toàn bộ user 1 mất 4,6 s (trước 17–20 s), user 4 mất 4,8 s (trước 10–12 s). Trong khoảng chờ timer, các deck cũ đọc trực tiếp; khi toàn bộ deck đều cũ thì chậm hơn raw 12–41%.
 - **Kiểm thử:** `tests.test_deck_count_snapshots` có thêm test cho release chưa pin; test này fail trên quy tắc cũ. Module analytics và decks: 353 test pass. Các probe MySQL `probe_deck_counts_mysql` (15 kiểm tra), `probe_dashboard_due_counts_mysql` và `probe_forecast_snapshots_mysql` đều pass.
 
 ## Các bước trên production (chờ duyệt)
@@ -45,7 +45,7 @@ Các cờ là GitHub-managed variable. Nếu variable để trống, lần deplo
 
 Ghi chú:
 
-- `DECK_COUNT_READ_MODE` không có allowlist theo user. Learner ngoài danh sách prewarm vẫn tính dependency vector rồi đọc trực tiếp, nên tốn thêm một chút.
+- `DECK_COUNT_READ_MODE=summary` chỉ đọc snapshot của learner trong `DECK_COUNT_PREWARM_USER_IDS`, vì chỉ timer mới ghi snapshot. Learner khác đọc trực tiếp như chế độ raw, không tính dependency vector (đo local 2026-11-01: bằng raw). Trước 2026-11-01 họ vẫn tính vector nên chậm hơn raw 6–36%.
 - Không đặt `ANALYTICS_REQUIRE_READY_USER_IDS`: cờ này biến mọi lần đọc trực tiếp thành lỗi 409.
 
 ## Còn lại

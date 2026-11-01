@@ -106,8 +106,8 @@ Maintenance jobs run on isolated schedules managed by systemd timers:
 
 1. **`flama-analytics-counts.service` & `.timer`**:
    - Schedule: Runs every 60 seconds (`OnUnitInactiveSec=60s`, `OnBootSec=30s`, `RandomizedDelaySec=5s`).
-   - Command: `/usr/bin/flock --nonblock /run/flama-analytics-counts/runner.lock /opt/flama/venv/bin/flask --app wsgi.py analytics-counts-prewarm --configured --apply --max-decks 100 --max-buckets 4096` (prewarms learner deck counts and forecast buckets).
-   - Execution Condition: Guarded by `ExecCondition` verifying `DECK_COUNT_WRITE_ENABLED` is active and `DECK_COUNT_PREWARM_USER_IDS` is configured.
+   - Command: `/usr/bin/flock --nonblock /run/flama-analytics-counts/runner.lock /opt/flama/venv/bin/flask --app wsgi.py analytics-counts-prewarm --configured --apply --max-decks 100 --max-buckets 4096` (prewarms learner deck counts and forecast buckets; each run finishes every 100-deck batch per learner through the keyset cursor, and each batch reads only its own decks' Notes).
+   - Execution Condition: Guarded by `ExecCondition` verifying `DECK_COUNT_WRITE_ENABLED` is active and `DECK_COUNT_PREWARM_USER_IDS` is configured. With `DECK_COUNT_READ_MODE=summary`, only these learners read deck-count snapshots; others read raw counts.
 2. **`flama-review-analytics-worker.service` & `.timer`**:
    - Schedule: Runs every 1 second (`OnUnitInactiveSec=1s`, `OnBootSec=5s`, `AccuracySec=100ms`).
    - Command: `/usr/bin/flock --nonblock /run/flama-review-analytics/runner.lock /opt/flama/venv/bin/flask --app wsgi.py review-analytics-drain --pending --apply --max-users 20 --max-revisions 100` (drains buffered review outbox projection events into analytics store in near real-time).
