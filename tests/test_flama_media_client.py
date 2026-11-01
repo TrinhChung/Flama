@@ -19,7 +19,7 @@ class FlamaMediaClientTests(unittest.TestCase):
             TESTING=True,
             MEDIA_SHARED_SECRET="test_shared_secret_12345",
             GATEWAY_SECRET="test_gw_secret_67890",
-            FLAMA_MEDIA_WORKER_URL="http://10.10.0.6:4792",
+            FLAMA_MEDIA_WORKER_URL="http://wg-worker212:4792",
         )
 
     def test_generate_upload_ticket(self):
@@ -46,6 +46,15 @@ class FlamaMediaClientTests(unittest.TestCase):
             self.assertEqual(result["asset_id"], "abc123hash")
             self.assertEqual(result["url"], "/media/proxy/abc123hash")
             self.assertFalse(result["deduplicated"])
+
+    @patch("urllib.request.urlopen")
+    def test_missing_worker_url_fails_without_network(self, mock_urlopen):
+        self.app.config["FLAMA_MEDIA_WORKER_URL"] = ""
+        with self.app.app_context():
+            with self.assertRaises(FlamaMediaClientError) as ctx:
+                flama_media_client.send_zip_to_worker(b"zip-bytes", user_id=1)
+        self.assertEqual(ctx.exception.error_code, "MEDIA_NOT_CONFIGURED")
+        mock_urlopen.assert_not_called()
 
 
 if __name__ == "__main__":

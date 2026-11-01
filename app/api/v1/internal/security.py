@@ -25,23 +25,23 @@ def _is_trusted_remote_ip(remote_ip: str) -> bool:
     if remote_ip in {"127.0.0.1", "::1", "localhost"}:
         return True
 
-    # Allow custom trusted IPs or networks from config
-    custom_trusted = current_app.config.get("INTERNAL_TRUSTED_IPS") or ()
-    if isinstance(custom_trusted, str):
-        custom_trusted = [ip.strip() for ip in custom_trusted.split(",") if ip.strip()]
-    if remote_ip in custom_trusted:
-        return True
-
     try:
         ip = ipaddress.ip_address(remote_ip)
-        if ip.is_loopback:
-            return True
-        # WireGuard VPN mesh subnet for Flama nodes (10.10.0.0/24)
-        wg_subnet = ipaddress.ip_network("10.10.0.0/24")
-        if ip in wg_subnet:
-            return True
     except ValueError:
         return False
+    if ip.is_loopback:
+        return True
+
+    # Trusted IPs or networks (the private WireGuard mesh) come from config, never from code.
+    custom_trusted = current_app.config.get("INTERNAL_TRUSTED_IPS") or ()
+    if isinstance(custom_trusted, str):
+        custom_trusted = [entry.strip() for entry in custom_trusted.split(",") if entry.strip()]
+    for entry in custom_trusted:
+        try:
+            if ip in ipaddress.ip_network(entry, strict=False):
+                return True
+        except ValueError:
+            continue
 
     return False
 
@@ -68,7 +68,7 @@ def report_security_incident():
     """Receive security threat notifications from internal services (e.g., worker 212).
 
     Enforces 2 layers of authorization:
-    1. Remote IP verification: Caller must originate from WireGuard mesh (10.10.0.0/24) or loopback.
+    1. Remote IP verification: Caller must originate from INTERNAL_TRUSTED_IPS (the WireGuard mesh) or loopback.
     2. Secret token verification: X-Internal-Secret header matching internal secret.
     """
     client_ip = request.remote_addr or ""

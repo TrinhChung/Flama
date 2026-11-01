@@ -12,12 +12,12 @@
 Repository `Flama` trên GitHub hiện đang ở chế độ **Public**, nhưng trong quá trình phát triển và triển khai gần đây, nhiều thông tin nhạy cảm ở cấp độ máy chủ production và hạ tầng mạng đã bị commit và đẩy (push) trực tiếp lên nhánh `master`:
 
 1. **Lộ Địa chỉ IP Public thật và Topology mạng nội bộ WireGuard**:
-   - `187.77.131.151` (Hostinger Chung VPS - Primary Backend & DB) - WireGuard `10.10.0.4`
-   - `161.33.193.141` (Oracle VPS - OV Gateway Nginx) - WireGuard `10.10.0.5`
-   - `132.145.115.226` (Worker 212 Tokyo - Flama Media Go Daemon) - WireGuard `10.10.0.6`
+   - `192.0.2.151` (Hostinger Chung VPS - Primary Backend & DB) - WireGuard `wg-app-server`
+   - `198.51.100.141` (Oracle VPS - OV Gateway Nginx) - WireGuard `wg-gateway`
+   - `203.0.113.226` (Worker 212 Tokyo - Flama Media Go Daemon) - WireGuard `wg-worker212`
    *(Đã bị commit trực tiếp trong `docs/architecture/` và `docs/runbooks/` tại commit `0ee1a409`)*.
 2. **Lộ Chuỗi Khóa Bí Mật Xác thực Cổng (Gateway Secret Token)**:
-   - Secret token: `"flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4"`
+   - Secret token: `"REDACTED_GATEWAY_SECRET"`
    - Bị commit công khai trong tài liệu kiến trúc dòng 81 & 195, đồng thời nằm trong file Nginx config `deploy/media.flama.vn.nginx.conf`.
 3. **Phơi bày Thư mục `deploy/` chứa Scripts Vận hành Production**:
    - Toàn bộ scripts quản trị: `bootstrap_hostinger.sh`, `activate_release.sh`, `run_remote_deploy.sh`, `sync_managed_env.py`.
@@ -29,8 +29,8 @@ Repository `Flama` trên GitHub hiện đang ở chế độ **Public**, nhưng 
 
 ## 2. Nguy cơ An ninh Trực tiếp (Security Risks)
 
-- **Bypass Cloudflare WAF**: Kẻ tấn công biết chính xác IP gốc của các server (`187.77.131.151`, `161.33.193.141`, `132.145.115.226`), có thể bypass hoàn toàn lớp bảo vệ Cloudflare để tấn công DDoS trực tiếp hoặc scan cổng dịch vụ.
-- **Giả mạo Cổng Gateway**: Token `flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4` bị lộ cho phép kẻ xấu giả mạo Edge Gateway gửi request trực tiếp vào Go daemon tại Worker 212.
+- **Bypass Cloudflare WAF**: Kẻ tấn công biết chính xác IP gốc của các server (`192.0.2.151`, `198.51.100.141`, `203.0.113.226`), có thể bypass hoàn toàn lớp bảo vệ Cloudflare để tấn công DDoS trực tiếp hoặc scan cổng dịch vụ.
+- **Giả mạo Cổng Gateway**: Token `REDACTED_GATEWAY_SECRET` bị lộ cho phép kẻ xấu giả mạo Edge Gateway gửi request trực tiếp vào Go daemon tại Worker 212.
 - **Tấn công Dò quét Dịch vụ**: Cổng backend 4789, 4790, 4792 và SSH có thể bị tấn công brute-force.
 
 ---

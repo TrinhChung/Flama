@@ -1,7 +1,7 @@
 # Comprehensive Audit & Migration Report: Flama Media Store Cutover, OV/Worker 212 Storage Unification & Legacy Media Code Audit
 
 - **Document ID**: `REPORT-MEDIA-20261101-FINAL`
-- **Scope**: Core Flask Backend (`app/`), Go Media Service (`flama-media/`), OV Gateway (`161.33.193.141`), Tokyo Worker 212 (`10.10.0.6`), React SPA Frontend (`frontend/src/`), Database (`MySQL 8.0`)
+- **Scope**: Core Flask Backend (`app/`), Go Media Service (`flama-media/`), OV Gateway (`198.51.100.141`), Tokyo Worker 212 (`wg-worker212`), React SPA Frontend (`frontend/src/`), Database (`MySQL 8.0`)
 - **Author**: `worker_report_1` (Antigravity Teamwork Collaborative Architecture Team)
 - **Date**: 2026-11-01
 - **Status**: Production Reference & Actionable Engineering Audit
@@ -13,7 +13,7 @@
 
 ### 1.1 Motivation & Context
 
-Prior to this architectural migration, the Flama flashcard and language-learning platform operated with a tightly coupled, single-server media architecture hosted on Hostinger Chung VPS (`187.77.131.151`). Under this legacy model, **3.1 GB (51,709 files)** of flashcard audio recordings, images, stroke order diagrams, and user avatars were stored on the VPS local filesystem and served directly through Flask Gunicorn sync worker processes via internal `/media/proxy/<uuid>` URLs.
+Prior to this architectural migration, the Flama flashcard and language-learning platform operated with a tightly coupled, single-server media architecture hosted on Hostinger Chung VPS (`192.0.2.151`). Under this legacy model, **3.1 GB (51,709 files)** of flashcard audio recordings, images, stroke order diagrams, and user avatars were stored on the VPS local filesystem and served directly through Flask Gunicorn sync worker processes via internal `/media/proxy/<uuid>` URLs.
 
 This architecture suffered from multiple severe production bottlenecks and security hazards:
 1. **Thread Starvation & High Latency**: Synchronous file streaming through Flask Python workers blocked web threads, leading to CPU saturation and HTTP 502/504 gateway timeouts during concurrent deck reviews and audio playback.
@@ -49,28 +49,28 @@ The modernized Flama media infrastructure spans three geographically distributed
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                 OV GATEWAY (Malaysia - Ingress Edge)                   │
-│   Public IP: 161.33.193.141 | WireGuard Mesh IP: 10.10.0.5             │
+│   Public IP: 198.51.100.141 | WireGuard Mesh IP: wg-gateway             │
 │   - Nginx Reverse Proxy terminating SSL                                │
 │   - Local SSD Cache: /var/lib/flama/media/strokes/ (35,143 SVGs)       │
 │   - Route /store/stroke_* -> /internal-strokes/ (0ms Local SSD)        │
 │   - Route /store/<uuid|sha256> -> WireGuard proxy to Worker 212       │
 └───────────────────────────────────┬────────────────────────────────────┘
-                                    │ WireGuard Mesh (10.10.0.0/24 :4792)
+                                    │ WireGuard Mesh (<wg-subnet> :4792)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                WORKER 212 (Tokyo - Private Media Node)                 │
-│   Public IP: 132.145.115.226 | WireGuard Mesh IP: 10.10.0.6            │
+│   Public IP: 203.0.113.226 | WireGuard Mesh IP: wg-worker212            │
 │   - Port 4792 (closed to public internet, WireGuard only)             │
 │   - flama-media Service (Go daemon)                                    │
 │   - Storage: /data/flama/media/ (CAS SHA-256 + UUID symlink index)     │
 │   - Pure Go re-encoding, ZIP extraction, decompression bomb defense    │
-│   - Incident reporting to Chung VPS webhook via 10.10.0.4               │
+│   - Incident reporting to Chung VPS webhook via wg-app-server               │
 └───────────────────────────────────▲────────────────────────────────────┘
                                     │ Internal API / HMAC Signing
                                     │
 ┌───────────────────────────────────┴────────────────────────────────────┐
 │                CHUNG VPS (Hostinger - Application & DB)                 │
-│   Public IP: 187.77.131.151 | WireGuard Mesh IP: 10.10.0.4             │
+│   Public IP: 192.0.2.151 | WireGuard Mesh IP: wg-app-server             │
 │   - Flask Web Application (`app/`, Gunicorn on :4789)                  │
 │   - MySQL 8.0 Database (`flama_db`, 34,099 media_assets records)       │
 │   - Cold media backup: /var/lib/flama/media/                           │
@@ -83,9 +83,9 @@ The modernized Flama media infrastructure spans three geographically distributed
 
 | Node | Geographic Location | Public IP | WireGuard IP | Role & Services | Media Storage Path |
 |---|---|---|---|---|---|
-| **OV Gateway** | Malaysia | `161.33.193.141` | `10.10.0.5` | Ingress proxy, SSL termination, static stroke diagram serving | `/var/lib/flama/media/strokes/` (Local NVMe SSD) |
-| **Worker 212** | Tokyo, Japan | `132.145.115.226` | `10.10.0.6` | Dedicated media processing worker, Go `flama-media` daemon (:4792) | `/data/flama/media/` (CAS sharded storage + symlinks) |
-| **Chung VPS** | Singapore / Global | `187.77.131.151` | `10.10.0.4` | Application core (Flask), MySQL 8.0 authority, security incident receptor | `/var/lib/flama/media/` (Cold backup repository) |
+| **OV Gateway** | Malaysia | `198.51.100.141` | `wg-gateway` | Ingress proxy, SSL termination, static stroke diagram serving | `/var/lib/flama/media/strokes/` (Local NVMe SSD) |
+| **Worker 212** | Tokyo, Japan | `203.0.113.226` | `wg-worker212` | Dedicated media processing worker, Go `flama-media` daemon (:4792) | `/data/flama/media/` (CAS sharded storage + symlinks) |
+| **Chung VPS** | Singapore / Global | `192.0.2.151` | `wg-app-server` | Application core (Flask), MySQL 8.0 authority, security incident receptor | `/var/lib/flama/media/` (Cold backup repository) |
 
 ---
 
@@ -187,7 +187,7 @@ location = /store {
 
 # Canonical media store location proxying to Tokyo Worker 212 via WireGuard
 location ^~ /store/ {
-    proxy_pass http://127.0.0.1:4789; # In local/Chung VPS; on OV Gateway points to http://10.10.0.6:4792
+    proxy_pass http://127.0.0.1:4789; # In local/Chung VPS; on OV Gateway points to http://wg-worker212:4792
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -397,7 +397,7 @@ The Go media service (`flama-media`) on Worker 212 was specified and designed as
 │ - Issues HMAC ticket      │
 │ - Calls Worker 212        │
 └─────────────┬─────────────┘
-              │ POST http://10.10.0.6:4792/media/fetch-url
+              │ POST http://wg-worker212:4792/media/fetch-url
               │ Header: Authorization: Bearer <ticket>
               │ Header: X-Flama-Gateway-Secret: <secret>
               ▼
@@ -469,7 +469,7 @@ def fetch_media_from_url(
         "max_bytes": max_bytes or 10485760,
         "action": action,
     }
-    # Transmit via WireGuard to http://10.10.0.6:4792/media/fetch-url ...
+    # Transmit via WireGuard to http://wg-worker212:4792/media/fetch-url ...
 ```
 
 ---
@@ -631,7 +631,7 @@ To handle rare Kanji or Hanzi characters missing from the pre-flattened 35,143 f
                                    ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │  location @stroke_generate_fallback {                                  │
-│      proxy_pass http://10.10.0.6:4792/internal/strokes/$3;            │
+│      proxy_pass http://wg-worker212:4792/internal/strokes/$3;            │
 │      proxy_store /var/lib/flama/media/strokes/$3.svg;                  │
 │      proxy_store_access user:rw group:rw all:r;                        │
 │      add_header Cache-Control "public, max-age=31536000, immutable";   │
@@ -725,9 +725,9 @@ An exhaustive forensic audit was conducted across all layers of the Flama codeba
 | File / Component | Location | Status & Action |
 |---|---|---|
 | `deploy/flama.nginx.conf` | Repository root | Synchronized with `/store/` and `/media/proxy/` proxy blocks and anti-cookie caching headers. |
-| `/etc/nginx/sites-available/media.flama.vn` | OV Gateway (`161.33.193.141`) | Active. Serves 35,143 stroke SVGs locally from SSD; proxies flashcard media to Worker 212 via WireGuard. |
-| `flama-media` Systemd Daemon | Worker 212 (`10.10.0.6:4792`) | Active. Pure Go re-encoding, CAS deduplication storage, UUID symlinks, incident reporting. |
-| WireGuard Mesh (`wg0`) | Across all 3 nodes | Active. Encrypted tunnel on `10.10.0.0/24` with zero public exposure of ports 4789 and 4792. |
+| `/etc/nginx/sites-available/media.flama.vn` | OV Gateway (`198.51.100.141`) | Active. Serves 35,143 stroke SVGs locally from SSD; proxies flashcard media to Worker 212 via WireGuard. |
+| `flama-media` Systemd Daemon | Worker 212 (`wg-worker212:4792`) | Active. Pure Go re-encoding, CAS deduplication storage, UUID symlinks, incident reporting. |
+| WireGuard Mesh (`wg0`) | Across all 3 nodes | Active. Encrypted tunnel on `<wg-subnet>` with zero public exposure of ports 4789 and 4792. |
 
 ---
 

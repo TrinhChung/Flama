@@ -1,5 +1,7 @@
 # Gitleaks Configuration for Flama Repository
-# Defines detection rules for leaked infrastructure credentials, production IPs, and gateway tokens.
+# Defines detection rules for leaked infrastructure credentials and gateway tokens.
+# Real server IPs and retired secrets are not listed here (this file is public);
+# scripts/check_secrets_staged.py checks them from a CI secret / the private infra-vpn submodule.
 
 title = "Flama Secret Scanner Configuration"
 
@@ -8,16 +10,9 @@ title = "Flama Secret Scanner Configuration"
 useDefault = true
 
 [allowlist]
-description = "Global allowlist for legitimate mock files, private submodule, and post-mortem incident documentation"
+description = "Private submodule, scanner rule files, and test fixtures (tests are still covered by scripts/check_secrets_staged.py --all)"
 paths = [
     '''^infra-vpn/''',
-    '''^\.agents/teamwork/''',
-    '''^docs/ops/incidents/''',
-    '''^docs/plans/''',
-    '''^docs/reports/''',
-    '''^docs/runbooks/''',
-    '''^ISSUE_PRODUCTION_CONFIG_EXPOSURE\.md$''',
-    '''^AGENTS\.md$''',
     '''^\.gitleaks\.toml$''',
     '''^scripts/check_secrets_staged\.py$''',
     '''^tests/''',
@@ -38,28 +33,20 @@ stopwords = [
 [[rules]]
 id = "flama-gateway-secret"
 description = "Detected Flama Gateway Secret Token (flama_gw_sec_*)"
-regex = '''\b(?i)flama_gw_sec_[a-f0-9]{32}\b'''
+regex = '''\b(?i)flama_gw_sec_[a-f0-9]{32}'''
 keywords = ["flama_gw_sec_"]
 
 [[rules]]
-id = "production-server-public-ip"
-description = "Detected hardcoded production server public IP address (Hostinger, Oracle Gateway, Worker 212)"
-regex = '''\b(?:187\.77\.131\.151|161\.33\.193\.141|132\.145\.115\.226)\b'''
-keywords = [
-    "187.77.131.151",
-    "161.33.193.141",
-    "132.145.115.226",
-]
+id = "flama-internal-secret"
+description = "Detected Flama internal service secret (flama_int_sec_*)"
+regex = '''\b(?i)flama_int_sec_[a-f0-9]{32}'''
+keywords = ["flama_int_sec_"]
 
 [[rules]]
 id = "internal-wireguard-ip"
-description = "Detected internal WireGuard topology IP address (10.10.0.4 - 10.10.0.6)"
-regex = '''\b10\.10\.0\.[4-6]\b'''
-keywords = [
-    "10.10.0.4",
-    "10.10.0.5",
-    "10.10.0.6",
-]
+description = "Detected internal WireGuard mesh host address (use wg-app-server, wg-gateway, wg-worker212)"
+regex = '''\b10\.10\.0\.(?:25[0-4]|2[0-4]\d|1\d\d|[1-9]\d?)\b'''
+keywords = ["10.10.0."]
 
 [[rules]]
 id = "flama-private-key"

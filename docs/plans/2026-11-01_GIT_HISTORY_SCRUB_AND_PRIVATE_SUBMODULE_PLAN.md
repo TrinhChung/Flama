@@ -40,7 +40,7 @@ Các giá trị này là bắt buộc để ứng dụng chạy và triển khai
 > [!IMPORTANT]
 > **Nguyên tắc "Fail-Fast No-Fallback"**:  
 > Trong file `.github/workflows/deploy.yml`, loại bỏ hoàn toàn các toán tử fallback như:  
-> `EMAIL_SMTP_USER: ${{ vars.EMAIL_SMTP_USER || 'chungtrinh2k2@gmail.com' }}`  
+> `EMAIL_SMTP_USER: ${{ vars.EMAIL_SMTP_USER || '<personal-email>' }}`  
 > Chuyển thành:  
 > `EMAIL_SMTP_USER: ${{ vars.EMAIL_SMTP_USER }}`  
 > Nếu thiếu biến trong GitHub Environment, runner phải dừng ngay lập tức (`exit 1`) thay vì âm thầm dùng giá trị fallback nhạy cảm đã hardcode.
@@ -52,18 +52,18 @@ Các giá trị này là bắt buộc để ứng dụng chạy và triển khai
 Các thông tin này hoàn toàn không có lý do tồn tại trên public repository và phải bị loại bỏ vĩnh viễn:
 
 1. **Chuỗi Secret Token Cũ**:
-   - Giá trị: `"flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4"`
+   - Giá trị: `"REDACTED_GATEWAY_SECRET"`
    - *Hành động*: Hủy bỏ (Revoke) trên toàn bộ server production; xóa sạch khỏi tài liệu `FLAMA_MEDIA_STORAGE_AND_STORE_ROUTING_ARCHITECTURE.md`.
 2. **Địa Chỉ IP Public Thật Của Cả 3 Server**:
-   - `187.77.131.151` (Hostinger VPS)
-   - `161.33.193.141` (Oracle OV Gateway)
-   - `132.145.115.226` (Worker 212 Tokyo)
+   - `192.0.2.151` (Hostinger VPS)
+   - `198.51.100.141` (Oracle OV Gateway)
+   - `203.0.113.226` (Worker 212 Tokyo)
    - *Hành động*: Xóa khỏi toàn bộ tài liệu public. Nếu tài liệu kiến trúc cần minh họa sơ đồ mạng, **bắt buộc thay bằng dải IP tài liệu chuẩn RFC 5737**:
      - `198.51.100.10` (Ví dụ cho Gateway)
      - `203.0.113.20` (Ví dụ cho Worker 212)
      - `192.0.2.30` (Ví dụ cho App Server)
 3. **Địa Chỉ IP Mạng Ảo WireGuard Nội Bộ**:
-   - `10.10.0.4`, `10.10.0.5`, `10.10.0.6`
+   - `wg-app-server`, `wg-gateway`, `wg-worker212`
    - *Hành động*: Đưa tài liệu cấu hình mạng này sang **Private Submodule**, tài liệu public chỉ dùng tên định danh trừu tượng (`wg-gateway`, `wg-worker212`).
 4. **File Cấu Hình Nginx Chứa SSL Private Key Path & Secret Thật**:
    - File `deploy/media.flama.vn.nginx.conf`
@@ -90,15 +90,15 @@ git clone --mirror https://github.com/TrinhChung/Flama.git Flama-backup.git
 Tạo một file text định nghĩa các chuỗi nhạy cảm cần tự động tìm và thay thế trên toàn bộ cây commit:
 ```text
 # Thay thế Gateway Secret bị lộ thành chuỗi placeholder
-flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4==>[REDACTED_GATEWAY_SECRET]
+REDACTED_GATEWAY_SECRET==>[REDACTED_GATEWAY_SECRET]
 
 # Thay thế các IP thật thành IP chuẩn RFC 5737
-161.33.193.141==>198.51.100.141
-132.145.115.226==>203.0.113.226
-187.77.131.151==>192.0.2.151
+198.51.100.141==>198.51.100.141
+203.0.113.226==>203.0.113.226
+192.0.2.151==>192.0.2.151
 
 # Thay thế email cá nhân trong workflow
-chungtrinh2k2@gmail.com==>noreply@flama.vn
+<personal-email>==>noreply@flama.vn
 
 # Thay thế Google OAuth Client ID hardcoded
 992185847654-b1aekjqb7dh3hddetgve8qfps17nro08.apps.googleusercontent.com==>[REDACTED_OAUTH_CLIENT_ID]

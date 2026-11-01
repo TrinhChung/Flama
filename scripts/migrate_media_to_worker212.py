@@ -36,8 +36,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--worker-ssh",
-        default="ubuntu@10.10.0.6",
-        help="SSH destination host for Worker 212 (default: ubuntu@10.10.0.6)",
+        default=os.environ.get("FLAMA_MEDIA_WORKER_SSH", ""),
+        help="SSH destination for Worker 212, e.g. ubuntu@wg-worker212 (default: $FLAMA_MEDIA_WORKER_SSH)",
     )
     parser.add_argument(
         "--export-manifest",
@@ -45,7 +45,10 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Export mapping manifest to a local JSON file for bulk rsync processing",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not args.worker_ssh:
+        parser.error("--worker-ssh (or FLAMA_MEDIA_WORKER_SSH) is required")
+    return args
 
 
 def main() -> None:
