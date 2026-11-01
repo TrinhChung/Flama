@@ -167,25 +167,31 @@ public class EdgeTtsEngineAdapter : ITtsEngineAdapter, IDisposable
                     ? cleaned
                     : Guid.NewGuid().ToString("N"));
 
-            byte[] audioBytes;
-            try
+            byte[] audioBytes = Array.Empty<byte>();
+            const int maxRetries = 2;
+            for (int attempt = 0; attempt <= maxRetries; attempt++)
             {
-                await EnsureConnectedAsync(ct);
-                audioBytes = await _client.SynthesizeSsmlAsync(wsRequestId, ssml, ct);
-            }
-            catch (Exception ex) when (ex is WebSocketException or InvalidOperationException or IOException)
-            {
-                _logger?.LogWarning(ex, "Edge TTS synthesis encountered disconnected socket, attempting clean reconnect retry");
-                await _connectLock.WaitAsync(ct);
                 try
                 {
-                    await ReconnectAsync(ct);
+                    await EnsureConnectedAsync(ct);
+                    string currentWsRequestId = attempt == 0 ? wsRequestId : Guid.NewGuid().ToString("N");
+                    audioBytes = await _client.SynthesizeSsmlAsync(currentWsRequestId, ssml, ct);
+                    break;
                 }
-                finally
+                catch (Exception ex) when (attempt < maxRetries && ex is WebSocketException or InvalidOperationException or IOException)
                 {
-                    _connectLock.Release();
+                    _logger?.LogWarning(ex, "Edge TTS synthesis encountered disconnected socket (attempt {Attempt}/{MaxRetries}), reconnecting with fresh request ID", attempt + 1, maxRetries);
+                    await _connectLock.WaitAsync(ct);
+                    try
+                    {
+                        await ReconnectAsync(ct);
+                    }
+                    finally
+                    {
+                        _connectLock.Release();
+                    }
+                    await Task.Delay(150, ct);
                 }
-                audioBytes = await _client.SynthesizeSsmlAsync(wsRequestId, ssml, ct);
             }
 
             return new TtsResult(
