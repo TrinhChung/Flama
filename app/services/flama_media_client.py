@@ -84,8 +84,13 @@ def generate_upload_ticket(
     max_bytes: int | None = None,
     ttl_seconds: int = 300,
     action: str = "upload",
+    preset: str | None = None,
 ) -> str:
-    """Generate an HMAC-SHA256 presigned upload ticket for flama-media."""
+    """Generate an HMAC-SHA256 presigned upload ticket for flama-media.
+
+    ``preset`` names the worker's image output profile (same names as
+    ``image_processor.PRESETS``); the worker defaults to ``note_image``.
+    """
     secret = str(current_app.config.get("MEDIA_SHARED_SECRET") or "").strip()
     if not secret:
         raise FlamaMediaClientError("MEDIA_SHARED_SECRET is not configured on Chung VPS", status_code=500)
@@ -97,6 +102,8 @@ def generate_upload_ticket(
         "exp": int(time.time()) + ttl_seconds,
         "action": action,
     }
+    if preset:
+        ticket["preset"] = preset
 
     raw_payload = json.dumps(ticket, separators=(",", ":")).encode("utf-8")
     b64_payload = base64.urlsafe_b64encode(raw_payload).decode("utf-8").rstrip("=")

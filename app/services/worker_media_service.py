@@ -60,7 +60,10 @@ def upload_ticket(*, user_id: int, payload: Any) -> dict[str, Any]:
     limit = int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 20 * 1024 * 1024))
     ttl = 3600
     try:
-        ticket = flama_media_client.generate_upload_ticket(user_id=user_id, max_bytes=limit, ttl_seconds=ttl)
+        # Note fields get the same WebP profile Flask used for staged note images.
+        ticket = flama_media_client.generate_upload_ticket(
+            user_id=user_id, max_bytes=limit, ttl_seconds=ttl, preset="note_image"
+        )
     except flama_media_client.FlamaMediaClientError as exc:
         raise _worker_error(exc) from exc
     return {"ticket": ticket, "upload_url": f"{base}/media/upload", "upload_zip_url": f"{base}/media/upload-zip",

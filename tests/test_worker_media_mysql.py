@@ -1,4 +1,6 @@
 """Direct-upload metadata and deferred commit against disposable local MySQL."""
+import base64
+import json
 from unittest.mock import patch
 from types import SimpleNamespace
 
@@ -66,6 +68,10 @@ class WorkerMediaMySQLTests(NoteBaseMySQLTestCase):
         data = response.get_json()
         self.assertEqual(data["upload_url"], "https://media.example.test/media/upload")
         self.assertEqual(data["staging_ttl_seconds"], 86400)
+        # The worker applies the signed preset, so the browser cannot pick another profile.
+        payload = json.loads(base64.urlsafe_b64decode(data["ticket"].split(".")[0] + "=="))
+        self.assertEqual(payload["preset"], "note_image")
+        self.assertEqual(payload["action"], "upload")
         network.assert_not_called()
         self.assertEqual(MediaAsset.query.count(), 0)
 
