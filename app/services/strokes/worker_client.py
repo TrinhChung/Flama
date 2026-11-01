@@ -1,4 +1,4 @@
-"""Small JSON control client; SVG bytes are generated on212 and stored onOV."""
+"""Small JSON control client: worker212 generates and stores stroke SVGs; OV nginx copies them on first request."""
 
 from __future__ import annotations
 
@@ -81,5 +81,5 @@ def generate_strokes(characters: list[str], locale: str, *, force: bool = False)
                         raise ValueError("invalid worker receipt")
                 result[char] = item
         except (OSError, ValueError, TypeError, urllib.error.URLError) as exc:
-            raise StrokeWorkerError("Dịch vụ SVG stroke chưa xác nhận lưu file trên OV. Vui lòng thử lại.") from exc
+            raise StrokeWorkerError("Dịch vụ SVG stroke chưa xác nhận đã lưu file. Vui lòng thử lại.") from exc
     return result

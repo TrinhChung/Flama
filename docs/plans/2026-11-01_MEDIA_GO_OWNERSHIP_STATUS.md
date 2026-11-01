@@ -29,8 +29,14 @@ Mặc định đang dùng cho các điểm chưa chốt (đổi nếu chủ dự
 
 | # | Chức năng | Trạng thái | Người nhận |
 |---|---|---|---|
-| 1 | Upload thẳng FE → 212 (staging, commit, WebP) | Code GPT đã commit dạng WIP; chưa build/test Go, chưa deploy | Claude |
-| 2 | Tải ảnh từ URL qua Go (thay `remote_image_fetcher` đang tắt) | Chưa làm; crawl đang hỏng trên prod | Claude (sau 1) |
-| 3 | SVG nét chữ do Go sinh, OV lưu | GPT viết role `receiver` chạy Go trên OV — cần đổi sang nginx `proxy_store` | Claude (sau 2) |
-| 4 | Auto-ban → chỉ cảnh báo | Chưa làm; endpoint báo sự cố đang bị CSRF chặn | Claude (sau 3) |
-| 5 | Dọn: bỏ timer sync, fallback nginx về app, route media/stroke Flask, Pillow | Sau khi 1–3 chạy ổn trên prod | — |
+| 1 | Upload thẳng FE → 212 (staging, commit, preset + WebP, symlink id) | Go đã chạy trên 212 từ 2026-11-01 13:04 UTC; OV route `/media/staged/` (GET). App chờ merge PR #283 | Claude |
+| 2 | Tải ảnh/trang từ URL qua Go (`POST /media/fetch-url`, chỉ qua WireGuard) | Go đã chạy trên 212; Flask `remote_image_fetcher` gọi worker, chờ PR #283 | Claude |
+| 3 | SVG nét chữ: 212 sinh + lưu `/data/flama/strokes`, OV nginx `proxy_store` khi thiếu | Đã chạy trên 212 và OV; `FLAMA_STROKE_WORKER_ENABLED=1` trong env, có hiệu lực sau PR #283 | Claude |
+| 4 | Báo sự cố chỉ tạo cảnh báo + audit, không khoá tài khoản | Code trong PR #283; `/api/v1/internal/` miễn CSRF | Claude |
+| 5 | Dọn: bỏ timer sync, fallback nginx về app, route media/stroke Flask, Pillow, worksheet tự tải SVG từ GitHub trên VPS | Sau khi 1–3 chạy ổn trên prod | — |
+
+## Việc sau khi PR #283 deploy
+
+1. Thử upload ảnh và audio TTS trong một thẻ thật; kiểm tra field lưu `/store/<uuid>` và file có trên 212.
+2. Bật báo sự cố trên 212: `SECURITY_CALLBACK_URL=http://wg-app-server:4789/api/internal/security/incident` (đường không có `/v1`), rồi restart `flama-media`. Chỉ làm sau khi bản chỉ-cảnh-báo đã chạy.
+3. Merge TrinhChung/flama-media#1 để CI build lại đúng bản đang chạy (CI chỉ thay binary, không sửa `.env`).
