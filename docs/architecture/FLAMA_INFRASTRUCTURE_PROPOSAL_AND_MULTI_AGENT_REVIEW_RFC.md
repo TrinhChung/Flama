@@ -15,9 +15,9 @@
 ## 1. Mục Đích & Hướng Dẫn Dành Cho Các Agent Tham Gia Đánh Giá
 
 Tài liệu này tổng hợp toàn bộ **bằng chứng thực nghiệm (Empirical Telemetry)**, **đặc thù phần cứng**, và **các phương án phân bổ hạ tầng** của Flama giữa 3 máy chủ:
-- **`chung_hostinger_vps`** (`187.77.131.151`) — Production hiện tại
-- **`worker212`** (`132.145.115.226`) — Node Oracle Cloud OCI (Tokyo)
-- **`oracle_vps`** (`161.33.193.141`) — Micro Node OCI (Tokyo)
+- **`chung_hostinger_vps`** (`192.0.2.151`) — Production hiện tại
+- **`worker212`** (`203.0.113.226`) — Node Oracle Cloud OCI (Tokyo)
+- **`oracle_vps`** (`198.51.100.141`) — Micro Node OCI (Tokyo)
 
 Các Agent (Claude Code, Codex, hoặc subagent) khi đọc tài liệu này cần:
 1. Đọc và đối chiếu các số liệu thực chứng tại **Mục 2 và 3**.
@@ -33,9 +33,9 @@ Các Agent (Claude Code, Codex, hoặc subagent) khi đọc tài liệu này c�
 
 | Máy chủ | Vị trí địa lý & Mạng | Dòng CPU & Kiến trúc | RAM | Tình trạng hiện tại |
 |---|---|---|---|---|
-| **Chung Hostinger VPS**<br>`187.77.131.151` | Kuala Lumpur, Malaysia<br>(Hostinger AS47583) | **AMD EPYC 9354P 32-Core**<br>(Kiến trúc **Zen 4 Genoa** x86_64, 6.490 BogoMIPS) | **8 GB** | **Đang chạy Production chính** của `flama.vn` (Web, Connect, DB, Redis). |
-| **Worker212**<br>`132.145.115.226` | Tokyo, Nhật Bản<br>(Oracle Cloud OCI AS31898) | **ARM Neoverse-N1**<br>(Kiến trúc Ampere Altra aarch64, 50 BogoMIPS) | **12 GB**<br>*(Trống ~11 GB)* | Máy chủ dự phòng, tài nguyên RAM dồi dào, CPU đơn nhân chậm hơn. |
-| **Oracle VPS (Micro)**<br>`161.33.193.141` | Tokyo, Nhật Bản<br>(Oracle Cloud OCI AS31898) | AMD / Intel Micro shape | **1 GB** | Máy nhỏ OCI Always Free, cùng datacenter với Worker212. |
+| **Chung Hostinger VPS**<br>`192.0.2.151` | Kuala Lumpur, Malaysia<br>(Hostinger AS47583) | **AMD EPYC 9354P 32-Core**<br>(Kiến trúc **Zen 4 Genoa** x86_64, 6.490 BogoMIPS) | **8 GB** | **Đang chạy Production chính** của `flama.vn` (Web, Connect, DB, Redis). |
+| **Worker212**<br>`203.0.113.226` | Tokyo, Nhật Bản<br>(Oracle Cloud OCI AS31898) | **ARM Neoverse-N1**<br>(Kiến trúc Ampere Altra aarch64, 50 BogoMIPS) | **12 GB**<br>*(Trống ~11 GB)* | Máy chủ dự phòng, tài nguyên RAM dồi dào, CPU đơn nhân chậm hơn. |
+| **Oracle VPS (Micro)**<br>`198.51.100.141` | Tokyo, Nhật Bản<br>(Oracle Cloud OCI AS31898) | AMD / Intel Micro shape | **1 GB** | Máy nhỏ OCI Always Free, cùng datacenter với Worker212. |
 
 ### 2.2 Đo Lường Hiệu Năng Thực Tế (Benchmark & Network Latency)
 

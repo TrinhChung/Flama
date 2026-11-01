@@ -85,6 +85,11 @@ skills/*
 !skills/flama-local-dev/
 
 
+# Infrastructure and server deploy secrets
+deploy/media.flama.vn.nginx.conf
+deploy/*.local*
+deploy/secrets*
+
 # OS / Editor files
 .DS_Store
 Thumbs.db

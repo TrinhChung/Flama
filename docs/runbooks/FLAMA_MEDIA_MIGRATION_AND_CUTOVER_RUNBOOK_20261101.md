@@ -4,8 +4,11 @@
 > **Date**: 2026-11-01  
 > **Author**: Antigravity Pair-Programming Agent  
 > **Status**: Completed & Production-Verified  
-> **Environment**: Hostinger Chung VPS (`187.77.131.151` / `10.10.0.4`) ➔ Worker 212 (`132.145.115.226` / `10.10.0.6`)  
+> **Environment**: Hostinger Chung VPS (`192.0.2.151` / `wg-app`) ➔ Worker 212 (`203.0.113.226` / `wg-worker`)  
 > **Reference Architecture**: `docs/architecture/FLAMA_MEDIA_STORAGE_AND_STORE_ROUTING_ARCHITECTURE.md`
+
+> [!NOTE]
+> **Public Runbook Notice**: All IP addresses and server nodes in this document are documented using RFC 5737 dummy addresses (192.0.2.151, 203.0.113.226, 198.51.100.141) and WireGuard logical placeholders. Unredacted operational runbooks are maintained in the private submodule infra-vpn/flama/docs/.
 
 ---
 
@@ -48,11 +51,11 @@
 ## 3. Các bước Thực hiện Chi tiết (Step-by-Step Execution)
 
 ### Bước 1: Đồng bộ dữ liệu khối 3.1GB sang Máy 212 qua WireGuard (ĐÃ HOÀN THÀNH)
-Trên **VPS Chung** (`root@187.77.131.151`), thiết lập SSH key qua WireGuard Mesh (`10.10.0.6`) và chạy lệnh `rsync` truyền tải dữ liệu trực tiếp:
+Trên **VPS Chung** (`root@192.0.2.151`), thiết lập SSH key qua WireGuard Mesh (`wg-worker`) và chạy lệnh `rsync` truyền tải dữ liệu trực tiếp:
 
 ```bash
 # Đồng bộ sang Máy 212 qua WireGuard
-rsync -av --info=progress2 /var/lib/flama/media/ ubuntu@10.10.0.6:/data/flama/media_legacy_source/
+rsync -av --info=progress2 /var/lib/flama/media/ ubuntu@wg-worker:/data/flama/media_legacy_source/
 ```
 
 - **Kết quả thực tế**: Truyền tải thành công **90,389 files (3,015,552,576 bytes ~ 3.02 GB)** với tốc độ trung bình **23.5 MB/s**, mã thoát 0.
@@ -68,7 +71,7 @@ Trích xuất manifest từ MySQL và chạy script di chuyển trực tiếp tr
   - Tạo **51,709 UUID symlinks** (`/data/flama/media/{uuid[0:2]}/{uuid[2:4]}/{uuid}.{ext}`).
 
 ### Bước 3: Làm phẳng Kanji Stroke SVGs trên OV Gateway (ĐÃ HOÀN THÀNH)
-Trên **OV Gateway** (`161.33.193.141`), tạo thư mục phẳng `/var/lib/flama/media/strokes/` và dùng hardlink vật lý liên kết toàn bộ 35,143 file SVG:
+Trên **OV Gateway** (`198.51.100.141`), tạo thư mục phẳng `/var/lib/flama/media/strokes/` và dùng hardlink vật lý liên kết toàn bộ 35,143 file SVG:
 
 ```bash
 python3 /tmp/flatten_strokes_gateway.py
@@ -81,7 +84,7 @@ python3 /tmp/flatten_strokes_gateway.py
    - Stroke SVGs: rewrite regex trỏ vào `/internal-strokes/$3.svg last;` phục vụ trực tiếp từ SSD.
    - Flashcard media: proxy sang Worker 212 (`flama_media_212` port 4792) kèm header bảo mật `X-Flama-Gateway-Secret`.
 2. Cập nhật `/etc/nginx/sites-available/api.flama.vn` trên Chung VPS:
-   - Thêm `location ^~ /store/` và `location ^~ /media/proxy/` proxy trực tiếp sang `10.10.0.6:4792`, giải phóng 100% tài nguyên Gunicorn.
+   - Thêm `location ^~ /store/` và `location ^~ /media/proxy/` proxy trực tiếp sang `wg-worker:4792`, giải phóng 100% tài nguyên Gunicorn.
 
 ### Bước 5: Cập nhật Daemon Go `flama-media` trên Worker 212 (ĐÃ HOÀN THÀNH)
 - Mở rộng router `mux` trong `cmd/server/main.go` và `internal/handler/serve.go` hỗ trợ đa tiền tố: `GET /store/`, `HEAD /store/`, `GET /media/store/`, `HEAD /media/store/`, `GET /media/proxy/`, `HEAD /media/proxy/`.
