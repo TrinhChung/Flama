@@ -158,7 +158,7 @@ _SCRIPT_TYPE_RE = re.compile(
     r"""(?is)\btype\s*=\s*(['"])(.*?)\1"""
 )
 _SCRIPT_SRC_RE = re.compile(r"""(?is)\bsrc\s*=""")
-_PROXY_MEDIA_URL_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
+_PROXY_MEDIA_URL_RE = re.compile(r"^/(?:media/)?(?:store|proxy)/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$")
 _LIBRARY_MEDIA_URL_RE = re.compile(r"^/media/library/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$")
 _STATIC_STROKE_URL_RE = re.compile(r"^/static/strokes/([a-zA-Z0-9_-]+)/([a-fA-F0-9]+)\.svg$")
 _SCRIPT_TOKEN_PREFIX = "__FC_INLINE_SCRIPT_BLOCK_"
@@ -449,11 +449,11 @@ def _resolve_media_url(value: Any, media_lookup: dict[str, Any]) -> str:
         return ""
     raw = str(value).strip()
     if raw == PREVIEW_MEDIA_AUDIO_TOKEN:
-        return "/media/proxy/sample-audio"
+        return "/store/sample-audio.mp3"
     if raw == PREVIEW_MEDIA_IMAGE_TOKEN:
-        return "/media/proxy/sample-image"
+        return "/store/sample-image.png"
     if raw == PREVIEW_MEDIA_DIAGRAM_TOKEN:
-        return "/media/proxy/sample-diagram"
+        return "/store/sample-diagram.svg"
     sound_match = re.match(r"^\[sound:([^\]]+)\]$", raw)
     if sound_match:
         raw = sound_match.group(1).strip()
@@ -463,7 +463,7 @@ def _resolve_media_url(value: Any, media_lookup: dict[str, Any]) -> str:
     if is_canonical_media_url(raw):
         return raw
     if raw.startswith("stroke_"):
-        return f"/media/library/{raw}.svg"
+        return f"/store/{raw}.svg"
     # External URLs — pass through directly for user-provided public media.
     return ""
 
@@ -852,11 +852,21 @@ def _render_single_media_html(
     escaped_alt = html.escape(field_name, quote=True)
     escaped_field = html.escape(field_name, quote=True)
     asset_id = _extract_proxy_asset_id(media_url)
-    asset = media_lookup.get(raw) or media_lookup.get(media_url)
+    base_asset_id = asset_id.rsplit(".", 1)[0] if "." in asset_id else asset_id
+    asset = (
+        media_lookup.get(raw)
+        or media_lookup.get(media_url)
+        or (media_lookup.get(asset_id) if asset_id else None)
+        or (media_lookup.get(base_asset_id) if base_asset_id else None)
+        or (media_lookup.get(f"/store/{base_asset_id}") if base_asset_id else None)
+        or (media_lookup.get(f"/media/proxy/{base_asset_id}") if base_asset_id else None)
+    )
     asset_mime = str(getattr(asset, "mime_type", "") or "").strip().lower()
     is_svg = (
         raw.lower().endswith(".svg")
         or media_url.lower().endswith(".svg")
+        or "/stroke_" in raw.lower()
+        or "/stroke_" in media_url.lower()
         or "image/svg+xml" in raw.lower()
         or "image/svg+xml" in media_url.lower()
         or asset_mime.startswith("image/svg+xml")
@@ -1049,6 +1059,8 @@ def build_render_context(
         if asset_id:
             media_lookup[asset_id] = asset
             media_lookup[f"/media/proxy/{asset_id}"] = asset
+            media_lookup[f"/store/{asset_id}"] = asset
+            media_lookup[f"/media/store/{asset_id}"] = asset
         filename = str(getattr(asset, "filename", "") or "").strip()
         if filename:
             media_lookup.setdefault(filename, asset)

@@ -102,7 +102,7 @@ def _classify_one(
         return MediaFieldDecision("", "clear", "null_literal", True)
     if _STROKE_KEY_RE.fullmatch(item) and media_family(field_type) == "image":
         return MediaFieldDecision(
-            f"/media/library/{item}.svg",
+            f"/store/{item}.svg",
             "normalize",
             "legacy_stroke_key",
             False,

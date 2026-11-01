@@ -339,8 +339,8 @@ export function AdminImageLibraryPage() {
             const rawUrl =
               asset.url ||
               (asset.image_key || asset.name
-                ? `/media/library/${asset.image_key || asset.name}`
-                : `/media/proxy/${assetId}`)
+                ? `/store/${asset.image_key || asset.name}`
+                : `/store/${assetId}`)
             const imageUrl = resolveBackendUrl(rawUrl)
             const isStroke =
               asset.image_key?.startsWith('stroke_') ||

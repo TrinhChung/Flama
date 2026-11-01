@@ -39,7 +39,7 @@ def serialize_mcp_image_asset(row: SharedImageAsset) -> dict[str, Any]:
         "is_enabled": bool(row.is_enabled),
         "tags": tags_list,
         "source_url": str(row.source_url or "") or None,
-        "url": f"/media/library/{row.image_key}",
+        "url": f"/store/{row.image_key}",
         "preview_url": f"/admin/image-library/{row.id}/preview",
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,

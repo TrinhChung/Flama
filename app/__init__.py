@@ -20,7 +20,7 @@ class MediaHardenedSessionInterface(PublicMediaSessionInterface):
     def save_session(self, app, session, response) -> None:
         super().save_session(app, session, response)
         if has_request_context() and (
-            request.path == "/media/proxy" or request.path.startswith("/media/proxy/")
+            request.path in {"/media/proxy", "/store", "/media/store"} or request.path.startswith(("/media/proxy/", "/store/", "/media/store/"))
         ):
             response.vary.discard("Cookie")
             if not response.vary:
@@ -264,9 +264,9 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     @app.errorhandler(404)
     def page_not_found(error):
         """Handle 404 errors."""
-        if request.path.startswith(("/api/", "/media/", "/static/")):
+        if request.path.startswith(("/api/", "/media/", "/static/", "/store/")):
             resp = jsonify({"error": "NOT_FOUND", "message": "Resource not found."})
-            if request.path == "/media/proxy" or request.path.startswith("/media/proxy/"):
+            if request.path in {"/media/proxy", "/store", "/media/store"} or request.path.startswith(("/media/proxy/", "/store/", "/media/store/")):
                 resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
                 resp.headers["Pragma"] = "no-cache"
                 resp.headers.pop("Vary", None)
@@ -280,7 +280,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
         """Handle 500 errors."""
         _rollback_failed_session()
         resp = jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."})
-        if request.path == "/media/proxy" or request.path.startswith("/media/proxy"):
+        if request.path in {"/media/proxy", "/store", "/media/store"} or request.path.startswith(("/media/proxy/", "/store/", "/media/store/")):
             resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
             resp.headers["Pragma"] = "no-cache"
             resp.headers.pop("Vary", None)
@@ -290,7 +290,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     def forbidden(error):
         """Handle 403 errors."""
         resp = jsonify({"error": "FORBIDDEN", "message": "Access is forbidden."})
-        if request.path == "/media/proxy" or request.path.startswith("/media/proxy"):
+        if request.path in {"/media/proxy", "/store", "/media/store"} or request.path.startswith(("/media/proxy/", "/store/", "/media/store/")):
             resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
             resp.headers["Pragma"] = "no-cache"
             resp.headers.pop("Vary", None)
@@ -304,7 +304,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
             status = int(error.code or 500)
             code = str(error.name or "HTTP_ERROR").upper().replace(" ", "_")
             resp = jsonify({"error": code, "message": str(error.description)})
-            if request.path == "/media/proxy" or request.path.startswith("/media/proxy"):
+            if request.path in {"/media/proxy", "/store", "/media/store"} or request.path.startswith(("/media/proxy/", "/store/", "/media/store/")):
                 resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
                 resp.headers["Pragma"] = "no-cache"
                 resp.headers.pop("Vary", None)
@@ -317,7 +317,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
             exc_info=True,
         )
         resp = jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."})
-        if request.path == "/media/proxy" or request.path.startswith("/media/proxy"):
+        if request.path in {"/media/proxy", "/store", "/media/store"} or request.path.startswith(("/media/proxy/", "/store/", "/media/store/")):
             resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
             resp.headers["Pragma"] = "no-cache"
             resp.headers.pop("Vary", None)

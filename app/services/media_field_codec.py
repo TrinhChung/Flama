@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 MEDIA_FIELD_TYPES = frozenset({"image", "audio", "diagram"})
 _IMAGE_EXTENSIONS = frozenset({"avif", "bmp", "gif", "jpeg", "jpg", "png", "svg", "webp"})
 _AUDIO_EXTENSIONS = frozenset({"aac", "flac", "m4a", "mp3", "oga", "ogg", "opus", "wav", "webm"})
-_PROXY_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
+_PROXY_RE = re.compile(r"^/(?:media/)?(?:store|proxy)/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$")
 _STAGED_RE = re.compile(r"^/media/staged/([A-Za-z0-9_-]{8,64})$")
 _ASSET_RE = re.compile(r"^/media/asset/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
 _LIBRARY_RE = re.compile(r"^/media/library/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
@@ -99,6 +99,8 @@ def media_reference_family_from_url(raw_url: str) -> str | None:
         path = urlsplit(str(raw_url or "").strip()).path
     except ValueError:
         return None
+    if "/stroke_" in path:
+        return "image"
     suffix = PurePosixPath(path).suffix.lower().lstrip(".")
     if suffix in _IMAGE_EXTENSIONS:
         return "image"
@@ -133,8 +135,23 @@ def _lookup_target(
     if reference_lookup is None:
         return None
     if isinstance(reference_lookup, set):
-        return MediaReferenceTarget(candidate) if candidate in reference_lookup else None
+        if candidate in reference_lookup:
+            return MediaReferenceTarget(candidate)
+        bare = re.sub(r"^/(?:media/)?(?:store|proxy)/", "", candidate)
+        stem = bare.rsplit(".", 1)[0] if "." in bare else bare
+        for variant in (stem, f"/store/{stem}", f"/media/proxy/{stem}"):
+            if variant in reference_lookup:
+                return MediaReferenceTarget(candidate)
+        return None
     entry = reference_lookup.get(candidate)
+    if entry is None:
+        bare = re.sub(r"^/(?:media/)?(?:store|proxy)/", "", candidate)
+        if "." in bare:
+            stem = bare.rsplit(".", 1)[0]
+            for variant in (stem, f"/store/{stem}", f"/media/proxy/{stem}", f"/media/store/{stem}"):
+                entry = reference_lookup.get(variant)
+                if entry is not None:
+                    break
     if entry is None:
         return None
     if isinstance(entry, MediaReferenceTarget):
@@ -181,10 +198,18 @@ def build_media_reference_lookup(assets: Any) -> dict[str, MediaReferenceTarget]
         target = MediaReferenceTarget(url, family)
         lookup[asset_id] = target
         lookup[url] = target
+        lookup[f"/store/{asset_id}"] = target
+        lookup[f"/media/store/{asset_id}"] = target
         filename = str(getattr(asset, "filename", "") or "").strip()
         if filename:
             lookup[filename] = target
             lookup[f"[sound:{filename}]"] = target
+            ext = PurePosixPath(filename).suffix.lower()
+            if ext:
+                lookup[f"{asset_id}{ext}"] = target
+                lookup[f"/store/{asset_id}{ext}"] = target
+                lookup[f"/media/store/{asset_id}{ext}"] = target
+                lookup[f"/media/proxy/{asset_id}{ext}"] = target
     return lookup
 
 
@@ -196,7 +221,10 @@ def _assert_family(candidate: str, *, field_type: str, resolved_family: str | No
             f"Media URL does not match the '{field_type}' field type.",
             reason="wrong_media_kind",
         )
-    if candidate.startswith(("/media/library/", "/static/strokes/", "/media/staged/", "/media/asset/")) and expected == "audio":
+    if (
+        candidate.startswith(("/media/library/", "/static/strokes/", "/media/staged/", "/media/asset/"))
+        or candidate.startswith(("/store/stroke_", "/media/store/stroke_", "/media/proxy/stroke_"))
+    ) and expected == "audio":
         raise MediaFieldValueError(
             "Image-library URLs cannot be stored in an audio field.",
             reason="wrong_media_kind",
@@ -217,7 +245,7 @@ def resolve_media_file_target(
     expected_family = media_family(field_type)
 
     if _STROKE_KEY_RE.fullmatch(cleaned) and expected_family == "image":
-        return MediaReferenceTarget(f"/media/library/{cleaned}.svg", "image")
+        return MediaReferenceTarget(f"/store/{cleaned}.svg", "image")
 
     if cleaned.startswith("static/strokes/") or cleaned.startswith("/static/strokes/"):
         canonical_stroke = cleaned if cleaned.startswith("/") else f"/{cleaned}"
@@ -247,7 +275,8 @@ def resolve_media_file_target(
                     SharedImageAsset.is_enabled.is_(True),
                 ).first()
                 if shared:
-                    return MediaReferenceTarget(f"/media/library/{shared.image_key}", "image")
+                    ext = ".svg" if (shared.image_key or "").startswith("stroke_") else ""
+                    return MediaReferenceTarget(f"/store/{shared.image_key}{ext}", "image")
         except Exception:
             pass
 
@@ -417,7 +446,12 @@ def normalize_media_reference_for_write(
 
     if is_canonical_media_url(candidate):
         target = _lookup_target(candidate, reference_lookup)
-        if candidate.startswith("/media/proxy/") and reference_lookup is not None and target is None:
+        if (
+            candidate.startswith(("/media/proxy/", "/store/", "/media/store/"))
+            and not candidate.startswith(("/store/stroke_", "/media/store/stroke_", "/media/proxy/stroke_"))
+            and reference_lookup is not None
+            and target is None
+        ):
             raise MediaFieldValueError(
                 "The media asset does not belong to this note.",
                 reason="unknown_media_asset",

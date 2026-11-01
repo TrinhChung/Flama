@@ -181,7 +181,7 @@ def resolve_stroke_items(
         
         # Ensure exists in SharedImageAsset & media library storage
         ensure_stroke_shared_asset(image_key)
-        url = f"/media/library/{image_key}.svg"
+        url = f"/store/{image_key}.svg"
 
         items.append({
             "char": char,

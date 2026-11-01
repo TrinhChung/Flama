@@ -45,8 +45,8 @@ describe('SampleValuesSheet', () => {
     const meaning = document.querySelector<HTMLTextAreaElement>('#sample-Meaning')!
     expect(meaning.tagName).toBe('TEXTAREA')
     expect(meaning.value).toContain('## Sample heading')
-    expect(document.querySelector<HTMLInputElement>('#sample-Audio')?.value).toBe('/media/proxy/sample-audio')
-    expect(document.querySelector('audio')?.getAttribute('src')).toContain('/media/proxy/sample-audio')
+    expect(document.querySelector<HTMLInputElement>('#sample-Audio')?.value).toBe('/store/sample-audio.mp3')
+    expect(document.querySelector('audio')?.getAttribute('src')).toContain('/store/sample-audio.mp3')
     // Only explicit samples are marked as overrides.
     expect(document.body.textContent?.match(/Mẫu tùy chỉnh/g)).toHaveLength(1)
 

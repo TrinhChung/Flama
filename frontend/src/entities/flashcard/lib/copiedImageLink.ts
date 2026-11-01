@@ -1,4 +1,4 @@
-const MANAGED_MEDIA_PATH = /^\/media\/(?:proxy|library)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/
+const MANAGED_MEDIA_PATH = /^\/(?:media\/)?(?:store|proxy|library)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/
 
 function mediaLink(raw: string): string | null {
   try {

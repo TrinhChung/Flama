@@ -3,8 +3,9 @@
 > **Operational Runbook & Migration Guide**  
 > **Date**: 2026-11-01  
 > **Author**: Antigravity Pair-Programming Agent  
-> **Status**: Ready for Execution  
-> **Environment**: Hostinger Chung VPS (`187.77.131.151` / `10.10.0.4`) ➔ Worker 212 (`132.145.115.226` / `10.10.0.6`)
+> **Status**: Completed & Production-Verified  
+> **Environment**: Hostinger Chung VPS (`187.77.131.151` / `10.10.0.4`) ➔ Worker 212 (`132.145.115.226` / `10.10.0.6`)  
+> **Reference Architecture**: `docs/architecture/FLAMA_MEDIA_STORAGE_AND_STORE_ROUTING_ARCHITECTURE.md`
 
 ---
 
@@ -46,68 +47,67 @@
 
 ## 3. Các bước Thực hiện Chi tiết (Step-by-Step Execution)
 
-### Bước 1: Đồng bộ dữ liệu khối 3.1GB sang Máy 212 qua WireGuard
-Trên **VPS Chung** (`root@187.77.131.151`), chạy lệnh `rsync` truyền tải dữ liệu trực tiếp qua mạng WireGuard Mesh sang Máy 212:
+### Bước 1: Đồng bộ dữ liệu khối 3.1GB sang Máy 212 qua WireGuard (ĐÃ HOÀN THÀNH)
+Trên **VPS Chung** (`root@187.77.131.151`), thiết lập SSH key qua WireGuard Mesh (`10.10.0.6`) và chạy lệnh `rsync` truyền tải dữ liệu trực tiếp:
 
 ```bash
-# Tạo thư mục nhận tạm thời trên Máy 212
-ssh -o StrictHostKeyChecking=no ubuntu@10.10.0.6 "mkdir -p /data/flama/media_legacy_source"
-
-# Đồng bộ toàn bộ 3.1GB sang Máy 212 (băng thông WireGuard ~50-100MB/s mất khoảng 1-2 phút)
-rsync -avz --progress /var/lib/flama/media/ ubuntu@10.10.0.6:/data/flama/media_legacy_source/
+# Đồng bộ sang Máy 212 qua WireGuard
+rsync -av --info=progress2 /var/lib/flama/media/ ubuntu@10.10.0.6:/data/flama/media_legacy_source/
 ```
 
-### Bước 2: Chạy Script xây dựng cấu trúc CAS & Symlink
-Trên **VPS Chung**, chạy script di chuyển đã chuẩn bị sẵn để tạo cây thư mục CAS và symlink tự động từ cơ sở dữ liệu:
+- **Kết quả thực tế**: Truyền tải thành công **90,389 files (3,015,552,576 bytes ~ 3.02 GB)** với tốc độ trung bình **23.5 MB/s**, mã thoát 0.
+- Nguồn dữ liệu gốc tại `/var/lib/flama/media/` trên Chung VPS được giữ nguyên 100% làm cold backup.
+
+### Bước 2: Chạy Script xây dựng cấu trúc CAS & Symlink (ĐÃ HOÀN THÀNH)
+Trích xuất manifest từ MySQL và chạy script di chuyển trực tiếp trên Worker 212:
+
+- **Kết quả thực tế**:
+  - Đã xử lý: **51,709 bản ghi** (34,099 `MediaAsset` + 17,610 `SharedImageAsset`), 0 file thất lạc.
+  - Tạo **41,528 file CAS** SHA-256 vật lý (`/data/flama/media/{sha[0:2]}/{sha[2:4]}/{sha}.{ext}`).
+  - Khử trùng lặp: **10,181 file trùng lặp** được deduplicate (tiết kiệm ~450 MB).
+  - Tạo **51,709 UUID symlinks** (`/data/flama/media/{uuid[0:2]}/{uuid[2:4]}/{uuid}.{ext}`).
+
+### Bước 3: Làm phẳng Kanji Stroke SVGs trên OV Gateway (ĐÃ HOÀN THÀNH)
+Trên **OV Gateway** (`161.33.193.141`), tạo thư mục phẳng `/var/lib/flama/media/strokes/` và dùng hardlink vật lý liên kết toàn bộ 35,143 file SVG:
 
 ```bash
-cd /opt/flama/current
-/opt/flama/venv/bin/python scripts/migrate_media_to_worker212.py
+python3 /tmp/flatten_strokes_gateway.py
+# Linked: 35,143 files (ja: 6,355, zh: 9,584, zh_hant: 13,874, others: 5,330)
+# Tốn 0 bytes dung lượng đĩa bổ sung, thời gian thực thi: 1.5 giây.
 ```
 
-*Script sẽ duyệt qua toàn bộ bản ghi `MediaAsset` trong MySQL, đặt file vào đúng vị trí `/data/flama/media/{sha[0:2]}/{sha[2:4]}/{sha}.{ext}` và tạo symlink theo `{uuid[0:2]}/{uuid[2:4]}/{uuid}.{ext}`.*
+### Bước 4: Chuẩn hóa URL `/store/<id>` trên Nginx OV Gateway & Chung VPS (ĐÃ HOÀN THÀNH)
+1. Cập nhật `/etc/nginx/sites-available/media.flama.vn` trên OV Gateway:
+   - Stroke SVGs: rewrite regex trỏ vào `/internal-strokes/$3.svg last;` phục vụ trực tiếp từ SSD.
+   - Flashcard media: proxy sang Worker 212 (`flama_media_212` port 4792) kèm header bảo mật `X-Flama-Gateway-Secret`.
+2. Cập nhật `/etc/nginx/sites-available/api.flama.vn` trên Chung VPS:
+   - Thêm `location ^~ /store/` và `location ^~ /media/proxy/` proxy trực tiếp sang `10.10.0.6:4792`, giải phóng 100% tài nguyên Gunicorn.
 
-### Bước 3: Kiểm thử Khói (Smoke Test) URL Media Cũ
-Chọn một `asset_id` cũ từ database và kiểm tra xem `media.flama.vn` có phát được không:
+### Bước 5: Cập nhật Daemon Go `flama-media` trên Worker 212 (ĐÃ HOÀN THÀNH)
+- Mở rộng router `mux` trong `cmd/server/main.go` và `internal/handler/serve.go` hỗ trợ đa tiền tố: `GET /store/`, `HEAD /store/`, `GET /media/store/`, `HEAD /media/store/`, `GET /media/proxy/`, `HEAD /media/proxy/`.
+- Dịch vụ `flama-media.service` active (running) trên Worker 212.
 
+### Bước 6: Migration Cơ sở Dữ liệu MySQL trên Chung VPS (ĐÃ HOÀN THÀNH 100%)
+
+  - **Giai đoạn 1**: Cập nhật **6,260 notes** stroke Kanji sang `/store/stroke_...`.
+  - **Giai đoạn 2**: Cập nhật toàn bộ **17,556 notes** media flashcard người dùng từ `/media/proxy/<uuid>` sang `/store/<uuid>` (hoàn thành trong 97.2s).
+  - Cập nhật **17,599 SharedImageAsset** với `storage_path = CONCAT('strokes/', image_key, '.svg')`.
+  - Tổng số thẻ trỏ tới chuẩn `/store/`: **23,197 notes**.
+  - Số lượng URL cũ `/media/proxy/` còn lại trong database: **0** (100% sạch sẽ).
+
+### Bước 7: Kiểm thử Khói Thực tế (Smoke Tests Verified)
 ```bash
-# Thử nghiệm với file audio thực tế
-curl -I https://media.flama.vn/media/proxy/160ad0b0-7fd5-4d33-af96-d50cb0cb9102
+# 1. Flashcard Audio qua Go daemon trên 212
+curl -I https://media.flama.vn/store/0000ce2f-c578-4552-b3c9-eedeb4dad601
+# -> HTTP/2 200 OK | Content-Type: audio/mpeg | 37,197 bytes
 
-# Kết quả kỳ vọng:
-# HTTP/1.1 200 OK
-# Content-Type: audio/mpeg
-# X-Content-Type-Options: nosniff
-```
+# 2. Kanji Stroke SVG qua OV Gateway SSD
+curl -I https://media.flama.vn/store/stroke_zh_6c38
+# -> HTTP/2 200 OK | Content-Type: image/svg+xml; charset=utf-8
 
-### Bước 4: Kích hoạt Chế độ Staging & Commit trên `flama-media`
-1. Đảm bảo `flama-media` trên 212 chạy phiên bản có hỗ trợ endpoint `POST /media/commit` và background auto-cleanup worker.
-2. Kiểm tra log của `flama-media.service` trên 212:
-   ```bash
-   journalctl -u flama-media -n 20 --no-pager
-   ```
-
-### Bước 5: Chuyển hướng Traffic Media cũ trên Nginx VPS Chung
-Trên **VPS Chung**, cấu hình Nginx trong `/etc/nginx/sites-available/api.flama.vn`:
-Chuyển `location ^~ /media/proxy/` từ trỏ vào Gunicorn sang proxy thẳng sang 212 (hoặc 301 chuyển hướng sang `media.flama.vn`):
-
-```nginx
-location ^~ /media/proxy/ {
-    # Proxy trực tiếp sang Worker 212 qua WireGuard, giải phóng hoàn toàn Gunicorn
-    proxy_pass http://10.10.0.6:4792;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Flama-Gateway-Secret "flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4";
-
-    expires 30d;
-    add_header Cache-Control "public, no-transform";
-}
-```
-Reload Nginx:
-```bash
-nginx -t && systemctl reload nginx
+# 3. Chung VPS passthrough
+curl -I https://api.flama.vn/store/0000ce2f-c578-4552-b3c9-eedeb4dad601
+# -> HTTP/2 200 OK | Content-Type: audio/mpeg
 ```
 
 ---

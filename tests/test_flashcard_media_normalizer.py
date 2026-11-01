@@ -141,6 +141,22 @@ class FlashcardMediaNormalizerTests(unittest.TestCase):
             "https://example.com/1.png\n/media/library/stroke_ja_4e00.svg",
         )
 
+    def test_store_urls_with_extensions(self):
+        self.assertTrue(is_canonical_media_url("/store/160ad0b0-7fd5-4d33-af96-d50cb0cb9102.mp3"))
+        self.assertTrue(is_canonical_media_url("/store/stroke_zh_6c38.svg"))
+        self.assertEqual(
+            normalize_single_media_reference("/store/160ad0b0-7fd5-4d33-af96-d50cb0cb9102.mp3", field_type="audio"),
+            "/store/160ad0b0-7fd5-4d33-af96-d50cb0cb9102.mp3",
+        )
+        self.assertEqual(
+            normalize_single_media_reference("/store/stroke_zh_6c38.svg", field_type="image"),
+            "/store/stroke_zh_6c38.svg",
+        )
+        asset = SimpleNamespace(id="asset-1", filename="audio.mp3", mime_type="audio/mpeg")
+        lookup = build_media_reference_lookup([asset])
+        self.assertIn("/store/asset-1.mp3", lookup)
+        self.assertIn("asset-1.mp3", lookup)
+
     def test_legacy_json_array_with_missing_binary_is_quarantined_unchanged(self):
         raw = '["missing.png"]'
         decision = classify_media_field_value(raw, field_type="image")

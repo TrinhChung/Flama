@@ -12,7 +12,7 @@ class PublicMediaSessionInterface(SecureCookieSessionInterface):
 
     def save_session(self, app, session: SessionMixin, response: Response) -> None:
         super().save_session(app, session, response)
-        if not has_request_context() or not request.path.startswith("/media/proxy/"):
+        if not has_request_context() or not request.path.startswith(("/media/proxy/", "/store/", "/media/store/")):
             return
 
         # Media is authorization-independent. Cookie-specific variants and

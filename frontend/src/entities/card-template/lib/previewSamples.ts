@@ -22,9 +22,9 @@ export function defaultTemplateSample(fieldType: string): TemplateSampleValue {
     case 'array': return ['First item', 'Second item', 'Third item']
     case 'richtext': return '<p><strong>Sample text</strong> with <em>formatting</em>.</p>'
     case 'markdown': return '## Sample heading\n\n**Sample text**\n\n- First item\n- Second item'
-    case 'image': return '/media/proxy/sample-image'
-    case 'audio': return '/media/proxy/sample-audio'
-    case 'diagram': return '/media/proxy/sample-diagram'
+    case 'image': return '/store/sample-image.png'
+    case 'audio': return '/store/sample-audio.mp3'
+    case 'diagram': return '/store/sample-diagram.svg'
     default: return 'Sample text'
   }
 }
@@ -39,7 +39,7 @@ export function templateSampleValues(fields: ReadonlyArray<TemplateSampleField>,
 export function sampleMediaUrl(value: string): string {
   const url = value.trim()
   if (/[\s"'<>]/.test(url)) return ''
-  if (/^\/media\/(?:proxy|library)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(url)) return url
+  if (/^\/(?:media\/)?(?:store|proxy|library)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(url)) return url
   if (/^\/static\/strokes\/[A-Za-z0-9_-]+\/[A-Fa-f0-9]+\.svg$/.test(url)) return url
   try {
     const parsed = new URL(url)
