@@ -393,6 +393,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_media_staging_service.py",
             "tests/test_flama_media_client.py",
             "tests/test_worker_media_mysql.py",
+            "tests/test_worker_media_e2e_mysql.py",
             "tests/test_stroke_worker_client.py",
             "tests/test_batch_flashcard_import.py",
             "tests/test_anki_import_api.py",
@@ -1217,6 +1218,7 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "app/services/flama_media_client.py",
     "app/api/v1/flashcards/media.py",
     "tests/test_worker_media_mysql.py",
+    "tests/test_worker_media_e2e_mysql.py",
     "scripts/run_mysql_probes.py",
     # Every schema-owning probe resets its schema through this helper.
     "scripts/mysql_probe_db.py",

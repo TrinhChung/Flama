@@ -436,6 +436,30 @@ jobs:
           tests/test_note_base_publish_mysql.py tests/test_note_base_cutover_mysql.py
           --backend-only --manifest output/note-base-mysql-ci.json
 
+      - name: Resolve pinned media worker revision
+        id: media_worker
+        run: echo "sha=$(git rev-parse HEAD:flama-media)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the pinned public media worker
+        uses: actions/checkout@v4
+        with:
+          repository: TrinhChung/flama-media
+          ref: ${{ steps.media_worker.outputs.sha }}
+          path: flama-media
+          persist-credentials: false
+
+      - name: Setup media worker Go toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: flama-media/go.mod
+          cache-dependency-path: flama-media/go.sum
+
+      - name: Build disposable media worker
+        working-directory: flama-media
+        env:
+          CGO_ENABLED: '0'
+        run: go build -trimpath -o "$RUNNER_TEMP/flama-media-test" ./cmd/server
+
       - name: Verify direct media upload and deferred commit on MySQL
         env:
           DB_HOST: 127.0.0.1
@@ -444,8 +468,10 @@ jobs:
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
           FLAMA_MYSQL_TESTS: '1'
+          FLAMA_MEDIA_TEST_BINARY: ${{ runner.temp }}/flama-media-test
         run: >-
           python scripts/run_tests.py --file tests/test_worker_media_mysql.py
+          tests/test_worker_media_e2e_mysql.py
           --backend-only --manifest output/worker-media-mysql-ci.json
 
       - name: Run schema-owning NOTE, field value, forecast, outbox and retention contracts on MySQL
