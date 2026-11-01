@@ -66,6 +66,12 @@ from app.validators.mcp import (
     validate_update_note_arguments,
     validate_update_note_type_arguments,
     validate_get_taxonomy_schema_arguments,
+    validate_create_taxonomy_domain_arguments,
+    validate_create_taxonomy_subject_arguments,
+    validate_create_taxonomy_framework_arguments,
+    validate_create_taxonomy_framework_level_arguments,
+    validate_create_taxonomy_option_arguments,
+    validate_ensure_taxonomy_category_arguments,
 )
 
 
@@ -1745,6 +1751,363 @@ GET_TAXONOMY_SCHEMA_TOOL = McpToolDefinition(
 )
 
 
+def _call_create_taxonomy_domain(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.create_taxonomy_domain(
+            user_id=user_id,
+            id=arguments["id"],
+            label=arguments["label"],
+            sort_order=arguments.get("sort_order", 0),
+            is_active=arguments.get("is_active", True),
+        )
+    )
+
+
+CREATE_TAXONOMY_DOMAIN_TOOL = McpToolDefinition(
+    name=mcp_tool_service.CREATE_TAXONOMY_DOMAIN_TOOL_NAME,
+    title="Create Taxonomy Domain",
+    description="Create a top-level knowledge domain in the system taxonomy (e.g., 'data_science', 'stem'). Requires admin privileges.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Unique identifier slug for domain (e.g. 'data_science'). Max 64 chars.",
+            },
+            "label": {
+                "type": "string",
+                "description": "Display name of the domain (e.g. 'Khoa học Dữ liệu').",
+            },
+            "sort_order": {
+                "type": "integer",
+                "default": 0,
+                "description": "Display sort order.",
+            },
+            "is_active": {
+                "type": "boolean",
+                "default": True,
+                "description": "Whether this domain is active.",
+            },
+        },
+        "required": ["id", "label"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:write",
+    annotations=tool_hints(read_only=False),
+    handler=_call_create_taxonomy_domain,
+    arguments_validator=validate_create_taxonomy_domain_arguments,
+)
+
+
+def _call_create_taxonomy_subject(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.create_taxonomy_subject(
+            user_id=user_id,
+            id=arguments["id"],
+            domain_id=arguments["domain_id"],
+            label=arguments["label"],
+            sort_order=arguments.get("sort_order", 0),
+            is_active=arguments.get("is_active", True),
+        )
+    )
+
+
+CREATE_TAXONOMY_SUBJECT_TOOL = McpToolDefinition(
+    name=mcp_tool_service.CREATE_TAXONOMY_SUBJECT_TOOL_NAME,
+    title="Create Taxonomy Subject",
+    description="Create a subject/discipline under an existing domain (e.g., 'machine_learning' under 'data_science'). Requires admin privileges.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Unique identifier slug for subject (e.g. 'machine_learning'). Max 64 chars.",
+            },
+            "domain_id": {
+                "type": "string",
+                "description": "Parent domain ID.",
+            },
+            "label": {
+                "type": "string",
+                "description": "Display name of the subject (e.g. 'Học máy & AI').",
+            },
+            "sort_order": {
+                "type": "integer",
+                "default": 0,
+                "description": "Display sort order.",
+            },
+            "is_active": {
+                "type": "boolean",
+                "default": True,
+                "description": "Whether this subject is active.",
+            },
+        },
+        "required": ["id", "domain_id", "label"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:write",
+    annotations=tool_hints(read_only=False),
+    handler=_call_create_taxonomy_subject,
+    arguments_validator=validate_create_taxonomy_subject_arguments,
+)
+
+
+def _call_create_taxonomy_framework(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.create_taxonomy_framework(
+            user_id=user_id,
+            id=arguments["id"],
+            subject_id=arguments["subject_id"],
+            label=arguments["label"],
+            sort_order=arguments.get("sort_order", 0),
+            is_active=arguments.get("is_active", True),
+        )
+    )
+
+
+CREATE_TAXONOMY_FRAMEWORK_TOOL = McpToolDefinition(
+    name=mcp_tool_service.CREATE_TAXONOMY_FRAMEWORK_TOOL_NAME,
+    title="Create Taxonomy Framework",
+    description="Create a certification or proficiency framework for a subject (e.g., 'goethe_cert' for 'german'). Requires admin privileges.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Unique identifier slug for framework (e.g. 'goethe_cert'). Max 64 chars.",
+            },
+            "subject_id": {
+                "type": "string",
+                "description": "Parent subject ID.",
+            },
+            "label": {
+                "type": "string",
+                "description": "Display name of the framework (e.g. 'Goethe-Zertifikat').",
+            },
+            "sort_order": {
+                "type": "integer",
+                "default": 0,
+                "description": "Display sort order.",
+            },
+            "is_active": {
+                "type": "boolean",
+                "default": True,
+                "description": "Whether this framework is active.",
+            },
+        },
+        "required": ["id", "subject_id", "label"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:write",
+    annotations=tool_hints(read_only=False),
+    handler=_call_create_taxonomy_framework,
+    arguments_validator=validate_create_taxonomy_framework_arguments,
+)
+
+
+def _call_create_taxonomy_framework_level(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.create_taxonomy_framework_level(
+            user_id=user_id,
+            id=arguments["id"],
+            framework_id=arguments["framework_id"],
+            subject_id=arguments["subject_id"],
+            label=arguments["label"],
+            difficulty_band=arguments.get("difficulty_band", "beginner"),
+            suggested_tags=arguments.get("suggested_tags"),
+            sort_order=arguments.get("sort_order", 0),
+            is_active=arguments.get("is_active", True),
+        )
+    )
+
+
+CREATE_TAXONOMY_FRAMEWORK_LEVEL_TOOL = McpToolDefinition(
+    name=mcp_tool_service.CREATE_TAXONOMY_FRAMEWORK_LEVEL_TOOL_NAME,
+    title="Create Taxonomy Framework Level",
+    description="Create a proficiency level under a framework and subject (e.g., 'a1', 'b2'). Requires admin privileges.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Unique identifier slug for level (e.g. 'a1', 'b1'). Max 64 chars.",
+            },
+            "framework_id": {
+                "type": "string",
+                "description": "Parent framework ID.",
+            },
+            "subject_id": {
+                "type": "string",
+                "description": "Subject ID this level is associated with.",
+            },
+            "label": {
+                "type": "string",
+                "description": "Display label for level (e.g. 'Goethe A1 - Sơ cấp').",
+            },
+            "difficulty_band": {
+                "type": "string",
+                "enum": ["beginner", "intermediate", "advanced"],
+                "default": "beginner",
+                "description": "Standard difficulty band mapping.",
+            },
+            "suggested_tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional suggested search/discovery tags.",
+            },
+            "sort_order": {
+                "type": "integer",
+                "default": 0,
+                "description": "Display sort order.",
+            },
+            "is_active": {
+                "type": "boolean",
+                "default": True,
+                "description": "Whether this level is active.",
+            },
+        },
+        "required": ["id", "framework_id", "subject_id", "label"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:write",
+    annotations=tool_hints(read_only=False),
+    handler=_call_create_taxonomy_framework_level,
+    arguments_validator=validate_create_taxonomy_framework_level_arguments,
+)
+
+
+def _call_create_taxonomy_option(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.create_taxonomy_option(
+            user_id=user_id,
+            id=arguments["id"],
+            option_type=arguments["option_type"],
+            label=arguments["label"],
+            sub_label=arguments.get("sub_label"),
+            sort_order=arguments.get("sort_order", 0),
+            is_active=arguments.get("is_active", True),
+        )
+    )
+
+
+CREATE_TAXONOMY_OPTION_TOOL = McpToolDefinition(
+    name=mcp_tool_service.CREATE_TAXONOMY_OPTION_TOOL_NAME,
+    title="Create Taxonomy Option",
+    description="Create a taxonomy option such as a learning goal, topic, or format feature. Requires admin privileges.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Unique identifier slug for the option (e.g. 'deep_learning'). Max 64 chars.",
+            },
+            "option_type": {
+                "type": "string",
+                "enum": ["primary_topic", "learning_goal", "format_feature", "audience", "best_used_for", "difficulty_band"],
+                "description": "Option category type.",
+            },
+            "label": {
+                "type": "string",
+                "description": "Display name of the option.",
+            },
+            "sub_label": {
+                "type": "string",
+                "description": "Optional sub-label or clarification.",
+            },
+            "sort_order": {
+                "type": "integer",
+                "default": 0,
+                "description": "Display sort order.",
+            },
+            "is_active": {
+                "type": "boolean",
+                "default": True,
+                "description": "Whether this option is active.",
+            },
+        },
+        "required": ["id", "option_type", "label"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:write",
+    annotations=tool_hints(read_only=False),
+    handler=_call_create_taxonomy_option,
+    arguments_validator=validate_create_taxonomy_option_arguments,
+)
+
+
+def _call_ensure_taxonomy_category(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.ensure_taxonomy_category(
+            user_id=user_id,
+            domain_id=arguments["domain_id"],
+            domain_label=arguments.get("domain_label"),
+            subject_id=arguments["subject_id"],
+            subject_label=arguments.get("subject_label"),
+            framework_id=arguments.get("framework_id"),
+            framework_label=arguments.get("framework_label"),
+            level_id=arguments.get("level_id"),
+            level_label=arguments.get("level_label"),
+            difficulty_band=arguments.get("difficulty_band", "beginner"),
+        )
+    )
+
+
+ENSURE_TAXONOMY_CATEGORY_TOOL = McpToolDefinition(
+    name=mcp_tool_service.ENSURE_TAXONOMY_CATEGORY_TOOL_NAME,
+    title="Ensure Taxonomy Category",
+    description="Ensure an entire taxonomy hierarchy (domain -> subject -> optional framework -> optional level) exists, creating any missing elements in a single step and returning a ready-to-use taxonomy_metadata snippet for share_deck. Requires admin privileges.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "domain_id": {
+                "type": "string",
+                "description": "Domain slug (e.g. 'professional_skills' or new 'data_science'). Required.",
+            },
+            "domain_label": {
+                "type": "string",
+                "description": "Display label for domain if creating a new one.",
+            },
+            "subject_id": {
+                "type": "string",
+                "description": "Subject slug (e.g. 'machine_learning'). Required.",
+            },
+            "subject_label": {
+                "type": "string",
+                "description": "Display label for subject if creating a new one.",
+            },
+            "framework_id": {
+                "type": "string",
+                "description": "Optional framework slug (e.g. 'ml_cert').",
+            },
+            "framework_label": {
+                "type": "string",
+                "description": "Display label for framework if creating a new one.",
+            },
+            "level_id": {
+                "type": "string",
+                "description": "Optional framework level slug (e.g. 'intro').",
+            },
+            "level_label": {
+                "type": "string",
+                "description": "Display label for level if creating a new one.",
+            },
+            "difficulty_band": {
+                "type": "string",
+                "enum": ["beginner", "intermediate", "advanced"],
+                "default": "beginner",
+                "description": "Standard difficulty band for the level.",
+            },
+        },
+        "required": ["domain_id", "subject_id"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:write",
+    annotations=tool_hints(read_only=False),
+    handler=_call_ensure_taxonomy_category,
+    arguments_validator=validate_ensure_taxonomy_category_arguments,
+)
+
+
 def _call_share_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
     return mcp_tool_service._wrap_tool_result(
         mcp_tool_service.share_deck(
@@ -2242,6 +2605,12 @@ _MCP_TOOL_DEFINITIONS = (
     EXTRACT_PAGE_IMAGES_TOOL,
     # Shared Decks & Releases & Taxonomy
     GET_TAXONOMY_SCHEMA_TOOL,
+    CREATE_TAXONOMY_DOMAIN_TOOL,
+    CREATE_TAXONOMY_SUBJECT_TOOL,
+    CREATE_TAXONOMY_FRAMEWORK_TOOL,
+    CREATE_TAXONOMY_FRAMEWORK_LEVEL_TOOL,
+    CREATE_TAXONOMY_OPTION_TOOL,
+    ENSURE_TAXONOMY_CATEGORY_TOOL,
     LIST_SHARED_DECKS_TOOL,
     GET_SHARED_DECK_TOOL,
     LIST_SHARED_DECK_NOTES_TOOL,

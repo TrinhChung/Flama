@@ -53,6 +53,12 @@ from app.services.mcp.base import (
     LIST_DECK_RELEASES_TOOL_NAME,
     LIST_INSTALLED_DECKS_TOOL_NAME,
     GET_TAXONOMY_SCHEMA_TOOL_NAME,
+    CREATE_TAXONOMY_DOMAIN_TOOL_NAME,
+    CREATE_TAXONOMY_SUBJECT_TOOL_NAME,
+    CREATE_TAXONOMY_FRAMEWORK_TOOL_NAME,
+    CREATE_TAXONOMY_FRAMEWORK_LEVEL_TOOL_NAME,
+    CREATE_TAXONOMY_OPTION_TOOL_NAME,
+    ENSURE_TAXONOMY_CATEGORY_TOOL_NAME,
     _compact_description,
     _wrap_tool_result,
     _wrap_tool_error,
@@ -127,5 +133,13 @@ from app.services.mcp.marketplace_tools import (
     publish_deck_release,
     list_deck_releases,
     list_installed_decks,
+)
+from app.services.mcp.taxonomy_tools import (
+    create_taxonomy_domain,
+    create_taxonomy_subject,
+    create_taxonomy_framework,
+    create_taxonomy_framework_level,
+    create_taxonomy_option,
+    ensure_taxonomy_category,
 )
 

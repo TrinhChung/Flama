@@ -294,6 +294,12 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "extract_page_images",
             # Shared Decks & Releases & Taxonomy
             "get_taxonomy_schema",
+            "create_taxonomy_domain",
+            "create_taxonomy_subject",
+            "create_taxonomy_framework",
+            "create_taxonomy_framework_level",
+            "create_taxonomy_option",
+            "ensure_taxonomy_category",
             "list_shared_decks",
             "get_shared_deck",
             "list_shared_deck_notes",
