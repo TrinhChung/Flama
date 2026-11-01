@@ -167,6 +167,7 @@
   ["DELETE", "/api/integration-tokens/<int:token_id>"],
   ["POST", "/api/integration-tokens/<int:token_id>/rotate"],
   ["POST", "/api/integration-tokens/sentence-mining-setup"],
+  ["POST", "/api/internal/security/incident"],
   ["GET", "/api/marketplace/decks/<deck_item_id>/auto-publish"],
   ["POST", "/api/marketplace/decks/<deck_item_id>/auto-publish"],
   ["GET", "/api/marketplace/decks/<deck_item_id>/releases"],

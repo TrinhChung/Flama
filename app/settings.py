@@ -318,6 +318,13 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         ),
 
 
+        "GATEWAY_SECRET": os.getenv("GATEWAY_SECRET", "").strip(),
+        "INTERNAL_SECURITY_SECRET": (
+            os.getenv("INTERNAL_SECURITY_SECRET", "").strip()
+            or os.getenv("GATEWAY_SECRET", "").strip()
+        ),
+        "MEDIA_SHARED_SECRET": os.getenv("MEDIA_SHARED_SECRET", "").strip(),
+        "FLAMA_MEDIA_WORKER_URL": os.getenv("FLAMA_MEDIA_WORKER_URL", "http://10.10.0.6:4792").strip().rstrip("/"),
         "PAYOS_CLIENT_ID": os.getenv("PAYOS_CLIENT_ID", "").strip(),
         "PAYOS_API_KEY": os.getenv("PAYOS_API_KEY", "").strip(),
         "PAYOS_CHECKSUM_KEY": os.getenv("PAYOS_CHECKSUM_KEY", "").strip(),
@@ -434,7 +441,13 @@ def _apply_startup_defaults(config: dict[str, Any]) -> None:
         _startup_cutover_fail_on_mismatch_default(default_cutover_fail_on_mismatch),
     )
     config.setdefault("WTF_CSRF_ENABLED", not testing)
-    config.setdefault("CSRF_EXEMPT_ENDPOINTS", {"payments.payos_webhook"})
+    config.setdefault(
+        "CSRF_EXEMPT_ENDPOINTS",
+        {
+            "payments.payos_webhook",
+            "api_v1.api_v1_internal_security.report_security_incident",
+        },
+    )
     config.setdefault("SESSION_COOKIE_HTTPONLY", True)
     config.setdefault("SESSION_COOKIE_SAMESITE", "Lax")
     config.setdefault(

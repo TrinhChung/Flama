@@ -1,3 +1,6 @@
 [submodule "flama-audio/src/Flama.Audio.Engine.Kokoro/G2P"]
 	path = flama-audio/src/Flama.Audio.Engine.Kokoro/G2P
 	url = https://github.com/TrinhChung/flama-g2p
+[submodule "flama-media"]
+	path = flama-media
+	url = https://github.com/TrinhChung/flama-media.git
