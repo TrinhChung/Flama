@@ -74,6 +74,13 @@ McpToolHandler = Callable[..., dict[str, Any]]
 McpToolArgumentsValidator = Callable[[Any], dict[str, Any]]
 
 
+def tool_hints(*, read_only: bool, destructive: bool = False, open_world: bool = False) -> dict[str, bool]:
+    """MCP ToolAnnotations. Clients only read the ``*Hint`` keys, and ChatGPT review
+    requires all three as explicit booleans: overwriting or deleting user data is
+    destructive; fetching arbitrary URLs is open-world."""
+    return {"readOnlyHint": read_only, "destructiveHint": destructive, "openWorldHint": open_world}
+
+
 @dataclass(frozen=True)
 class McpToolDefinition:
     """Metadata and execution hooks for a single MCP tool."""
@@ -103,6 +110,10 @@ class McpToolDefinition:
             payload["outputSchema"] = self.output_schema
         if self.annotations:
             payload["annotations"] = self.annotations
+        # Public tools run anonymously; every other tool needs an OAuth token carrying its scope.
+        payload["securitySchemes"] = (
+            [{"type": "noauth"}] if self.is_public else [{"type": "oauth2", "scopes": [self.required_scope]}]
+        )
         if self.meta:
             # Never advertise a missing bundled UI; data/text preview still works.
             from app.services.mcp_resource_registry import TEMPLATE_PREVIEW_URI, template_preview_ui_available
@@ -139,7 +150,7 @@ LIST_MY_DECKS_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_list_my_decks,
     arguments_validator=validate_list_my_decks_arguments,
 )
@@ -160,7 +171,7 @@ GET_DECK_TREE_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_deck_tree,
     arguments_validator=validate_get_deck_tree_arguments,
 )
@@ -185,7 +196,7 @@ GET_DECK_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_deck,
     arguments_validator=validate_get_deck_arguments,
 )
@@ -210,7 +221,7 @@ RESOLVE_DECK_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_resolve_deck,
     arguments_validator=validate_resolve_deck_arguments,
 )
@@ -241,6 +252,7 @@ BATCH_ENSURE_DECKS_TOOL = McpToolDefinition(
     required_scope="deck:write",
     handler=_call_batch_ensure_decks,
     arguments_validator=validate_batch_ensure_decks_arguments,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -274,6 +286,7 @@ CREATE_DECK_TOOL = McpToolDefinition(
     required_scope="deck:write",
     handler=_call_create_deck,
     arguments_validator=validate_create_deck_arguments,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -311,6 +324,7 @@ UPDATE_DECK_TOOL = McpToolDefinition(
     required_scope="deck:write",
     handler=_call_update_deck,
     arguments_validator=validate_update_deck_arguments,
+    annotations=tool_hints(read_only=False, destructive=True),
 )
 
 
@@ -346,7 +360,7 @@ DELETE_DECK_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck:write",
-    annotations={"destructive": True},
+    annotations=tool_hints(read_only=False, destructive=True),
     handler=_call_delete_deck,
     arguments_validator=validate_delete_deck_arguments,
 )
@@ -386,7 +400,7 @@ LIST_NOTES_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_list_notes,
     arguments_validator=validate_list_notes_arguments,
 )
@@ -411,7 +425,7 @@ GET_NOTE_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_note,
     arguments_validator=validate_get_note_arguments,
 )
@@ -446,7 +460,7 @@ FIND_NOTES_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_find_notes,
     arguments_validator=validate_find_notes_arguments,
 )
@@ -482,6 +496,7 @@ CREATE_NOTE_TOOL = McpToolDefinition(
     required_scope="note:create",
     handler=_call_create_note,
     arguments_validator=validate_create_note_arguments,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -519,6 +534,7 @@ UPDATE_NOTE_TOOL = McpToolDefinition(
     required_scope="note:update",
     handler=_call_update_note,
     arguments_validator=validate_update_note_arguments,
+    annotations=tool_hints(read_only=False, destructive=True),
 )
 
 
@@ -554,7 +570,7 @@ DELETE_NOTE_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note:delete",
-    annotations={"destructive": True},
+    annotations=tool_hints(read_only=False, destructive=True),
     handler=_call_delete_note,
     arguments_validator=validate_delete_note_arguments,
 )
@@ -582,6 +598,7 @@ MOVE_NOTE_TOOL = McpToolDefinition(
     required_scope="note:update",
     handler=_call_move_note,
     arguments_validator=validate_move_note_arguments,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -607,6 +624,7 @@ ADD_TAGS_TOOL = McpToolDefinition(
     required_scope="note:update",
     handler=_call_add_tags,
     arguments_validator=validate_add_tags_arguments,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -632,6 +650,7 @@ REMOVE_TAGS_TOOL = McpToolDefinition(
     required_scope="note:update",
     handler=_call_remove_tags,
     arguments_validator=validate_remove_tags_arguments,
+    annotations=tool_hints(read_only=False, destructive=True),
 )
 
 
@@ -676,6 +695,7 @@ BATCH_CREATE_NOTES_TOOL = McpToolDefinition(
     required_scope="note:create",
     handler=_call_batch_create_notes,
     arguments_validator=validate_batch_create_notes_arguments,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -712,6 +732,7 @@ BATCH_UPDATE_NOTES_TOOL = McpToolDefinition(
     required_scope="note:update",
     handler=_call_batch_update_notes,
     arguments_validator=validate_batch_update_notes_arguments,
+    annotations=tool_hints(read_only=False, destructive=True),
 )
 
 
@@ -747,7 +768,7 @@ BATCH_DELETE_NOTES_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note:delete",
-    annotations={"destructive": True},
+    annotations=tool_hints(read_only=False, destructive=True),
     handler=_call_batch_delete_notes,
     arguments_validator=validate_batch_delete_notes_arguments,
 )
@@ -775,6 +796,7 @@ BATCH_MOVE_NOTES_TOOL = McpToolDefinition(
     required_scope="note:update",
     handler=_call_batch_move_notes,
     arguments_validator=validate_batch_move_notes_arguments,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -824,7 +846,7 @@ PREVIEW_NOTE_SYNC_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_preview_note_sync,
     arguments_validator=validate_preview_note_sync_arguments,
 )
@@ -882,6 +904,7 @@ SYNC_NOTES_TOOL = McpToolDefinition(
     required_scope="note:sync",
     handler=_call_sync_notes,
     arguments_validator=validate_sync_notes_arguments,
+    annotations=tool_hints(read_only=False, destructive=True),
 )
 
 
@@ -908,7 +931,7 @@ GET_DUE_CARD_COUNTS_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="study:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_due_card_counts,
     arguments_validator=validate_get_due_card_counts_arguments,
 )
@@ -937,7 +960,7 @@ GET_STUDY_QUEUE_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="study:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_study_queue,
     arguments_validator=validate_get_study_queue_arguments,
 )
@@ -962,7 +985,7 @@ GET_CARD_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="study:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_card,
     arguments_validator=validate_get_card_arguments,
 )
@@ -998,6 +1021,7 @@ SUBMIT_REVIEW_TOOL = McpToolDefinition(
     required_scope="study:write",
     handler=_call_submit_review,
     arguments_validator=validate_submit_review_arguments,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -1025,7 +1049,7 @@ GET_DECK_STATS_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="stats:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_deck_stats,
     arguments_validator=validate_get_deck_stats_arguments,
 )
@@ -1049,7 +1073,7 @@ GET_STUDY_STATS_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="stats:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_study_stats,
     arguments_validator=validate_get_study_stats_arguments,
 )
@@ -1075,7 +1099,7 @@ LIST_NOTE_TYPES_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note-type:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_list_note_types,
     arguments_validator=validate_list_note_types_arguments,
 )
@@ -1109,7 +1133,7 @@ GET_NOTE_TYPE_SCHEMA_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note-type:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_note_type_schema,
     arguments_validator=validate_get_note_type_schema_arguments,
     error_handler=wrap_authoring_error,
@@ -1190,6 +1214,7 @@ CREATE_NOTE_TYPE_TOOL = McpToolDefinition(
     handler=_call_create_note_type,
     arguments_validator=validate_create_note_type_arguments,
     error_handler=wrap_authoring_error,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -1223,7 +1248,7 @@ PREVIEW_NOTE_TYPE_UPDATE_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note-type:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_preview_note_type_update,
     arguments_validator=validate_preview_note_type_update_arguments,
     error_handler=wrap_authoring_error,
@@ -1283,6 +1308,7 @@ UPDATE_NOTE_TYPE_TOOL = McpToolDefinition(
     handler=_call_update_note_type,
     arguments_validator=validate_update_note_type_arguments,
     error_handler=wrap_authoring_error,
+    annotations=tool_hints(read_only=False, destructive=True),
 )
 
 
@@ -1321,7 +1347,7 @@ DELETE_NOTE_TYPE_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="note-type:write",
-    annotations={"destructive": True},
+    annotations=tool_hints(read_only=False, destructive=True),
     handler=_call_delete_note_type,
     arguments_validator=validate_delete_note_type_arguments,
 )
@@ -1390,6 +1416,7 @@ IMPORT_IMAGE_TOOL = McpToolDefinition(
     },
     handler=_call_import_image,
     arguments_validator=validate_import_image_arguments,
+    annotations=tool_hints(read_only=False, open_world=True),
 )
 
 
@@ -1434,6 +1461,7 @@ CRAWL_NOTE_MEDIA_TOOL = McpToolDefinition(
     },
     handler=_call_crawl_note_media,
     arguments_validator=validate_crawl_note_media_arguments,
+    annotations=tool_hints(read_only=False, destructive=True, open_world=True),
 )
 
 
@@ -1468,6 +1496,7 @@ EXTRACT_PAGE_IMAGES_TOOL = McpToolDefinition(
     },
     handler=_call_extract_page_images,
     arguments_validator=validate_extract_page_images_arguments,
+    annotations=tool_hints(read_only=True, open_world=True),
 )
 
 
@@ -1518,6 +1547,7 @@ SEARCH_IMAGES_TOOL = McpToolDefinition(
     },
     handler=_call_search_images,
     arguments_validator=validate_search_images_arguments,
+    annotations=tool_hints(read_only=True),
 )
 
 
@@ -1551,6 +1581,7 @@ GET_IMAGE_TOOL = McpToolDefinition(
     },
     handler=_call_get_image,
     arguments_validator=validate_get_image_arguments,
+    annotations=tool_hints(read_only=True),
 )
 
 # ---------------------------------------------------------------------------
@@ -1593,7 +1624,7 @@ LIST_SHARED_DECKS_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck-share:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_list_shared_decks,
     arguments_validator=validate_list_shared_decks_arguments,
 )
@@ -1618,7 +1649,7 @@ GET_SHARED_DECK_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck-share:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_shared_deck,
     arguments_validator=validate_get_shared_deck_arguments,
 )
@@ -1652,7 +1683,7 @@ LIST_SHARED_DECK_NOTES_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck-share:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_list_shared_deck_notes,
     arguments_validator=validate_list_shared_deck_notes_arguments,
 )
@@ -1676,7 +1707,7 @@ GET_DECK_PUBLISH_OPTIONS_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck-share:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_deck_publish_options,
     arguments_validator=validate_get_deck_publish_options_arguments,
 )
@@ -1708,7 +1739,7 @@ GET_TAXONOMY_SCHEMA_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck-share:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_taxonomy_schema,
     arguments_validator=validate_get_taxonomy_schema_arguments,
 )
@@ -1759,6 +1790,7 @@ SHARE_DECK_TOOL = McpToolDefinition(
     required_scope="deck-share:write",
     handler=_call_share_deck,
     arguments_validator=validate_share_deck_arguments,
+    annotations=tool_hints(read_only=False),
 )
 
 
@@ -1806,6 +1838,7 @@ UPDATE_SHARED_DECK_TOOL = McpToolDefinition(
     required_scope="deck-share:write",
     handler=_call_update_shared_deck,
     arguments_validator=validate_update_shared_deck_arguments,
+    annotations=tool_hints(read_only=False, destructive=True),
 )
 
 
@@ -1836,7 +1869,7 @@ PREVIEW_DECK_RELEASE_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck-share:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_preview_deck_release,
     arguments_validator=validate_preview_deck_release_arguments,
 )
@@ -1874,6 +1907,7 @@ PUBLISH_DECK_RELEASE_TOOL = McpToolDefinition(
     required_scope="deck-share:write",
     handler=_call_publish_deck_release,
     arguments_validator=validate_publish_deck_release_arguments,
+    annotations=tool_hints(read_only=False, destructive=True),
 )
 
 
@@ -1903,7 +1937,7 @@ LIST_DECK_RELEASES_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck-share:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_list_deck_releases,
     arguments_validator=validate_list_deck_releases_arguments,
 )
@@ -1926,7 +1960,7 @@ LIST_INSTALLED_DECKS_TOOL = McpToolDefinition(
         "additionalProperties": False,
     },
     required_scope="deck:read",
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_list_installed_decks,
     arguments_validator=validate_list_installed_decks_arguments,
 )
@@ -2002,7 +2036,7 @@ SEARCH_MARKETPLACE_DECKS_TOOL = McpToolDefinition(
     },
     required_scope=None,
     is_public=True,
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_search_marketplace_decks,
     arguments_validator=public_search_tools.validate_search_marketplace_decks_arguments,
 )
@@ -2054,7 +2088,7 @@ LOOKUP_PUBLIC_VOCABULARY_TOOL = McpToolDefinition(
     },
     required_scope=None,
     is_public=True,
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_lookup_public_vocabulary,
     arguments_validator=public_search_tools.validate_lookup_public_vocabulary_arguments,
 )
@@ -2086,7 +2120,7 @@ GET_PUBLIC_DECK_PREVIEW_TOOL = McpToolDefinition(
     },
     required_scope=None,
     is_public=True,
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_public_deck_preview,
     arguments_validator=public_search_tools.validate_get_public_deck_preview_arguments,
 )
@@ -2119,7 +2153,7 @@ GET_FLAMA_DOCUMENTATION_TOOL = McpToolDefinition(
     },
     required_scope=None,
     is_public=True,
-    annotations={"readOnly": True},
+    annotations=tool_hints(read_only=True),
     handler=_call_get_flama_documentation,
     arguments_validator=public_search_tools.validate_get_flama_documentation_arguments,
 )
@@ -2141,7 +2175,7 @@ PREVIEW_NOTE_TYPE_TEMPLATE_TOOL = McpToolDefinition(
     input_schema=TEMPLATE_PREVIEW_INPUT_SCHEMA,
     output_schema=TEMPLATE_PREVIEW_OUTPUT_SCHEMA,
     required_scope="note-type:read",
-    annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
+    annotations=tool_hints(read_only=True),
     meta={"ui": {"resourceUri": TEMPLATE_PREVIEW_URI}},
     handler=preview_note_type_template,
     arguments_validator=validate_template_preview_arguments,

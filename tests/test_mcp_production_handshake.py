@@ -357,6 +357,97 @@ class McpProductionHandshakeTests(unittest.TestCase):
         resp7 = self.client.get("/.well-known/openid-configuration/api/mcp")
         self.assertEqual(resp7.status_code, 200)
 
+    def test_every_tool_declares_explicit_hints_and_security_schemes(self):
+        """ChatGPT review requires all three hints as booleans on every tool, plus per-tool auth."""
+        resp = self._post_mcp({"jsonrpc": "2.0", "id": 20, "method": "tools/list"}, token=self.raw_token)
+        tools = {tool["name"]: tool for tool in resp.get_json()["result"]["tools"]}
+        self.assertGreater(len(tools), 50)
+        for name, tool in tools.items():
+            hints = tool.get("annotations") or {}
+            self.assertEqual(set(hints), {"readOnlyHint", "destructiveHint", "openWorldHint"}, name)
+            self.assertTrue(all(isinstance(value, bool) for value in hints.values()), name)
+            if hints["readOnlyHint"]:
+                self.assertFalse(hints["destructiveHint"], name)
+        for name in ("delete_deck", "delete_note", "batch_delete_notes", "delete_note_type", "update_note", "sync_notes"):
+            self.assertTrue(tools[name]["annotations"]["destructiveHint"], name)
+        for name in ("extract_page_images", "import_image", "crawl_note_media"):
+            self.assertTrue(tools[name]["annotations"]["openWorldHint"], name)
+        self.assertFalse(tools["create_note"]["annotations"]["destructiveHint"])
+        self.assertEqual(tools["search_marketplace_decks"]["securitySchemes"], [{"type": "noauth"}])
+        self.assertEqual(tools["list_my_decks"]["securitySchemes"], [{"type": "oauth2", "scopes": ["deck:read"]}])
+
+    def test_auth_challenges_follow_rfc_6750(self):
+        """No credential gets a bare challenge; bad tokens and missing scopes name the error."""
+        resource_metadata = 'resource_metadata="http://api.flama.vn/.well-known/oauth-protected-resource"'
+
+        def call(name, token=None):
+            return self._post_mcp(
+                {"jsonrpc": "2.0", "id": 21, "method": "tools/call", "params": {"name": name, "arguments": {}}},
+                token=token,
+            )
+
+        missing = call("list_my_decks")
+        self.assertEqual(missing.status_code, 401)
+        self.assertEqual(missing.headers["WWW-Authenticate"], f'Bearer {resource_metadata}, scope="deck:read"')
+
+        invalid = call("list_my_decks", token="flama_mcp_not_a_real_token")
+        self.assertEqual(invalid.status_code, 401)
+        self.assertIn('error="invalid_token"', invalid.headers["WWW-Authenticate"])
+        self.assertIn(resource_metadata, invalid.headers["WWW-Authenticate"])
+
+        with self.app.app_context():
+            narrow = mcp_access_token_service.issue_token(user_id=self.user_id, name="Deck only", scopes=["deck:read"])
+            db.session.commit()
+        forbidden = call("list_note_types", token=narrow.token)
+        self.assertEqual(forbidden.status_code, 403)
+        challenge = forbidden.headers["WWW-Authenticate"]
+        self.assertIn('error="insufficient_scope"', challenge)
+        self.assertIn('scope="note-type:read"', challenge)
+
+    def test_connect_discovery_points_at_configured_issuer(self):
+        """Connect has no authorization server, so its resource metadata must name the main one."""
+        for app in (self.app, self.connect_app):
+            app.config["OAUTH_ISSUER_URL"] = "https://api.flama.vn"
+        try:
+            resource = self.connect_client.get("/.well-known/oauth-protected-resource").get_json()
+            self.assertEqual(resource["resource"], "http://connect.flama.vn/v1/mcp")
+            self.assertEqual(resource["authorization_servers"], ["https://api.flama.vn"])
+            metadata = self.client.get("/.well-known/oauth-authorization-server").get_json()
+            self.assertEqual(metadata["issuer"], "https://api.flama.vn")
+            self.assertEqual(metadata["token_endpoint"], "https://api.flama.vn/oauth/token")
+        finally:
+            for app in (self.app, self.connect_app):
+                app.config["OAUTH_ISSUER_URL"] = ""
+
+    def test_openai_apps_challenge_serves_exact_token_on_both_origins(self):
+        for app, client in ((self.app, self.client), (self.connect_app, self.connect_client)):
+            app.config["OPENAI_APPS_CHALLENGE_TOKEN"] = ""
+            self.assertEqual(client.get("/.well-known/openai-apps-challenge").status_code, 404)
+            app.config["OPENAI_APPS_CHALLENGE_TOKEN"] = "challenge-token-123"
+            try:
+                resp = client.get("/.well-known/openai-apps-challenge")
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(resp.mimetype, "text/plain")
+                self.assertEqual(resp.get_data(as_text=True), "challenge-token-123")
+            finally:
+                app.config["OPENAI_APPS_CHALLENGE_TOKEN"] = ""
+
+    def test_initialize_does_not_echo_account_identity(self):
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 30,
+                "method": "initialize",
+                "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}},
+            },
+            token=self.raw_token,
+        )
+        self.assertEqual(resp.status_code, 200)
+        result = resp.get_json()["result"]
+        self.assertEqual(result["serverInfo"]["title"], "Flama")
+        self.assertNotIn("testuser", json.dumps(result))
+        self.assertNotIn("user_id", json.dumps(result))
+
 
 if __name__ == "__main__":
     unittest.main()

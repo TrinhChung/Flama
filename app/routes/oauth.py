@@ -412,7 +412,8 @@ def get_endpoints_info():
             "id": default_client.id,
             "client_id": default_client.client_id,
             "client_name": default_client.client_name,
-            "client_secret": default_client.client_secret,
+            # Signed-in users copy it into their own ChatGPT connector; anonymous callers never need it.
+            "client_secret": default_client.client_secret if current_user.is_authenticated else None,
             "redirect_uris": default_client.get_redirect_uris(),
             "is_default": bool(default_client.is_default),
         }

@@ -64,6 +64,8 @@ MANAGED_VARIABLE_KEYS = (
     "MCP_PREVIEW_TTL_SECONDS",
     "MCP_TEMPLATE_PREVIEW_UI_ENABLED",
     "MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL",
+    "OAUTH_ISSUER_URL",
+    "OPENAI_APPS_CHALLENGE_TOKEN",
     "SHARED_DECK_TREE_CLONE_MODE",
     "DECK_SOURCE_NOTETYPE_GUARD_MODE",
     "MARKETPLACE_SAMPLE_MODE",
@@ -133,6 +135,7 @@ MANAGED_VARIABLE_DEFAULTS = {
     "MCP_PREVIEW_TTL_SECONDS": "600",
     "MCP_TEMPLATE_PREVIEW_UI_ENABLED": "false",
     "MCP_TEMPLATE_PREVIEW_MEDIA_BASE_URL": "https://api.flama.vn",
+    "OAUTH_ISSUER_URL": "https://api.flama.vn",
     "SHARED_DECK_TREE_CLONE_MODE": "batched",
     "DECK_SOURCE_NOTETYPE_GUARD_MODE": "shadow",
     "MARKETPLACE_SAMPLE_MODE": "shadow_cache",
@@ -191,6 +194,8 @@ OPTIONAL_MANAGED_KEYS = (
     "EMAIL_RESEND_API_KEY",
     "GOOGLE_OAUTH_CLIENT_ID",
     "GOOGLE_OAUTH_CLIENT_SECRET",
+    # Issued per submission by the OpenAI plugin portal; absent until then.
+    "OPENAI_APPS_CHALLENGE_TOKEN",
     # Preserve operator canary flags when the GitHub variable is unset.
     # Startup/bootstrap defaults are safe; adding management must not reset
     # an already-qualified writer/read cohort on every unrelated release.
