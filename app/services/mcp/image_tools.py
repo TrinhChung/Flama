@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from app.services import flashcard_content_service
+from app.services.media_field_codec import shared_image_store_url
 from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.note import Note
@@ -39,7 +40,7 @@ def serialize_mcp_image_asset(row: SharedImageAsset) -> dict[str, Any]:
         "is_enabled": bool(row.is_enabled),
         "tags": tags_list,
         "source_url": str(row.source_url or "") or None,
-        "url": f"/store/{row.image_key}",
+        "url": shared_image_store_url(image_key=row.image_key, asset_id=row.id),
         "preview_url": f"/admin/image-library/{row.id}/preview",
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,

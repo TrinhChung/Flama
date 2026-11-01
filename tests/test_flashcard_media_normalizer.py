@@ -13,6 +13,7 @@ from app.services.media_field_codec import (
     build_media_reference_lookup,
     is_canonical_media_url,
     normalize_media_reference_for_write,
+    shared_image_store_url,
 )
 
 
@@ -156,6 +157,10 @@ class FlashcardMediaNormalizerTests(unittest.TestCase):
         lookup = build_media_reference_lookup([asset])
         self.assertIn("/store/asset-1.mp3", lookup)
         self.assertIn("asset-1.mp3", lookup)
+
+    def test_library_images_use_store_ids_and_strokes_keep_keys(self):
+        self.assertEqual(shared_image_store_url(image_key="cat_photo", asset_id="lib-1"), "/store/lib-1")
+        self.assertEqual(shared_image_store_url(image_key="stroke_ja_4e00", asset_id="lib-2"), "/store/stroke_ja_4e00.svg")
 
     def test_legacy_json_array_with_missing_binary_is_quarantined_unchanged(self):
         raw = '["missing.png"]'

@@ -167,6 +167,30 @@ def _lookup_target(
     return MediaReferenceTarget(f"/media/proxy/{asset_id}", family) if asset_id else None
 
 
+def shared_image_store_url(*, image_key: str | None, asset_id: Any) -> str:
+    """Store URL of a library image: nginx serves strokes by key, the store holds the rest by asset id."""
+    key = str(image_key or "")
+    return f"/store/{key}.svg" if key.startswith("stroke_") else f"/store/{asset_id}"
+
+
+def _is_enabled_shared_image_url(candidate: str) -> bool:
+    """Library images are shared, so their store URLs belong to no note's own assets."""
+    match = _PROXY_RE.fullmatch(candidate)
+    if match is None:
+        return False
+    asset_id = match.group(1).split(".", 1)[0]
+    try:
+        from flask import has_app_context
+        if not has_app_context():
+            return False
+        from models.shared_image_asset import SharedImageAsset
+        return SharedImageAsset.query.with_entities(SharedImageAsset.id).filter(
+            SharedImageAsset.id == asset_id, SharedImageAsset.is_enabled.is_(True),
+        ).first() is not None
+    except Exception:
+        return False
+
+
 def media_field_label_for_schema(asset: Any, field_defs: Any = None) -> str:
     """Resolve media labels against the captured schema, including old releases.
 
@@ -275,8 +299,9 @@ def resolve_media_file_target(
                     SharedImageAsset.is_enabled.is_(True),
                 ).first()
                 if shared:
-                    ext = ".svg" if (shared.image_key or "").startswith("stroke_") else ""
-                    return MediaReferenceTarget(f"/store/{shared.image_key}{ext}", "image")
+                    return MediaReferenceTarget(
+                        shared_image_store_url(image_key=shared.image_key, asset_id=shared.id), "image",
+                    )
         except Exception:
             pass
 
@@ -452,10 +477,12 @@ def normalize_media_reference_for_write(
             and reference_lookup is not None
             and target is None
         ):
-            raise MediaFieldValueError(
-                "The media asset does not belong to this note.",
-                reason="unknown_media_asset",
-            )
+            if not _is_enabled_shared_image_url(candidate):
+                raise MediaFieldValueError(
+                    "The media asset does not belong to this note.",
+                    reason="unknown_media_asset",
+                )
+            target = MediaReferenceTarget(candidate, "image")
         _assert_family(candidate, field_type=field_type, resolved_family=target.family if target else None)
         return candidate
 
