@@ -338,6 +338,12 @@ def commit_all_staged_urls_in_field_values(
     if not field_values:
         return {}
 
+    from app.services import worker_media_service
+    if worker_media_service.enabled():
+        return worker_media_service.commit_field_values(
+            user_id=user_id, note_id=note_id, field_values=field_values,
+        )
+
     updated: dict[str, Any] = {}
     for field_name, val in field_values.items():
         if not val or not isinstance(val, str):

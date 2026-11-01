@@ -198,6 +198,15 @@ def scan_deck_audio(
 
     notes: list[Note] = notes_query.all()
 
+    from app.services import worker_media_service
+    from app.validators import RequestValidationError
+    remote_ids = [asset.id for note in notes for asset in note.media_assets
+        if str(asset.storage_path).startswith(worker_media_service.WORKER_PREFIX)]
+    try:
+        remote_files = worker_media_service.inspect_assets(remote_ids)
+    except RequestValidationError as exc:
+        raise AudioScanError(str(exc), status=exc.status, code=exc.code) from exc
+
     # Collect note types from deck and notes
     note_type_map: dict[str, NoteType] = {}
     if deck.note_type and deck.note_type.id:
@@ -325,8 +334,12 @@ def scan_deck_audio(
 
                 if matched_asset is not None:
                     # Verify physical file existence
-                    full_path = (resolved_upload_root / matched_asset.storage_path).resolve()
-                    if full_path.is_file() and full_path.stat().st_size > 0:
+                    if str(matched_asset.storage_path).startswith(worker_media_service.WORKER_PREFIX):
+                        file_exists = remote_files.get(matched_asset.id, False)
+                    else:
+                        full_path = (resolved_upload_root / matched_asset.storage_path).resolve()
+                        file_exists = full_path.is_file() and full_path.stat().st_size > 0
+                    if file_exists:
                         audio_status_map[dest_field] = {
                             "status": "valid",
                             "value": raw_val or matched_asset.filename,

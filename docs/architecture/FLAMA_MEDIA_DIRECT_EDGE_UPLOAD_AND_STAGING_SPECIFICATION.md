@@ -1,154 +1,82 @@
-# Flama Media: Direct Edge Upload & Two-Phase Staging Architecture
+# Direct media upload, Ubuntu staging cleanup and Go stroke generation
 
-> **Architecture Specification & Design Contract**  
-> **Date**: 2026-11-01  
-> **Status**: Approved for Implementation  
-> **Subsystems**: `flama-media` (Worker 212 Go Daemon, Tokyo), `app` (Flask Monolith, Malaysia), `frontend` (React SPA)
+Date: 2026-11-01. Implementation contract; production activation requires the matching worker, backend, frontend and private infrastructure configuration.
 
----
+Media remains on Worker 212. Only generated SVG stroke diagrams are stored on OV. The Flask application owns authentication, note permissions, quotas and MySQL transactions.
 
-## 1. Bối cảnh & Lý do Kiến trúc (Motivation)
+## Note media flow
 
-### 1.1. Hiện trạng Hạ tầng Vật lý
-- **VPS Chung (Chính)**: Đặt tại datacenter Hostinger (Malaysia / Singapore), chạy ứng dụng Flask REST Monolith và cơ sở dữ liệu MySQL 8.0.
-- **Worker 212 & OV Gateway**: Đặt tại Oracle Cloud Tokyo (NRT), chạy `flama-media` daemon (Pure Go) chịu trách nhiệm lưu trữ ổ SSD `/data/flama/media` và phát media tốc độ cao qua `https://media.flama.vn`.
-- Hai cụm server kết nối với nhau qua mạng riêng ảo WireGuard Mesh (`<wg-subnet>`) với RTT ~73ms.
+1. The authenticated browser requests `POST /api/media/upload-ticket` with optional `note_id` and `field_name`. Flask issues a bounded, expiring HMAC upload capability and the configured public upload URL.
+2. The browser sends the file directly to the Go upload URL with `Authorization: Bearer ...` and no application cookies. File bytes do not pass through Flask. Go validates the format, checks image allocation limits, resizes images to a maximum side of 1600, re-encodes them and writes an owner-scoped stage on 212.
+3. Go returns a random `stage_id`, a temporary preview URL and metadata. Editing a field only changes the local form. It does not commit the stage.
+4. On note create/update, Browse save or Study quick-edit save, Flask finds staged references, including references inside nested array items and inline Markdown. It rejects another media origin, verifies stage ownership through the internal metadata endpoint, checks field type and quota, and allocates the existing UUID `MediaAsset` identity.
+5. Flask sends a private `POST /media/commit` message with the user ID and stage-to-asset UUID mappings. Go promotes bytes into SHA-256 CAS on the same filesystem with `rename`, then persists UUID aliases. No binary bytes are copied back through Flask or OV.
+6. The caller commits MySQL and reports success only after Go acknowledges promotion. Stored field values use `/store/<MediaAsset UUID>`; the media gateway serves these aliases from 212.
 
-### 1.2. Nhược điểm của luồng Upload truyền thống (Đi vòng qua VPS Chung)
-Nếu Frontend gửi file trực tiếp lên VPS Chung rồi VPS Chung stream sang 212:
-1. **Nhân đôi độ trễ (Double-Hop Latency)**: File nhị phân nặng phải di chuyển 2 chặng: `Client -> Malaysia -> Tokyo`. Một file audio hoặc ảnh 5–10MB sẽ mất hàng giây tải lên.
-2. **Nghẽn tài nguyên VPS Chung**: VPS Chung phải đệm multipart form vào RAM/ổ đĩa tạm, tiêu tốn CPU xử lý I/O và băng thông của server chính.
+Generated-audio clients represent an explicit save action. They upload to Go first, then attach the stage through JSON `POST /api/notes/<id>/media`. The batch endpoint accepts JSON receipts and preserves per-item success/failure. Inline Markdown attachment uses `/markdown-media`.
 
-### 1.3. Giải pháp: Kiến trúc Direct Edge Upload (Tải thẳng lên Tokyo)
-Thay vì đi vòng, **Frontend sẽ gửi trực tiếp luồng nhị phân lên Tokyo (`media.flama.vn`)**, sau đó gửi metadata xác thực về **VPS Chung (Malaysia)**.
+## Wire contracts
 
----
+Upload ticket response:
 
-## 2. Nguyên tắc Phân định Trách nhiệm (Separation of Concerns)
-
-| Thành phần | Địa điểm | Trách nhiệm duy nhất (Single Responsibility) |
-| :--- | :--- | :--- |
-| **VPS Chung** | Malaysia | **Kiểm soát nghiệp vụ & Phân quyền**: Xác thực phiên (Session), kiểm tra quyền sở hữu Thẻ/Deck/Ticket/Avatar, kiểm soát hạn ngạch Quota, quản lý ORM MySQL (`MediaAsset`, `Note`, `User`), quyết định lưu URL vào thẻ và gửi tín hiệu `commit`. |
-| **Worker 212** | Tokyo | **Xử lý nhị phân nặng & Phục vụ tĩnh**: Nhận byte stream, khử độc EXIF/polyglot, kiểm tra Decompression Bomb / Zip Slip, lưu tạm vào `staging/`, chuyển sang CAS vĩnh viễn khi có tín hiệu `commit`, tự động dọn rác file mồ côi và phát media tĩnh qua CDN/OV Gateway. |
-
----
-
-## 3. Quy trình 2 Request Song song (Two-Phase Direct Upload)
-
-```text
-               ┌─────────────────── (1) Upload File Nhị Phân ───────────────────┐
-               │    POST https://media.flama.vn/media/upload                    │
-               │    (Đến thẳng Tokyo qua OV Gateway - Pure Go siêu nhanh)       │
-               ▼                                                                ▼
-┌───────────────────────────────┐                             ┌─────────────────────────────────┐
-│     CLIENT (REACT FRONTEND)   │                             │      MÁY CHỦ 212 (TOKYO)        │
-│                               │                             │  - Khử độc EXIF, polyglot       │
-│  - Giữ sẵn Media Ticket       │                             │  - Lưu vào thư mục staging/     │
-│    (cấp lúc login, hạn 24h)   │                             │  - Trả về ngay:                 │
-│                               │                             │    { asset_id, url }            │
-└──────────────┬────────────────┘                             └────────────────┬────────────────┘
-               │                                                               │
-               │ (2) Gửi JSON nhẹ (~200 bytes)                                 │
-               │     POST /api/notes/<id>/attach-media                         │
-               ▼                                                               │
-┌───────────────────────────────┐                                              │
-│     VPS CHUNG (MALAYSIA)      │                                              │
-│  - Kiểm tra quyền & Quota     │                                              │
-│  - Lưu URL vào MySQL Note     │                                              │
-│  - Gửi tín hiệu commit ────►──┼─── (3) POST /media/commit (WireGuard) ───────┘
-│    nhẹ (~10 bytes)            │        Chuyển file từ staging/ sang CAS vĩnh viễn
-└───────────────────────────────┘
+```json
+{
+  "ticket": "signed-upload-capability",
+  "upload_url": "https://media.example.com/media/upload",
+  "upload_zip_url": "https://media.example.com/media/upload-zip",
+  "expires_at": 1793538000,
+  "max_bytes": 10485760,
+  "staging_ttl_seconds": 86400
+}
 ```
 
-### Bước 1: Request 1 (Tải nhị phân lên Tokyo)
-- **Endpoint**: `POST https://media.flama.vn/media/upload`
-- **Header**: `Authorization: Bearer <media_ticket>` (ticket HMAC 24h đã được cấp sẵn lúc đăng nhập).
-- **Xử lý trên 212**:
-  - Xác thực chữ ký số HMAC của ticket (`ticket.UserID`, `ticket.MaxBytes`).
-  - Kiểm tra Decompression Bomb, Zip-Slip, SVG Exploit.
-  - Re-encode giải mã pixel ảnh (Pure Go) để xóa 100% EXIF/GPS/metadata độc hại.
-  - Lưu file tạm thời vào thư mục Staging: `/data/flama/media/staging/<sha256>.<ext>`.
-- **Phản hồi**:
-  ```json
-  {
-    "asset_id": "01b58ddb2f86a768f91751b62f25395417f6cf526191a4aefc1ebe4f8beacdcb",
-    "url": "/media/proxy/01b58ddb2f86a768f91751b62f25395417f6cf526191a4aefc1ebe4f8beacdcb",
-    "sha256": "01b58ddb2f86a768f91751b62f25395417f6cf526191a4aefc1ebe4f8beacdcb",
-    "size_bytes": 74,
-    "content_type": "image/png"
-  }
-  ```
-- **Preview tức thì**: Hàm `FindById` trên 212 hỗ trợ tìm kiếm cả trong `staging/` lẫn CAS vĩnh viễn, nên thẻ preview trên màn hình học tập của Frontend hiển thị ảnh/audio **ngay lập tức** không có độ trễ.
+Internal metadata request, authenticated with `X-Internal-Secret`:
 
-### Bước 2: Request 2 (Xác nhận quyền & Gắn thẻ tại Malaysia)
-- **Endpoint**: `POST /api/notes/<note_id>/attach-media` (hoặc `/profile/avatar`, `/tickets/attach-media`)
-- **Payload (JSON siêu nhẹ ~200B)**:
-  ```json
-  {
-    "field_name": "Audio",
-    "asset_id": "01b58ddb2f86a768f91751b62f25395417f6cf526191a4aefc1ebe4f8beacdcb",
-    "url": "/media/proxy/01b58ddb2f86a768f91751b62f25395417f6cf526191a4aefc1ebe4f8beacdcb",
-    "sha256": "01b58ddb2f86a768f91751b62f25395417f6cf526191a4aefc1ebe4f8beacdcb"
-  }
-  ```
-- **Xử lý trên VPS Chung**:
-  1. Kiểm tra xác thực (`current_user.is_authenticated`).
-  2. Kiểm tra quyền sở hữu Note / Deck (`note.user_id == current_user.id`).
-  3. Kiểm tra hạn ngạch upload/ngày của tài khoản.
-  4. Tạo bản ghi `MediaAsset` trong MySQL và cập nhật `notes.field_values_by_id`.
-  5. **Gửi tín hiệu Commit nội bộ qua WireGuard**:
-     - `POST http://wg-worker212:4792/media/commit`
-     - Header: `X-Internal-Secret: <GATEWAY_SECRET>`
-     - Body: `{"asset_id": "01b58ddb..."}`
-  6. 212 chuyển file từ `/data/flama/media/staging/` sang cây CAS vĩnh viễn `/data/flama/media/ab/cd/<sha256>.<ext>`.
-  7. Commit transaction MySQL và trả về `200 OK`.
+```json
+{"user_id": 42, "stage_ids": ["stg_0123456789abcdef0123456789abcdef"]}
+```
 
----
+Commit request to `POST /media/commit`, with the same private authentication:
 
-## 4. Cơ chế Staging TTL & Tự động dọn rác (Auto-Cleanup Worker)
+```json
+{
+  "user_id": 42,
+  "items": [{"stage_id": "stg_0123456789abcdef0123456789abcdef", "asset_id": "e2fe658e-1b78-4bb6-a9bd-bce7e1b7b66e"}]
+}
+```
 
-### 4.1. Kịch bản hủy / mồ côi (Orphan File)
-Nếu người dùng upload file lên 212 xong nhưng:
-- Đóng tab trình duyệt.
-- Bấm "Hủy" (Cancel) không lưu thẻ.
-- Bị VPS Chung từ chối vì không có quyền sửa hoặc hết quota.
+Both internal endpoints return `items` containing verified stage identity, SHA-256, MIME type, byte count, filename and CAS relative path. A commit receipt also contains the application asset UUID. Public gateway routing must reject internal control endpoints.
 
-### 4.2. Cơ chế dọn rác tự động trên Worker 212
-- File vẫn nằm ở `/data/flama/media/staging/<sha256>.<ext>` và chưa bao giờ được commit.
-- Trong `flama-media`, một **Background Goroutine** chạy ngầm định kỳ mỗi **30 phút**:
-  ```go
-  func (s *DiskStorage) StartCleanupWorker(interval time.Duration, maxAge time.Duration) {
-      ticker := time.NewTicker(interval)
-      go func() {
-          for range ticker.C {
-              s.cleanupStaleStaged(maxAge)
-          }
-      }()
-  }
-  ```
-- Mọi file trong `staging/` có thời gian sửa đổi (`ModTime`) vượt quá **2 giờ** sẽ bị xóa vĩnh viễn khỏi ổ đĩa.
-- **Kết quả**: Ổ cứng 212 sạch 100%, không bị rác hay phình dung lượng.
+## Ubuntu owns abandoned-file cleanup
 
----
+Stages live under `<MEDIA_STORAGE_ROOT>/staging/stg_<random>/`. Stage directories share the CAS filesystem, so promotion is an atomic rename rather than a second full file write. The Go service holds a BSD directory lock while manipulating a stage; `systemd-tmpfiles` skips locked stage directories.
 
-## 5. Cấp phát Media Upload Ticket không tốn thêm Round-trip
+The requested retention is **one day**. A dedicated `tmpfiles.d` rule ages only the staging subtree; a systemd timer checks it every thirty minutes. Cleanup is periodic, not an exact deletion at the 24-hour boundary. On the inspected Ubuntu host the generic `/tmp` policy was thirty days, so relying on that default would not satisfy this requirement.
 
-Để Frontend không phải xin vé trước mỗi lần bấm upload:
-1. Khi đăng nhập (`/api/session`), VPS Chung sinh sẵn `media_upload_ticket` bằng khóa bí mật HMAC `MEDIA_SHARED_SECRET`.
-2. Thời hạn vé: **24 giờ**.
-3. Frontend lưu ticket vào `sessionStorage` (hoặc Zustand store).
-4. Khi upload, Frontend lấy ticket từ cache gửi thẳng sang `https://media.flama.vn`. Chỉ khi vé hết hạn (hoặc 401), Frontend mới xin vé mới từ `/api/v1/media/ticket`.
+Go independently rejects expired stage leases after 86400 seconds. There is no Go background cleanup goroutine. Permanent CAS files, UUID aliases and OV strokes are outside the cleanup rule. Plain `os.CreateTemp` does not automatically remove files when a Go process exits.
 
----
+Private operational configuration lives in the `infra-vpn` submodule: `flama/tmpfiles/flama-media-staging.conf`, the `flama-media-staging-clean` service/timer, media gateway routing and the stroke receiver service. No production addresses or credentials belong in the public repository.
 
-## 6. Lợi ích Đạt được
+## ZIP processing
 
-1. **Tốc độ Upload (UX) tăng gấp 3 lần**:
-   - Loại bỏ hoàn toàn chặng bay đôi `Client -> Malaysia -> Tokyo`.
-   - File nhị phân đi thẳng vào cổng Tokyo (`media.flama.vn`) với tốc độ thuần Go.
-2. **VPS Chung tải nhẹ 100% về Media**:
-   - Không còn phải đệm dữ liệu lớn, không còn chạy Pillow làm nóng CPU.
-   - VPS Chung chỉ nhận JSON siêu nhẹ vài trăm bytes để kiểm tra quyền và ghi database.
-3. **Bảo mật tuyệt đối**:
-   - Nếu client cố tình upload file độc hại, 212 bắt quả tang và bắn webhook về VPS Chung qua WireGuard để khóa tài khoản tự động (Lớp bảo vệ đã kích hoạt).
-   - Nếu người dùng không hoàn tất, file tự động bay màu sau 2 giờ.
+Go accepts direct `POST /media/upload-zip` with a valid upload capability. It checks archive entry count, total uncompressed size, per-entry hard limits, compression ratio and unsafe paths. Accepted media is staged and returned as individual receipts; extraction alone does not commit the assets. The existing Anki import session/package protocol is separate and has not been replaced by this endpoint.
+
+## SVG strokes
+
+With `FLAMA_STROKE_WORKER_ENABLED`, Flask sends only character/locale JSON to `POST /internal/strokes/generate` on 212. Go uses canonical KanjiVG/MMAH data to generate diagrams and transfers the result through an authenticated private request to the OV stroke receiver. The receiver accepts only validated stroke filenames/SVG, writes atomically and exposes metadata checks. Arbitrary user-uploaded SVG is not accepted as note media.
+
+Existing `/store/stroke_<locale>_<hex>.svg` URLs remain stable. Go first checks whether OV already has a diagram. Flask emits available URLs only after confirmed storage and retains note/permission/overlay orchestration. The receiver role initializes neither media CAS nor media upload routes.
+
+## Configuration and activation
+
+Backend settings: `FLAMA_MEDIA_DIRECT_UPLOAD_ENABLED`, `FLAMA_MEDIA_PUBLIC_URL`, `FLAMA_MEDIA_WORKER_URL`, `MEDIA_SHARED_SECRET`, `INTERNAL_SECURITY_SECRET`, `FLAMA_MEDIA_STAGING_TTL_SECONDS=86400`, `FLAMA_STROKE_WORKER_ENABLED`.
+
+Worker settings and role-specific examples are documented in `flama-media/README.md`. Configure exact allowed browser origins. Keep upload signing and private control secrets separate, require the gateway credential on public routes, and expose internal commands only on the private network.
+
+Activate the worker/OV receiver and private routing before enabling the backend flags and deploying the matching frontend. Existing legacy media URLs and files are preserved. This change does not migrate historical media or replace avatar, support attachment, admin image-library or Anki import transports.
+
+## Transaction limits
+
+Go promotion and MySQL are separate systems. A failed Go acknowledgement rolls back the note transaction and does not report success. A failure after Go promotion but before MySQL commit can leave an unreferenced permanent CAS file/UUID alias; it cannot create a successful note reference to a stage awaiting later cleanup. Retried promotions are idempotent, and content is deduplicated. Permanent orphan reconciliation is separate from Ubuntu temporary-file aging.
+
+References: [Go temporary files](https://pkg.go.dev/os#CreateTemp), [Linux rename](https://man7.org/linux/man-pages/man2/rename.2.html), [systemd temporary directories](https://github.com/systemd/systemd/blob/main/docs/TEMPORARY_DIRECTORIES.md).

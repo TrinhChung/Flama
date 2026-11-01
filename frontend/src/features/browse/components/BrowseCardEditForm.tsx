@@ -169,7 +169,7 @@ export function BrowseCardEditForm({
         {/* Dynamic Card fields */}
         {detail.fields.map((field) => (
           <NoteFieldEditor
-            key={field.name}
+            key={`${detail.note.id}:${field.name}`}
             field={field}
             value={editFieldValues[field.name]}
             initialValue={detail.note.field_values[field.name]}

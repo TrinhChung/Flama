@@ -251,7 +251,7 @@ def _assert_family(candidate: str, *, field_type: str, resolved_family: str | No
             reason="wrong_media_kind",
         )
     if (
-        candidate.startswith(("/media/library/", "/static/strokes/", "/media/staged/", "/media/asset/"))
+        candidate.startswith(("/media/library/", "/static/strokes/", "/media/asset/"))
         or candidate.startswith(("/store/stroke_", "/media/store/stroke_", "/media/proxy/stroke_"))
     ) and expected == "audio":
         raise MediaFieldValueError(

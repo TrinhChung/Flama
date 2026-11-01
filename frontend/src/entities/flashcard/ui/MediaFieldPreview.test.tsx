@@ -32,7 +32,7 @@ describe('MediaFieldPreview', () => {
         />,
       )
     })
-    return { container, onChange }
+    return { container, onChange, root }
   }
 
   it('renders image preview by default and hides raw URL textarea in preview mode', async () => {
@@ -158,35 +158,52 @@ describe('MediaFieldPreview', () => {
     expect(audio?.src).toBe('https://example.com/custom_sound.mp3')
   })
 
-  it('rejects pasted images exceeding 2MB and does not send request', async () => {
-    const { toast } = await import('sonner')
-    const toastErrorSpy = vi.spyOn(toast, 'error')
-
+  it('stages original pasted images on the media worker without changing the saved note', async () => {
+    const media = await import('@/entities/flashcard/api/media')
+    const stageSpy = vi.spyOn(media, 'stageNoteMedia').mockResolvedValue({
+      stage_id: `stg_${'a'.repeat(32)}`, asset_id: 'b'.repeat(64), sha256: 'b'.repeat(64),
+      url: 'https://media.example.test/media/staged/stg_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      size_bytes: 100, content_type: 'image/png',
+    })
+    const client = await import('@/shared/api/client')
+    const requestSpy = vi.spyOn(client, 'apiRequest')
+    requestSpy.mockClear()
     const onChange = vi.fn()
     const { container: view } = await render('', 'image', onChange)
     const previewContainer = view.querySelector('[tabindex="0"]') as HTMLDivElement
-
-    const imageCompression = await import('@/lib/imageCompression')
-    vi.spyOn(imageCompression, 'compressImage').mockRejectedValue(new Error('Mock compression error'))
-
     const largeFile = new File([new ArrayBuffer(3 * 1024 * 1024)], 'huge.png', { type: 'image/png' })
-
     const pasteEvent = new Event('paste', { bubbles: true, cancelable: true }) as any
     pasteEvent.clipboardData = {
-      items: [{
-        type: 'image/png',
-        getAsFile: () => largeFile,
-      }],
-      files: [largeFile],
-      getData: () => '',
+      items: [{ type: 'image/png', getAsFile: () => largeFile }],
+      files: [largeFile], getData: () => '',
     }
+    await act(async () => { previewContainer.dispatchEvent(pasteEvent) })
+    expect(stageSpy).toHaveBeenCalledWith(largeFile, 'huge.png', {}, expect.any(AbortSignal))
+    expect(onChange).toHaveBeenCalledWith('https://media.example.test/media/staged/stg_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    expect(requestSpy).not.toHaveBeenCalled()
+    stageSpy.mockRestore()
+  })
 
-    await act(async () => {
-      previewContainer.dispatchEvent(pasteEvent)
-    })
-
-    expect(toastErrorSpy).toHaveBeenCalledWith('Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
+  it('cancels the upload when its editor unmounts and ignores a late worker response', async () => {
+    const media = await import('@/entities/flashcard/api/media')
+    let finishUpload: (value: Awaited<ReturnType<typeof media.stageNoteMedia>>) => void
+    const stageSpy = vi.spyOn(media, 'stageNoteMedia').mockImplementation(() => new Promise((resolve) => {
+      finishUpload = resolve
+    }))
+    const { container: view, onChange, root } = await render('')
+    const image = new File(['raw'], 'clipboard.png', { type: 'image/png' })
+    const paste = new Event('paste', { bubbles: true, cancelable: true }) as any
+    paste.clipboardData = { items: [{ type: image.type, getAsFile: () => image }], files: [image], getData: () => '' }
+    await act(async () => { view.querySelector('[tabindex="0"]')!.dispatchEvent(paste) })
+    const signal = stageSpy.mock.calls[0][3]!
+    act(() => root.unmount())
+    expect(signal.aborted).toBe(true)
+    await act(async () => finishUpload!({
+      stage_id: `stg_${'a'.repeat(32)}`, asset_id: 'b'.repeat(64), sha256: 'b'.repeat(64),
+      url: 'https://media.example.test/media/staged/stg_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', size_bytes: 3, content_type: image.type,
+    }))
     expect(onChange).not.toHaveBeenCalled()
+    stageSpy.mockRestore()
   })
 
   it('refuses pasted image files when uploads are disabled but still accepts links', async () => {

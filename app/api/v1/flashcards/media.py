@@ -5,7 +5,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 
-from app.services import flashcard_media_api_service, image_crawl_service
+from app.services import flashcard_media_api_service, image_crawl_service, worker_media_service
 from app.validators.flashcard_input import RequestValidationError
 from app.validators.image_crawl import (
     validate_batch_media_crawl_request,
@@ -28,6 +28,12 @@ def _error(exc: flashcard_media_api_service.MediaApiError | image_crawl_service.
 
 def _upload(note_id: str, *, markdown_inline: bool):
     try:
+        if request.is_json:
+            payload, status = worker_media_service.attach(
+                user_id=current_user.id, note_id=note_id,
+                payload=request.get_json(silent=True), markdown_inline=markdown_inline,
+            )
+            return jsonify(payload), status
         payload, status = flashcard_media_api_service.upload_media(
             user_id=current_user.id,
             note_id=note_id,
@@ -54,6 +60,17 @@ def _upload(note_id: str, *, markdown_inline: bool):
     except (flashcard_media_api_service.MediaApiError, image_crawl_service.ImageCrawlError, RequestValidationError) as exc:
         return _error(exc)
     return jsonify(payload), status
+
+
+@media_bp.post("/media/upload-ticket")
+@login_required
+def media_upload_ticket():
+    try:
+        return jsonify(worker_media_service.upload_ticket(
+            user_id=current_user.id, payload=request.get_json(silent=True) or {},
+        ))
+    except RequestValidationError as exc:
+        return _error(exc)
 
 
 @media_bp.post("/notes/<note_id>/media")
@@ -157,6 +174,14 @@ def crawl_page_images():
 @login_required
 def upload_notes_media_batch():
     import json
+
+    if request.is_json:
+        try:
+            return jsonify(worker_media_service.attach_batch(
+                user_id=current_user.id, payload=request.get_json(silent=True),
+            ))
+        except RequestValidationError as exc:
+            return _error(exc)
 
     manifest_raw = request.form.get("manifest")
     items_input = []

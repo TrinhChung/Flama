@@ -23,6 +23,44 @@ from flask import current_app
 logger = logging.getLogger(__name__)
 
 
+class _NoInternalRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Never forward the private control credential to a redirect destination.
+        return None
+
+
+def internal_request(path: str, payload: dict[str, Any], *, timeout: int = 30) -> dict[str, Any]:
+    """Send a small authenticated control message over the configured private network."""
+    worker_url = str(current_app.config.get("FLAMA_MEDIA_WORKER_URL") or "").rstrip("/")
+    secret = str(current_app.config.get("INTERNAL_SECURITY_SECRET") or "").strip()
+    if not worker_url or not secret:
+        raise FlamaMediaClientError("Media worker internal connection is not configured.", 503)
+    req = urllib.request.Request(
+        f"{worker_url}{path}",
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Internal-Secret": secret},
+        method="POST",
+    )
+    try:
+        with urllib.request.build_opener(_NoInternalRedirects()).open(req, timeout=timeout) as response:
+            result = json.loads(response.read(2 * 1024 * 1024).decode("utf-8"))
+            if not isinstance(result, dict):
+                raise ValueError("Invalid worker response")
+            return result
+    except urllib.error.HTTPError as exc:
+        try:
+            error = json.loads(exc.read(8192).decode("utf-8"))
+        except (ValueError, UnicodeError):
+            error = {}
+        raise FlamaMediaClientError(
+            str(error.get("message") or "Media worker rejected the operation."),
+            status_code=exc.code if exc.code in {400, 403, 404, 409, 410, 413} else 502,
+            error_code=str(error.get("error") or "MEDIA_WORKER_ERROR"),
+        ) from exc
+    except (OSError, ValueError) as exc:
+        raise FlamaMediaClientError("Media worker is unavailable.", 503, "MEDIA_WORKER_UNAVAILABLE") from exc
+
+
 class FlamaMediaClientError(Exception):
     def __init__(self, message: str, status_code: int = 502, error_code: str = "MEDIA_WORKER_ERROR"):
         super().__init__(message)

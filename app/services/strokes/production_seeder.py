@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
+from flask import current_app, has_app_context
+
 from models import db
 from models.shared_image_asset import SharedImageAsset
 from app.services.strokes.cjk_datasets import (
@@ -125,6 +127,9 @@ def seed_production_strokes_dataset(
     if "zh-hant" in locales or "zh-tw" in locales or "all" in locales:
         targets.append(("zh-hant", "zh_hant", "stroke_zh_hant_", get_production_hanzi_list(locale="zh-hant", limit=limit_zh_hant)))
 
+    if has_app_context() and current_app.config.get("FLAMA_STROKE_WORKER_ENABLED", False):
+        return _seed_worker_strokes(targets, force=force, progress_callback=progress_callback)
+
     overall_stats = {
         "total_targets": sum(len(chars) for _, _, _, chars in targets),
         "generated": 0,
@@ -207,6 +212,36 @@ def seed_production_strokes_dataset(
     return overall_stats
 
 
+def _seed_worker_strokes(targets, *, force=False, progress_callback=None) -> dict[str, Any]:
+    """Provision on212 -> OV; the Flask CLI handles metadata only."""
+    from app.services.strokes.worker_client import generate_strokes
+
+    stats = {"total_targets": sum(len(chars) for _, _, _, chars in targets),
+             "generated": 0, "cached": 0, "failed": 0, "db_updated": 0}
+    for locale, raw_folder, _, chars in targets:
+        completed = 0
+        for offset in range(0, len(chars), 15):
+            chunk = chars[offset:offset + 15]
+            receipts = generate_strokes(list(chunk), locale, force=force)
+            rows = []
+            for char in chunk:
+                receipt = receipts[char]
+                completed += 1
+                if receipt["available"]:
+                    stats["cached" if receipt.get("cached") else "generated"] += 1
+                    rows.append({**receipt, "locale": locale, "raw_folder": raw_folder,
+                                 "storage_path": f"strokes/{receipt['image_key']}.svg"})
+                else:
+                    stats["failed"] += 1
+                if progress_callback:
+                    progress_callback({"locale": locale, "completed": completed,
+                                       "total": len(chars), "char": char, "overall": stats})
+            if rows:
+                _sync_db_batch(rows)
+                stats["db_updated"] += len(rows)
+    return stats
+
+
 def _sync_db_batch(batch: list[dict[str, Any]]) -> None:
     """Sync a batch of stroke asset metadata to SharedImageAsset table."""
     try:
@@ -218,7 +253,7 @@ def _sync_db_batch(batch: list[dict[str, Any]]) -> None:
             hex_code = item["hex"]
             char = item["char"]
             locale = item["locale"]
-            storage_path = f"library/strokes/{item['raw_folder']}/{hex_code}.svg"
+            storage_path = item.get("storage_path") or f"library/strokes/{item['raw_folder']}/{hex_code}.svg"
             sha256 = item["sha256"]
             size_bytes = item["size_bytes"]
 
