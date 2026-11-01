@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-commit hook: Auto update REST API route snapshot if app routes or models were touched
+# Pre-commit hook: Auto verify secrets, update REST API route snapshot, and sync skill mirrors
 
 set -e
 
@@ -16,11 +16,22 @@ elif command -v python >/dev/null 2>&1; then
 elif command -v py >/dev/null 2>&1; then
     PYTHON="py -3.12"
 else
-    echo "[pre-commit] WARNING: Python not found, skipping route snapshot update."
-    exit 0
+    echo "[pre-commit] WARNING: Python not found, skipping Python pre-commit checks."
 fi
 
-# Check if any route/app/model files are staged
+# 1. Primary Secret Scan: Gitleaks if available
+if command -v gitleaks >/dev/null 2>&1; then
+    echo "[pre-commit] Running Gitleaks secret scan on staged changes..."
+    gitleaks protect --staged --verbose --config=.gitleaks.toml
+    echo "[pre-commit] Gitleaks scan passed."
+fi
+
+# 2. Portable Fail-Safe Secret Scan: Native Python Scanner (always executed)
+if [ -n "$PYTHON" ] && [ -f "scripts/check_secrets_staged.py" ]; then
+    $PYTHON scripts/check_secrets_staged.py
+fi
+
+# 3. Check if any route/app/model files are staged
 STAGED_FILES=$(git diff --cached --name-only)
 if echo "$STAGED_FILES" | grep -qE '^(app/|models/|tests/test_api_v1_route_map\.py)'; then
     echo "[pre-commit] Route-affecting files modified in commit. Refreshing API route snapshot..."
@@ -29,7 +40,7 @@ if echo "$STAGED_FILES" | grep -qE '^(app/|models/|tests/test_api_v1_route_map\.
     echo "[pre-commit] API route snapshot verified and auto-staged."
 fi
 
-# Keep both repository skill discovery mirrors in step with skills/
+# 4. Keep both repository skill discovery mirrors in step with skills/
 if echo "$STAGED_FILES" | grep -qE '^skills/'; then
     echo "[pre-commit] Agent skills modified. Updating Claude Code and Codex repo mirrors..."
     $PYTHON scripts/sync_claude_skills.py --stage
