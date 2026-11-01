@@ -205,6 +205,15 @@ def proxy_media(asset_id: str):
     asset = MediaAsset.query.filter(MediaAsset.id == asset_id).first()
     if not asset:
         return _media_error("FIELD_NOT_FOUND", "Media asset not found.", status=404)
+    from app.services import worker_media_service
+    if str(asset.storage_path).startswith(worker_media_service.WORKER_PREFIX):
+        from flask import redirect
+        try:
+            response = redirect(f"{worker_media_service.public_base()}/store/{asset.id}", code=307)
+        except RequestValidationError as exc:
+            return _media_error(exc.code, str(exc), status=exc.status)
+        response.headers["Cache-Control"] = "no-store"
+        return response
     upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
     try:
         full_path = resolve_safe_storage_path(

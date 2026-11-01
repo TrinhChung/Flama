@@ -1268,11 +1268,13 @@ def create_note(
     db.session.add(note)
     db.session.flush()
     from app.services import media_staging_service
-    committed_values = media_staging_service.commit_all_staged_urls_in_field_values(
-        user_id=user_id,
-        note_id=note.id,
-        field_values=note.field_values,
-    )
+    try:
+        committed_values = media_staging_service.commit_all_staged_urls_in_field_values(
+            user_id=user_id, note_id=note.id, field_values=note.field_values,
+        )
+    except RequestValidationError as exc:
+        db.session.rollback()
+        raise _validation_error(exc) from exc
     if committed_values != note.field_values:
         note.field_values = committed_values
         db.session.flush()
@@ -1366,11 +1368,13 @@ def update_note(
         values = dict(note.field_values or {})
         values.update(validated.field_updates)
         from app.services import media_staging_service
-        values = media_staging_service.commit_all_staged_urls_in_field_values(
-            user_id=user_id,
-            note_id=note.id,
-            field_values=values,
-        )
+        try:
+            values = media_staging_service.commit_all_staged_urls_in_field_values(
+                user_id=user_id, note_id=note.id, field_values=values,
+            )
+        except RequestValidationError as exc:
+            db.session.rollback()
+            raise _validation_error(exc) from exc
         note.field_values = values
     if validated.update_tags:
         note.tags = validated.tags

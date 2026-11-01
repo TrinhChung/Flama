@@ -8,7 +8,7 @@ import {
   uploadNoteMediaBlob,
   uploadNoteMediaBatch,
   type BatchMediaItemInput,
-} from '@/shared/api/noteMedia'
+} from '@/entities/flashcard'
 import {
   getLanguageGroupFromVoiceId,
   loadStoredLocalAudioSettings,

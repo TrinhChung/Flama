@@ -436,6 +436,18 @@ jobs:
           tests/test_note_base_publish_mysql.py tests/test_note_base_cutover_mysql.py
           --backend-only --manifest output/note-base-mysql-ci.json
 
+      - name: Verify direct media upload and deferred commit on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+          FLAMA_MYSQL_TESTS: '1'
+        run: >-
+          python scripts/run_tests.py --file tests/test_worker_media_mysql.py
+          --backend-only --manifest output/worker-media-mysql-ci.json
+
       - name: Run schema-owning NOTE, field value, forecast, outbox and retention contracts on MySQL
         env:
           DB_HOST: 127.0.0.1

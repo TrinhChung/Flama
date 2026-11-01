@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { updateCardFieldValues } from '@/entities/flashcard/model/cardContentUpdates'
+import { updateCardFieldValues } from '@/entities/flashcard/contentUpdates'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
-import { uploadNoteMediaBlob } from '@/shared/api/noteMedia'
+import { uploadNoteMediaBlob } from '@/entities/flashcard'
 import {
   clearStoredAudioQueue,
   flushStoredAudioQueueSave,

@@ -28,3 +28,6 @@ export type {
   CardRenderPayload,
   RendererSidePayload,
 } from './model/types'
+
+export { stageNoteMedia, uploadNoteMediaBlob, uploadNoteMediaBatch } from './api/media'
+export type { StagedNoteMedia, UploadMediaResponse, BatchMediaItemInput, BatchUploadMediaResponseItem, BatchUploadMediaResponse } from './api/media'

@@ -1,7 +1,9 @@
 """Security incident processing service.
 
 Handles attack notifications forwarded by media edge services or internal microservices,
-creates administrative security alerts, logs audit trails, and automatically blocks/bans offending users.
+creates administrative security alerts and audit trails. It never disables accounts or
+revokes tokens: the worker's detectors also fire on ordinary uploads (very large photos,
+an SVG file), so an automatic ban would lock out legitimate users. Admins decide.
 """
 
 from __future__ import annotations
@@ -13,10 +15,8 @@ from typing import Any
 from models import db
 from models.admin_security_alert import AdminSecurityAlert
 from models.audit_log import AuditLog
-from models.mcp_access_token import McpAccessToken
 from models.model_uuid import uuid_str
 from models.user import User
-from models.user_api_token import UserApiToken
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +29,11 @@ class SecurityIncidentError(Exception):
 
 
 def handle_security_incident(payload: dict[str, Any]) -> dict[str, Any]:
-    """Process a verified security incident reported by internal worker services.
+    """Record a verified incident reported by an internal worker service.
 
-    1. Records an AdminSecurityAlert threat record.
-    2. If a user_id is associated:
-       - Protects admin accounts from DoS auto-bans (alert and audit log only).
-       - Automatically disables malicious normal users (is_disabled = True).
-       - Immediately revokes all active UserApiTokens and McpAccessTokens.
-       - Records a security.user_auto_banned AuditLog entry.
-    3. Commits the transaction and returns a status summary.
+    Creates an AdminSecurityAlert and, when the incident names an existing user, a
+    ``security.incident_reported`` audit entry for that user. Accounts and tokens
+    are left unchanged.
     """
     if not isinstance(payload, dict):
         raise SecurityIncidentError("Invalid incident payload: expected JSON object", status_code=400)
@@ -74,64 +70,25 @@ def handle_security_incident(payload: dict[str, Any]) -> dict[str, Any]:
     )
     db.session.add(alert)
 
-    user_banned = False
-    admin_protected = False
-
-    if user_id:
-        user = db.session.get(User, user_id)
-        if user:
-            if user.is_admin:
-                admin_protected = True
-                logger.warning(
-                    "[SECURITY] Threat detected from admin user_id=%s (%s), skipping auto-disable to prevent DoS lockout.",
-                    user_id,
-                    user.username,
-                )
-                audit = AuditLog(
-                    user_id=user.id,
-                    action="security.incident_admin_bypassed",
-                    payload={
-                        "incident_type": incident_type,
-                        "detail": detail,
-                        "client_ip": client_ip,
-                        "alert_id": alert_id,
-                    },
-                )
-                db.session.add(audit)
-            else:
-                user.is_disabled = True
-                user_banned = True
-
-                # Revoke active User API tokens
-                now = datetime.utcnow()
-                UserApiToken.query.filter_by(user_id=user.id).filter(
-                    UserApiToken.revoked_at.is_(None)
-                ).update({"revoked_at": now})
-
-                # Revoke active MCP access tokens
-                McpAccessToken.query.filter_by(user_id=user.id, revoked=False).update(
-                    {"revoked": True}
-                )
-
-                audit = AuditLog(
-                    user_id=user.id,
-                    action="security.user_auto_banned",
-                    payload={
-                        "reason": incident_type,
-                        "detail": detail,
-                        "client_ip": client_ip,
-                        "alert_id": alert_id,
-                    },
-                )
-                db.session.add(audit)
-
-                logger.critical(
-                    "[SECURITY] User user_id=%s (%s) automatically BANNED due to incident %s: %s",
-                    user.id,
-                    user.username,
-                    incident_type,
-                    detail,
-                )
+    user = db.session.get(User, user_id) if user_id else None
+    if user is not None:
+        db.session.add(AuditLog(
+            user_id=user.id,
+            action="security.incident_reported",
+            payload={
+                "incident_type": incident_type,
+                "detail": detail,
+                "client_ip": client_ip,
+                "alert_id": alert_id,
+            },
+        ))
+        logger.warning(
+            "[SECURITY] Incident %s reported for user_id=%s (%s); alert %s created, account unchanged.",
+            incident_type,
+            user.id,
+            user.username,
+            alert_id,
+        )
 
     db.session.commit()
 
@@ -139,6 +96,5 @@ def handle_security_incident(payload: dict[str, Any]) -> dict[str, Any]:
         "status": "ok",
         "alert_id": alert_id,
         "user_id": user_id,
-        "user_banned": user_banned,
-        "admin_protected": admin_protected,
+        "user_banned": False,
     }

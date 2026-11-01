@@ -1,8 +1,6 @@
-import { useMemo, useState, useCallback, useRef } from 'react'
+import { useMemo } from 'react'
 import { resolveBackendUrl, resolveMediaUrl } from '@/shared/config/env'
-import { apiRequest } from '@/shared/api/client'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { Button, Textarea } from '@/shared/ui'
 import {
   AlertCircle,
   Check,
@@ -15,9 +13,7 @@ import {
   LoaderCircle,
   Music,
 } from 'lucide-react'
-import { toast } from 'sonner'
-import { compressImage, MAX_IMAGE_UPLOAD_BYTES } from '@/lib/imageCompression'
-import { copiedImageLink } from '../lib/copiedImageLink'
+import { useMediaFieldPreview } from '../hooks/useMediaFieldPreview'
 
 export interface MediaFieldPreviewProps {
   fieldName: string
@@ -126,11 +122,6 @@ export function MediaFieldPreview({
   resolveUrl,
   uploadDisabled = false,
 }: MediaFieldPreviewProps) {
-  const [viewMode, setViewMode] = useState<'preview' | 'url' | 'code'>('preview')
-  const [isUploading, setIsUploading] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const containerRef = useRef<HTMLDivElement | null>(null)
-
   const values = useMemo(() => parseMediaValues(value), [value])
   const validUrls = useMemo(
     () => values.filter((item) => isValidForField(item, fieldType, resolveUrl)),
@@ -143,124 +134,9 @@ export function MediaFieldPreview({
   )
   const FieldIcon = fieldType === 'audio' ? Music : fieldType === 'diagram' ? FileImage : ImageIcon
 
-  const handleCopyCode = useCallback(() => {
-    if (!derivedHtml) return
-    navigator.clipboard.writeText(derivedHtml).then(() => {
-      setCopied(true)
-      toast.success('Đã sao chép mã HTML vào clipboard!')
-      setTimeout(() => setCopied(false), 2000)
-    }).catch(() => {
-      toast.error('Không thể sao chép mã.')
-    })
-  }, [derivedHtml])
-
-  const handlePaste = useCallback(
-    async (e: React.ClipboardEvent<HTMLDivElement>) => {
-      // 1. Check for image files in clipboard
-      const items = e.clipboardData?.items
-      let imageFile: File | null = null
-
-      if (items) {
-        for (let i = 0; i < items.length; i++) {
-          if (items[i].type.startsWith('image/')) {
-            const blob = items[i].getAsFile()
-            if (blob) {
-              imageFile = blob
-              break
-            }
-          }
-        }
-      }
-
-      if (!imageFile && e.clipboardData?.files?.length > 0) {
-        for (let i = 0; i < e.clipboardData.files.length; i++) {
-          if (e.clipboardData.files[i].type.startsWith('image/')) {
-            imageFile = e.clipboardData.files[i]
-            break
-          }
-        }
-      }
-
-      if (imageFile) {
-        e.preventDefault()
-        e.stopPropagation()
-
-        if (fieldType === 'audio') {
-          toast.error('Trường âm thanh không thể dán hình ảnh.')
-          return
-        }
-
-        if (uploadDisabled) {
-          // Chrome's "Copy image" also carries the image's address; use it when uploads are off.
-          const link = copiedImageLink(e.clipboardData)
-          if (link) {
-            const trimmedVal = value.trim()
-            onChange(trimmedVal ? `${trimmedVal}\n${link}` : link)
-            toast.success('Thẻ này không tải ảnh lên được nên đã dán link của ảnh.')
-            return
-          }
-          toast.error('Thẻ này không hỗ trợ tải ảnh lên. Hãy dán link ảnh.')
-          return
-        }
-
-        setIsUploading(true)
-        try {
-          let fileToSend: File = imageFile
-          try {
-            const compressed = await compressImage(imageFile, {
-              maxDimension: 1600,
-              quality: 0.85,
-            })
-            fileToSend = compressed.file
-          } catch {
-            // Fall back to original file if compression fails
-          }
-
-          if (fileToSend.size > MAX_IMAGE_UPLOAD_BYTES) {
-            toast.error('Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
-            return
-          }
-
-          const formData = new FormData()
-          formData.append('file', fileToSend)
-
-          const data = await apiRequest<{ url: string }>(
-            '/api/browse/media/stage-paste',
-            {
-              method: 'POST',
-              body: formData,
-            },
-          )
-
-          const newUrl = data.url
-          if (newUrl) {
-            const trimmedVal = value.trim()
-            const updated = trimmedVal ? `${trimmedVal}\n${newUrl}` : newUrl
-            onChange(updated)
-            toast.success('Đã dán và tối ưu ảnh WebP thành công!')
-          }
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : 'Lỗi không xác định khi xử lý ảnh.'
-          toast.error(`Không thể dán ảnh: ${msg}`)
-        } finally {
-          setIsUploading(false)
-        }
-        return
-      }
-
-      // 2. Check for plain text URL in clipboard
-      const text = e.clipboardData?.getData('text')?.trim()
-      if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('/media/') || text.startsWith('/store/'))) {
-        e.preventDefault()
-        e.stopPropagation()
-        const trimmedVal = value.trim()
-        const updated = trimmedVal ? `${trimmedVal}\n${text}` : text
-        onChange(updated)
-        toast.success('Đã dán liên kết media!')
-      }
-    },
-    [fieldType, uploadDisabled, value, onChange],
-  )
+  const { viewMode, setViewMode, isUploading, copied, containerRef, handleCopyCode, handlePaste } = useMediaFieldPreview({
+    fieldName, fieldType, value, onChange, uploadDisabled, derivedHtml,
+  })
 
   return (
     <div className="space-y-1.5">
@@ -322,7 +198,7 @@ export function MediaFieldPreview({
           {isUploading && (
             <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center">
               <LoaderCircle className="size-6 text-primary animate-spin mb-2" />
-              <p className="text-xs font-semibold text-foreground">Đang tối ưu WebP & quét an toàn...</p>
+              <p className="text-xs font-semibold text-foreground">Đang tối ưu ảnh & quét an toàn...</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Vui lòng đợi trong giây lát</p>
             </div>
           )}

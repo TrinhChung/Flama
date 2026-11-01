@@ -342,6 +342,12 @@ def _get_stroke_svg_content(locale: str, hex_code: str, char: str | None = None)
             pass
 
     # 3. If char is provided, fetch authentic stroke SVG or auto-generate a new SVG
+    if char and has_app_context() and current_app.config.get("FLAMA_STROKE_WORKER_ENABLED", False):
+        # worker212 serves (and on a miss generates) the SVG; the app server
+        # neither calls GitHub nor writes stroke files.
+        from app.services.strokes.worker_client import fetch_stroke_svg
+
+        return fetch_stroke_svg(char, folder)
     if char:
         image_key = f"stroke_{raw_folder}_{hex_code}"
         try:

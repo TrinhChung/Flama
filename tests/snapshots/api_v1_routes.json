@@ -219,6 +219,7 @@
   ["POST", "/api/mcp-tokens/cleanup"],
   ["DELETE", "/api/media/<asset_id>"],
   ["POST", "/api/media/crawl-page"],
+  ["POST", "/api/media/upload-ticket"],
   ["GET", "/api/note-types"],
   ["POST", "/api/note-types"],
   ["DELETE", "/api/note-types/<note_type_id>"],

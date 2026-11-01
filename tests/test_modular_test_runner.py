@@ -23,6 +23,18 @@ def _case_manifest(cases):
 
 
 class ModularTestRunnerTests(unittest.TestCase):
+    def test_worker_media_selects_its_contracts_and_mysql_job(self):
+        modules, backend_tests, frontend_tests = run_tests.map_files_to_modules(
+            ["app/services/worker_media_service.py"]
+        )
+        self.assertIn("flashcards", modules)
+        self.assertIn("tests/test_worker_media_mysql.py", backend_tests)
+        self.assertIn("tests/test_stroke_worker_client.py", backend_tests)
+        self.assertEqual(frontend_tests, set())
+        self.assertTrue(run_tests.build_ci_change_plan(
+            ["app/services/worker_media_service.py"]
+        )["mysql_contract"])
+
     def test_full_backend_discovery_matches_test_files_on_disk(self):
         expected = sorted(
             path.relative_to(run_tests.ROOT_DIR).as_posix()

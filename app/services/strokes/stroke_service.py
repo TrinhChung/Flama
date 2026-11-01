@@ -152,6 +152,7 @@ def resolve_stroke_items(
     deduplicate: bool = True,
     max_characters: int = 15,
     output_format: str = "html",
+    _worker_cache: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Extract CJK characters from input text/HTML and resolve Image Library SVG URLs and snippets."""
     characters = CjkExtractor.extract_characters(
@@ -164,32 +165,51 @@ def resolve_stroke_items(
 
     items: list[dict[str, Any]] = []
 
+    worker_items: dict[str, dict[str, Any]] | None = None
+    if has_app_context() and current_app.config.get("FLAMA_STROKE_WORKER_ENABLED", False):
+        from app.services.strokes.worker_client import StrokeWorkerError, generate_strokes
+
+        worker_items = _worker_cache if _worker_cache is not None else {}
+        pending = [char for char in characters if char not in worker_items]
+        try:
+            if pending:
+                worker_items.update(generate_strokes(pending, norm_locale))
+        except StrokeWorkerError as exc:
+            raise StrokeServiceError(str(exc), status=502, code="STROKE_WORKER_UNAVAILABLE") from exc
+
     for char in characters:
         hex_code = CjkExtractor.char_to_hex(char)
         image_key = f"stroke_{raw_folder}_{hex_code}"
         url = f"/store/{image_key}.svg"
 
-        items.append({
+        worker_item = worker_items.get(char) if worker_items is not None else None
+        item = {
             "char": char,
             "hex": hex_code,
             "image_key": image_key,
             "url": url,
-            "available": True,
-        })
+            "available": bool(worker_item["available"]) if worker_item is not None else True,
+        }
+        if worker_item is not None and worker_item.get("error"):
+            item["error"] = worker_item["error"]
+        items.append(item)
+
+    available_items = [item for item in items if item["available"]]
+    missing_characters = [item["char"] for item in items if not item["available"]]
 
     # Render formatted output
     fmt = str(output_format or "html").strip().lower()
     if fmt in {"urls", "urls_json", "json"}:
-        output_str = json.dumps([item["url"] for item in items], ensure_ascii=False)
+        output_str = json.dumps([item["url"] for item in available_items], ensure_ascii=False)
     elif fmt in {"raw", "raw_urls", "raw_url", "plain", "text"}:
-        output_str = "\n".join(item["url"] for item in items)
+        output_str = "\n".join(item["url"] for item in available_items)
     else:  # html embed
-        if not items:
+        if not available_items:
             output_str = ""
         else:
             img_tags = "".join(
                 f'<img src="{item["url"]}" class="flama-stroke-char" alt="{item["char"]}" />'
-                for item in items
+                for item in available_items
             )
             output_str = f'<div class="flama-stroke-diagram" data-locale="{norm_locale}">{img_tags}</div>'
 
@@ -200,8 +220,8 @@ def resolve_stroke_items(
         "output": output_str,
         "format": fmt,
         "locale": norm_locale,
-        "missing_count": 0,
-        "missing_characters": [],
+        "missing_count": len(missing_characters),
+        "missing_characters": missing_characters,
     }
 
 
@@ -341,7 +361,7 @@ def estimate_batch_strokes(
 
     for note in notes:
         field_values = dict(note.field_values or {})
-        existing_val = str(field_values.get(target_field) or "").strip()
+        existing_val = field_value_text(field_values.get(target_field)).strip()
 
         if not overwrite and existing_val:
             notes_skipped += 1
@@ -481,10 +501,30 @@ def batch_generate_strokes(
     skipped_count = 0
     missing_all: set[str] = set()
     dirty_mutations: list[dict[str, Any]] = []
+    worker_cache: dict[str, dict[str, Any]] = {}
+
+    # Resolve remote files before mutating ORM objects. A failed VPN/OV write
+    # must not leave a partially updated deck in the request's transaction.
+    if has_app_context() and current_app.config.get("FLAMA_STROKE_WORKER_ENABLED", False):
+        from app.services.strokes.worker_client import StrokeWorkerError, generate_strokes
+
+        characters: list[str] = []
+        for note in notes:
+            values = note.field_values or {}
+            if not overwrite and field_value_text(values.get(target_field)).strip():
+                continue
+            characters.extend(CjkExtractor.extract_characters(
+                field_value_text(values.get(source_field)), max_limit=max_characters,
+            ))
+        try:
+            if characters:
+                worker_cache.update(generate_strokes(characters, normalize_locale(locale)))
+        except StrokeWorkerError as exc:
+            raise StrokeServiceError(str(exc), status=502, code="STROKE_WORKER_UNAVAILABLE") from exc
 
     for note in notes:
         field_values = dict(note.field_values or {})
-        existing_val = str(field_values.get(target_field) or "").strip()
+        existing_val = field_value_text(field_values.get(target_field)).strip()
 
         if not overwrite and existing_val:
             skipped_count += 1
@@ -500,6 +540,7 @@ def batch_generate_strokes(
             locale=locale,
             output_format="raw",
             max_characters=max_characters,
+            _worker_cache=worker_cache,
         )
 
         missing_all.update(res.get("missing_characters") or [])

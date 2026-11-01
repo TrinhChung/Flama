@@ -1485,6 +1485,10 @@ def _update_clone_browse_card(
 ) -> dict[str, Any]:
     from app.services import flashcards_share as share_ctrl
 
+    from app.services.worker_media_service import has_staged_urls
+    if has_staged_urls(validated.field_updates):
+        raise BrowseCardUpdateError("Media uploads for cloned cards are not supported.", status=400)
+
     mapped_local_deck_id = _clone_local_deck_id(clone_scope, note_obj)
     if validated.update_deck:
         selected_deck_id = validated.deck_id
@@ -1609,11 +1613,14 @@ def _update_owned_browse_card(
         for key_name, value in validated.field_updates.items():
             next_values[key_name] = value
         from app.services import media_staging_service
-        next_values = media_staging_service.commit_all_staged_urls_in_field_values(
-            user_id=user_id,
-            note_id=note_obj.id,
-            field_values=next_values,
-        )
+        try:
+            next_values = media_staging_service.commit_all_staged_urls_in_field_values(
+                user_id=user_id, note_id=note_obj.id, field_values=next_values,
+            )
+        except RequestValidationError as exc:
+            browse_card_repository.rollback_changes()
+            raise BrowseCardUpdateError(str(exc), status=exc.status, field=exc.field,
+                code=exc.code, include_details=True) from exc
         note_obj.field_values = next_values
 
     deck_changed = validated.update_deck and original_deck_id != note_obj.deck_id

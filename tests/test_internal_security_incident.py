@@ -124,40 +124,26 @@ class InternalSecurityIncidentTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json.get("error"), "INVALID_PAYLOAD")
 
-    def test_normal_user_auto_banned_on_attack(self):
-        payload = {
-            "user_id": self.normal_user_id,
-            "incident_type": "ZIP_SLIP",
-            "detail": "Path traversal attempt ../../evil.sh",
-            "client_ip": "203.0.113.195",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-        resp = self.client.post(
+    def _report(self, user_id, incident_type, detail, client_ip):
+        return self.client.post(
             "/api/internal/security/incident",
             headers={"X-Internal-Secret": self.secret},
-            json=payload,
+            json={"user_id": user_id, "incident_type": incident_type, "detail": detail, "client_ip": client_ip},
         )
+
+    def test_incident_alerts_admins_but_never_disables_the_user(self):
+        resp = self._report(self.normal_user_id, "ZIP_SLIP", "Path traversal attempt ../../evil.sh", "203.0.113.195")
         self.assertEqual(resp.status_code, 200)
-        data = resp.json
-        self.assertEqual(data["status"], "ok")
-        self.assertTrue(data["user_banned"])
-        self.assertFalse(data["admin_protected"])
+        self.assertEqual(resp.json["status"], "ok")
+        self.assertFalse(resp.json["user_banned"])
 
         with self.app.app_context():
-            # Verify user is disabled
             user = db.session.get(User, self.normal_user_id)
-            self.assertTrue(user.is_disabled)
-            self.assertFalse(user.is_active)
+            self.assertFalse(user.is_disabled)
+            self.assertTrue(user.is_active)
+            self.assertIsNone(db.session.get(UserApiToken, self.user_token_id).revoked_at)
+            self.assertFalse(db.session.get(McpAccessToken, self.mcp_token_id).revoked)
 
-            # Verify API tokens revoked
-            tok = db.session.get(UserApiToken, self.user_token_id)
-            self.assertIsNotNone(tok.revoked_at)
-
-            # Verify MCP tokens revoked
-            mcp = db.session.get(McpAccessToken, self.mcp_token_id)
-            self.assertTrue(mcp.revoked)
-
-            # Verify AdminSecurityAlert recorded
             alert = AdminSecurityAlert.query.filter_by(user_id=self.normal_user_id).first()
             self.assertIsNotNone(alert)
             self.assertEqual(alert.threat_type, "zip_slip")
@@ -165,47 +151,20 @@ class InternalSecurityIncidentTests(unittest.TestCase):
             self.assertEqual(alert.source_ip, "203.0.113.195")
             self.assertIn("evil.sh", alert.message)
 
-            # Verify AuditLog recorded
-            audit = AuditLog.query.filter_by(
-                user_id=self.normal_user_id, action="security.user_auto_banned"
-            ).first()
+            audit = AuditLog.query.filter_by(user_id=self.normal_user_id, action="security.incident_reported").first()
             self.assertIsNotNone(audit)
-            self.assertEqual(audit.payload.get("reason"), "ZIP_SLIP")
+            self.assertEqual(audit.payload.get("incident_type"), "ZIP_SLIP")
+            self.assertEqual(AuditLog.query.filter_by(action="security.user_auto_banned").count(), 0)
 
-    def test_admin_user_protected_from_auto_ban(self):
-        payload = {
-            "user_id": self.admin_user_id,
-            "incident_type": "DECOMPRESSION_BOMB",
-            "detail": "Pixel explosion 10000x10000",
-            "client_ip": "198.51.100.5",
-        }
-        resp = self.client.post(
-            "/api/internal/security/incident",
-            headers={"X-Internal-Secret": self.secret},
-            json=payload,
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json
-        self.assertEqual(data["status"], "ok")
-        self.assertFalse(data["user_banned"])
-        self.assertTrue(data["admin_protected"])
-
+    def test_ordinary_large_photo_report_keeps_admin_and_user_active(self):
+        for user_id in (self.admin_user_id, self.normal_user_id):
+            resp = self._report(user_id, "DECOMPRESSION_BOMB", "dimension 8000x6000 exceeds 4096", "198.51.100.5")
+            self.assertEqual(resp.status_code, 200)
+            self.assertFalse(resp.json["user_banned"])
         with self.app.app_context():
-            # Admin must NOT be disabled
-            admin = db.session.get(User, self.admin_user_id)
-            self.assertFalse(admin.is_disabled)
-            self.assertTrue(admin.is_active)
-
-            # But security alert is still created
-            alert = AdminSecurityAlert.query.filter_by(user_id=self.admin_user_id).first()
-            self.assertIsNotNone(alert)
-            self.assertEqual(alert.threat_type, "decompression_bomb")
-
-            # Audit log records admin bypass
-            audit = AuditLog.query.filter_by(
-                user_id=self.admin_user_id, action="security.incident_admin_bypassed"
-            ).first()
-            self.assertIsNotNone(audit)
+            self.assertFalse(db.session.get(User, self.admin_user_id).is_disabled)
+            self.assertFalse(db.session.get(User, self.normal_user_id).is_disabled)
+            self.assertEqual(AdminSecurityAlert.query.filter_by(threat_type="decompression_bomb").count(), 2)
 
     def test_incident_without_user_id_creates_alert_only(self):
         payload = {

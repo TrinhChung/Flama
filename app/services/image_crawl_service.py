@@ -16,7 +16,6 @@ from werkzeug.datastructures import FileStorage
 from app.services import deck_working_tree_service, quota_service
 from app.services.image_sanitizer import sanitize_shared_image
 from app.services.remote_image_fetcher import (
-    DirectCrawlDisabledError,
     fetch_remote_html,
     fetch_remote_image,
 )
@@ -735,13 +734,4 @@ def _media_payload(
         payload["filename"] = asset.filename
     return payload
 
-
-def delegate_url_crawl_to_media_worker(
-    url: str,
-    user_id: int | None = None,
-    max_bytes: int | None = None,
-) -> dict[str, Any]:
-    """Delegate safe URL fetching, anti-SSRF verification, and CAS ingestion to Worker 212."""
-    from app.services.flama_media_client import fetch_media_from_url
-    return fetch_media_from_url(url, user_id=user_id, max_bytes=max_bytes)
 

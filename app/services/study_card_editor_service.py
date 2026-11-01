@@ -104,6 +104,15 @@ def update_study_card_note(
         )
 
     if changed_field_names:
+        from app.services import media_staging_service
+        try:
+            next_values = media_staging_service.commit_all_staged_urls_in_field_values(
+                user_id=user_id, note_id=note.id, field_values=next_values,
+            )
+        except RequestValidationError as exc:
+            from models import db
+            db.session.rollback()
+            raise StudyCardEditError(str(exc), status=exc.status, field=exc.field, code=exc.code) from exc
         note.field_values = next_values
     if tags_changed:
         note.tags = validated.tags
