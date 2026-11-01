@@ -16,6 +16,7 @@ from models.field_def import FieldDef
 from models.media_asset import MediaAsset
 from models.note import Note
 from models.note_type import NoteType
+from app.services.media_field_codec import store_media_url
 
 logger = logging.getLogger(__name__)
 
@@ -330,7 +331,7 @@ def scan_deck_audio(
                             "status": "valid",
                             "value": raw_val or matched_asset.filename,
                             "asset_id": matched_asset.id,
-                            "url": f"/media/proxy/{matched_asset.id}",
+                            "url": store_media_url(matched_asset.id),
                             "filename": matched_asset.filename,
                         }
                         valid_count += 1

@@ -163,7 +163,7 @@ class FlashcardRendererTests(unittest.TestCase):
             field_values={"Word_Audio": "voicevox-001.wav"},
             media_assets=media_assets,
         )
-        self.assertIn("/media/proxy/asset-a", rendered_a["front_html"])
+        self.assertIn("/store/asset-a", rendered_a["front_html"])
 
         rendered_b = render_template_pair(
             template=template,
@@ -171,7 +171,7 @@ class FlashcardRendererTests(unittest.TestCase):
             field_values={"Word_Audio": "[sound:voicevox-001.wav]"},
             media_assets=media_assets,
         )
-        self.assertIn("/media/proxy/asset-a", rendered_b["front_html"])
+        self.assertIn("/store/asset-a", rendered_b["front_html"])
 
     def test_client_template_compiles_audio_field_to_explicit_url_helper(self):
         raw_html = (

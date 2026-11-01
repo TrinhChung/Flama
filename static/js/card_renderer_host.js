@@ -6,7 +6,7 @@
   const RENDERER_DIRECTION = "renderer_to_host";
   const DEFAULT_MIN_HEIGHT = 180;
   const MAX_FRAME_HEIGHT = 4096;
-  const PROXY_MEDIA_RE = /^\/media\/proxy\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$/;
+  const PROXY_MEDIA_RE = /^\/((?:media\/)?(?:store|proxy))\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$/;
   const LIBRARY_MEDIA_RE = /^\/media\/library\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$/;
   const STATIC_STROKE_RE = /^\/static\/strokes\/([a-zA-Z0-9_-]+\/[a-fA-F0-9]+\.svg)$/;
 
@@ -55,7 +55,7 @@
     }
     const directMatch = trimmed.match(PROXY_MEDIA_RE);
     if (directMatch) {
-      return "/media/proxy/" + directMatch[1];
+      return "/" + directMatch[1] + "/" + directMatch[2];
     }
     const libraryMatch = trimmed.match(LIBRARY_MEDIA_RE);
     if (libraryMatch) {
@@ -70,7 +70,7 @@
       const normalizedPath = String(parsed.pathname || "").trim();
       const absoluteMatch = normalizedPath.match(PROXY_MEDIA_RE);
       if (absoluteMatch) {
-        return "/media/proxy/" + absoluteMatch[1];
+        return "/" + absoluteMatch[1] + "/" + absoluteMatch[2];
       }
       const absoluteLibraryMatch = normalizedPath.match(LIBRARY_MEDIA_RE);
       if (absoluteLibraryMatch) {
@@ -89,7 +89,7 @@
     }
     const assetOnlyMatch = trimmed.match(/^([A-Za-z0-9][A-Za-z0-9_-]{0,127})$/);
     if (assetOnlyMatch) {
-      return "/media/proxy/" + assetOnlyMatch[1];
+      return "/store/" + assetOnlyMatch[1];
     }
     return null;
   }
@@ -120,7 +120,7 @@
 
   function assetIdFromProxyRef(proxyRef) {
     const match = String(proxyRef || "").match(PROXY_MEDIA_RE);
-    return match ? match[1] : "";
+    return match ? match[2].split(".")[0] : "";
   }
 
   function normalizeStringList(values) {
@@ -288,6 +288,7 @@
     const mediaOrigin = new URL(mediaBaseUrl).origin;
     const allowedMediaSources = buildCspSourceList(options.allowedMediaUrls, mediaBaseUrl);
     const defaultImgSources = [
+      mediaOrigin + "/store/",
       mediaOrigin + "/media/library/",
       mediaOrigin + "/static/strokes/",
       "data:",
@@ -484,19 +485,19 @@
       "    if (!raw) {",
       "      return '';",
       "    }",
-      "    if (/^\\/media\\/proxy\\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(raw)) {",
+      "    if (/^\\/(?:media\\/)?(?:store|proxy)\\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(raw)) {",
       "      return raw;",
       "    }",
       "    try {",
       "      var absoluteUrl = new URL(raw, document.baseURI || window.location.href);",
-      "      if (/^\\/media\\/proxy\\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(String(absoluteUrl.pathname || ''))) {",
+      "      if (/^\\/(?:media\\/)?(?:store|proxy)\\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(String(absoluteUrl.pathname || ''))) {",
       "        return String(absoluteUrl.pathname || '');",
       "      }",
       "    } catch (_error) {",
       "      // Ignore invalid URLs and fall through to the remaining resolvers.",
       "    }",
       "    if (/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(raw)) {",
-      "      return '/media/proxy/' + raw;",
+      "      return '/store/' + raw;",
       "    }",
       "    var escaped = window.CSS && typeof window.CSS.escape === 'function' ? window.CSS.escape(raw) : raw.replace(/([\"\\\\])/g, '\\\\$1');",
       "    var selector = 'audio[data-flama-media-field=\"' + escaped + '\"]';",
@@ -504,10 +505,10 @@
       "    if (audioEl instanceof HTMLAudioElement) {",
       "      var assetId = String(audioEl.getAttribute('data-flama-media-asset-id') || '').trim();",
       "      if (/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(assetId)) {",
-      "        return '/media/proxy/' + assetId;",
+      "        return '/store/' + assetId;",
       "      }",
       "      var src = String(audioEl.getAttribute('src') || '').trim();",
-      "      if (/^\\/media\\/proxy\\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(src)) {",
+      "      if (/^\\/(?:media\\/)?(?:store|proxy)\\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(src)) {",
       "        return src;",
       "      }",
       "    }",
@@ -524,7 +525,7 @@
       "      assetId = '';",
       "    }",
       "    if (/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(assetId)) {",
-      "      return '/media/proxy/' + assetId;",
+      "      return '/store/' + assetId;",
       "    }",
       "    var srcCandidates = [];",
       "    try {",
@@ -902,7 +903,12 @@
       if (!normalized) {
         return null;
       }
-      return allowedAudioUrls.has(normalized) ? normalized : null;
+      if (allowedAudioUrls.has(normalized)) {
+        return normalized;
+      }
+      const assetId = assetIdFromProxyRef(normalized);
+      const allowedById = assetId && Array.from(allowedAudioUrls).some((ref) => assetIdFromProxyRef(ref) === assetId);
+      return allowedById ? normalized : null;
     }
 
     const controllerToken = {};

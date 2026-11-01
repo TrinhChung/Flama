@@ -1,11 +1,11 @@
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/shared/ui'
-import { resolveBackendUrl } from '@/shared/config/env'
+import { resolveMediaUrl } from '@/shared/config/env'
 import { sampleMediaUrl } from '../lib/previewSamples'
 
 export function SampleMediaEditor({ id, label, type, value, onChange }: { id: string; label: string; type: string; value: string; onChange: (value: string) => void }) {
   const { t } = useTranslation('card_templates')
-  const source = resolveBackendUrl(sampleMediaUrl(value))
+  const source = resolveMediaUrl(sampleMediaUrl(value))
   return <div className="space-y-2">
     {source && <div className="rounded-xl border border-border bg-muted/20 p-3">{type === 'audio'
       ? <audio key={source} controls preload="none" src={source} aria-label={label} className="w-full" />

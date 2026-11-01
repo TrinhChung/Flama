@@ -17,6 +17,7 @@ import {
   User as UserIcon,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { resolveMediaUrl } from '@/shared/config/env'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -82,7 +83,7 @@ export function ProfileHeroCard({
                 <Avatar className="size-20 sm:size-24 border-2 border-primary/30 shadow-md ring-4 ring-primary/10">
                   {user.avatar_url ? (
                     <AvatarImage
-                      src={user.avatar_url}
+                      src={resolveMediaUrl(user.avatar_url)}
                       alt={displayName}
                       className="object-cover"
                     />
@@ -276,7 +277,7 @@ export function ProfileHeroCard({
           <AvatarUploadModal
             open={avatarOpen}
             onOpenChange={setAvatarOpen}
-            currentAvatarUrl={user.avatar_url}
+            currentAvatarUrl={resolveMediaUrl(user.avatar_url)}
           />
 
           <EmailVerificationDialog

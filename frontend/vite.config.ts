@@ -28,6 +28,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:4789',
         changeOrigin: false,
       },
+      '^/store': {
+        target: 'http://127.0.0.1:4789',
+        changeOrigin: false,
+      },
       '/static': {
         target: 'http://127.0.0.1:4789',
         changeOrigin: false,

@@ -381,7 +381,7 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
             )
             value = result["items"][0]["value"]
             self.assertEqual(value.splitlines()[0], "https://cdn.example.com/original.mp3")
-            self.assertTrue(value.splitlines()[1].startswith("/media/proxy/"))
+            self.assertTrue(value.splitlines()[1].startswith("/store/"))
 
             with self.assertRaises(browse_voicevox_service.BrowseVoiceVoxError) as ctx:
                 browse_voicevox_service.generate_voicevox(
@@ -430,10 +430,10 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
             self.assertEqual(len(dirty), 2)
             self.assertEqual({row.field_def_id for row in dirty}, {self.sound_field_id})
             self.assertTrue(all(item["value"] == item["url"] for item in result["items"]))
-            self.assertTrue(all(str(item["url"]).startswith("/media/proxy/") for item in result["items"]))
+            self.assertTrue(all(str(item["url"]).startswith("/store/") for item in result["items"]))
             for note_id in (self.first_note_id, self.second_note_id):
                 note = db.session.get(Note, note_id)
-                self.assertTrue(str(note.field_values["Sound"]).startswith("/media/proxy/"))
+                self.assertTrue(str(note.field_values["Sound"]).startswith("/store/"))
 
     def test_note_sync_tracks_create_and_update_with_fixed_creation_tags(self):
         with self.app.app_context():

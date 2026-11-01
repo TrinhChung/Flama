@@ -114,11 +114,11 @@ class StudyArtifactServiceTest(unittest.TestCase):
         self.assertIn('src="{{word_audio_url}}"', template_artifact["back_source"])
         self.assertEqual(
             content_artifact["render_context"]["word_audio_url"],
-            "/media/proxy/audio-1",
+            "/store/audio-1",
         )
         self.assertEqual(
             content_artifact["media"][0]["proxy_url"],
-            "/media/proxy/audio-1",
+            "/store/audio-1",
         )
 
 

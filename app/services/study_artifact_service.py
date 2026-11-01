@@ -18,6 +18,7 @@ from app.services.flashcard_renderer import (
     sanitize_css,
 )
 from models.deck_marketplace_item import DeckMarketplaceItem
+from app.services.media_field_codec import store_media_url
 
 
 RENDERER_ABI = "flama-client-mustache.v2"
@@ -265,7 +266,7 @@ def _media_payload(context: EffectiveStudyCard) -> list[dict[str, Any]]:
             "filename": str(asset.filename or ""),
             "mime_type": str(asset.mime_type or "application/octet-stream"),
             "sha256": str(asset.sha256 or ""),
-            "proxy_url": f"/media/proxy/{asset.id}",
+            "proxy_url": store_media_url(asset.id),
         }
         for asset in sorted(
             context.note.media_assets or [],

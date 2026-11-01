@@ -15,7 +15,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
-import { resolveBackendUrl } from '@/config/env'
+import { resolveBackendUrl, resolveMediaUrl } from '@/shared/config/env'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -341,7 +341,7 @@ export function AdminImageLibraryPage() {
               (asset.image_key || asset.name
                 ? `/store/${asset.image_key || asset.name}`
                 : `/store/${assetId}`)
-            const imageUrl = resolveBackendUrl(rawUrl)
+            const imageUrl = resolveMediaUrl(rawUrl)
             const isStroke =
               asset.image_key?.startsWith('stroke_') ||
               asset.name?.startsWith('stroke_') ||

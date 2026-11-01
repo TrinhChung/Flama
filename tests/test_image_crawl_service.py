@@ -202,7 +202,7 @@ class ImageCrawlServiceTests(unittest.TestCase):
                 max_bytes=2 * 1024 * 1024,
             )
             self.assertEqual(status, 201)
-            self.assertTrue(payload["url"].startswith("/media/proxy/"))
+            self.assertTrue(payload["url"].startswith("/store/"))
             self.assertEqual(payload["field_name"], "Illustration")
             self.assertEqual(payload["source_url"], "https://cdn.example.com/flower.png")
 
@@ -210,7 +210,7 @@ class ImageCrawlServiceTests(unittest.TestCase):
             note = Note.query.get(self.note1_id)
             self.assertEqual(
                 note.field_values.get("Illustration"),
-                f"/media/proxy/{payload['asset_id']}",
+                f"/store/{payload['asset_id']}",
             )
 
             # Verify file exists on disk
@@ -308,7 +308,7 @@ class ImageCrawlServiceTests(unittest.TestCase):
             self.assertEqual(result["crawled_count"], 1)
             rewritten = result["rewritten_markdown"]
             self.assertNotIn("https://cdn.example.com/diagram.png", rewritten)
-            self.assertIn("/media/proxy/", rewritten)
+            self.assertIn("/store/", rewritten)
 
     @patch("app.services.image_crawl_service.fetch_remote_html")
     def test_extract_images_from_page(self, mock_html):
@@ -361,7 +361,7 @@ class ImageCrawlServiceTests(unittest.TestCase):
         self.assertEqual(res.status_code, 201)
         data = res.get_json()
         self.assertIn("asset_id", data)
-        self.assertTrue(data["url"].startswith("/media/proxy/"))
+        self.assertTrue(data["url"].startswith("/store/"))
 
     @patch("app.services.image_crawl_service.fetch_remote_image")
     def test_api_crawl_markdown_images_endpoint(self, mock_fetch):
@@ -383,7 +383,7 @@ class ImageCrawlServiceTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertEqual(data["crawled_count"], 1)
-        self.assertIn("/media/proxy/", data["rewritten_markdown"])
+        self.assertIn("/store/", data["rewritten_markdown"])
 
     @patch("app.services.image_crawl_service.fetch_remote_html")
     def test_api_crawl_page_endpoint(self, mock_html):
@@ -430,10 +430,10 @@ class ImageCrawlServiceTests(unittest.TestCase):
             note = Note.query.get(note_id)
             # Illustration field should be converted to the canonical proxy URL.
             self.assertNotEqual(note.field_values.get("Illustration"), "https://images.example.com/dog.png")
-            self.assertTrue(note.field_values.get("Illustration", "").startswith("/media/proxy/"))
+            self.assertTrue(note.field_values.get("Illustration", "").startswith("/store/"))
             # NotesMD should be rewritten with /media/proxy/
             self.assertNotIn("https://images.example.com/dog.png", note.field_values.get("NotesMD"))
-            self.assertIn("/media/proxy/", note.field_values.get("NotesMD"))
+            self.assertIn("/store/", note.field_values.get("NotesMD"))
 
     @patch("app.services.image_crawl_service.fetch_remote_image")
     def test_mcp_crawl_note_media_tool(self, mock_fetch):
@@ -459,7 +459,7 @@ class ImageCrawlServiceTests(unittest.TestCase):
             self.assertFalse(res.get("isError", False))
             struct = res.get("structuredContent", {})
             self.assertTrue(struct.get("success"))
-            self.assertTrue(struct.get("url", "").startswith("/media/proxy/"))
+            self.assertTrue(struct.get("url", "").startswith("/store/"))
 
     @patch("app.services.image_crawl_service.fetch_remote_html")
     def test_mcp_extract_page_images_tool(self, mock_html):

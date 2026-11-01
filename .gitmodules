@@ -4,3 +4,7 @@
 [submodule "flama-media"]
 	path = flama-media
 	url = https://github.com/TrinhChung/flama-media.git
+[submodule "infra-vpn"]
+	path = infra-vpn
+	url = git@github.com:TrinhChung/infra-vpn.git
+	update = none

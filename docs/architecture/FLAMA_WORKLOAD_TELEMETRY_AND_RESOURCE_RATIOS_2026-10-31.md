@@ -60,7 +60,7 @@ Toàn bộ dữ liệu trong RFC này được trích xuất trực tiếp từ 
 
 ```mermaid
 flowchart TD
-    subgraph Hostinger_Production ["Hostinger Production VPS (Ubuntu 22.04 LTS - 187.77.131.151)"]
+    subgraph Hostinger_Production ["Hostinger Production VPS (Ubuntu 22.04 LTS - 192.0.2.151)"]
         direction TB
         subgraph MySQL_Layer ["MySQL 8.0 Daemon (13.63 Days Uptime)"]
             GLOBAL_STATUS["SHOW GLOBAL STATUS\n5.25M DML Statements"]
@@ -87,7 +87,7 @@ flowchart TD
 ```
 
 ### 2.1. Snapshot Telemetry MySQL Hostinger Production
-- **Host**: `187.77.131.151` (Host alias: `chung_hostinger_vps`), Ubuntu 22.04 LTS (`5.15.0-198-generic`).
+- **Host**: `192.0.2.151` (Host alias: `chung_hostinger_vps`), Ubuntu 22.04 LTS (`5.15.0-198-generic`).
 - **Thời điểm trích xuất**: 2026-10-31 07:00:05 UTC.
 - **Phương pháp thu thập**: Kết nối SSH an toàn qua khóa Ed25519, truy vấn socket nội bộ không cần mật khẩu (`mysql --protocol=socket` qua tài khoản root), thực hiện các lệnh chỉ đọc `SHOW GLOBAL STATUS` và `SHOW VARIABLES` không gây lock bảng hay suy giảm hiệu năng.
 - **Thời gian tích lũy (Uptime)**: $1,178,086\text{ giây} \approx \mathbf{13.63\text{ ngày}}$ hoạt động liên tục không gián đoạn.

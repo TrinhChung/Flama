@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.services import deck_working_tree_service, quota_service
-from app.services.media_field_codec import join_media_field_urls, split_media_field_value
+from app.services.media_field_codec import join_media_field_urls, split_media_field_value, store_media_url
 from app.validators import (
     RequestValidationError,
     resolve_safe_storage_path,
@@ -120,7 +120,7 @@ def upload_media(
     if existing:
         if not markdown_inline:
             values = dict(note.field_values or {})
-            target_val = f"/media/proxy/{existing.id}"
+            target_val = store_media_url(existing.id)
             if values.get(validated.field_name) != target_val:
                 values[validated.field_name] = target_val
                 note.field_values = values
@@ -171,7 +171,7 @@ def upload_media(
         db.session.flush()
         if not markdown_inline:
             values = dict(note.field_values or {})
-            values[validated.field_name] = f"/media/proxy/{asset.id}"
+            values[validated.field_name] = store_media_url(asset.id)
             note.field_values = values
             deck_working_tree_service.mark_note_field_batches_changed(
                 mutations=[
@@ -347,7 +347,7 @@ def upload_media_batch(
             if existing:
                 if not markdown_inline:
                     values = dict(note.field_values or {})
-                    target_value = f"/media/proxy/{existing.id}"
+                    target_value = store_media_url(existing.id)
                     if values.get(validated.field_name) != target_value:
                         values[validated.field_name] = target_value
                         note.field_values = values
@@ -413,7 +413,7 @@ def upload_media_batch(
 
             if not markdown_inline:
                 values = dict(note.field_values or {})
-                values[validated.field_name] = f"/media/proxy/{asset.id}"
+                values[validated.field_name] = store_media_url(asset.id)
                 note.field_values = values
                 dirty_field_names_by_note_id.setdefault(note.id, set()).add(
                     validated.field_name
@@ -500,7 +500,9 @@ def delete_media(
     current_items = split_media_field_value(values.get(asset.field_name)) if same_identity else []
     removable = {
         str(asset.id),
+        store_media_url(asset.id),
         f"/media/proxy/{asset.id}",
+        f"/media/store/{asset.id}",
         str(asset.filename or "").strip(),
         f"[sound:{str(asset.filename or '').strip()}]",
     }
@@ -546,7 +548,7 @@ def _media_payload(
 ) -> dict[str, Any]:
     payload = {
         "asset_id": asset.id,
-        "url": f"/media/proxy/{asset.id}",
+        "url": store_media_url(asset.id),
         "field_name": asset.field_name,
     }
     if include_filename:

@@ -11,7 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import type { GenerateStrokesResponse } from '@/entities/stroke'
-import { resolveBackendUrl } from '@/config/env'
+import { resolveBackendUrl, resolveMediaUrl } from '@/shared/config/env'
 
 export interface BrowseStrokeSinglePreviewProps {
   sourceField: string
@@ -93,7 +93,7 @@ export function BrowseStrokeSinglePreview({
                 className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-white dark:bg-zinc-950 border border-border/70 p-1 flex items-center justify-center overflow-hidden shadow-2xs hover:border-primary/50 transition-all shrink-0"
               >
                 <img
-                  src={resolveBackendUrl(item.url)}
+                  src={resolveMediaUrl(item.url)}
                   alt={item.char}
                   title={t('stroke_modal.stroke_order_title', { char: item.char })}
                   className="w-full h-full object-contain"

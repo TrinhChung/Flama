@@ -26,7 +26,7 @@ def resolve_media_audit_field(note, item):
     proven = set()
     # An asset created for the exact old field can disambiguate an otherwise
     # reused label. A cross-field reference is not evidence of target identity.
-    asset_ids = re.findall(r"/media/proxy/([A-Za-z0-9_-]{1,128})", str(item.new_value or ""))
+    asset_ids = re.findall(r"/(?:media/)?(?:store|proxy)/([A-Za-z0-9_-]{1,128})", str(item.new_value or ""))
     if asset_ids:
         proven = set(db.session.execute(select(MediaAsset.field_identity_key).where(
             MediaAsset.note_id == note.id, MediaAsset.id.in_(asset_ids))).scalars()) & candidates

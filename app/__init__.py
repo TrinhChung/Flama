@@ -264,7 +264,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     @app.errorhandler(404)
     def page_not_found(error):
         """Handle 404 errors."""
-        if request.path.startswith(("/api/", "/media/", "/static/", "/store/")):
+        if request.path in {"/store", "/media/proxy"} or request.path.startswith(("/api/", "/media/", "/static/", "/store/")):
             resp = jsonify({"error": "NOT_FOUND", "message": "Resource not found."})
             if request.path in {"/media/proxy", "/store", "/media/store"} or request.path.startswith(("/media/proxy/", "/store/", "/media/store/")):
                 resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"

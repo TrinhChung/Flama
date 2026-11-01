@@ -252,6 +252,8 @@ class FlashcardImportMediaValidationTests(unittest.TestCase):
             db.session.add(media_asset)
             db.session.commit()
             asset_id = media_asset.id
+            # The store holds library images by asset id, not by image key.
+            library_url = f"/store/{shared.id}"
 
         csv_data = (
             'Word,Audio,Image\n'
@@ -271,18 +273,36 @@ class FlashcardImportMediaValidationTests(unittest.TestCase):
 
             note1 = notes_by_word.get("猫")
             self.assertIsNotNone(note1)
-            self.assertEqual(note1.field_values["Audio"], f"/media/proxy/{asset_id}")
-            self.assertEqual(note1.field_values["Image"], "/store/cat_photo")
+            self.assertEqual(note1.field_values["Audio"], f"/store/{asset_id}")
+            self.assertEqual(note1.field_values["Image"], library_url)
 
             note2 = notes_by_word.get("子猫")
             self.assertIsNotNone(note2)
-            self.assertEqual(note2.field_values["Audio"], f"/media/proxy/{asset_id}")
-            self.assertEqual(note2.field_values["Image"], "/store/cat_photo")
+            self.assertEqual(note2.field_values["Audio"], f"/store/{asset_id}")
+            self.assertEqual(note2.field_values["Image"], library_url)
 
             note3 = notes_by_word.get("子猫2")
             self.assertIsNotNone(note3)
-            self.assertEqual(note3.field_values["Audio"], f"/media/proxy/{asset_id}")
-            self.assertEqual(note3.field_values["Image"], "/store/cat_photo")
+            self.assertEqual(note3.field_values["Audio"], f"/store/{asset_id}")
+            self.assertEqual(note3.field_values["Image"], library_url)
+
+    def test_library_store_url_is_accepted_without_belonging_to_the_note(self):
+        from app.services.media_field_codec import MediaFieldValueError, normalize_media_reference_for_write
+
+        with self.app.app_context():
+            enabled = SharedImageAsset(image_key="dog_photo", filename="dog_photo.png", is_enabled=True)
+            disabled = SharedImageAsset(image_key="old_photo", filename="old_photo.png", is_enabled=False)
+            db.session.add_all([enabled, disabled])
+            db.session.commit()
+            url = f"/store/{enabled.id}"
+            self.assertEqual(normalize_media_reference_for_write(url, field_type="image", reference_lookup={}), url)
+            with self.assertRaises(MediaFieldValueError) as wrong_kind:
+                normalize_media_reference_for_write(url, field_type="audio", reference_lookup={})
+            self.assertEqual(wrong_kind.exception.reason, "wrong_media_kind")
+            for foreign in (f"/store/{disabled.id}", "/store/955b645f-e9c7-4e74-a5c4-c3a55f0f1bd7"):
+                with self.assertRaises(MediaFieldValueError) as unknown:
+                    normalize_media_reference_for_write(foreign, field_type="image", reference_lookup={})
+                self.assertEqual(unknown.exception.reason, "unknown_media_asset")
 
     def test_raw_asset_uuid_rejected(self):
         csv_data = "Word,Audio\n猫,955b645f-e9c7-4e74-a5c4-c3a55f0f1bd7\n"

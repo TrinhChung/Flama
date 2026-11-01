@@ -164,7 +164,36 @@ def _lookup_target(
     asset_id = str(getattr(entry, "id", "") or "").strip()
     mime_type = str(getattr(entry, "mime_type", "") or "").strip().lower()
     family = "audio" if mime_type.startswith("audio/") else "image" if mime_type.startswith("image/") else None
-    return MediaReferenceTarget(f"/media/proxy/{asset_id}", family) if asset_id else None
+    return MediaReferenceTarget(store_media_url(asset_id), family) if asset_id else None
+
+
+def store_media_url(asset_id: Any) -> str:
+    """Canonical URL of an app media asset; the store serves it by asset id."""
+    return f"/store/{asset_id}"
+
+
+def shared_image_store_url(*, image_key: str | None, asset_id: Any) -> str:
+    """Store URL of a library image: nginx serves strokes by key, the store holds the rest by asset id."""
+    key = str(image_key or "")
+    return f"/store/{key}.svg" if key.startswith("stroke_") else f"/store/{asset_id}"
+
+
+def _is_enabled_shared_image_url(candidate: str) -> bool:
+    """Library images are shared, so their store URLs belong to no note's own assets."""
+    match = _PROXY_RE.fullmatch(candidate)
+    if match is None:
+        return False
+    asset_id = match.group(1).split(".", 1)[0]
+    try:
+        from flask import has_app_context
+        if not has_app_context():
+            return False
+        from models.shared_image_asset import SharedImageAsset
+        return SharedImageAsset.query.with_entities(SharedImageAsset.id).filter(
+            SharedImageAsset.id == asset_id, SharedImageAsset.is_enabled.is_(True),
+        ).first() is not None
+    except Exception:
+        return False
 
 
 def media_field_label_for_schema(asset: Any, field_defs: Any = None) -> str:
@@ -194,11 +223,11 @@ def build_media_reference_lookup(assets: Any) -> dict[str, MediaReferenceTarget]
             continue
         mime_type = str(getattr(asset, "mime_type", "") or "").strip().lower()
         family = "audio" if mime_type.startswith("audio/") else "image" if mime_type.startswith("image/") else None
-        url = f"/media/proxy/{asset_id}"
+        url = store_media_url(asset_id)
         target = MediaReferenceTarget(url, family)
         lookup[asset_id] = target
         lookup[url] = target
-        lookup[f"/store/{asset_id}"] = target
+        lookup[f"/media/proxy/{asset_id}"] = target
         lookup[f"/media/store/{asset_id}"] = target
         filename = str(getattr(asset, "filename", "") or "").strip()
         if filename:
@@ -275,8 +304,9 @@ def resolve_media_file_target(
                     SharedImageAsset.is_enabled.is_(True),
                 ).first()
                 if shared:
-                    ext = ".svg" if (shared.image_key or "").startswith("stroke_") else ""
-                    return MediaReferenceTarget(f"/store/{shared.image_key}{ext}", "image")
+                    return MediaReferenceTarget(
+                        shared_image_store_url(image_key=shared.image_key, asset_id=shared.id), "image",
+                    )
         except Exception:
             pass
 
@@ -290,7 +320,7 @@ def resolve_media_file_target(
                 asset = db.session.get(MediaAsset, cleaned)
                 if asset:
                     family = "audio" if (asset.mime_type or "").startswith("audio/") else "image"
-                    return MediaReferenceTarget(f"/media/proxy/{asset.id}", family)
+                    return MediaReferenceTarget(store_media_url(asset.id), family)
 
             from models.note import Note
             from sqlalchemy import func, or_
@@ -304,12 +334,12 @@ def resolve_media_file_target(
                 user_asset = query.join(Note, MediaAsset.note_id == Note.id).filter(Note.user_id == user_id).first()
                 if user_asset:
                     family = "audio" if (user_asset.mime_type or "").startswith("audio/") else "image"
-                    return MediaReferenceTarget(f"/media/proxy/{user_asset.id}", family)
+                    return MediaReferenceTarget(store_media_url(user_asset.id), family)
 
             asset = query.first()
             if asset:
                 family = "audio" if (asset.mime_type or "").startswith("audio/") else "image"
-                return MediaReferenceTarget(f"/media/proxy/{asset.id}", family)
+                return MediaReferenceTarget(store_media_url(asset.id), family)
     except Exception:
         pass
 
@@ -452,10 +482,12 @@ def normalize_media_reference_for_write(
             and reference_lookup is not None
             and target is None
         ):
-            raise MediaFieldValueError(
-                "The media asset does not belong to this note.",
-                reason="unknown_media_asset",
-            )
+            if not _is_enabled_shared_image_url(candidate):
+                raise MediaFieldValueError(
+                    "The media asset does not belong to this note.",
+                    reason="unknown_media_asset",
+                )
+            target = MediaReferenceTarget(candidate, "image")
         _assert_family(candidate, field_type=field_type, resolved_family=target.family if target else None)
         return candidate
 

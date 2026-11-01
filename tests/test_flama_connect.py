@@ -556,8 +556,8 @@ class FlamaConnectTests(unittest.TestCase):
             assets = {asset.field_name: asset for asset in MediaAsset.query.filter_by(note_id=created.id).all()}
             self.assertEqual(created.field_values["Word"], "media-note")
             self.assertEqual(created.field_values["Meaning"], "cat")
-            self.assertEqual(created.field_values["Image"], f"/media/proxy/{assets['Image'].id}")
-            self.assertEqual(created.field_values["Sound"], f"/media/proxy/{assets['Sound'].id}")
+            self.assertEqual(created.field_values["Image"], f"/store/{assets['Image'].id}")
+            self.assertEqual(created.field_values["Sound"], f"/store/{assets['Sound'].id}")
             self.assertEqual(MediaAsset.query.filter_by(note_id=created.id).count(), 2)
             self.assertEqual(ConnectImportMedia.query.count(), 2)
 
@@ -607,8 +607,8 @@ class FlamaConnectTests(unittest.TestCase):
             existing = Note.query.filter_by(user_id=self.user_id, deck_id=child.id).one()
             assets = {asset.field_name: asset for asset in MediaAsset.query.filter_by(note_id=existing.id).all()}
             self.assertEqual(existing.field_values["Meaning"], "updated meaning")
-            self.assertEqual(existing.field_values["Image"], f"/media/proxy/{assets['Image'].id}")
-            self.assertEqual(existing.field_values["Sound"], f"/media/proxy/{assets['Sound'].id}")
+            self.assertEqual(existing.field_values["Image"], f"/store/{assets['Image'].id}")
+            self.assertEqual(existing.field_values["Sound"], f"/store/{assets['Sound'].id}")
             self.assertEqual(MediaAsset.query.filter_by(note_id=existing.id).count(), 2)
 
     def test_shared_import_tracks_final_media_move_and_blocks_destructive_seams(self):
@@ -850,8 +850,8 @@ class FlamaConnectTests(unittest.TestCase):
             self.assertEqual(note.deck_id, after_deck_id)
             self.assertNotEqual(note.deck_id, before_deck_id)
             self.assertEqual(note.field_values["Meaning"], "updated meaning")
-            self.assertEqual(note.field_values["Image"], f"/media/proxy/{assets['Image'].id}")
-            self.assertEqual(note.field_values["Sound"], f"/media/proxy/{assets['Sound'].id}")
+            self.assertEqual(note.field_values["Image"], f"/store/{assets['Image'].id}")
+            self.assertEqual(note.field_values["Sound"], f"/store/{assets['Sound'].id}")
             self.assertEqual(int(item.working_revision or 0), 1)
             self.assertEqual(int(item.dirty_tracking_revision or 0), 1)
             dirty_rows = DeckWorkingDirtyEntity.query.filter_by(
@@ -1173,7 +1173,7 @@ class FlamaConnectTests(unittest.TestCase):
             image_asset = MediaAsset.query.filter_by(note_id=created.id, field_name="Image").one()
             self.assertEqual(created.field_values["Word"], "media-note")
             self.assertEqual(created.field_values["Meaning"], "cat")
-            self.assertEqual(created.field_values["Image"], f"/media/proxy/{image_asset.id}")
+            self.assertEqual(created.field_values["Image"], f"/store/{image_asset.id}")
             self.assertEqual(created.field_values["Sound"], "")
             self.assertEqual(created.field_values["Diagram"], "")
             self.assertEqual(MediaAsset.query.filter_by(note_id=created.id).count(), 1)
@@ -1745,7 +1745,7 @@ class FlamaConnectTests(unittest.TestCase):
             asset = MediaAsset.query.filter_by(note_id=created_note.id, field_name="Sound").one()
             self.assertEqual(asset.filename, filename)
             self.assertEqual(asset.mime_type, "audio/mpeg")
-            self.assertEqual(created_note.field_values["Sound"], f"/media/proxy/{asset.id}")
+            self.assertEqual(created_note.field_values["Sound"], f"/store/{asset.id}")
             self.assertNotEqual(created_note.field_values["Sound"], f"[sound:{filename}]")
             self.assertEqual(ConnectPendingMedia.query.count(), 0)
             self.assertTrue(Path(self.upload_tmp.name, asset.storage_path).is_file())
