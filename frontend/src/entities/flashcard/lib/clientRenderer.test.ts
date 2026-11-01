@@ -519,5 +519,37 @@ describe('renderCardSide', () => {
         expect.arrayContaining([expect.stringContaining('word_audio_url')]),
       )
     })
+
+    it('renders and allows media with /store/<id> and stroke opaque URLs', () => {
+      const testTemplate = template({
+        back_source: (
+          '<audio id="store-audio" src="{{word_audio}}"></audio>'
+          + '<img src="{{stroke_img}}" />'
+        ),
+      })
+      const testContent = content({
+        render_context: {
+          word_audio: '/store/0000ce2f-c578-4552-b3c9-eedeb4dad601',
+          stroke_img: '/store/stroke_zh_6c38',
+        },
+        field_values: {
+          word_audio: '/store/0000ce2f-c578-4552-b3c9-eedeb4dad601',
+          stroke_img: '/store/stroke_zh_6c38',
+        },
+        media: [{
+          id: '0000ce2f-c578-4552-b3c9-eedeb4dad601',
+          field_name: 'word_audio',
+          filename: 'word.mp3',
+          mime_type: 'audio/mpeg',
+          sha256: 'abc',
+          proxy_url: '/store/0000ce2f-c578-4552-b3c9-eedeb4dad601',
+        }],
+      })
+
+      const result = renderCardSide(testTemplate, testContent, 'back')
+      expect(result.html).toContain('src="/store/0000ce2f-c578-4552-b3c9-eedeb4dad601"')
+      expect(result.html).toContain('src="/store/stroke_zh_6c38"')
+      expect(result.allowed_audio_urls).toContain('/store/0000ce2f-c578-4552-b3c9-eedeb4dad601')
+    })
   })
 })

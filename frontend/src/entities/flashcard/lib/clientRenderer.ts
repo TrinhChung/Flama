@@ -97,7 +97,7 @@ export function renderMediaHtml(
       resolvedUrl = matchedAsset.proxy_url
       assetId = matchedAsset.id
     } else {
-      const proxyMatch = candidate.match(/^\/media\/proxy\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$/)
+      const proxyMatch = candidate.match(/^\/(?:media\/)?(?:store|proxy)\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$/)
       if (proxyMatch && proxyMatch[1]) {
         assetId = proxyMatch[1]
       }
@@ -116,6 +116,8 @@ export function renderMediaHtml(
       const isSvg = (
         candidate.toLowerCase().endsWith('.svg')
         || resolvedUrl.toLowerCase().endsWith('.svg')
+        || candidate.includes('/stroke_')
+        || resolvedUrl.includes('/stroke_')
         || candidate.includes('image/svg+xml')
         || resolvedUrl.includes('image/svg+xml')
       )
@@ -225,7 +227,7 @@ export function patchRenderContext(
   return next
 }
 
-const PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/
+const PROXY_MEDIA_RE = /^\/(?:media\/)?(?:store|proxy)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/
 const LIBRARY_MEDIA_RE = /^\/media\/library\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}(?:\.(?:svg|png|jpe?g|webp|gif|mp3|wav|ogg|webm))?$/i
 const STATIC_STROKE_RE = /^\/static\/strokes\/[a-zA-Z0-9_-]+\/[a-fA-F0-9]+\.svg$/
 
@@ -575,7 +577,7 @@ export function renderCardSide(
     for (const val of Object.values(content.field_values)) {
       const text = fieldValueEditorText(val)
       if (text) {
-        const matches = text.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
+        const matches = text.match(/\/(?:media\/)?(?:store|proxy)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}/g)
         if (matches) fieldValueProxyUrls.push(...matches)
       }
     }
@@ -601,7 +603,7 @@ export function renderCardSide(
       const lk = key.toLowerCase()
       return lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
     })
-    .flatMap(([, val]) => fieldValueEditorText(val).match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g) || [])
+    .flatMap(([, val]) => fieldValueEditorText(val).match(/\/(?:media\/)?(?:store|proxy)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}/g) || [])
   const allowedAudioUrls = [
     ...new Set([...audioFromMedia, ...audioFromFieldValues, ...trustedMedia.audio]),
   ]

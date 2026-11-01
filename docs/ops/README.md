@@ -9,6 +9,7 @@ Welcome to the Flama Operations documentation hub. This directory covers the pro
 | Document | Purpose & Scope |
 |---|---|
 | [**`ARCHITECTURE.md`**](./ARCHITECTURE.md) | **Authoritative Operations Architecture Guide**: Production deployment topology on Hostinger Ubuntu VPS (`deploy/bootstrap_hostinger.sh`), systemd daemon units (`flama.service`, `flama-connect.service`, `flama-study-worker.service`), maintenance timers, Nginx reverse proxy with `X-Accel-Redirect` protected media streaming and edge WAF rules, environment configuration groups (`/etc/flama/flama.env`), 69 Alembic migration versions, quiesced runner (`deploy/migrate_database.py`), database seeding, and Docker containerization. |
+| [**`mysql_master_slave_plan.md`**](./mysql_master_slave_plan.md) | **MySQL 8.0 Master-Slave Replication Runbook**: Production GTID-based replication plan and runbook between VPS Primary (Master) and Server 212 (Read-Only Replica / Disaster Recovery). Includes complete `my.cnf` specs, dedicated `REPLICATION SLAVE` user, non-blocking zero-downtime initial snapshot (`mysqldump`), health verification (`SHOW REPLICA STATUS\G`), and incident troubleshooting. |
 | [**`tech-debt/README.md`**](./tech-debt/README.md) | **Operations Technical Debt Catalog**: Detailed documentation of [OPS-DEBT-01] Parity in Development Docker Compose, [OPS-DEBT-02] Flama Connect Containerization, [OPS-DEBT-03] `.dockerignore` Context Optimization, [OPS-DEBT-04] Reseed Script Platform Consistency, and [OPS-DEBT-05] Hostinger SSH Key Management & Healthcheck Retries. |
 | [**`old/README.md`**](./old/README.md) | **Historical Archive**: Directory reserved for preserving retired rollout runbooks, legacy cutover plans, and historical infrastructure procedures. |
 
@@ -103,6 +104,7 @@ nihongo/
 │   ├── migrate_database.py           # Quiesced multi-step Alembic migration runner
 │   ├── prune_releases.py             # Release retention manager (keeps last 2 releases)
 │   └── sync_managed_env.py           # Remote /etc/flama/flama.env synchronization tool
+├── flama-media/                      # Hardened Go media processing & storage service (port 4792)
 ├── .github/workflows/
 │   ├── ci.yml                        # Matrix CI workflow with MySQL and Redis service containers
 │   ├── deploy.yml                    # Automated SSH deployment and rollback workflow

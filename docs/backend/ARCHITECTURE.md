@@ -1,7 +1,7 @@
 # Flama Backend Architecture Specification
 
 - **Domain**: Flask Modular Monolith & Companion Services
-- **Root Paths**: `app/`, `models/`, `connect_wsgi.py`, `flama-audio/`
+- **Root Paths**: `app/`, `models/`, `connect_wsgi.py`, `flama-audio/`, `flama-media/`
 - **Specification Status**: Active / Production Ground Truth
 - **Backend Stack**: Python 3.12, Flask, SQLAlchemy 2.0, Flask-Migrate (Alembic), Flask-Login, MySQL 8 / SQLite, Werkzeug
 
@@ -19,15 +19,15 @@ The Flama backend is a Python/Flask modular monolith designed to power a fully d
          +---------------------------------------+---------------------------------------+
          |                                       |                                       |
          v                                       v                                       v
-+-----------------------------+     +-----------------------------+     +-----------------------------+
-|   Flama Core Flask API      |     |     Flama Connect Bridge    |     |   Flama Audio Companion     |
-|   `wsgi.py` (Port 4789)     |     |   `connect_wsgi.py` (4790)  |     |   .NET 8 WPF (Port 4791)    |
-|   - Flask Application Fact. |     |   - Isolated WSGI Service   |     |   - Kestrel Local HTTP      |
-|   - REST API under `/api`   |     |   - Yomitan / AnkiConnect   |     |   - VoiceVox Engine         |
-|   - 102 SQLAlchemy Models   |     |   - Smart Scheme CORS       |     |   - Kokoro TTS Engine       |
-|   - Anki SM-2 / FSRS Sched. |     |   - Extension Auto-Approval |     |   - Pairing Handshake       |
-|   - Marketplace & payOS     |     |   - MCP AI Search Protocol  |     |   - Portable Binary         |
-+-----------------------------+     +-----------------------------+     +-----------------------------+
++-----------------------------+     +-----------------------------+     +-----------------------------+     +-----------------------------+
+|   Flama Core Flask API      |     |     Flama Connect Bridge    |     |   Flama Audio Companion     |     |   Flama Media Hardened Svc  |
+|   `wsgi.py` (Port 4789)     |     |   `connect_wsgi.py` (4790)  |     |   .NET 8 WPF (Port 4791)    |     |   Go Service (Port 4792)    |
+|   - Flask Application Fact. |     |   - Isolated WSGI Service   |     |   - Kestrel Local HTTP      |     |   - Hardened Media Server   |
+|   - REST API under `/api`   |     |   - Yomitan / AnkiConnect   |     |   - VoiceVox Engine         |     |   - HMAC Presigned Tickets  |
+|   - 102 SQLAlchemy Models   |     |   - Smart Scheme CORS       |     |   - Kokoro TTS Engine       |     |   - Pure-Go Image Re-encode |
+|   - Anki SM-2 / FSRS Sched. |     |   - Extension Auto-Approval |     |   - Pairing Handshake       |     |   - Worker Node 212 Storage |
+|   - Marketplace & payOS     |     |   - MCP AI Search Protocol  |     |   - Portable Binary         |     |   - Incident Callback Loop  |
++-----------------------------+     +-----------------------------+     +-----------------------------+     +-----------------------------+
                |                                   |                                   |
                +-----------------+-----------------+                                   |
                                  |                                                     |
@@ -43,6 +43,7 @@ The Flama backend is a Python/Flask modular monolith designed to power a fully d
 2. **Flama Connect (`connect_wsgi.py`, Port 4790)**: High-throughput Yomitan / AnkiConnect protocol bridge and Model Context Protocol (MCP) server running in process isolation.
 3. **Flama Audio (`flama-audio/`, Port 4791)**: Desktop companion (.NET 8 WPF + Kestrel) providing zero-cost, offline neural Japanese text-to-speech.
 4. **Study Worker (`study_worker.py`)**: Standalone background worker process consuming asynchronous study session commits without HTTP request overhead.
+5. **Flama Media Service (`flama-media/`, Port 4792)**: High-throughput Go microservice running on private Worker Node 212, handling hardened, zero-trust media processing, storage, and streaming (HMAC presigned tickets, pure-Go pixel re-encoding, decompression bomb protection, and security incident webhook callbacks).
 
 ---
 
@@ -285,3 +286,12 @@ Study intervals are computed based on day ordinals rather than timestamps to pre
 - **Role**: Windows desktop application (.NET 8 WPF + Kestrel HTTP API) providing offline Japanese text-to-speech synthesis without external cloud API keys.
 - **Engines**: Local VOICEVOX Engine (`http://127.0.0.1:50021`) and Kokoro TTS.
 - **Distribution**: Single-file portable self-contained executable (`FlamaAudio-Portable.exe`). Authenticode signed via GitHub Actions release workflow.
+
+### 7.3 Flama Media Hardened Service (`flama-media/`, Port 4792)
+- **Role**: High-performance Go microservice handling flashcard audio and image storage, sanitization, and streaming.
+- **Zero-Trust Network Perimeter**: Deployed on private Worker Node 212 and strictly unexposed to WAN. All ingress flows through the OV Gateway (Nginx reverse proxy) validated by an internal `X-Flama-Gateway-Secret` header.
+- **HMAC Presigned Tickets**: Uploads (`/media/upload`, `/media/upload-zip`) require valid, time-bounded HMAC-SHA256 signatures generated by Flama Backend, eliminating direct database exposure.
+- **Pure-Go Image Sanitization & Re-encoding**: Neutralizes polyglot files, malicious EXIF payloads, and steganography by fully decoding raw pixel buffers in RAM and redrawing clean images via Go standard libraries before persisting to disk.
+- **Decompression Bomb Protection**: Enforces dimension limits (<= 4096px) and total pixel caps (<= 16M pixels) prior to decompression memory allocation; caps batch ZIP decompression ratios.
+- **Path Traversal Defense**: Normalizes filenames to random UUIDv4 identifiers across sharded subdirectories (`ab/cd/<uuid>.<ext>`).
+- **Active Security Incident Callback Loop**: Automatically triggers webhooks back to Flama Core at `/api/v1/internal/security/incident` upon detecting forged tickets or hostile payloads to log audit trails and auto-lock malicious accounts.

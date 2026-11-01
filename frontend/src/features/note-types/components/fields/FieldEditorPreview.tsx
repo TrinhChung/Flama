@@ -15,9 +15,9 @@ const EXAMPLES: Record<string, string> = {
   text: '日本語',
   richtext: '<p><strong>日本語</strong> — Japanese language</p>',
   markdown: '## 日本語\n\n**Japanese language**\n\n- にほんご\n- A language spoken in Japan',
-  image: '/media/proxy/sample-image',
-  audio: '/media/proxy/sample-audio',
-  diagram: '/media/proxy/sample-diagram',
+  image: '/store/sample-image.png',
+  audio: '/store/sample-audio.mp3',
+  diagram: '/store/sample-diagram.svg',
   array: 'ăn\ndùng bữa',
 }
 type FieldPreviewResult = { front_html: string; front_renderer_payload?: unknown }
@@ -76,7 +76,7 @@ export function FieldEditorPreview({ fieldType, value, onChange, localFile, onFi
     </div>}
     {fieldType === 'text' ? <Input id="field-editor-sample" value={value} onChange={(event) => setSample(event.target.value)} placeholder={t('setup.sample_placeholder')} /> :
       <Textarea ref={sourceInput} id="field-editor-sample" value={value} onChange={(event) => setSample(event.target.value)}
-        placeholder={isMedia ? '/media/proxy/…' : t('setup.sample_placeholder')} className="min-h-24 resize-y font-mono text-sm" />}
+        placeholder={isMedia ? '/store/…' : t('setup.sample_placeholder')} className="min-h-24 resize-y font-mono text-sm" />}
   </div>
 
   return (

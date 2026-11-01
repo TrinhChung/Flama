@@ -79,18 +79,20 @@ export function applyCardContentPatch(
     const existingProxyUrls = new Set(combinedMedia.map((m) => m.proxy_url))
     for (const [fieldName, val] of Object.entries(newFieldValues)) {
       if (typeof val === 'string') {
-        const matches = val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
+        const matches = val.match(/\/(?:media\/)?(?:store|proxy)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}/g)
         if (matches) {
           for (const pUrl of matches) {
             if (!existingProxyUrls.has(pUrl)) {
-              const assetId = pUrl.replace('/media/proxy/', '')
+              const assetId = pUrl.replace(/^\/(?:media\/)?(?:store|proxy)\//, '')
               const lk = fieldName.toLowerCase()
-              const isAudio = lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
+              const ext = assetId.split('.').pop()?.toLowerCase() || ''
+              const isAudio = ext === 'mp3' || ext === 'wav' || ext === 'ogg' || ext === 'm4a' || lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
+              const mimeType = isAudio ? (ext === 'wav' ? 'audio/wav' : 'audio/mpeg') : (ext === 'svg' ? 'image/svg+xml' : ext === 'png' ? 'image/png' : 'image/jpeg')
               combinedMedia.push({
                 id: assetId,
                 field_name: fieldName,
                 filename: `${assetId}`,
-                mime_type: isAudio ? 'audio/mpeg' : 'image/jpeg',
+                mime_type: mimeType,
                 sha256: '',
                 proxy_url: pUrl,
               })

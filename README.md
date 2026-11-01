@@ -15,6 +15,7 @@ React 19 SPA + Flask REST modular monolith for Japanese spaced repetition (SRS) 
 - **Companion Services**:
   - Flama Connect service (Yomitan/AnkiConnect protocol bridge): `connect_wsgi.py` (port `4790`)
   - Flama Audio Local TTS setup: [`flama-audio/README.md`](flama-audio/README.md) (port `4791`)
+  - Flama Media Hardened Service (Go): [`flama-media/README.md`](flama-media/README.md) (port `4792`)
 - **Key Domain Guides & Runbooks**:
   - Flashcard V2 operational runbook: [`docs/runbooks/FLASHCARD_V2_RUNBOOK.md`](docs/runbooks/FLASHCARD_V2_RUNBOOK.md)
   - Database seeding guide: [`docs/guides/SEEDING_GUIDE.md`](docs/guides/SEEDING_GUIDE.md)
@@ -33,6 +34,7 @@ React 19 SPA + Flask REST modular monolith for Japanese spaced repetition (SRS) 
 - Deck Change Requests: collaborative contribution workflow with diff preview and conflict resolution.
 - Flama Connect: Yomitan and AnkiConnect-compatible protocol bridge (`connect_wsgi.py` on port `4790`) with automatic extension CORS authorization.
 - Flama Audio: Local desktop TTS companion app (.NET 8 WPF on port `4791`) supporting VoiceVox and Kokoro neural engines.
+- Flama Media: Hardened Go microservice (port `4792`) for zero-trust flashcard media upload/streaming, pure-Go image re-encoding, HMAC presigned tickets, and anti-decompression bomb protection.
 - payOS-first payment domain centered on orders, payment attempts, webhook processing, and entitlements.
 - Admin management for user accounts, role-based access control, fee schedules, and operational monitoring.
 
@@ -61,6 +63,7 @@ app/
 models/                 # SQLAlchemy 2.0 declarative model definitions (102 models)
 frontend/               # React 19 SPA (Vite, TailwindCSS v4, FSD structure)
 flama-audio/            # Flama Audio .NET 8 WPF desktop companion
+flama-media/            # Flama Media Go service (hardened zero-trust media processing/serving, port 4792)
 deploy/                 # Hostinger VPS deployment scripts, systemd units, Nginx configs
 docs/                   # Technical documentation structured into 4 domain hubs
 static/                 # Seed data, uploads and card-renderer host

@@ -46,7 +46,7 @@ export function resolveDisplayUrl(
   }
   if (/^https:\/\/[^\s"'<>]+$/i.test(value)) return value
   if (/^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\/[^\s"'<>]*$/i.test(value)) return value
-  if (/^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) return resolveBackendUrl(value)
+  if (/^\/(?:media\/)?(?:store|proxy)\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)) return resolveBackendUrl(value)
   if (/^\/media\/staged\/[A-Za-z0-9_-]{8,64}$/.test(value)) return resolveBackendUrl(value)
   if (/^\/media\/asset\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) return resolveBackendUrl(value)
   if (/^\/media\/library\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)) return resolveBackendUrl(value)
@@ -69,6 +69,7 @@ const AUDIO_EXTENSIONS = new Set(['aac', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'op
 function mediaFamilyFromUrl(raw: string): 'image' | 'audio' | null {
   try {
     const path = new URL(raw, window.location.origin).pathname
+    if (path.includes('/stroke_')) return 'image'
     const extension = path.split('/').pop()?.split('.').pop()?.toLowerCase() || ''
     if (IMAGE_EXTENSIONS.has(extension)) return 'image'
     if (AUDIO_EXTENSIONS.has(extension)) return 'audio'
@@ -249,7 +250,7 @@ export function MediaFieldPreview({
 
       // 2. Check for plain text URL in clipboard
       const text = e.clipboardData?.getData('text')?.trim()
-      if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('/media/'))) {
+      if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('/media/') || text.startsWith('/store/'))) {
         e.preventDefault()
         e.stopPropagation()
         const trimmedVal = value.trim()

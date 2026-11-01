@@ -90,18 +90,18 @@ class TestStrokeService(unittest.TestCase):
         self.assertEqual(res["characters"], ["勉", "強"])
         self.assertEqual(len(res["items"]), 2)
         self.assertIn('class="flama-stroke-diagram"', res["output"])
-        self.assertIn('/media/library/stroke_ja_52c9', res["output"])
-        self.assertIn('/media/library/stroke_ja_5f37', res["output"])
+        self.assertIn('/store/stroke_ja_52c9', res["output"])
+        self.assertIn('/store/stroke_ja_5f37', res["output"])
 
     def test_resolve_stroke_items_urls(self):
         res = resolve_stroke_items("勉強", locale="ja", output_format="urls")
         self.assertEqual(res["characters"], ["勉", "強"])
-        self.assertIn('/media/library/stroke_ja_52c9', res["output"])
+        self.assertIn('/store/stroke_ja_52c9', res["output"])
 
     def test_resolve_stroke_items_raw(self):
         res = resolve_stroke_items("勉強", locale="ja", output_format="raw")
         self.assertEqual(res["characters"], ["勉", "強"])
-        self.assertEqual(res["output"], "/media/library/stroke_ja_52c9.svg\n/media/library/stroke_ja_5f37.svg")
+        self.assertEqual(res["output"], "/store/stroke_ja_52c9.svg\n/store/stroke_ja_5f37.svg")
 
     def test_batch_generate_strokes_deck(self):
         res = batch_generate_strokes(
@@ -119,7 +119,7 @@ class TestStrokeService(unittest.TestCase):
 
         # Verify note1 has StrokeDiagram
         db.session.refresh(self.note1)
-        self.assertIn("/media/library/stroke_ja_52c9", self.note1.field_values.get("StrokeDiagram", ""))
+        self.assertIn("/store/stroke_ja_52c9", self.note1.field_values.get("StrokeDiagram", ""))
 
         # Verify note2 was not overwritten
         db.session.refresh(self.note2)
@@ -138,7 +138,7 @@ class TestStrokeService(unittest.TestCase):
         self.assertEqual(res["updated"], 2)  # note1 and note2 updated
 
         db.session.refresh(self.note2)
-        self.assertIn("/media/library/stroke_ja_5b66", self.note2.field_values.get("StrokeDiagram", ""))
+        self.assertIn("/store/stroke_ja_5b66", self.note2.field_values.get("StrokeDiagram", ""))
 
 
 if __name__ == "__main__":

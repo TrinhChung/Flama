@@ -335,6 +335,26 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertEqual(payload["allowed_audio_asset_ids"], ["audio-2"])
         self.assertIn("/media/proxy/audio-2", payload["allowed_media_urls"])
 
+    def test_store_opaque_media_url_allowed_and_extracted(self):
+        fields = [self._field("Audio", "audio"), self._field("Stroke", "image")]
+        rendered = render_template_pair(
+            template=self._template(
+                "<audio id=\"voice\" controls src=\"/store/0000ce2f-c578-4552-b3c9-eedeb4dad601\"></audio>"
+                "<img src=\"/store/stroke_zh_6c38\" />"
+            ),
+            field_defs=fields,
+            field_values={"Audio": "/store/0000ce2f-c578-4552-b3c9-eedeb4dad601", "Stroke": "/store/stroke_zh_6c38"},
+            media_assets=[
+                type("Asset", (), {"id": "0000ce2f-c578-4552-b3c9-eedeb4dad601", "filename": "voice.mp3"})(),
+            ],
+            allow_inline_script=True,
+            defer_inline_script=True,
+        )
+        payload = rendered["front_renderer_payload"]
+        self.assertIn("/store/0000ce2f-c578-4552-b3c9-eedeb4dad601", payload["allowed_audio_urls"])
+        self.assertEqual(payload["allowed_audio_asset_ids"], ["0000ce2f-c578-4552-b3c9-eedeb4dad601"])
+        self.assertIn("/store/stroke_zh_6c38", payload["allowed_media_urls"])
+
     def test_onclick_style_display_assignment_is_preserved(self):
         fields = [self._field("Word", "text")]
         rendered = render_template_pair(
@@ -845,7 +865,7 @@ class FlashcardSecurityTests(unittest.TestCase):
         # Stroke reference
         self.assertEqual(
             normalize_single_media_reference("stroke_kanji_4e00", field_type="diagram"),
-            "/media/library/stroke_kanji_4e00.svg",
+            "/store/stroke_kanji_4e00.svg",
         )
         # Multi-value
         self.assertEqual(

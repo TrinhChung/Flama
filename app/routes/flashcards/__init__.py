@@ -74,8 +74,8 @@ ALLOWED_MEDIA_MIME_TYPES = set(VALIDATOR_ALLOWED_MEDIA_MIME_TYPES)
 CSP_CARD_POLICY = (
     "default-src 'none'; "
     "style-src 'unsafe-inline'; "
-    "img-src /media/proxy/ /media/library/ /static/strokes/; "
-    "media-src /media/proxy/ /media/library/; "
+    "img-src /store/ /media/store/ /media/proxy/ /media/library/ /static/strokes/ https://media.flama.vn; "
+    "media-src /store/ /media/store/ /media/proxy/ /media/library/ https://media.flama.vn; "
     "frame-ancestors 'self'"
 )
 
@@ -436,7 +436,10 @@ def _top_items_by_category_decks(items: list[DeckMarketplaceItem], *, limit_per_
 def _set_card_security_headers(response):
     if request.path.endswith("/preview"):
         response.headers["Content-Security-Policy"] = CSP_CARD_POLICY
-    if (request.path == "/media/proxy" or request.path.startswith("/media/proxy/")) and response.status_code >= 400:
+    if (
+        request.path in {"/media/proxy", "/store", "/media/store"}
+        or request.path.startswith(("/media/proxy/", "/store/", "/media/store/"))
+    ) and response.status_code >= 400:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers.pop("Vary", None)
