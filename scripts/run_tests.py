@@ -345,6 +345,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/image_*.py",
             "app/services/remote_image_fetcher.py",
             "app/services/stroke*.py",
+            "app/services/strokes/**",
             "app/repositories/flashcard*.py",
             "app/repositories/image_library_repository.py",
             "app/routes/flashcards/**",
@@ -353,6 +354,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/media_field_codec.py",
             "app/services/media_staging_service.py",
             "app/services/flama_media_client.py",
+            "app/services/worker_media_service.py",
             "scripts/migrate_media_to_worker212.py",
             "app/services/note_management_service.py",
             "app/services/note_type_service.py",
@@ -390,6 +392,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_deploy_environment_consistency.py",
             "tests/test_media_staging_service.py",
             "tests/test_flama_media_client.py",
+            "tests/test_worker_media_mysql.py",
+            "tests/test_stroke_worker_client.py",
             "tests/test_batch_flashcard_import.py",
             "tests/test_anki_import_api.py",
             "tests/test_image_crawl_service.py",
@@ -1207,6 +1211,12 @@ REDIS_CONTRACT_SOURCE_PATTERNS = (
 )
 
 MYSQL_CONTRACT_SOURCE_PATTERNS = (
+    # Stage ownership, quotas and note writes must be exercised on real MySQL.
+    "app/services/worker_media_service.py",
+    "app/services/media_staging_service.py",
+    "app/services/flama_media_client.py",
+    "app/api/v1/flashcards/media.py",
+    "tests/test_worker_media_mysql.py",
     "scripts/run_mysql_probes.py",
     # Every schema-owning probe resets its schema through this helper.
     "scripts/mysql_probe_db.py",
