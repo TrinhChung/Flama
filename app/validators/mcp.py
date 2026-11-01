@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from models.field_types import FIELD_TYPES, stored_field_value
@@ -1613,5 +1614,217 @@ def validate_list_deck_releases_arguments(arguments: Any) -> dict[str, Any]:
 def validate_list_installed_decks_arguments(arguments: Any) -> dict[str, Any]:
     """Validate arguments for list_installed_decks tool."""
     return validate_empty_arguments(arguments, tool_name="list_installed_decks")
+
+
+def _validate_taxonomy_identifier(raw: Any, field_name: str) -> str:
+    """Validate and normalize a taxonomy slug/id."""
+    val = str(raw or "").strip().lower()
+    if not val:
+        raise RequestValidationError(f"{field_name} là bắt buộc.", field=field_name, status=400, code="INVALID_PARAMS")
+    if len(val) > 64:
+        raise RequestValidationError(f"{field_name} không được vượt quá 64 ký tự.", field=field_name, status=400, code="INVALID_PARAMS")
+    if not re.match(r"^[a-z0-9_-]+$", val):
+        raise RequestValidationError(
+            f"{field_name} chỉ được chứa chữ cái, số, gạch dưới và gạch ngang.",
+            field=field_name,
+            status=400,
+            code="INVALID_PARAMS",
+        )
+    return val
+
+
+def validate_create_taxonomy_domain_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for create_taxonomy_domain tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    domain_id = _validate_taxonomy_identifier(arguments.get("id"), "id")
+    raw_label = str(arguments.get("label") or "").strip()
+    if not raw_label:
+        raise RequestValidationError("label là bắt buộc.", field="label", status=400, code="INVALID_PARAMS")
+    if len(raw_label) > 128:
+        raise RequestValidationError("label không được vượt quá 128 ký tự.", field="label", status=400, code="INVALID_PARAMS")
+    sort_order = _validate_positive_int(arguments.get("sort_order", 0), "sort_order", default=0, max_val=10000)
+    is_active = bool(arguments.get("is_active", True))
+    return {
+        "id": domain_id,
+        "label": raw_label,
+        "sort_order": sort_order,
+        "is_active": is_active,
+    }
+
+
+def validate_create_taxonomy_subject_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for create_taxonomy_subject tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    subject_id = _validate_taxonomy_identifier(arguments.get("id"), "id")
+    domain_id = _validate_taxonomy_identifier(arguments.get("domain_id"), "domain_id")
+    raw_label = str(arguments.get("label") or "").strip()
+    if not raw_label:
+        raise RequestValidationError("label là bắt buộc.", field="label", status=400, code="INVALID_PARAMS")
+    if len(raw_label) > 128:
+        raise RequestValidationError("label không được vượt quá 128 ký tự.", field="label", status=400, code="INVALID_PARAMS")
+    sort_order = _validate_positive_int(arguments.get("sort_order", 0), "sort_order", default=0, max_val=10000)
+    is_active = bool(arguments.get("is_active", True))
+    return {
+        "id": subject_id,
+        "domain_id": domain_id,
+        "label": raw_label,
+        "sort_order": sort_order,
+        "is_active": is_active,
+    }
+
+
+def validate_create_taxonomy_framework_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for create_taxonomy_framework tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    framework_id = _validate_taxonomy_identifier(arguments.get("id"), "id")
+    subject_id = _validate_taxonomy_identifier(arguments.get("subject_id"), "subject_id")
+    raw_label = str(arguments.get("label") or "").strip()
+    if not raw_label:
+        raise RequestValidationError("label là bắt buộc.", field="label", status=400, code="INVALID_PARAMS")
+    if len(raw_label) > 128:
+        raise RequestValidationError("label không được vượt quá 128 ký tự.", field="label", status=400, code="INVALID_PARAMS")
+    sort_order = _validate_positive_int(arguments.get("sort_order", 0), "sort_order", default=0, max_val=10000)
+    is_active = bool(arguments.get("is_active", True))
+    return {
+        "id": framework_id,
+        "subject_id": subject_id,
+        "label": raw_label,
+        "sort_order": sort_order,
+        "is_active": is_active,
+    }
+
+
+def validate_create_taxonomy_framework_level_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for create_taxonomy_framework_level tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    level_id = _validate_taxonomy_identifier(arguments.get("id"), "id")
+    framework_id = _validate_taxonomy_identifier(arguments.get("framework_id"), "framework_id")
+    subject_id = _validate_taxonomy_identifier(arguments.get("subject_id"), "subject_id")
+    raw_label = str(arguments.get("label") or "").strip()
+    if not raw_label:
+        raise RequestValidationError("label là bắt buộc.", field="label", status=400, code="INVALID_PARAMS")
+    if len(raw_label) > 128:
+        raise RequestValidationError("label không được vượt quá 128 ký tự.", field="label", status=400, code="INVALID_PARAMS")
+
+    raw_band = str(arguments.get("difficulty_band") or "beginner").strip().lower()
+    allowed_bands = {"beginner", "intermediate", "advanced"}
+    if raw_band not in allowed_bands:
+        raise RequestValidationError(
+            f"difficulty_band phải là một trong {sorted(allowed_bands)}.",
+            field="difficulty_band",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+
+    raw_tags = arguments.get("suggested_tags")
+    suggested_tags = None
+    if raw_tags is not None:
+        if not isinstance(raw_tags, list):
+            raise RequestValidationError("suggested_tags phải là danh sách chuỗi.", field="suggested_tags", status=400, code="INVALID_PARAMS")
+        suggested_tags = [str(t).strip() for t in raw_tags if str(t).strip()][:30]
+
+    sort_order = _validate_positive_int(arguments.get("sort_order", 0), "sort_order", default=0, max_val=10000)
+    is_active = bool(arguments.get("is_active", True))
+    return {
+        "id": level_id,
+        "framework_id": framework_id,
+        "subject_id": subject_id,
+        "label": raw_label,
+        "difficulty_band": raw_band,
+        "suggested_tags": suggested_tags,
+        "sort_order": sort_order,
+        "is_active": is_active,
+    }
+
+
+def validate_create_taxonomy_option_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for create_taxonomy_option tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    option_id = _validate_taxonomy_identifier(arguments.get("id"), "id")
+    raw_type = str(arguments.get("option_type") or "").strip().lower()
+    if raw_type in ("topic", "primary_topic"):
+        norm_type = "primary_topic"
+    elif raw_type in ("goal", "learning_goal"):
+        norm_type = "learning_goal"
+    else:
+        norm_type = raw_type
+
+    allowed_types = {"primary_topic", "learning_goal", "format_feature", "audience", "best_used_for", "difficulty_band"}
+    if norm_type not in allowed_types:
+        raise RequestValidationError(
+            f"option_type phải là một trong {sorted(allowed_types)}.",
+            field="option_type",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+
+    raw_label = str(arguments.get("label") or "").strip()
+    if not raw_label:
+        raise RequestValidationError("label là bắt buộc.", field="label", status=400, code="INVALID_PARAMS")
+    if len(raw_label) > 128:
+        raise RequestValidationError("label không được vượt quá 128 ký tự.", field="label", status=400, code="INVALID_PARAMS")
+
+    raw_sub_label = arguments.get("sub_label")
+    sub_label = str(raw_sub_label).strip() if raw_sub_label is not None else None
+    if sub_label and len(sub_label) > 255:
+        raise RequestValidationError("sub_label không được vượt quá 255 ký tự.", field="sub_label", status=400, code="INVALID_PARAMS")
+
+    sort_order = _validate_positive_int(arguments.get("sort_order", 0), "sort_order", default=0, max_val=10000)
+    is_active = bool(arguments.get("is_active", True))
+    return {
+        "id": option_id,
+        "option_type": norm_type,
+        "label": raw_label,
+        "sub_label": sub_label,
+        "sort_order": sort_order,
+        "is_active": is_active,
+    }
+
+
+def validate_ensure_taxonomy_category_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for ensure_taxonomy_category tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    domain_id = _validate_taxonomy_identifier(arguments.get("domain_id"), "domain_id")
+    domain_label = str(arguments.get("domain_label")).strip() if arguments.get("domain_label") else None
+    subject_id = _validate_taxonomy_identifier(arguments.get("subject_id"), "subject_id")
+    subject_label = str(arguments.get("subject_label")).strip() if arguments.get("subject_label") else None
+
+    framework_id = None
+    if arguments.get("framework_id"):
+        framework_id = _validate_taxonomy_identifier(arguments.get("framework_id"), "framework_id")
+    framework_label = str(arguments.get("framework_label")).strip() if arguments.get("framework_label") else None
+
+    level_id = None
+    if arguments.get("level_id"):
+        level_id = _validate_taxonomy_identifier(arguments.get("level_id"), "level_id")
+    level_label = str(arguments.get("level_label")).strip() if arguments.get("level_label") else None
+
+    raw_band = str(arguments.get("difficulty_band") or "beginner").strip().lower()
+    allowed_bands = {"beginner", "intermediate", "advanced"}
+    if raw_band not in allowed_bands:
+        raise RequestValidationError(
+            f"difficulty_band phải là một trong {sorted(allowed_bands)}.",
+            field="difficulty_band",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+
+    return {
+        "domain_id": domain_id,
+        "domain_label": domain_label,
+        "subject_id": subject_id,
+        "subject_label": subject_label,
+        "framework_id": framework_id,
+        "framework_label": framework_label,
+        "level_id": level_id,
+        "level_label": level_label,
+        "difficulty_band": raw_band,
+    }
 
 

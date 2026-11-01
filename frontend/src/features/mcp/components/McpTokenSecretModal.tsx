@@ -34,19 +34,19 @@ export function McpTokenSecretModal({
 
   return (
     <Dialog open={showModal} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="w-[95vw] sm:max-w-xl max-h-[90vh] flex flex-col overflow-hidden p-0 rounded-2xl border-border/60 shadow-2xl">
+        <DialogHeader className="px-5 py-4 border-b bg-muted/20 text-left shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <KeyRound className="size-5 text-primary" />
-            {t('secret_modal.title')}
+            <span>{t('secret_modal.title')}</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs text-muted-foreground mt-0.5">
             {t('secret_modal.desc')}
           </DialogDescription>
         </DialogHeader>
 
         {issuedToken && (
-          <div className="space-y-4 py-2">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-w-0 text-xs">
             <input
               type="text"
               readOnly
@@ -81,7 +81,7 @@ export function McpTokenSecretModal({
                   <span>{copiedToken ? t('secret_modal.copied') : t('secret_modal.copy')}</span>
                 </Button>
               </div>
-              <pre className="p-3 overflow-x-auto font-mono text-xs text-foreground">
+              <pre className="p-3 overflow-x-auto font-mono text-xs text-foreground break-all select-all whitespace-pre-wrap">
                 <code>{issuedToken.token}</code>
               </pre>
             </div>
@@ -100,7 +100,7 @@ export function McpTokenSecretModal({
                   <span>{copiedUrl ? t('secret_modal.copied') : t('secret_modal.copy_url')}</span>
                 </Button>
               </div>
-              <pre className="p-3 overflow-x-auto font-mono text-xs text-foreground">
+              <pre className="p-3 overflow-x-auto font-mono text-xs text-foreground break-all select-all whitespace-pre-wrap">
                 <code>{serverUrl}</code>
               </pre>
             </div>
@@ -114,7 +114,7 @@ export function McpTokenSecretModal({
           </div>
         )}
 
-        <DialogFooter className="flex-row justify-end gap-2">
+        <DialogFooter className="px-5 py-3 border-t bg-muted/30 m-0 shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           <Button variant="outline" onClick={onClose}>{t('secret_modal.close_btn')}</Button>
           <Button onClick={onClose}>{t('secret_modal.saved_and_close_btn')}</Button>
         </DialogFooter>

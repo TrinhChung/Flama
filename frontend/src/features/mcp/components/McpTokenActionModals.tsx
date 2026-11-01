@@ -170,20 +170,20 @@ export function McpTokenActionModals({
         open={Boolean(viewingScopeToken)}
         onOpenChange={(open) => !open && onScopeDetailsClose()}
       >
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:max-w-lg max-h-[85vh] flex flex-col overflow-hidden p-0 rounded-2xl border-border/60 shadow-2xl">
+          <DialogHeader className="px-5 py-4 border-b bg-muted/20 text-left shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Shield className="size-5 text-primary" />
-              {t('actions.scope_details.title', { name: viewingScopeToken?.name || '' })}
+              <span>{t('actions.scope_details.title', { name: viewingScopeToken?.name || '' })}</span>
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
               {viewingScopeToken?.username
                 ? t('actions.scope_details.admin_desc', { username: viewingScopeToken.username, email: viewingScopeToken.email || '' })
                 : t('actions.scope_details.user_desc')}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-2">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-w-0 text-xs">
             {viewingScopeToken?.scopes?.length ? (
               <div className="grid grid-cols-1 gap-2">
                 {viewingScopeToken.scopes.map((scopeKey) => {
@@ -191,7 +191,7 @@ export function McpTokenActionModals({
                   return (
                     <div
                       key={scopeKey}
-                      className="p-2 rounded-lg border bg-muted/30 flex items-start gap-2.5 text-xs"
+                      className="p-2.5 rounded-lg border bg-muted/30 flex items-start gap-2.5 text-xs"
                     >
                       <Check className="size-4 text-primary shrink-0 mt-0.5" />
                       <div>
@@ -216,7 +216,7 @@ export function McpTokenActionModals({
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="px-5 py-3 border-t bg-muted/30 m-0 shrink-0 flex justify-end">
             <Button onClick={onScopeDetailsClose}>{t('actions.scope_details.close')}</Button>
           </DialogFooter>
         </DialogContent>

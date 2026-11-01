@@ -83,6 +83,12 @@ PUBLISH_DECK_RELEASE_TOOL_NAME = "publish_deck_release"
 LIST_DECK_RELEASES_TOOL_NAME = "list_deck_releases"
 LIST_INSTALLED_DECKS_TOOL_NAME = "list_installed_decks"
 GET_TAXONOMY_SCHEMA_TOOL_NAME = "get_taxonomy_schema"
+CREATE_TAXONOMY_DOMAIN_TOOL_NAME = "create_taxonomy_domain"
+CREATE_TAXONOMY_SUBJECT_TOOL_NAME = "create_taxonomy_subject"
+CREATE_TAXONOMY_FRAMEWORK_TOOL_NAME = "create_taxonomy_framework"
+CREATE_TAXONOMY_FRAMEWORK_LEVEL_TOOL_NAME = "create_taxonomy_framework_level"
+CREATE_TAXONOMY_OPTION_TOOL_NAME = "create_taxonomy_option"
+ENSURE_TAXONOMY_CATEGORY_TOOL_NAME = "ensure_taxonomy_category"
 
 
 def _resolve_deck_for_user(*, user_id: int, deck_id: int | None = None, deck_name: str | None = None) -> Deck:
