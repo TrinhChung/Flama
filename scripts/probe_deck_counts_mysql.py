@@ -57,6 +57,8 @@ def run(url, output):
             result["fixture_users"] = probe.fixtures
             _write_result(output, result)
             user_id = probe.users["basic"]
+            # Summary reads cover only the learners the prewarm worker refreshes.
+            app.config["DECK_COUNT_PREWARM_USER_IDS"] = (str(user_id),)
             fixture_tag = probe.fixtures[user_id].split("@")[0]
             with probe.session() as session:
                 for fixture_user_id in probe.users.values():
