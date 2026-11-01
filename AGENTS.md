@@ -18,6 +18,7 @@
 - Startup and config: `wsgi.py`, `app/__init__.py`, `app/extensions.py`, `app/api/__init__.py`, `docker-compose.yml`, `README_SETUP.md`
 - Flashcard/share/clone/change-request work: `docs/runbooks/FLASHCARD_V2_RUNBOOK.md`, `docs/backend/old/completed-plans/CLONE_CUTOVER_REPORT.md`, `docs/backend/old/completed-plans/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
 - UI structure: `docs/frontend/ARCHITECTURE.md`, `frontend/src/`
+- Production deployment & infrastructure: private submodule `infra-vpn/flama/README.md` and incident document `docs/ops/incidents/2026-11-01_SECURITY_ISSUE_PRODUCTION_CONFIG_EXPOSURE.md`
 - Treat docs as guidance, not automatic ground truth. Verify behavior in code before encoding agent instructions.
 
 ## Runtime Flow
@@ -55,8 +56,23 @@
 - Payments (payOS): `app/services/payment_service.py`, `app/services/payment/provider/payos_provider.py`, `docs/backend/old/FLAMA_PAYMENT_ARCHITECTURE.md`
 - Admin users and roles: `app/api/v1/admin/`, `app/services/admin_service.py`, `app/services/admin_user_api_service.py`, `app/services/user_roles.py`, `models/user_role.py`
 - Seeding and CLI: `app/cli.py`, `scripts/reseed_db.*`, `static/seed_data/`
+- Production deployment & server infrastructure: private submodule `infra-vpn/flama/` (Nginx, Systemd, deploy scripts, WireGuard mesh, production runbooks).
 
 ## Repo-Specific Guardrails
+- **Bảo Mật Hạ Tầng & Cô Lập Submodule Private (Zero Leak & Private Infra Isolation)**:
+  - **Nguyên nhân & Nguy cơ**: Repository `Flama` là kho mã nguồn **Mở (Public)**. Bất kỳ commit nào chứa địa chỉ IP máy chủ thật, topology mạng WireGuard nội bộ, khóa bí mật gateway, chứng chỉ SSL private key, hoặc scripts vận hành máy chủ production đều tạo điều kiện cho kẻ xấu bypass Cloudflare WAF, tấn công trực tiếp vào IP gốc (origin server), giả mạo Edge Gateway hoặc chiếm đoạt máy chủ.
+  - **Quy tắc bắt buộc đối với Lập trình viên và AI Agents**:
+    1. **Tuyệt đối cấm commit thông tin hạ tầng thực tế vào Public Repo**: Nghiêm cấm đưa các địa chỉ IP public thật của server (App Server, Ingress Gateway, Worker), dải IP mạng ảo WireGuard nội bộ (bất kỳ IP nào thuộc subnet `10.10.0.0/24`), khóa bí mật gateway (`flama_gw_sec_*`), token API (PayOS, OpenAI, Cloudflare, Resend), mật khẩu DB, chứng chỉ SSL/private keys (`*.key`, `*.pem`, `*.pfx`), và email cá nhân vào repository public `Flama`.
+    2. **Cô lập 100% cấu hình máy chủ sang Private Submodule `infra-vpn`**: Toàn bộ cấu hình Nginx thực tế, systemd unit files/timers, shell scripts triển khai máy chủ (`activate_release.sh`, `bootstrap_hostinger.sh`, `run_remote_deploy.sh`, `sync_managed_env.py`), topology mạng WireGuard và tài liệu vận hành chứa IP thực PHẢI được quản lý và commit trực tiếp tại submodule private `infra-vpn` (thư mục `infra-vpn/flama/`). Không duy trì file deploy production thật trong thư mục gốc của repo public.
+    3. **Tài liệu public bắt buộc dùng IP chuẩn RFC 5737 & Tên định danh trừu tượng**: Mọi sơ đồ kiến trúc, tài liệu Markdown, ví dụ cấu hình và unit test trong repo public nếu cần biểu diễn địa chỉ IP bắt buộc phải sử dụng các dải IP tài liệu chuẩn RFC 5737:
+       - `192.0.2.0/24` (TEST-NET-1, ví dụ: `192.0.2.151` cho App Server)
+       - `198.51.100.0/24` (TEST-NET-2, ví dụ: `198.51.100.141` cho Ingress Gateway)
+       - `203.0.113.0/24` (TEST-NET-3, ví dụ: `203.0.113.226` cho Worker Node)
+       - Loopback `127.0.0.1` cho các kết nối cục bộ.
+       - Tên định danh trừu tượng (`wg-gateway`, `wg-worker212`, `app-server`) thay cho IP nội bộ.
+    4. **Cấu hình mẫu Generic (`.example`)**: Nếu cung cấp mẫu cấu hình Nginx hoặc Systemd phục vụ cộng đồng mã nguồn mở, bắt buộc đặt tên với hậu tố `.example` (ví dụ `flama.nginx.conf.example`, `flama.service.example` hoặc trong `deploy.example/`) và dùng biến placeholder `CHANGE_ME_SECRET`, `example.com`.
+    5. **Nguyên tắc "Fail-Fast No-Fallback" trong CI/CD**: Trong các file GitHub Actions workflow (`.github/workflows/*.yml`), tuyệt đối không dùng toán tử fallback để hardcode giá trị nhạy cảm (như email cá nhân hay OAuth client ID). Nếu thiếu biến cấu hình trong GitHub Environment, job phải lập tức dừng và báo lỗi (`exit 1`) thay vì chạy ngầm với giá trị fallback.
+    6. **Tuân thủ Pre-commit Hooks & Secret Scanning**: Mọi commit trước khi đẩy (push) lên GitHub đều phải vượt qua kiểm tra bí mật tự động qua Gitleaks và pre-commit hook (`.githooks/pre-commit`). Tuyệt đối không dùng cờ `--no-verify` để qua mặt rào chắn bảo mật.
 - **Index phải được trao đổi và duyệt trước**:
   - Không mặc định thêm index để xử lý query chậm. Ưu tiên sửa nguyên nhân: SELECT/JOIN dư, scope quá rộng, N+1, đọc lặp, cách lọc/sort/pagination. Yêu cầu chung như "tối ưu hiệu năng" không phải là chấp thuận thêm index.
   - Trước khi thêm hoặc thay đổi index, trình bày query/workload cụ thể, bằng chứng nghẽn (`EXPLAIN`/số đo), các phương án không thêm index đã xem xét, index và thứ tự cột đề xuất, lợi ích dự kiến cùng giới hạn của phép đo.

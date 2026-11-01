@@ -1,0 +1,84 @@
+# Gitleaks Configuration for Flama Repository
+# Defines detection rules for leaked infrastructure credentials, production IPs, and gateway tokens.
+
+title = "Flama Secret Scanner Configuration"
+
+[extend]
+# Inherit built-in Gitleaks base rules (AWS keys, GitHub tokens, Generic API keys, etc.)
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for legitimate mock files, private submodule, and post-mortem incident documentation"
+paths = [
+    '''^infra-vpn/''',
+    '''^\.agents/teamwork/''',
+    '''^docs/ops/incidents/''',
+    '''^docs/plans/''',
+    '''^docs/reports/''',
+    '''^docs/runbooks/''',
+    '''^ISSUE_PRODUCTION_CONFIG_EXPOSURE\.md$''',
+    '''^AGENTS\.md$''',
+    '''^\.gitleaks\.toml$''',
+    '''^scripts/check_secrets_staged\.py$''',
+    '''^tests/''',
+]
+stopwords = [
+    "REDACTED",
+    "REDACTED_GATEWAY_SECRET",
+    "REDACTED_OAUTH_CLIENT_ID",
+    "127.0.0.1",
+    "192.0.2.151",
+    "198.51.100.141",
+    "203.0.113.226",
+    "CHANGE_ME_SECRET",
+    "test-api-key",
+    "test-checksum-key",
+]
+
+[[rules]]
+id = "flama-gateway-secret"
+description = "Detected Flama Gateway Secret Token (flama_gw_sec_*)"
+regex = '''\b(?i)flama_gw_sec_[a-f0-9]{32}\b'''
+keywords = ["flama_gw_sec_"]
+
+[[rules]]
+id = "production-server-public-ip"
+description = "Detected hardcoded production server public IP address (Hostinger, Oracle Gateway, Worker 212)"
+regex = '''\b(?:187\.77\.131\.151|161\.33\.193\.141|132\.145\.115\.226)\b'''
+keywords = [
+    "187.77.131.151",
+    "161.33.193.141",
+    "132.145.115.226",
+]
+
+[[rules]]
+id = "internal-wireguard-ip"
+description = "Detected internal WireGuard topology IP address (10.10.0.4 - 10.10.0.6)"
+regex = '''\b10\.10\.0\.[4-6]\b'''
+keywords = [
+    "10.10.0.4",
+    "10.10.0.5",
+    "10.10.0.6",
+]
+
+[[rules]]
+id = "flama-private-key"
+description = "Detected unencrypted Private Key header"
+regex = '''(?i)-----BEGIN[ A-Z0-9_-]+PRIVATE KEY-----'''
+keywords = [
+    "-----BEGIN",
+    "PRIVATE KEY",
+]
+
+[[rules]]
+id = "personal-admin-email"
+description = "Detected personal admin email in workflow or deployment configs"
+regex = '''\b[a-zA-Z0-9._%+-]+@gmail\.com\b'''
+keywords = ["@gmail.com"]
+path = '''^(\.github/workflows/|deploy/)'''
+
+[[rules]]
+id = "production-ssl-cert-path"
+description = "Detected production SSL private key path in configs"
+regex = '''/etc/letsencrypt/live/[a-zA-Z0-9._-]+/privkey\.pem'''
+keywords = ["/privkey.pem", "letsencrypt"]
