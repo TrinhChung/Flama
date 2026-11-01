@@ -272,17 +272,17 @@ class FlashcardImportMediaValidationTests(unittest.TestCase):
             note1 = notes_by_word.get("猫")
             self.assertIsNotNone(note1)
             self.assertEqual(note1.field_values["Audio"], f"/media/proxy/{asset_id}")
-            self.assertEqual(note1.field_values["Image"], "/media/library/cat_photo")
+            self.assertEqual(note1.field_values["Image"], "/store/cat_photo")
 
             note2 = notes_by_word.get("子猫")
             self.assertIsNotNone(note2)
             self.assertEqual(note2.field_values["Audio"], f"/media/proxy/{asset_id}")
-            self.assertEqual(note2.field_values["Image"], "/media/library/cat_photo")
+            self.assertEqual(note2.field_values["Image"], "/store/cat_photo")
 
             note3 = notes_by_word.get("子猫2")
             self.assertIsNotNone(note3)
             self.assertEqual(note3.field_values["Audio"], f"/media/proxy/{asset_id}")
-            self.assertEqual(note3.field_values["Image"], "/media/library/cat_photo")
+            self.assertEqual(note3.field_values["Image"], "/store/cat_photo")
 
     def test_raw_asset_uuid_rejected(self):
         csv_data = "Word,Audio\n猫,955b645f-e9c7-4e74-a5c4-c3a55f0f1bd7\n"
