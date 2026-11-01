@@ -323,8 +323,9 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             os.getenv("INTERNAL_SECURITY_SECRET", "").strip()
             or os.getenv("GATEWAY_SECRET", "").strip()
         ),
+        "INTERNAL_TRUSTED_IPS": os.getenv("INTERNAL_TRUSTED_IPS", "").strip(),
         "MEDIA_SHARED_SECRET": os.getenv("MEDIA_SHARED_SECRET", "").strip(),
-        "FLAMA_MEDIA_WORKER_URL": os.getenv("FLAMA_MEDIA_WORKER_URL", "http://10.10.0.6:4792").strip().rstrip("/"),
+        "FLAMA_MEDIA_WORKER_URL": os.getenv("FLAMA_MEDIA_WORKER_URL", "").strip().rstrip("/"),
         "PAYOS_CLIENT_ID": os.getenv("PAYOS_CLIENT_ID", "").strip(),
         "PAYOS_API_KEY": os.getenv("PAYOS_API_KEY", "").strip(),
         "PAYOS_CHECKSUM_KEY": os.getenv("PAYOS_CHECKSUM_KEY", "").strip(),

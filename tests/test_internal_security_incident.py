@@ -23,6 +23,7 @@ class InternalSecurityIncidentTests(unittest.TestCase):
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "WTF_CSRF_ENABLED": False,
                 "INTERNAL_SECURITY_SECRET": self.secret,
+                "INTERNAL_TRUSTED_IPS": "203.0.113.0/24, 198.51.100.141",
             }
         )
         self.client = self.app.test_client()
@@ -97,9 +98,10 @@ class InternalSecurityIncidentTests(unittest.TestCase):
 
         with self.app.app_context():
             self.assertTrue(_is_trusted_remote_ip("127.0.0.1"))
-            self.assertTrue(_is_trusted_remote_ip("10.10.0.6")) # Worker 212
-            self.assertTrue(_is_trusted_remote_ip("10.10.0.5")) # OV Gateway
+            self.assertTrue(_is_trusted_remote_ip("203.0.113.226")) # Worker 212 inside the configured mesh network
+            self.assertTrue(_is_trusted_remote_ip("198.51.100.141")) # OV Gateway listed as a single IP
             self.assertFalse(_is_trusted_remote_ip("198.51.100.1")) # External public IP
+            self.assertFalse(_is_trusted_remote_ip("not-an-ip"))
             self.assertFalse(_is_trusted_remote_ip("1.2.3.4"))
             self.assertFalse(_is_trusted_remote_ip(""))
 

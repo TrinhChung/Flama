@@ -60,15 +60,15 @@ Theo kết quả điều tra chi tiết tại báo cáo `REP-SEC-20261101-01`, k
 
 ### Danh Mục Tài Nguyên Nhạy Cảm Bắt Buộc Phải Thanh Lọc:
 1. **3 Địa chỉ IP Public máy chủ thật**:
-   - `187.77.131.151` (Hostinger Chung VPS - Kuala Lumpur)
-   - `161.33.193.141` (Oracle OV Gateway - Micro Instance)
-   - `132.145.115.226` (Tokyo Worker 212 - Ampere ARM)
+   - `192.0.2.151` (Hostinger Chung VPS - Kuala Lumpur)
+   - `198.51.100.141` (Oracle OV Gateway - Micro Instance)
+   - `203.0.113.226` (Tokyo Worker 212 - Ampere ARM)
 2. **Khóa bí mật chia sẻ cổng phân phối (Shared Gateway Secret Token)**:
-   - `flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4`
+   - `REDACTED_GATEWAY_SECRET`
 3. **Mạng riêng ảo nội bộ WireGuard Mesh**:
-   - Dải mạng `10.10.0.0/24` và các địa chỉ IP `10.10.0.4`, `10.10.0.5`, `10.10.0.6`
+   - Dải mạng `<wg-subnet>` và các địa chỉ IP `wg-app-server`, `wg-gateway`, `wg-worker212`
 4. **Thông tin định danh quản trị & Khóa OAuth**:
-   - Email quản trị cá nhân: `chungtrinh2k2@gmail.com`
+   - Email quản trị cá nhân: `<personal-email>`
    - Google OAuth Client ID Production: `992185847654-b1aekjqb7dh3hddetgve8qfps17nro08.apps.googleusercontent.com`
    - Prefix Google Client ID: `992185847654-b1aekjqb7dh3hddetgve8qfps17nro08`
 5. **Thư mục cấu hình hạ tầng production**:
@@ -267,37 +267,28 @@ Tất cả các địa chỉ IP Public thật của máy chủ được thay th�
 - `198.51.100.0/24` (TEST-NET-2)
 - `203.0.113.0/24` (TEST-NET-3)
 
-#### Nội Dung Chuẩn Xác 100% Của File `replace-text.txt`:
+#### Cấu Trúc File `replace-text.txt`:
+File thật chứa giá trị thật nên **chỉ** được lưu trong submodule private `infra-vpn` (ví dụ `infra-vpn/flama/security/replace-text.txt`), không bao giờ commit vào repo public. Mẫu dưới đây chỉ dùng placeholder:
 ```text
-# ==============================================================================
-# FLAMA GIT-FILTER-REPO OFFICIAL REPLACEMENT MAPPING RULES (RFC 5737 COMPLIANT)
-# ==============================================================================
+# 1. IP public thật của máy chủ -> RFC 5737
+<REAL_APP_SERVER_IP>==>192.0.2.151
+<REAL_GATEWAY_IP>==>198.51.100.141
+<REAL_WORKER_IP>==>203.0.113.226
 
-# 1. BẢN ĐỒ THAY THẾ ĐỊA CHỈ IP PUBLIC MÁY CHỦ THẬT (RFC 5737)
-187.77.131.151==>192.0.2.151
-161.33.193.141==>198.51.100.141
-132.145.115.226==>203.0.113.226
+# 2. Gateway secret cũ (đã xoay vòng ngày 2026-11-01)
+<OLD_GATEWAY_SECRET>==>REDACTED_GATEWAY_SECRET
 
-# 2. BẢN ĐỒ THAY THẾ KHÓA BÍ MẬT CỔNG GIAO TIẾP (SHARED GATEWAY SECRET)
-flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4==>[REDACTED_GATEWAY_SECRET]
+# 3. Email cá nhân
+<PERSONAL_EMAIL>==>noreply@flama.vn
 
-# 3. BẢN ĐỒ THAY THẾ GOOGLE OAUTH CLIENT ID VÀ TIỀN TỐ CLIENT ID
-992185847654-b1aekjqb7dh3hddetgve8qfps17nro08.apps.googleusercontent.com==>[REDACTED_OAUTH_CLIENT_ID]
-992185847654-b1aekjqb7dh3hddetgve8qfps17nro08==>[REDACTED_OAUTH_CLIENT_PREFIX]
-
-# 4. BẢN ĐỒ THAY THẾ EMAIL QUẢN TRỊ VIÊN CÁ NHÂN
-chungtrinh2k2@gmail.com==>noreply@flama.vn
-
-# 5. BẢN ĐỒ THAY THẾ CÁC FALLBACK URL VÀ ĐỊA CHỈ IP NỘI BỘ WIREGUARD (MESH TOPOLOGY)
-http://10.10.0.6:4792==>http://127.0.0.1:4792
-ubuntu@10.10.0.6==>ubuntu@wg-worker212-ip
-10.10.0.4==>[REDACTED_WG_IP_CHUNG]
-10.10.0.5==>[REDACTED_WG_IP_OV]
-10.10.0.6==>[REDACTED_WG_IP_WORKER212]
+# 4. Địa chỉ WireGuard nội bộ -> tên trừu tượng
+<WG_APP_SERVER_IP>==>wg-app-server
+<WG_GATEWAY_IP>==>wg-gateway
+<WG_WORKER_IP>==>wg-worker212
 ```
 
 > [!NOTE]
-> Thứ tự sắp xếp trong `replace-text.txt`: Chuỗi dài hơn phải được đặt trước chuỗi ngắn hơn (ví dụ: Google OAuth Client ID đầy đủ `.apps.googleusercontent.com` đặt trước chuỗi prefix ngắn `992185847654-b1aekjqb7dh3hddetgve8qfps17nro08`) để tránh hiện tượng thay thế một phần làm sót hậu tố.
+> Thứ tự sắp xếp trong `replace-text.txt`: chuỗi dài hơn phải đặt trước chuỗi ngắn hơn là tiền tố của nó để tránh thay thế một phần làm sót hậu tố.
 
 ---
 
@@ -429,23 +420,23 @@ Chạy thử nghiệm tìm kiếm sự xuất hiện của các chuỗi bí mậ
 
 ```bash
 # 1. Kiểm tra 3 IP Public thật:
-git log --all -S "187.77.131.151"
-git log --all -S "161.33.193.141"
-git log --all -S "132.145.115.226"
+git log --all -S "192.0.2.151"
+git log --all -S "198.51.100.141"
+git log --all -S "203.0.113.226"
 
 # 2. Kiểm tra 3 IP WireGuard Mesh nội bộ:
-git log --all -S "10.10.0.4"
-git log --all -S "10.10.0.5"
-git log --all -S "10.10.0.6"
+git log --all -S "wg-app-server"
+git log --all -S "wg-gateway"
+git log --all -S "wg-worker212"
 
 # 3. Kiểm tra Gateway Secret Token:
-git log --all -S "flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4"
+git log --all -S "REDACTED_GATEWAY_SECRET"
 
 # 4. Kiểm tra Google OAuth Client ID Production:
 git log --all -S "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08"
 
 # 5. Kiểm tra Email Cá Nhân Quản Trị:
-git log --all -S "chungtrinh2k2@gmail.com"
+git log --all -S "<personal-email>"
 ```
 
 > **Yêu cầu tiêu chuẩn**: Tất cả các lệnh trên phải trả về kết quả **rỗng (không có commit nào được hiển thị)**.
@@ -482,16 +473,16 @@ TOTAL_LEAKS=0
 
 # Danh sách tất cả chuỗi nhạy cảm bị cấm xuất hiện trong lịch sử
 SENSITIVE_PATTERNS=(
-    "187.77.131.151"
-    "161.33.193.141"
-    "132.145.115.226"
-    "10.10.0.4"
-    "10.10.0.5"
-    "10.10.0.6"
-    "flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4"
+    "192.0.2.151"
+    "198.51.100.141"
+    "203.0.113.226"
+    "wg-app-server"
+    "wg-gateway"
+    "wg-worker212"
+    "REDACTED_GATEWAY_SECRET"
     "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08.apps.googleusercontent.com"
     "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08"
-    "chungtrinh2k2@gmail.com"
+    "<personal-email>"
 )
 
 for pattern in "${SENSITIVE_PATTERNS[@]}"; do
@@ -545,16 +536,16 @@ Write-Host "=================================================================" -
 
 $TotalLeaks = 0
 $SensitivePatterns = @(
-    "187.77.131.151",
-    "161.33.193.141",
-    "132.145.115.226",
-    "10.10.0.4",
-    "10.10.0.5",
-    "10.10.0.6",
-    "flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4",
+    "192.0.2.151",
+    "198.51.100.141",
+    "203.0.113.226",
+    "wg-app-server",
+    "wg-gateway",
+    "wg-worker212",
+    "REDACTED_GATEWAY_SECRET",
     "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08.apps.googleusercontent.com",
     "992185847654-b1aekjqb7dh3hddetgve8qfps17nro08",
-    "chungtrinh2k2@gmail.com"
+    "<personal-email>"
 )
 
 foreach ($pattern in $SensitivePatterns) {
@@ -770,17 +761,17 @@ Việc viết lại lịch sử Git chỉ bảo vệ kho mã nguồn. Toàn bộ
    - Khởi động lại service `flama-media` và `nginx`.
 
 2. **Cấu Hình Tường Lửa UFW Ngăn Chặn Truy Cập Trực Tiếp (WAF Bypass Mitigation)**:
-   - Trên **Hostinger Chung VPS** (`187.77.131.151`):
+   - Trên **Hostinger Chung VPS** (`192.0.2.151`):
      - Chặn truy cập trực tiếp từ Internet vào cổng Gunicorn `4789`, MySQL `3306`, Redis `6379`.
-     - Chỉ cho phép IP WireGuard `10.10.0.0/24` và các dải IP chính thức của Cloudflare truy cập HTTP/HTTPS:
+     - Chỉ cho phép IP WireGuard `<wg-subnet>` và các dải IP chính thức của Cloudflare truy cập HTTP/HTTPS:
        ```bash
        sudo ufw default deny incoming
        sudo ufw allow in on wg0
        sudo ufw allow 22/tcp
        sudo ufw reload
        ```
-   - Trên **Tokyo Worker 212** (`132.145.115.226`):
-     - Chặn hoàn toàn cổng `4792` từ Internet, chỉ cho phép nhận request từ OV Gateway qua IP WireGuard `10.10.0.5`.
+   - Trên **Tokyo Worker 212** (`203.0.113.226`):
+     - Chặn hoàn toàn cổng `4792` từ Internet, chỉ cho phép nhận request từ OV Gateway qua IP WireGuard `wg-gateway`.
 
 3. **Thu Hồi & Tạo Mới Khóa SSH / SSL**:
    - Thay thế toàn bộ SSH keys cá nhân trên các máy chủ Ubuntu.

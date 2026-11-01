@@ -12,7 +12,7 @@
 ### 1.1. Hiện trạng Hạ tầng Vật lý
 - **VPS Chung (Chính)**: Đặt tại datacenter Hostinger (Malaysia / Singapore), chạy ứng dụng Flask REST Monolith và cơ sở dữ liệu MySQL 8.0.
 - **Worker 212 & OV Gateway**: Đặt tại Oracle Cloud Tokyo (NRT), chạy `flama-media` daemon (Pure Go) chịu trách nhiệm lưu trữ ổ SSD `/data/flama/media` và phát media tốc độ cao qua `https://media.flama.vn`.
-- Hai cụm server kết nối với nhau qua mạng riêng ảo WireGuard Mesh (`10.10.0.0/24`) với RTT ~73ms.
+- Hai cụm server kết nối với nhau qua mạng riêng ảo WireGuard Mesh (`<wg-subnet>`) với RTT ~73ms.
 
 ### 1.2. Nhược điểm của luồng Upload truyền thống (Đi vòng qua VPS Chung)
 Nếu Frontend gửi file trực tiếp lên VPS Chung rồi VPS Chung stream sang 212:
@@ -97,7 +97,7 @@ Thay vì đi vòng, **Frontend sẽ gửi trực tiếp luồng nhị phân lên
   3. Kiểm tra hạn ngạch upload/ngày của tài khoản.
   4. Tạo bản ghi `MediaAsset` trong MySQL và cập nhật `notes.field_values_by_id`.
   5. **Gửi tín hiệu Commit nội bộ qua WireGuard**:
-     - `POST http://10.10.0.6:4792/media/commit`
+     - `POST http://wg-worker212:4792/media/commit`
      - Header: `X-Internal-Secret: <GATEWAY_SECRET>`
      - Body: `{"asset_id": "01b58ddb..."}`
   6. 212 chuyển file từ `/data/flama/media/staging/` sang cây CAS vĩnh viễn `/data/flama/media/ab/cd/<sha256>.<ext>`.

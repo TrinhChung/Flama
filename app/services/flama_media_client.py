@@ -31,6 +31,16 @@ class FlamaMediaClientError(Exception):
         self.error_code = error_code
 
 
+def _worker_url() -> str:
+    """Private worker address from config; there is deliberately no built-in default."""
+    worker_url = str(current_app.config.get("FLAMA_MEDIA_WORKER_URL") or "").strip().rstrip("/")
+    if not worker_url:
+        raise FlamaMediaClientError(
+            "FLAMA_MEDIA_WORKER_URL is not configured", status_code=503, error_code="MEDIA_NOT_CONFIGURED"
+        )
+    return worker_url
+
+
 def generate_upload_ticket(
     user_id: int | None = None,
     max_bytes: int | None = None,
@@ -74,7 +84,7 @@ def send_media_to_worker(
         "deduplicated": bool
     }
     """
-    worker_url = str(current_app.config.get("FLAMA_MEDIA_WORKER_URL", "http://10.10.0.6:4792")).rstrip("/")
+    worker_url = _worker_url()
     gateway_secret = str(current_app.config.get("GATEWAY_SECRET") or "").strip()
     ticket = generate_upload_ticket(user_id=user_id, max_bytes=len(file_bytes) + 1024)
 
@@ -127,7 +137,7 @@ def send_media_to_worker(
 
 def send_zip_to_worker(zip_bytes: bytes, user_id: int | None = None) -> dict[str, Any]:
     """Forward a ZIP archive to Worker 212 for Zip-Slip safe extraction and CAS persistence."""
-    worker_url = str(current_app.config.get("FLAMA_MEDIA_WORKER_URL", "http://10.10.0.6:4792")).rstrip("/")
+    worker_url = _worker_url()
     gateway_secret = str(current_app.config.get("GATEWAY_SECRET") or "").strip()
     ticket = generate_upload_ticket(user_id=user_id, max_bytes=len(zip_bytes) + 1024)
 
@@ -185,7 +195,7 @@ def fetch_media_from_url(
         "deduplicated": bool
     }
     """
-    worker_url = str(current_app.config.get("FLAMA_MEDIA_WORKER_URL", "http://10.10.0.6:4792")).rstrip("/")
+    worker_url = _worker_url()
     gateway_secret = str(current_app.config.get("GATEWAY_SECRET") or "").strip()
     ticket = generate_upload_ticket(user_id=user_id, max_bytes=max_bytes, action="fetch_url")
 

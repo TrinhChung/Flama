@@ -28,27 +28,27 @@ Trong commit `0ee1a4097d1a0c8e0aadec7c5695c63f061943dc` (đã merge vào `origin
 
 | Máy chủ (Node) | IP Public bị lộ | IP WireGuard Mesh bị lộ | Vị trí & Vai trò | Nguồn file bị lộ trên Git |
 | :--- | :--- | :--- | :--- | :--- |
-| **Hostinger Chung VPS** | `187.77.131.151` | `10.10.0.4` | Primary Backend API, MySQL, Redis, SSH Port | `docs/runbooks/FLAMA_MEDIA_MIGRATION_AND_CUTOVER_RUNBOOK_20261101.md` |
-| **Oracle VPS (OV Gateway)** | `161.33.193.141` | `10.10.0.5` | Nginx Edge Gateway, TLS Termination, Reverse Proxy | `docs/architecture/FLAMA_MEDIA_STORAGE_AND_STORE_ROUTING_ARCHITECTURE.md`, `FLAMA_INFRASTRUCTURE_PROPOSAL_...RFC.md` |
-| **Worker 212 (Tokyo)** | `132.145.115.226` | `10.10.0.6` | Flama Media Go Daemon (:4792), CAS File Storage (3.1GB) | `docs/architecture/FLAMA_MEDIA_STORAGE_AND_STORE_ROUTING_ARCHITECTURE.md`, `FLAMA_MEDIA_MIGRATION...RUNBOOK...md` |
+| **Hostinger Chung VPS** | `192.0.2.151` | `wg-app-server` | Primary Backend API, MySQL, Redis, SSH Port | `docs/runbooks/FLAMA_MEDIA_MIGRATION_AND_CUTOVER_RUNBOOK_20261101.md` |
+| **Oracle VPS (OV Gateway)** | `198.51.100.141` | `wg-gateway` | Nginx Edge Gateway, TLS Termination, Reverse Proxy | `docs/architecture/FLAMA_MEDIA_STORAGE_AND_STORE_ROUTING_ARCHITECTURE.md`, `FLAMA_INFRASTRUCTURE_PROPOSAL_...RFC.md` |
+| **Worker 212 (Tokyo)** | `203.0.113.226` | `wg-worker212` | Flama Media Go Daemon (:4792), CAS File Storage (3.1GB) | `docs/architecture/FLAMA_MEDIA_STORAGE_AND_STORE_ROUTING_ARCHITECTURE.md`, `FLAMA_MEDIA_MIGRATION...RUNBOOK...md` |
 
 *Chi tiết trích đoạn lộ trong Git:*
 > `docs/architecture/FLAMA_MEDIA_STORAGE_AND_STORE_ROUTING_ARCHITECTURE.md` (Dòng 33 & 42):
 > ```text
-> OV Gateway (Malaysia): Public IP: 161.33.193.141 | WG: 10.10.0.5
-> Worker 212 (Tokyo):   Public IP: 132.145.115.226 | WG: 10.10.0.6
+> OV Gateway (Malaysia): Public IP: 198.51.100.141 | WG: wg-gateway
+> Worker 212 (Tokyo):   Public IP: 203.0.113.226 | WG: wg-worker212
 > ```
 
 ### 2.2. Lộ Shared Secret Token giữa Gateway và Media Service
 Trong commit `0ee1a409`, cấu hình Nginx mẫu đã được đưa vào tài liệu kiến trúc, trong đó **ghi lộ nguyên văn token xác thực bí mật**:
-- **Token bị lộ**: `"flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4"`
+- **Token bị lộ**: `"REDACTED_GATEWAY_SECRET"`
 - **Vị trí**:
   - `docs/architecture/FLAMA_MEDIA_STORAGE_AND_STORE_ROUTING_ARCHITECTURE.md` (Dòng 81 & 195)
   - File cấu hình `deploy/media.flama.vn.nginx.conf` (Dòng 64 & 81):
     ```nginx
-    proxy_set_header X-Flama-Gateway-Secret "flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4";
+    proxy_set_header X-Flama-Gateway-Secret "REDACTED_GATEWAY_SECRET";
     ```
-- **Hậu quả**: Bất kỳ kẻ tấn công nào cũng có thể gửi header `X-Flama-Gateway-Secret: flama_gw_sec_e4b2a0f8c6d4e2a0b8c6d4e2a0b8c6d4` kèm theo payload để tải file lên hoặc truy cập trực tiếp vào Go daemon tại Worker 212 nếu port 4792 bị mở hoặc bị can thiệp.
+- **Hậu quả**: Bất kỳ kẻ tấn công nào cũng có thể gửi header `X-Flama-Gateway-Secret: REDACTED_GATEWAY_SECRET` kèm theo payload để tải file lên hoặc truy cập trực tiếp vào Go daemon tại Worker 212 nếu port 4792 bị mở hoặc bị can thiệp.
 
 ### 2.3. Lộ Script Quản trị Hệ thống & Quyền Root trong `deploy/`
 Thư mục `deploy/` nằm trực tiếp trong root của repository chứa toàn bộ quy trình vận hành nhạy cảm:
@@ -68,8 +68,8 @@ Thư mục `deploy/` nằm trực tiếp trong root của repository chứa toà
 Trong workflow tự động hóa:
 - Giá trị fallback của biến môi trường lộ email cá nhân quản trị viên:
   ```yaml
-  EMAIL_FROM_ADDRESS: ${{ vars.EMAIL_FROM_ADDRESS || 'chungtrinh2k2@gmail.com' }}
-  EMAIL_SMTP_USER: ${{ vars.EMAIL_SMTP_USER || 'chungtrinh2k2@gmail.com' }}
+  EMAIL_FROM_ADDRESS: ${{ vars.EMAIL_FROM_ADDRESS || '<personal-email>' }}
+  EMAIL_SMTP_USER: ${{ vars.EMAIL_SMTP_USER || '<personal-email>' }}
   GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID || secrets.GOOGLE_OAUTH_CLIENT_ID || '992185847654-b1aekjqb7dh3hddetgve8qfps17nro08.apps.googleusercontent.com' }}
   GOOGLE_OAUTH_REDIRECT_URI: ${{ vars.GOOGLE_OAUTH_REDIRECT_URI || 'https://api.flama.vn/auth/google/callback' }}
   ```
@@ -94,7 +94,7 @@ Trong workflow tự động hóa:
 
 1. **Bypass Cloudflare WAF để tấn công trực tiếp vào Máy chủ Gốc (Origin IP Exposure)**:
    - Bình thường `flama.vn` và `media.flama.vn` được bảo vệ phía sau proxy Cloudflare.
-   - Nhưng khi IP `187.77.131.151`, `161.33.193.141`, và `132.145.115.226` bị công khai, kẻ tấn công có thể bỏ qua Cloudflare, gửi request trực tiếp đến IP gốc để vượt qua rate limiting, tấn công từ chối dịch vụ (DDoS) hoặc khai thác cổng dịch vụ chưa khóa kỹ.
+   - Nhưng khi IP `192.0.2.151`, `198.51.100.141`, và `203.0.113.226` bị công khai, kẻ tấn công có thể bỏ qua Cloudflare, gửi request trực tiếp đến IP gốc để vượt qua rate limiting, tấn công từ chối dịch vụ (DDoS) hoặc khai thác cổng dịch vụ chưa khóa kỹ.
 2. **Nguy cơ Xâm nhập Trực tiếp từ Cổng Dịch vụ (Direct Service Exploitation)**:
    - Các cổng backend như `4789` (Flask), `4790` (Connect), `4792` (Flama Media Go daemon) hoặc SSH `22` có nguy cơ bị tấn công dò mật khẩu hoặc khai thác tràn bộ đệm nếu firewall UFW chưa drop toàn bộ public incoming traffic.
 3. **Phơi bày Logic Vận hành và Điểm yếu Hệ thống**:
@@ -112,13 +112,13 @@ Agent khuyến nghị thực hiện ngay lập tức các bước sau theo thứ
      ```bash
      openssl rand -hex 32
      ```
-   - Cập nhật cấu hình Nginx trên OV Gateway (`161.33.193.141`) và file cấu hình / env của `flama-media` trên Worker 212 (`132.145.115.226`).
+   - Cập nhật cấu hình Nginx trên OV Gateway (`198.51.100.141`) và file cấu hình / env của `flama-media` trên Worker 212 (`203.0.113.226`).
    - Khởi động lại dịch vụ `flama-media` và `nginx`.
 2. **Kiểm tra và Cấu hình lại Tường lửa (Firewall Hardening)**:
    - Đảm bảo trên cả 3 server, tường lửa UFW / OCI Security List:
      - **Chỉ mở cổng 80, 443** cho các dải IP của Cloudflare (Cloudflare IP Ranges).
      - **Chặn tuyệt đối** truy cập trực tiếp từ Internet vào cổng `4789`, `4790`, `4792`, `3306`, `6379`.
-     - Chỉ cho phép giao tiếp giữa các server thông qua mạng ảo WireGuard (`10.10.0.0/24`).
+     - Chỉ cho phép giao tiếp giữa các server thông qua mạng ảo WireGuard (`<wg-subnet>`).
      - Cổng SSH (22) nên đổi port hoặc giới hạn theo IP quản trị cố định.
 
 ### Bước 2: Tạm ẩn hoặc Làm sạch Lịch sử Git (Scrub Git History) - *Ưu tiên 2*
@@ -126,7 +126,7 @@ Vì repo đang ở chế độ Public, việc chỉ commit đè file mới (over
 - **Phương án A (Khuyến nghị ngắn hạn nhanh nhất)**:
   - Tạm thời chuyển repository `TrinhChung/Flama` sang **Private** trên GitHub Settings trong quá trình xử lý và dọn dẹp lịch sử.
 - **Phương án B (Làm sạch lịch sử Git bằng `git-filter-repo`)**:
-  - Dùng công cụ `git-filter-repo` để thay thế toàn bộ các chuỗi IP (`161.33.193.141`, `187.77.131.151`, `132.145.115.226`) và secret token `flama_gw_sec_...` thành chuỗi giả lập/dummy trong toàn bộ lịch sử commit.
+  - Dùng công cụ `git-filter-repo` để thay thế toàn bộ các chuỗi IP (`198.51.100.141`, `192.0.2.151`, `203.0.113.226`) và secret token `flama_gw_sec_...` thành chuỗi giả lập/dummy trong toàn bộ lịch sử commit.
   - Xóa bỏ file `deploy/media.flama.vn.nginx.conf` ra khỏi cây thư mục git.
 
 ---
@@ -219,11 +219,11 @@ Cập nhật file `.github/workflows/deploy.yml` để runner có quyền checko
 ## 6. Kế hoạch Hành động Cụ thể (Action Plan & Checklist)
 
 - [ ] **Khẩn cấp (Trong vòng 1 giờ tới)**:
-  - [ ] Rotate `X-Flama-Gateway-Secret` trên cả OV Gateway (`161.33.193.141`) và Worker 212 (`132.145.115.226`).
+  - [ ] Rotate `X-Flama-Gateway-Secret` trên cả OV Gateway (`198.51.100.141`) và Worker 212 (`203.0.113.226`).
   - [ ] Xóa bỏ/tách file untracked `deploy/media.flama.vn.nginx.conf` khỏi workspace công khai hoặc bổ sung vào `.gitignore`.
   - [ ] Tạm thời cân nhắc đặt repo `Flama` sang Private trên GitHub nếu cần chặn bot scanner trong lúc dọn dẹp.
 - [ ] **Làm sạch Tài liệu & Mã nguồn (Trong 24 giờ tới)**:
-  - [ ] Rà soát lại tất cả các file docs trong `docs/architecture/` và `docs/runbooks/`: thay thế toàn bộ địa chỉ IP thực (`161.33.193.141`, `187.77.131.151`, `132.145.115.226`) bằng địa chỉ giả lập/RFC 5737 (ví dụ: `203.0.113.10`, `198.51.100.5`).
+  - [ ] Rà soát lại tất cả các file docs trong `docs/architecture/` và `docs/runbooks/`: thay thế toàn bộ địa chỉ IP thực (`198.51.100.141`, `192.0.2.151`, `203.0.113.226`) bằng địa chỉ giả lập/RFC 5737 (ví dụ: `203.0.113.10`, `198.51.100.5`).
   - [ ] Rà soát `.github/workflows/deploy.yml`: loại bỏ email cá nhân và client id hardcode trong fallback.
   - [ ] Chạy công cụ thanh lọc lịch sử Git để xóa vĩnh viễn token đã commit.
 - [ ] **Triển khai Kiến trúc Mới (Private Submodule)**:
